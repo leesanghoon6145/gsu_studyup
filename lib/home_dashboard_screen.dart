@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'timer/timer_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({Key? key}) : super(key: key);
@@ -154,26 +155,28 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             ),
             const SizedBox(height: 40),
 
-            // 집중 시작 버튼
+// // 집중 시작 버튼
             ElevatedButton(
-              onPressed: selectedSubject.isEmpty ? () {
+              onPressed: selectedSubject.isEmpty
+                  ? () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please select a subject first! (먼저 과목을 선택해 주세요!)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                  const SnackBar(content: Text('먼저 과목을 선택해 주세요!')),
                 );
-              } : () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Starting Focus! ($selectedSubject / $selectedMode / $selectedDuration분)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+              }
+                  : () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const TimerScreen()),
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFCD34D),
+                backgroundColor: const Color(0xFFFFCD34),
                 minimumSize: const Size(double.infinity, 58),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: Text(
                 'Start Focus with These Settings\n(이 설정으로 집중 시작하기)',
+                style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 18),
               ),
             ),
             const SizedBox(height: 20),
