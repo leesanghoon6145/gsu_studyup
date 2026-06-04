@@ -2,29 +2,43 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// GSU StudyUp - [원장님 최종 지시: 이미지 기반 타이머 폰트/크기 일치화 및 황금색 별갯수 마감본]
+/// GSU StudyUp - 타이머 위치 미세조정 및 선택 시간별 실시간 분당 별 수집 트랙 반영 완료본
 class TimerScreen extends StatefulWidget {
-  const TimerScreen({super.key});
+  final String selectedSubject;
+  final String selectedMode;
+  final int selectedDurationMinutes;
+  final String dynamicTestTitle;
+  final String calculatedDDay;
+
+  const TimerScreen({
+    super.key,
+    required this.selectedSubject,
+    required this.selectedMode,
+    required this.selectedDurationMinutes,
+    required this.dynamicTestTitle,
+    required this.calculatedDDay,
+  });
 
   @override
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
 class _TimerScreenState extends State<TimerScreen> {
-  // 🏛️ 타이머 제어 코어 엔진
   Timer? _ticker;
-  int _elapsedSeconds = 45 * 60 + 23; // 이미지와 싱크를 맞추기 위한 초기값 (45분 23초)
-  int _totalTargetMinutes = 500; // 이미지 기준 목표 변경 (500분)
+  int _elapsedSeconds = 0; // 0초부터 실시간 빌드업
+  late int _totalTargetSeconds; // 목표 분을 초 단위로 환산
   bool _isRunning = false;
+  bool _isMissionCompleted = false; // 미션 중복 트리거 방어막
 
-  // 🎯 홈 대시보드 및 가입 정보 연동 가변 데이터
-  final String _dynamicGradeTitle = "2027 대학수능";
-  final String _calendarDDayText = "D - 100";
+  @override
+  void initState() {
+    super.initState();
+    _totalTargetSeconds = widget.selectedDurationMinutes * 60;
 
-  // 게이미피케이션 자산 데이터
-  int _realtimeStars = 23;
-  final int _maxStars = 60;
-  final String _subject = "수학";
+// ⚠️ [개발용 미션 즉시 완료 테스트 치트키]
+// 테스트 시 5초 만에 타임스타 미션 완료를 확인하고 싶으시다면 아래 주석을 풀어주세요.
+// _totalTargetSeconds = 5;
+  }
 
   @override
   void dispose() {
@@ -41,11 +55,121 @@ class _TimerScreenState extends State<TimerScreen> {
         _isRunning = true;
         _ticker = Timer.periodic(const Duration(seconds: 1), (timer) {
           setState(() {
-            _elapsedSeconds++;
+            if (_elapsedSeconds < _totalTargetSeconds) {
+              _elapsedSeconds++;
+            } else {
+              _ticker?.cancel();
+              _isRunning = false;
+              if (!_isMissionCompleted) {
+                _isMissionCompleted = true;
+                _triggerTimeStarMissionComplete();
+              }
+            }
           });
         });
       }
     });
+  }
+
+// 🌍 글로벌 UTC 기반 성공 판정 및 완료 다이얼로그 팝업
+  void _triggerTimeStarMissionComplete() {
+    DateTime completionUtcTime = DateTime.now().toUtc();
+    debugPrint("🌐 [GSU StudyUp] Mission Completed At (UTC): $completionUtcTime");
+
+    int rewardStars = 1;
+    if (widget.selectedDurationMinutes >= 90) {
+      rewardStars = 3;
+    } else if (widget.selectedDurationMinutes >= 60) {
+      rewardStars = 2;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF0D1527),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+// 🎯 [정정 코드] 189번 라인부터의 children 내부를 이 규격으로 교체해 주세요.
+              children: [
+                const Icon(Icons.workspace_premium_rounded, color: Color(0xFFE5C158), size: 50),
+                const SizedBox(height: 16),
+                Text(
+                  "GSU\nSTUDYUP",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.gowunBatang(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(width: 40, height: 1.5, color: const Color(0xFFE5C158)),
+                const SizedBox(height: 16),
+                Text(
+                  "TIME STAR MISSION COMPLETE!\n[타임스타 미션 완료]",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.gowunBatang(
+                    color: const Color(0xFFE5C158),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "You have successfully focused on ${widget.selectedSubject} for ${widget.selectedDurationMinutes} minutes.\n\n"
+                      "축하합니다! ${widget.selectedSubject} 과목을 ${widget.selectedDurationMinutes}분 동안 완벽히 집중하여 타임스타를 획득했습니다.",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.5)),
+                  ),
+
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.star, color: Color(0xFFE5C158), size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        "+$rewardStars Stars Acquired (별 적립 완료)",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE5C158),
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    "CONTINUE JOURNEY (계속하기)",
+                    style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   String _formatDisplayTime(int totalSeconds) {
@@ -57,14 +181,16 @@ class _TimerScreenState extends State<TimerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    double progressPercent = _elapsedSeconds / (_totalTargetMinutes * 60);
+    double progressPercent = _totalTargetSeconds > 0 ? _elapsedSeconds / _totalTargetSeconds : 0.0;
     if (progressPercent > 1.0) progressPercent = 1.0;
+
+// 🌟 [원장님 핵심 지시 정밀 수식] 현재 경과한 시간(초)을 분(Minute) 단위 분자 값으로 계산
+    int currentMinutes = _elapsedSeconds ~/ 60;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F0E17),
       body: Stack(
         children: [
-          // 🎨 오리지널 명품 아트워크 배경 도킹
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -76,12 +202,10 @@ class _TimerScreenState extends State<TimerScreen> {
             ),
           ),
 
-          // 🪐 최상단 가시성 레이아웃
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 뒤로가기 버튼 영역
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
@@ -92,28 +216,24 @@ class _TimerScreenState extends State<TimerScreen> {
                     ),
                   ),
                 ),
-
-                // 🏛️ 상단 구역: GSU STUDYUP 글자 아래 ~ 별 위 끝점 정중앙 안착존
                 const SizedBox(height: 125),
 
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 진짜 펼쳐진 고전 황금 왕관 심볼
-                    const Icon(
-                      Icons.workspace_premium_rounded,
-                      color: Color(0xFFE5C158),
-                      size: 24,
+                    Image.asset(
+                      'assets/images/crown_wings.png',
+                      width: 100,
+                      fit: BoxFit.contain,
                     ),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
 
-                    // 좌우 황금 선 디자인과 가변 학년 타이틀
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("✧───  ", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                        const Text("✧─── ", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
                         Text(
-                          _dynamicGradeTitle,
+                          widget.dynamicTestTitle,
                           style: GoogleFonts.gowunBatang(
                             color: const Color(0xFFE5C158),
                             fontSize: 14,
@@ -121,15 +241,12 @@ class _TimerScreenState extends State<TimerScreen> {
                             letterSpacing: 1.0,
                           ),
                         ),
-                        const Text("  ───✧", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                        const Text(" ───✧", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
                       ],
                     ),
-
-                    const SizedBox(height: 0),
-
-                    // 달력 연동형 D-Day 카운터
+                    const SizedBox(height: 4),
                     Text(
-                      _calendarDDayText,
+                      widget.calculatedDDay,
                       style: GoogleFonts.gowunBatang(
                         color: const Color(0xFFFFF6D6),
                         fontSize: 34,
@@ -140,44 +257,43 @@ class _TimerScreenState extends State<TimerScreen> {
                     ),
                   ],
                 ),
-
-                // 황금 별 트랙 내부 공간 통과용 프리셋 스페이서
+// 황금 별 트랙 공간 확보용 프리셋 스페이서 (기존 210 유지하여 별 내부 공간 완벽 방어)
                 const SizedBox(height: 210),
 
-                // 🚨 [원장님 지시 완수] 이미지와 100% 일치하는 폰트, 크기, 위치의 타이머 레이아웃
-                Text(
-                  _formatDisplayTime(_elapsedSeconds),
-                  style: GoogleFonts.rajdhani(
-                    color: Colors.white,
-                    fontSize: 78, // 💡 이미지 속 웅장하고 컴팩트한 비율을 내기 위한 스케일
-                    fontWeight: FontWeight.w700, // 세련되게 각진 두께감 수호
-                    letterSpacing: 1.0, // 이미지 특유의 자간 거리 적용
-                    height: 0.9, // 별 하단 팁에 바짝 붙이기 위한 서체 마진 최적화
-                  ),
-                ),
-
-                const SizedBox(height: 6), // 타이머와 별갯수 사이 미세 마진
-
-                // ✨ [원장님 지시 완수] 황금색 변환 및 고가시성 볼드 처리된 실시간 별갯수 라인
+// 📐 [원장님 최종 지시 마감] 타이머 숫자 '바로 1mm 위' 안착 레이아웃
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.star, color: Color(0xFFE5C158), size: 15), // 아이콘 황금색 변환
-                    const SizedBox(width: 4),
+                    const Icon(Icons.star, color: Color(0xFFE5C158), size: 16),
+                    const SizedBox(width: 6),
                     Text(
-                      "실시간 별갯수: $_realtimeStars개",
+                      "실시간 별 획득 현황 : $currentMinutes / ${widget.selectedDurationMinutes} Mins",
                       style: GoogleFonts.gowunBatang(
-                        color: const Color(0xFFE5C158), // 💡 원장님 지시: 황금색 마스터 컬러 코딩!
+                        color: const Color(0xFFE5C158),
                         fontSize: 14,
-                        fontWeight: FontWeight.w800, // 아주 진하게 강조
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
+// 💡 원장님 지시 1mm 미세 격차 조율: 별 획득 상황과 아래 타이머 타이포그래피 간의 초밀착 마진
+                const SizedBox(height: 4),
+// 🚨 위치 고정 완료: 이미지 일치 규격 타이머 거대 숫자 레이아웃
+                Text(
+                  _formatDisplayTime(_elapsedSeconds),
+                  style: GoogleFonts.rajdhani(
+                    color: Colors.white,
+                    fontSize: 78,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    height: 0.9,
+                  ),
+                ),
 
                 const Spacer(flex: 3),
 
-                // 학습 바 구역 (이미지 기반 수치 동기화 완수)
+// 학습 바 구역
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32.0),
                   child: Column(
@@ -186,8 +302,10 @@ class _TimerScreenState extends State<TimerScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("🔊 실시간 학습 진행 상황", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
-                          Text("편집 / $_totalTargetMinutes분", style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 12)),
+                          Text("🔊 [${widget.selectedSubject}] 실시간 학습 진행",
+                              style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text("목표 시간: ${widget.selectedDurationMinutes}분", style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 12)),
+
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -221,7 +339,7 @@ class _TimerScreenState extends State<TimerScreen> {
 
                 const Spacer(flex: 2),
 
-                // 최하단 버튼 구역 (공부 시작 / 일시 중지 텍스트 일치 완료)
+// 최하단 버튼 구역 (공부 시작 / 일시 중지)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 36.0),
                   child: GestureDetector(
@@ -237,7 +355,7 @@ class _TimerScreenState extends State<TimerScreen> {
                       ),
                       child: Center(
                         child: Text(
-                          "공부 시작 / 일시 중지", // 이미지 명칭과 완벽 싱크
+                          _isRunning ? "PAUSE (일시 중지)" : "START FOCUS (공부 시작)",
                           style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),

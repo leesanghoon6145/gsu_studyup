@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({Key? key}) : super(key: key);
+  const SignupScreen({super.key});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -14,7 +14,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool isUnder14 = false;
   bool parentConsent = false;
   bool isEmailSent = false;
-  bool isPasswordVisible = false; // 🔥 비밀번호 숨김/보임 상태
+  bool isPasswordVisible = false;
 
   // 입력 컨트롤러
   final TextEditingController _nationalityController = TextEditingController();
@@ -27,20 +27,22 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _schoolController = TextEditingController();
   final TextEditingController _gradeController = TextEditingController();
 
-  // 🔥 새로 추가된 컨트롤러
-  final TextEditingController _classCodeController = TextEditingController(); // 학생용 클래스 코드
-  final TextEditingController _childEmailController = TextEditingController(); // 학부모용 자녀 이메일
-  final TextEditingController _relationshipController = TextEditingController(); // 학부모용 관계
+  // 클래스 코드 및 학부모 전용 컨트롤러
+  final TextEditingController _classCodeController = TextEditingController();
+  final TextEditingController _childEmailController = TextEditingController();
+  final TextEditingController _relationshipController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
+    const Color brandGolden = Color(0xFFE5C158); // GSU StudyUp 글로벌 브랜드 지정 컬러
+
     return Scaffold(
       backgroundColor: const Color(0xFF030712), // 진한 밤하늘 배경
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -49,6 +51,7 @@ class _SignupScreenState extends State<SignupScreen> {
             color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 22,
+            letterSpacing: 1.0,
           ),
         ),
       ),
@@ -73,7 +76,7 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
             const SizedBox(height: 30),
 
-            // 3. 무조건 보여주는 공통 정보 (국적 -> 이름 -> 이메일 -> 전화번호)
+            // 3. 무조건 보여주는 공통 정보
             _buildInputField(hint: 'Nationality (국적)', icon: Icons.public, controller: _nationalityController),
             _buildInputField(hint: 'Full Name (본인 이름)', icon: Icons.person, controller: _nameController),
 
@@ -93,14 +96,22 @@ class _SignupScreenState extends State<SignupScreen> {
                         isEmailSent = true;
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Verification code sent! (인증번호가 발송되었습니다!)')),
+                        SnackBar(
+                          content: Text(
+                            'Verification code sent! (인증번호가 발송되었습니다!)',
+                            style: GoogleFonts.gowunBatang(fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       );
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFCD34D),
+                      backgroundColor: brandGolden,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('AUTH (인증)', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'AUTH (인증)',
+                      style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
@@ -112,7 +123,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
             _buildInputField(hint: 'Phone Number (전화번호)', icon: Icons.phone, controller: _phoneController),
 
-            // 🔥 눈동자 토글 기능이 들어간 비밀번호 입력창
+            // 눈동자 토글 기능이 들어간 비밀번호 입력창
             _buildInputField(
               hint: 'Password (비밀번호)',
               icon: Icons.lock,
@@ -133,24 +144,20 @@ class _SignupScreenState extends State<SignupScreen> {
               icon: Icons.lock_outline,
               controller: _confirmPasswordController,
               isPassword: true,
-              hideText: !isPasswordVisible, // 동일하게 연동
+              hideText: !isPasswordVisible,
             ),
 
-            // -------------------------------------------------------------------
-            // 4-1. 🔥 STUDENT (학생) 전용 추가 입력 필드 (학교, 학년, 클래스 코드)
-            // -------------------------------------------------------------------
+            // 4-1. STUDENT (학생) 전용 추가 입력 필드
             if (isStudent) ...[
               _buildInputField(hint: 'School Name (학교명)', icon: Icons.school, controller: _schoolController),
               _buildInputField(hint: 'Grade (학년)', icon: Icons.grade, controller: _gradeController),
-              _buildInputField(hint: 'Class Code (클래스 코드 - 선택입력)', icon: Icons.qr_code, controller: _classCodeController), // 🔥 추가
+              _buildInputField(hint: 'Class Code (클래스 코드 - 선택입력)', icon: Icons.qr_code, controller: _classCodeController),
             ],
 
-            // -------------------------------------------------------------------
-            // 4-2. 🔥 PARENT (학부모) 전용 추가 입력 필드 (자녀 이메일, 관계)
-            // -------------------------------------------------------------------
+            // 4-2. PARENT (학부모) 전용 추가 입력 필드
             if (!isStudent) ...[
-              _buildInputField(hint: "Child's Email (연동할 자녀 이메일 주소)", icon: Icons.child_care, controller: _childEmailController), // 🔥 추가
-              _buildInputField(hint: 'Relationship to Child (자녀와의 관계 - 예: 부/모)', icon: Icons.family_restroom, controller: _relationshipController), // 🔥 추가
+              _buildInputField(hint: "Child's Email (연동할 자녀 이메일 주소)", icon: Icons.child_care, controller: _childEmailController),
+              _buildInputField(hint: 'Relationship to Child (자녀와의 관계 - 예: 부/모)', icon: Icons.family_restroom, controller: _relationshipController),
             ],
 
             const SizedBox(height: 10),
@@ -162,13 +169,13 @@ class _SignupScreenState extends State<SignupScreen> {
                   Checkbox(
                     value: isUnder14,
                     onChanged: (val) => setState(() => isUnder14 = val!),
-                    activeColor: const Color(0xFFFCD34D),
+                    activeColor: brandGolden,
                     side: const BorderSide(color: Colors.white38),
                   ),
-                  const Flexible(
+                  Flexible(
                     child: Text(
-                      'I am under 14 years old.\n(만 14세 미만 청소년입니다.)',
-                      style: TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.bold),
+                      'I am under 14 years old. (만 14세 미만 청소년입니다.)',
+                      style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -179,31 +186,32 @@ class _SignupScreenState extends State<SignupScreen> {
                   margin: const EdgeInsets.only(top: 10, bottom: 10),
                   padding: const EdgeInsets.all(15),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFCD34D).withOpacity(0.1),
+                    color: brandGolden.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFCD34D).withOpacity(0.3)),
+                    border: Border.all(color: brandGolden.withOpacity(0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Parental Consent Required (보호자 동의 필수)',
-                        style: TextStyle(color: Color(0xFFFCD34D), fontWeight: FontWeight.bold, fontSize: 16),
+//  [정정 코드] 198번 라인을 이 코드로 대체해 주세요.
+                        style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                       const SizedBox(height: 5),
-                      const Text(
+                      Text(
                         'In accordance with international regulations (COPPA/GDPR), parental consent must be verified.\n(국제법 규정에 따라 보호자의 동의가 확인되어야 가입이 가능합니다.)',
-                        style: TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.gowunBatang(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                       CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text(
+                        title: Text(
                           'I confirm parental consent. (보호자 동의를 확인했습니다.)',
-                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                         value: parentConsent,
                         onChanged: (val) => setState(() => parentConsent = val!),
-                        activeColor: const Color(0xFFFCD34D),
+                        activeColor: brandGolden,
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                     ],
@@ -223,13 +231,13 @@ class _SignupScreenState extends State<SignupScreen> {
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFCD34D),
+                backgroundColor: brandGolden,
                 minimumSize: const Size(double.infinity, 55),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text(
+              child: Text(
                 'NEXT STEP (다음 단계로)',
-                style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 18),
+                style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 18),
               ),
             ),
           ],
@@ -238,27 +246,27 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // 토글 버튼 부품 위젯
   Widget _buildToggleButton({
     required String title,
     required bool active,
     required VoidCallback onTap,
   }) {
+    const Color brandGolden = Color(0xFFE5C158);
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? const Color(0xFFFCD34D) : Colors.transparent,
+            color: active ? brandGolden : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             title,
-            style: TextStyle(
+            style: GoogleFonts.gowunBatang(
               color: active ? const Color(0xFF030712) : Colors.white60,
               fontWeight: FontWeight.bold,
-              fontSize: 18,
+              fontSize: 16,
             ),
           ),
         ),
@@ -266,14 +274,13 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // 입력 필드 부품 위젯 (눈동자 버튼 탑재할 수 있도록 업그레이드)
   Widget _buildInputField({
     required String hint,
     required IconData icon,
     required TextEditingController controller,
     bool isPassword = false,
-    Widget? suffixIcon,  // 🔥 우측 눈동자 아이콘용 변수 추가
-    bool hideText = false, // 🔥 글자 숨김 여부 변수 추가
+    Widget? suffixIcon,
+    bool hideText = false,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -284,19 +291,19 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: isPassword ? hideText : false, // 비밀번호 모드일 때만 적용
-        style: const TextStyle(
+        obscureText: isPassword ? hideText : false,
+        style: GoogleFonts.gowunBatang(
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          fontSize: 18,
+          fontSize: 16,
         ),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: const Color(0xFFFCD34D), size: 20),
-          suffixIcon: suffixIcon, // 🔥 우측 아이콘 배치
+          prefixIcon: Icon(icon, color: const Color(0xFFE5C158), size: 20),
+          suffixIcon: suffixIcon,
           hintText: hint,
-          hintStyle: const TextStyle(
+          hintStyle: GoogleFonts.gowunBatang(
             color: Colors.white38,
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
           border: InputBorder.none,
@@ -311,7 +318,7 @@ class _SignupScreenState extends State<SignupScreen> {
 // 7. 화면 2: 약관 동의 화면 (TermsAgreementScreen)
 // -----------------------------------------------------------------------
 class TermsAgreementScreen extends StatefulWidget {
-  const TermsAgreementScreen({Key? key}) : super(key: key);
+  const TermsAgreementScreen({super.key});
 
   @override
   State<TermsAgreementScreen> createState() => _TermsAgreementScreenState();
@@ -322,6 +329,8 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color brandGolden = Color(0xFFE5C158);
+
     return Scaffold(
       backgroundColor: const Color(0xFF030712),
       appBar: AppBar(
@@ -329,7 +338,7 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
         elevation: 0,
         title: Text(
           'TERMS AGREEMENT (이용약관 동의)',
-          style: GoogleFonts.gowunBatang(fontWeight: FontWeight.bold, fontSize: 20),
+          style: GoogleFonts.gowunBatang(fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
       body: Padding(
@@ -337,9 +346,9 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Please read and agree to the terms to use GSU STUDYUP.\n(GSU STUDYUP 서비스 이용을 위해 약관을 읽고 동의해 주세요.)',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, height: 1.5),
+              style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, height: 1.5),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -350,23 +359,23 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white12),
                 ),
-                child: const SingleChildScrollView(
+                child: SingleChildScrollView(
                   child: Text(
                     "[Terms & Privacy Policy / 이용약관 및 개인정보 처리방침]\n\n1. Purpose (목적)\nThis agreement outlines the terms and procedures for using GSU STUDYUP services.\n(본 약관은 GSU STUDYUP 서비스의 이용 조건 및 절차를 규정합니다.)\n\n2. International Law Compliance (국제법 준수)\nThis service strictly complies with EU GDPR and US COPPA. Parental consent is mandatory for collecting data of users under 14.\n(본 서비스는 유럽 GDPR 및 미국 COPPA 규정을 준수하며, 14세 미만 아동의 데이터 보호를 위해 법정대리인의 동의를 필수적으로 수집합니다.)\n\n3. Data Collection Items (수집 항목)\nNationality, Full Name, email, phone number, school name, and grade are collected solely for personalized study reporting.\n(국적, 이름, 이메일, 전화번호, 학교, 학년 정보를 수집하며 이는 학습 리포트 제공 목적으로만 사용됩니다.)\n\n4. Data Security & Rights (데이터 보안)\nAll information is securely encrypted (AES-256) and users retain the right to request deletion at any time.\n(모든 정보는 암호화되어 안전하게 관리되며, 사용자는 언제든 삭제를 요청할 수 있습니다.)",
-                    style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.6, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, height: 1.6, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 20),
             CheckboxListTile(
-              title: const Text(
+              title: Text(
                 'I have read and agree to all terms above.\n(위 약관의 내용을 모두 읽었으며 동의합니다.)',
-                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
               ),
               value: isAgreed,
               onChanged: (val) => setState(() => isAgreed = val!),
-              activeColor: const Color(0xFFFCD34D),
+              activeColor: brandGolden,
               checkColor: const Color(0xFF030712),
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
@@ -374,32 +383,30 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: isAgreed ? () {
-                // 1. 가입 완료 메시지 띄우기
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text(
                       'Registration Complete! (회원가입이 완료되었습니다!)',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: GoogleFonts.gowunBatang(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ),
                 );
 
-                // 2. 🔥 [완벽 수정] 약관 화면과 가입 화면을 연속으로 닫아 '로그인 화면'으로 정확히 복귀!
-                int count = 0;
-                Navigator.of(context).popUntil((route) {
-                  return count++ >= 2; // 정확히 2개의 화면만 걷어내고 로그인 화면을 보여줍니다.
-                });
+                // 🔥 [하드코딩 제거 안전 제일] 가입 완료 후 스택 파괴 현상 방지:
+                // 가입 플로우 화면들을 명확하게 걷어내고 루틴을 안전하게 이전 화면으로 회귀시킵니다.
+                Navigator.of(context).pop(); // 약관창 닫기
+                Navigator.of(context).pop(); // 회원가입 입력창 닫기
               } : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFCD34D),
+                backgroundColor: brandGolden,
                 disabledBackgroundColor: Colors.white10,
                 minimumSize: const Size(double.infinity, 55),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text(
+              child: Text(
                 'SIGNUP COMPLETE (가입 완료)',
-                style: TextStyle(
-                  color: Color(0xFF030712),
+                style: GoogleFonts.gowunBatang(
+                  color: const Color(0xFF030712),
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
