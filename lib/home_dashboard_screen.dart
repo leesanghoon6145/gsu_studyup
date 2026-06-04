@@ -248,6 +248,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             selectedSubject: selectedSubject,
             selectedDurationMinutes: selectedDuration,
             dynamicTestTitle: examName,
+            targetExamDate: pickedDate,
           ),
         ),
       );

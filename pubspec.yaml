@@ -30,8 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^6.2.1
-  audioplayers: ^6.0.0 # 🔥 [최신 사운드 엔진] 끊김 없는 루핑을 위한 초정밀 엔진 장착!
+  google_fonts: ^6.1.0
+  audioplayers: ^6.0.0
+  timezone: ^0.9.4  # 🔥 [최신 사운드 엔진] 끊김 없는 루핑을 위한 초정밀 엔진 장착!
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

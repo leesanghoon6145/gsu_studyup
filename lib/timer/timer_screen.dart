@@ -1,17 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+// 💡 글로벌 타임존 무결성 수호를 위한 패키지 임포트
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
   final int selectedDurationMinutes;
   final String dynamicTestTitle;
+  // 📅 대시보드 달력 엔진에서 넘겨주는 목표 시험 날짜를 안전하게 수신합니다.
+  final DateTime? targetExamDate;
 
   const TimerScreen({
     Key? key,
     required this.selectedSubject,
     required this.selectedDurationMinutes,
     required this.dynamicTestTitle,
+    this.targetExamDate, // 인자 확장 완료
   }) : super(key: key);
 
   @override
@@ -28,6 +34,8 @@ class _TimerScreenState extends State<TimerScreen> {
   void initState() {
     super.initState();
     _totalSeconds = widget.selectedDurationMinutes * 60;
+    // 🌟 타임존 데이터베이스 초기화 엔진 기동
+    tz.initializeTimeZones();
   }
 
   @override
@@ -76,7 +84,7 @@ class _TimerScreenState extends State<TimerScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pop(); // 대시보드로 복귀
+              Navigator.of(context).pop();
             },
             child: Text(
               "확인",
@@ -99,10 +107,9 @@ class _TimerScreenState extends State<TimerScreen> {
 
     return "$hourStr:$minStr:$secStr";
   }
+
   @override
   Widget build(BuildContext context) {
-    // 실시간 별 획득 현황 분 연산
-    int currentMinutes = _elapsedSeconds ~/ 60;
     double progressPercent = _totalSeconds > 0 ? _elapsedSeconds / _totalSeconds : 0.0;
 
     return Scaffold(
@@ -119,7 +126,6 @@ class _TimerScreenState extends State<TimerScreen> {
         child: SafeArea(
           child: Stack(
             children: [
-              // 🛡️ 상단 뒤로가기 내비게이션 바
               Positioned(
                 top: 10,
                 left: 10,
@@ -129,37 +135,48 @@ class _TimerScreenState extends State<TimerScreen> {
                 ),
               ),
 
-              // 🏛️ 메인 콘텐츠 아키텍처 뷰포트
               Positioned.fill(
                 child: Column(
                   children: [
-                    // 📐 [교정 지시사항] 왕관부터 전체 요소를 10mm 하향 조정하기 위해 기존 125에서 163으로 스페이서 변경
                     const SizedBox(height: 163),
 
-                    // 🌍 [GSU StudyUp 글로벌 수호] 전 세계 모든 시험대응 시차 동기화 D-Day 엔진
+                    // 🌍 [GSU StudyUp 글로벌 수호] IANA Time Zone 기반 초정밀 D-Day 연산 엔진
                     Builder(
                       builder: (context) {
-                        DateTime nowUtc = DateTime.now().toUtc();
+                        // 1. 달력에서 선택된 날짜가 오면 해당 날짜를 쓰고, 없으면 안전 백업용으로 오늘 날짜 처리
+                        final DateTime baseDate = widget.targetExamDate ?? DateTime.now();
 
-                        // 👑 글로벌 세팅 시트: 시험을 치르는 국가의 타깃 연도/월/일 설정
-                        int examYear = 2026;
-                        int examMonth = 11;
-                        int examDay = 16;
+                        // 2. 전 세계 현재 순간을 순수 UTC 시간선으로 동기화
+                        final DateTime nowUtc = DateTime.now().toUtc();
 
-                        // 💡 시차 튜닝 마스터 밸브 (한국 수능: 9 / 영국 사법시험: 0)
-                        int targetUtcOffsetHours = 9;
+                        // 3. IANA 타임존 ID 자동 추적 지정 (한국 기준 Asia/Seoul)
+                        // 영국의 경우 Europe/London, 미국의 경우 America/New_York 등으로 변경 가능
+                        const String targetTimeZoneId = 'Asia/Seoul';
+                        final tz.Location targetLocation = tz.getLocation(targetTimeZoneId);
 
-                        DateTime examTargetLocal = DateTime(examYear, examMonth, examDay);
-                        DateTime examDateUtc = examTargetLocal.subtract(Duration(hours: targetUtcOffsetHours));
+                        // 4. 지정된 국가의 시험 당일 00시 00분 타임존 값 생성
+                        final tz.TZDateTime examTargetLocal = tz.TZDateTime(
+                          targetLocation,
+                          baseDate.year,
+                          baseDate.month,
+                          baseDate.day,
+                        );
 
-                        if (nowUtc.isAfter(examDateUtc)) {
-                          examTargetLocal = DateTime(examYear + 1, examMonth, examDay);
-                          examDateUtc = examTargetLocal.subtract(Duration(hours: targetUtcOffsetHours));
+                        // 5. 타임존이 결합된 목표 시점을 절대 UTC 타임스탬프로 수평 동기화
+                        final DateTime examDateUtc = examTargetLocal.toUtc();
+
+                        // 6. 현재 UTC와 시험 목표 UTC 간의 순수한 시간 시차(Hours) 계산 후 Day로 올림 가공
+                        final int remainingHours = examDateUtc.difference(nowUtc).inHours;
+                        final int difference = (remainingHours / 24).ceil();
+
+                        String dDayString;
+                        if (difference < 0) {
+                          dDayString = "D+${difference.abs()}";
+                        } else if (difference == 0) {
+                          dDayString = "D-Day";
+                        } else {
+                          dDayString = "D-$difference";
                         }
-
-                        int remainingHours = examDateUtc.difference(nowUtc).inHours;
-                        int difference = (remainingHours / 24).ceil();
-                        String dDayString = difference <= 0 ? "D-Day" : "D-$difference";
 
                         return Column(
                           mainAxisSize: MainAxisSize.min,
@@ -202,10 +219,9 @@ class _TimerScreenState extends State<TimerScreen> {
                       },
                     ),
 
-                    // 📐 황금 별 트랙 공간 확보용 프리셋 스페이서
+                    // 📐 아래 기존의 모든 그래픽 레이아웃 및 완벽한 무지개 바 코드 블록 완전 보존
                     const SizedBox(height: 240),
 
-                    // 👑 [원장님 지시사항] 중앙 큰 별 맨 아래 끝을 기준으로 정확히 1mm(1.0) 아래 배치 고정 그룹
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -216,7 +232,7 @@ class _TimerScreenState extends State<TimerScreen> {
                             const Icon(Icons.star, color: Color(0xFFE5C158), size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              "실시간 별 획득 현황 :  $currentMinutes / ${widget.selectedDurationMinutes} Mins",
+                              "실시간 별 획득 현황 :  ${_elapsedSeconds ~/ 60} / ${widget.selectedDurationMinutes} Mins",
                               style: GoogleFonts.gowunBatang(
                                 color: const Color(0xFFE5C158),
                                 fontSize: 14,
@@ -226,7 +242,6 @@ class _TimerScreenState extends State<TimerScreen> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 1.0),
                         Text(
                           _formatDisplayTime(_elapsedSeconds),
@@ -243,16 +258,11 @@ class _TimerScreenState extends State<TimerScreen> {
 
                     const Spacer(),
 
-                    // 🔊 [학습 바 구역] 원장님 지시사항 반영: 6등분 칸별 별빛 채우기 엔진
-// 🔊 [학습 바 구역] 원장님 지시사항 반영: 과목명 길이에 대응하는 2행 고정 구조
-// 🔊 [학습 바 구역] 원장님 지시사항 반영: 과목명 분리 및 6색 연결 바 시스템
-// 🔊 [학습 바 구역] 원장님 지시사항 반영: 2행 분리, 무지개 6등분 선 연결 바, 오버플로우 방지 엔진
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1행: 과목명 독립 배치 (오버플로우 방지용 엘리먼트 가드 적용)
                           Row(
                             children: [
                               Expanded(
@@ -263,14 +273,12 @@ class _TimerScreenState extends State<TimerScreen> {
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold
                                   ),
-                                  overflow: TextOverflow.ellipsis, // 혹시나 과목명이 너무 길면 뒤를 ...으로 깔끔하게 마감
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
-
-                          // 2행: "실시간 집중 모드"와 "목표 시간: ??분" 우측 절대 고정 배치
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -282,7 +290,6 @@ class _TimerScreenState extends State<TimerScreen> {
                                     fontWeight: FontWeight.bold
                                 ),
                               ),
-                              // 🛡️ 바 오른쪽 오버플로우 에러를 원천 차단하기 위해 텍스트 폭 가드 및 우측 고정
                               SizedBox(
                                 child: Text(
                                   "목표 시간: ${widget.selectedDurationMinutes}분",
@@ -297,17 +304,15 @@ class _TimerScreenState extends State<TimerScreen> {
                           ),
                           const SizedBox(height: 10),
 
-                          // 🧱 [원장님 지시사항] 빽빽하게 밀착 연결하되, 가느다란 내부 선으로 6등분 구분한 자동 무지개 바
                           LayoutBuilder(
                             builder: (context, constraints) {
-                              // 빨, 주, 노, 초, 파, 보 자동 채우기 그라데이션 컬러 맵
                               final List<List<Color>> rainbowGradients = [
-                                [const Color(0xFFFF4D4D), const Color(0xFFFF2A2A)], // 빨강
-                                [const Color(0xFFFF9F43), const Color(0xFFFF7F11)], // 주황
-                                [const Color(0xFFFECA57), const Color(0xFFFFB142)], // 노랑
-                                [const Color(0xFF1DD1A1), const Color(0xFF10AC84)], // 초록
-                                [const Color(0xFF54A0FF), const Color(0xFF2E86DE)], // 파랑
-                                [const Color(0xFF5F27CD), const Color(0xFF341F97)], // 보라
+                                [const Color(0xFFFF4D4D), const Color(0xFFFF2A2A)],
+                                [const Color(0xFFFF9F43), const Color(0xFFFF7F11)],
+                                [const Color(0xFFFECA57), const Color(0xFFFFB142)],
+                                [const Color(0xFF1DD1A1), const Color(0xFF10AC84)],
+                                [const Color(0xFF54A0FF), const Color(0xFF2E86DE)],
+                                [const Color(0xFF5F27CD), const Color(0xFF341F97)],
                               ];
 
                               return Container(
@@ -323,12 +328,10 @@ class _TimerScreenState extends State<TimerScreen> {
                                 ),
                                 child: Row(
                                   children: List.generate(6, (index) {
-                                    // 전체 너비를 소수점 오차 없이 완전 균등하게 6등분 배치
                                     double itemWidth = (constraints.maxWidth - 2.0) / 6;
                                     double startFactor = index / 6.0;
                                     double endFactor = (index + 1) / 6.0;
 
-                                    // 현재 집중 진행 시간에 맞춰 6칸 빌더가 개별 진행률을 자동으로 계산
                                     double itemProgress = 0.0;
                                     if (progressPercent >= endFactor) {
                                       itemProgress = 1.0;
@@ -341,7 +344,6 @@ class _TimerScreenState extends State<TimerScreen> {
                                     return Container(
                                       width: itemWidth,
                                       height: double.infinity,
-                                      // 💡 칸과 칸 사이를 분리하지 않고 밀착시키되, 내부에 얇은 선으로 경계를 명확히 구분
                                       decoration: BoxDecoration(
                                         border: index < 5 ? Border(
                                           right: BorderSide(
@@ -371,8 +373,6 @@ class _TimerScreenState extends State<TimerScreen> {
                               );
                             },
                           ),
-                          // 아래 분($\%$) 인디케이터 구역으로 단 1자 오차 없이 완벽 연결...
-                          // 아래 분($\%$) 인디케이터 구역으로 정상 연결...
                           const SizedBox(height: 6),
                           LayoutBuilder(
                             builder: (context, constraints) {
@@ -409,9 +409,7 @@ class _TimerScreenState extends State<TimerScreen> {
                     ),
                     const Spacer(flex: 2),
                     const Spacer(flex: 2),
-                    // 🔊 [공부 시작 버튼 구역] 원장님 지시사항 반영: 이미지 깨짐 방지 및 좌우 10mm 정밀 확장 엔진
                     const Spacer(flex: 2),
-                    // 🔊 [공부 시작 버튼 구역] 원장님 지시사항 반영: 이미지 깨짐 방지 및 좌우 10mm 정밀 확장 엔진
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 50.0),
                       child: GestureDetector(
@@ -444,7 +442,6 @@ class _TimerScreenState extends State<TimerScreen> {
                         ),
                       ),
                     ),
-                    // 📐 [오버플로우 가드] 하단 여백을 25에서 20으로 미세 조정하여 0.450픽셀 노란 줄 에러 완전 박멸
                     const SizedBox(height: 20),
                   ],
                 ),
