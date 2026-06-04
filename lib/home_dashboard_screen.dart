@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:gsu_studyup/timer/timer_screen.dart';
- // 💡 상위 폴더 구조에 맞춘 임포트 경로 수호
+import 'package:gsu_studyup/timer/timer_screen.dart'; // 💡 상위 폴더 구조에 맞춘 임포트 경로 수호
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -240,36 +239,25 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
 
     if (pickedDate != null) {
-      DateTime pickedDateOnly = DateTime(pickedDate.year, pickedDate.month, pickedDate.day);
-      int differenceInDays = pickedDateOnly.difference(todayZeroClock).inDays;
-
-      String calculatedDDay = "D - $differenceInDays";
-      if (differenceInDays == 0) calculatedDDay = "D - DAY";
-
       if (!mounted) return;
 
-      // 🚨 [핵심 동기화] 타이머 화면이 닫힐 때 전송하는 완료 데이터를 대시보드로 수집
+      // 🚨 [매개변수 일치 정밀 튜닝 완료] timer_screen.dart 아키텍처와 변수 100% 동기화
       final missionResult = await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => TimerScreen(
             selectedSubject: selectedSubject,
-            selectedMode: selectedMode,
             selectedDurationMinutes: selectedDuration,
             dynamicTestTitle: examName,
-            calculatedDDay: calculatedDDay,
           ),
         ),
       );
 
       // 만약 타이머 미션이 성공하여 별 보상 데이터가 반환되었다면 실시간 갱신 처리
-      if (missionResult != null && missionResult is Map<String, dynamic>) {
-        if (missionResult['isSuccess'] == true) {
-          int earned = missionResult['earnedStars'] ?? 1;
-          setState(() {
-            currentStars += earned;
-            if (currentStars > maxTargetStars) currentStars = maxTargetStars;
-          });
-        }
+      if (missionResult != null && missionResult is int) {
+        setState(() {
+          currentStars = missionResult;
+          if (currentStars > maxTargetStars) currentStars = maxTargetStars;
+        });
       }
     }
   }
@@ -294,7 +282,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.stretch, // 👈 cross 뒤에 AxisAlignment를 붙이고 콜론(:)으로 연결!
           children: [
 
             // 🏰 [웅장한 아트워크 구역] 마법의 책과 탑 비주얼 + 게이미피케이션 현황판
