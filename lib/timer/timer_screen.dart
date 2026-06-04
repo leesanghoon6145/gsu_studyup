@@ -203,7 +203,7 @@ class _TimerScreenState extends State<TimerScreen> {
                     ),
 
                     // 📐 황금 별 트랙 공간 확보용 프리셋 스페이서
-                    const SizedBox(height: 238),
+                    const SizedBox(height: 240),
 
                     // 👑 [원장님 지시사항] 중앙 큰 별 맨 아래 끝을 기준으로 정확히 1mm(1.0) 아래 배치 고정 그룹
                     Column(
@@ -408,33 +408,44 @@ class _TimerScreenState extends State<TimerScreen> {
                       ),
                     ),
                     const Spacer(flex: 2),
+                    const Spacer(flex: 2),
+                    // 🔊 [공부 시작 버튼 구역] 원장님 지시사항 반영: 이미지 깨짐 방지 및 좌우 10mm 정밀 확장 엔진
+                    const Spacer(flex: 2),
+                    // 🔊 [공부 시작 버튼 구역] 원장님 지시사항 반영: 이미지 깨짐 방지 및 좌우 10mm 정밀 확장 엔진
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 36.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 50.0),
                       child: GestureDetector(
                         onTap: _toggleTimer,
                         child: Container(
                           width: double.infinity,
-                          height: 58,
+                          height: 60,
                           decoration: const BoxDecoration(
                             image: DecorationImage(
                               image: AssetImage('assets/images/btn_start.png'),
-                              fit: BoxFit.contain,
+                              fit: BoxFit.fill,
                             ),
                           ),
                           child: Center(
-                            child: Text(
-                              _isRunning ? "PAUSE (일시 중지)" : "START FOCUS (공부 시작)",
-                              style: GoogleFonts.gowunBatang(
-                                  color: const Color(0xFFFFF6D6),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _isRunning ? "PAUSE (일시 중지)" : "START FOCUS (공부 시작)",
+                                  style: GoogleFonts.gowunBatang(
+                                      color: const Color(0xFFFFF6D6),
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 25),
+                    // 📐 [오버플로우 가드] 하단 여백을 25에서 20으로 미세 조정하여 0.450픽셀 노란 줄 에러 완전 박멸
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
