@@ -12,6 +12,7 @@ class HomeDashboardScreen extends StatefulWidget {
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   // 🌟 게이미피케이션 핵심 상태 변수 (원장님 지시: 기본 메인 기준 75개 설정)
+  String userName = '이규현';
   int currentStars = 75;
   final int maxTargetStars = 90;
 
@@ -23,13 +24,17 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   late AudioPlayer _audioPlayer;
 
   final List<Map<String, String>> subjects = [
-    {'en': 'Korean', 'ko': '국어'}, {'en': 'English', 'ko': '영어'},
-    {'en': 'English Voca', 'ko': '영어단·숙어'}, {'en': 'English Speaking', 'ko': '영어회화'},
-    {'en': 'Math', 'ko': '수학'}, {'en': 'Science', 'ko': '과학'},
-    {'en': 'Social Studies', 'ko': '사회'}, {'en': 'History', 'ko': '역사'},
-    {'en': 'Second Language', 'ko': '제2외국어'}, {'en': 'Ethics', 'ko': '도덕'},
-    {'en': 'Tech & Home', 'ko': '기술/가정'}, {'en': 'Chinese Characters', 'ko': '한문'},
-    {'en': 'Information Tech', 'ko': '정보'},
+// 📚 [원장님 지시사항 반영] 1열부터 7열까지 자로 잰 듯 정렬된 14대 마스터 과목 데이터 세트
+    // 1열
+    {'en': 'Native Language', 'ko': '국어'},
+    {'en': 'English', 'ko': '영어'}, {'en': 'Math', 'ko': '수학'},
+    {'en': 'Convo', 'ko': '회화'},   {'en': 'Science', 'ko': '과학'},
+    {'en': 'Social', 'ko': '사회'},  {'en': 'Hist', 'ko': '역사'},
+    {'en': 'Ethics', 'ko': '도덕'},  {'en': 'SFL', 'ko': '제2외국어'},
+    {'en': 'Info', 'ko': '정보'}, {'en': 'Lit Chinese', 'ko': '한문'},
+    {'en': 'Tech & Home Assump', 'ko': '기술/가정'},
+    {'en': 'Vocabulary & Idioms', 'ko': '영단어·숙어'},
+    {'en': 'Other Subjects', 'ko': '기타과목'},
   ];
 
   final List<Map<String, String>> sounds = [
@@ -82,7 +87,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           builder: (context, setPopupState) {
             return Dialog(
               backgroundColor: const Color(0xFF0D1527),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(22.0),
                 child: Column(
@@ -107,7 +113,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       children: [
                         '중간고사', '기말고사', '모의고사', '2027 대학수능'
                       ].map((exam) {
-                        final bool isCurrentSelected = temporarySelectedExam == exam && customExamController.text.isEmpty;
+                        final bool isCurrentSelected = temporarySelectedExam ==
+                            exam && customExamController.text.isEmpty;
                         return GestureDetector(
                           onTap: () {
                             setPopupState(() {
@@ -116,18 +123,24 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             });
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: isCurrentSelected ? const Color(0xFFE5C158) : Colors.black26,
+                              color: isCurrentSelected
+                                  ? const Color(0xFFE5C158)
+                                  : Colors.black26,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: isCurrentSelected ? const Color(0xFFE5C158) : Colors.white24,
+                                color: isCurrentSelected ? const Color(
+                                    0xFFE5C158) : Colors.white24,
                               ),
                             ),
                             child: Text(
                               exam,
                               style: GoogleFonts.gowunBatang(
-                                color: isCurrentSelected ? Colors.black : const Color(0xB3FFFFFF),
+                                color: isCurrentSelected
+                                    ? Colors.black
+                                    : const Color(0xB3FFFFFF),
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
                               ),
@@ -140,11 +153,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
                     Row(
                       children: [
-                        const Icon(Icons.edit_note_rounded, color: Color(0xFFE5C158), size: 20),
+                        const Icon(Icons.edit_note_rounded, color: Color(
+                            0xFFE5C158), size: 20),
                         const SizedBox(width: 6),
                         Text(
                           "Custom Input (직접 입력)",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.gowunBatang(color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -153,11 +169,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       decoration: BoxDecoration(
                         color: Colors.black38,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.4)),
+                        border: Border.all(color: const Color(0xFFE5C158)
+                            .withOpacity(0.4)),
                       ),
                       child: TextField(
                         controller: customExamController,
-                        style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        style: GoogleFonts.gowunBatang(color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15),
                         onChanged: (val) {
                           if (val.isNotEmpty) {
                             setPopupState(() {
@@ -167,9 +186,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         },
                         decoration: InputDecoration(
                           hintText: "e.g. 사법고시, 행정고시, TOEIC",
-                          hintStyle: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 13),
+                          hintStyle: GoogleFonts.gowunBatang(
+                              color: Colors.white38, fontSize: 13),
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
                         ),
                       ),
                     ),
@@ -184,7 +205,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
                         if (finalExamName.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('시험 종류를 선택하거나 직접 입력해 주세요!', style: GoogleFonts.gowunBatang())),
+                            SnackBar(content: Text('시험 종류를 선택하거나 직접 입력해 주세요!',
+                                style: GoogleFonts.gowunBatang())),
                           );
                           return;
                         }
@@ -195,11 +217,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE5C158),
                         minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius
+                            .circular(10)),
                       ),
                       child: Text(
                         "NEXT: SELECT DATE (날짜 선택)",
-                        style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.gowunBatang(color: Colors.black,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -244,12 +268,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       // 🚨 [매개변수 일치 정밀 튜닝 완료] timer_screen.dart 아키텍처와 변수 100% 동기화
       final missionResult = await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => TimerScreen(
-            selectedSubject: selectedSubject,
-            selectedDurationMinutes: selectedDuration,
-            dynamicTestTitle: examName,
-            targetExamDate: pickedDate,
-          ),
+          builder: (context) =>
+              TimerScreen(
+                selectedSubject: selectedSubject,
+                selectedDurationMinutes: selectedDuration,
+                dynamicTestTitle: examName,
+                targetExamDate: pickedDate,
+              ),
         ),
       );
 
@@ -275,7 +300,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         automaticallyImplyLeading: false,
         title: Text(
           'GSU STUDYUP',
-          style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 1.5),
+          style: GoogleFonts.gowunBatang(color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+              letterSpacing: 1.5),
         ),
         centerTitle: true,
       ),
@@ -283,74 +311,62 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch, // 👈 cross 뒤에 AxisAlignment를 붙이고 콜론(:)으로 연결!
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          // 👈 cross 뒤에 AxisAlignment를 붙이고 콜론(:)으로 연결!
           children: [
 
             // 🏰 [웅장한 아트워크 구역] 마법의 책과 탑 비주얼 + 게이미피케이션 현황판
+// 🏰 [원장님 지시사항 반영] 불필요한 별빛 구역 완전 삭제 및 영문 병기 6대 핵심 관리 메뉴
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: const Color(0xFF0D1527),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: brandGolden.withOpacity(0.3), width: 1.2),
-                image: const DecorationImage(
-                  image: AssetImage('assets/images/dashboard_tower_bg.png'), // 마법의 탑 배경 지정 백업
-                  fit: BoxFit.cover,
-                  opacity: 0.15,
-                ),
               ),
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // 🎛️ 글로벌 상용화 스펙: 영문 병기 및 가독성 확보를 위한 2열 격자 배치
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    childAspectRatio: 2.1, // 👈 영문이 들어가면서 늘어난 텍스트 높이를 받아주는 황금 배율 설정
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.menu_book_rounded, color: brandGolden, size: 22),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Magic Tower Status",
-                            style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                      _buildMenuButton(
+                        icon: Icons.forum_rounded,
+                        label: "학친방",
+                        subLabel: "Friends Study Room",
                       ),
-                      // 실시간 텍스트 수집 인디케이터 (75/90)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black45,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: brandGolden.withOpacity(0.5)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.star, color: brandGolden, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              "$currentStars / $maxTargetStars",
-                              style: const TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                          ],
-                        ),
+                      _buildMenuButton(
+                        icon: Icons.assignment_ind_rounded,
+                        label: "개인이름 성취도",
+                        subLabel: "Personal Achievement",
+                      ),
+                      _buildMenuButton(
+                        icon: Icons.language_rounded, // 🌍 글로벌 규격 지구본 아이콘 적용
+                        label: "동시접속자",
+                        subLabel: "Concurrent Users",
+                        isBadge: true,
+                      ),
+                      _buildMenuButton(
+                        icon: Icons.fort_rounded,
+                        label: "나의제국",
+                        subLabel: "My Empire",
+                      ),
+                      _buildMenuButton(
+                        icon: Icons.support_agent_rounded,
+                        label: "교육상담",
+                        subLabel: "Education Counseling",
+                      ),
+                      _buildMenuButton(
+                        icon: Icons.rate_review_rounded,
+                        label: "건의사항",
+                        subLabel: "Suggestions",
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 20),
-                  // 마법의 탑 웅장한 게이미피케이션 프로그레스 바
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: currentStars / maxTargetStars,
-                      minHeight: 12,
-                      backgroundColor: Colors.black38,
-                      valueColor: const AlwaysStoppedAnimation<Color>(brandGolden),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    "Collect Time Stars to complete the Great Magic Tower Journey!\n(타임스타를 수집하여 위대한 마법의 탑 여정을 완수하세요!)",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 11, height: 1.4),
                   ),
                 ],
               ),
@@ -358,7 +374,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             const SizedBox(height: 30),
 
             // Q1. 과목 선택
-            _buildSectionTitle('Which subject will you study?\n(어떤 과목을 공부할까요?)'),
+              _buildSectionTitle('Subject Selection\n[과목 선택]'),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10, runSpacing: 10,
@@ -374,7 +390,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             const SizedBox(height: 30),
 
             // Q2. 학습 모드
-            _buildSectionTitle('Which learning mode will you start?\n(어떤 학습 모드로 시작할까요?)'),
+            _buildSectionTitle('Learning Mode Selection\n[학습 모드 선택]'),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -387,14 +403,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 _buildExpandedToggleButton(
                   title: 'Weekend/Vacation\n(주말·방학 학습)',
                   isActive: selectedMode == 'Weekend/Vacation (주말·방학 학습)',
-                  onTap: () => setState(() => selectedMode = 'Weekend/Vacation (주말·방학 학습)'),
+                  onTap: () =>
+                      setState(() =>
+                      selectedMode = 'Weekend/Vacation (주말·방학 학습)'),
                 ),
               ],
             ),
             const SizedBox(height: 30),
 
             // Q3. 집중 시간 선택
-            _buildSectionTitle('How long will you focus?\n(얼마나 집중해 볼까요?)'),
+            _buildSectionTitle('Focus Mode Selection\n[집중 모드 선택]'),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10, runSpacing: 10,
@@ -410,7 +428,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             const SizedBox(height: 30),
 
             // Q4. 백색소음 선택
-            _buildSectionTitle('Choose a sound to help you focus.\n(집중을 도울 소리를 골라보세요)'),
+            _buildSectionTitle('White Noise Selection\n[백색소음 선택]'),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10, runSpacing: 10,
@@ -431,7 +449,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               onPressed: selectedSubject.isEmpty
                   ? () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('먼저 과목을 선택해 주세요!', style: GoogleFonts.gowunBatang())),
+                  SnackBar(content: Text(
+                      '먼저 과목을 선택해 주세요!', style: GoogleFonts.gowunBatang())),
                 );
               }
                   : () {
@@ -440,11 +459,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: brandGolden,
                 minimumSize: const Size(double.infinity, 58),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: Text(
                 'Select Exam Type & Date\n(목표 시험 및 일정 선택 후 집중 시작)',
-                style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16),
+                style: GoogleFonts.gowunBatang(color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -456,7 +478,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(title, style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, height: 1.4));
+    return Text(title, style: GoogleFonts.gowunBatang(color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: 16,
+        height: 1.4));
   }
 
   Widget _buildSelectableChip({
@@ -472,7 +497,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         decoration: BoxDecoration(
           color: isSelected ? brandGolden : const Color(0xFF0D1527),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? brandGolden : Colors.white12, width: 1.5),
+          border: Border.all(
+              color: isSelected ? brandGolden : Colors.white12, width: 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -498,7 +524,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildExpandedToggleButton({required String title, required bool isActive, required VoidCallback onTap}) {
+  Widget _buildExpandedToggleButton(
+      {required String title, required bool isActive, required VoidCallback onTap}) {
     const Color brandGolden = Color(0xFFE5C158);
     return Expanded(
       child: GestureDetector(
@@ -526,4 +553,99 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       ),
     );
   }
-}
+
+// 🎨 [원장님 기획 완벽 반영] 1행(로고+한글), 2행(로고 없이 영문 대폭 확대) 쾌적 가독성 버튼 빌더
+  Widget _buildMenuButton({
+    required IconData icon,
+    required String label,
+    required String subLabel,
+    bool isBadge = false,
+  }) {
+    const Color brandGolden = Color(0xFFE5C158);
+    return InkWell(
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${label.replaceAll('\n', ' ')} 페이지 준비 중입니다.',
+              style: GoogleFonts.gowunBatang(),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black38,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: brandGolden.withOpacity(0.2), width: 1.0),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 1행: 로고(아이콘) 배치 + 선명한 한글 타이틀
+                Row(
+                  children: [
+                    Icon(icon, color: brandGolden, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          label,
+                          style: GoogleFonts.gowunBatang(
+                            color: const Color(0xFFFFF6D6),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 7), // 👈 글로벌 규격의 쾌적함을 위한 황금 행간 세팅
+
+                // 2행: 원장님 핵심 지시 (앞에 로고를 완전히 제거하여 영문 타이포 공간 100% 확보 및 시원하게 확대)
+                Padding(
+                  padding: const EdgeInsets.only(left: 2), // 한글 로고 라인과 예쁘게 정렬을 맞추는 마진
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      subLabel,
+                      style: GoogleFonts.gowunBatang(
+                        color: Colors.white70, // 은은하면서 눈이 편안한 화이트 스케일
+                        fontWeight: FontWeight.bold, // 글로벌 위엄이 살아나는 Bold 두께 고정
+                        fontSize: 13.5, // 👈 학생들이 절대 짜증 나지 않도록 글자 크기를 시원하게 상향 조정!
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (isBadge)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    "LIVE",
+                    style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+} // 👈 🚨 [체크 필수] 이 파일의 가장 마지막 최종 닫는 중괄호입니다!/ 👈 클래스가 끝나는 파일의 최하단 최종 중괄호의 위치를 꼭 확인해 주세요!
