@@ -374,7 +374,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             const SizedBox(height: 30),
 
             // Q1. 과목 선택
-              _buildSectionTitle('Subject Selection\n[과목 선택]'),
+            _buildSectionTitle('Subject Selection\n[과목 선택]'),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10, runSpacing: 10,
