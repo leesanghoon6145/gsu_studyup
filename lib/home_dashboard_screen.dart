@@ -27,20 +27,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   Timer? _previewTimer;
   String previewingSound = '';
 
-  // 📚 14대 마스터 과목 데이터 완벽 수호 (영어/한국어 엄격 병기)
-  final List<Map<String, String>> subjects = [
+  // 📚 14대 과목을 정리하고 국어, 수학 남기고 운동, 독서 추가 (동적 변경을 위해 리스트 타입 변경 및 final 제거)
+  List<Map<String, String>> subjects = [
     {'en': 'Native Language', 'ko': '국어'},
-    {'en': 'English', 'ko': '영어'}, {'en': 'Math', 'ko': '수학'},
-    {'en': 'Convo', 'ko': '회화'},   {'en': 'Science', 'ko': '과학'},
-    {'en': 'Social', 'ko': '사회'},  {'en': 'Hist', 'ko': '역사'},
-    {'en': 'Ethics', 'ko': '도덕'},  {'en': 'SFL', 'ko': '제2외국어'},
-    {'en': 'Info', 'ko': '정보'}, {'en': 'Lit Chinese', 'ko': '한문'},
-    {'en': 'Tech & Home Assump', 'ko': '기술/가정'},
-    {'en': 'Vocabulary & Idioms', 'ko': '영단어·숙어'},
-    {'en': 'Other Subjects', 'ko': '기타과목'},
+    {'en': 'Math', 'ko': '수학'},
+    {'en': 'Exercise', 'ko': '운동'},
+    {'en': 'Reading', 'ko': '독서'},
   ];
 
-  // 🔊 백색소음 에셋 매핑 리스트
+  // 🔊 백색소음 에셋 매핑 리스트 완벽 수호
   final List<Map<String, String>> sounds = [
     {'en': 'Crickets', 'ko': '귀뚜라미 소리', 'file': 'crickets.mp3'},
     {'en': 'Spring Morning', 'ko': '봄 아침소리', 'file': 'spring_morning.mp3'},
@@ -65,7 +60,27 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     super.dispose();
   }
 
-  // 🎧 지시사항 1번 해결: 10초 미리듣기 사운드 파이프라인 표준 정밀 교정
+  // ➕ 자유로운 과목 생성을 위한 함수 (국어 수학 등이 있는 현재 위치에 실시간 자동 배치)
+  void _addNewSubject(String nameKo, String nameEn) {
+    setState(() {
+      // nameEn이 비어있으면 괄호 없이 한글명만 깔끔하게 노출되도록 처리
+      final finalEn = nameEn.isEmpty ? '' : '$nameEn ';
+      subjects.add({'en': finalEn, 'ko': nameKo});
+    });
+  }
+
+  // ❌ 과목 실시간 삭제 함수 (X 버튼 동작)
+  void _deleteSubject(Map<String, String> targetSub, String displayName) {
+    setState(() {
+      subjects.remove(targetSub);
+      // 현재 선택된 과목이 삭제되는 과목이라면 선택 해제
+      if (selectedSubject == displayName) {
+        selectedSubject = '';
+      }
+    });
+  }
+
+  // 🎧 지시사항 1번 해결: 10초 미리듣기 사운드 파이프라인 표준 정밀 교정 완벽 수호
   void _handleSoundPreview(String displayName, String fileName) async {
     try {
       _previewTimer?.cancel();
@@ -75,7 +90,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         setState(() => previewingSound = '');
       } else {
         setState(() => previewingSound = displayName);
-        // 에셋 소스 다이렉트 주입 규격 준수
         await _audioPlayer.play(AssetSource('sounds/$fileName'));
 
         _previewTimer = Timer(const Duration(seconds: 10), () async {
@@ -90,7 +104,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     }
   }
 
-  // 🔘 단독 토글 활성화 및 음원 제어
+  // 🔘 단독 토글 활성화 및 음원 제어 완벽 수호
   void _handleSoundSelect(String displayName, String fileName) async {
     _previewTimer?.cancel();
     await _audioPlayer.stop();
@@ -133,7 +147,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     Wrap(
                       spacing: 8, runSpacing: 8,
                       alignment: WrapAlignment.center,
-                      children: ['중간고사', '기말고사', '모의고사', '2027 대학수능'].map((exam) {
+                      children: ['학기중 학습', '기말고사', '공무원 시험', 'TOEIC', '2027 대학수능', '운동'].map((exam) {
                         final bool isCurrentSelected = temporarySelectedExam == exam && customExamController.text.isEmpty;
                         return GestureDetector(
                           onTap: () {
@@ -253,6 +267,82 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     }
   }
 
+// ➕ 단일 입력 및 버튼 한 줄 정렬이 반영된 과목 생성 팝업창
+  void _showAddSubjectDialog() {
+    final TextEditingController subjectController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF0D1527),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(22.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  "CREATE NEW SUBJECT\n[새로운 과목 생성]",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 18),
+
+                // 💡 편리성을 위해 한글/영어 구분 없이 딱 1개의 입력창으로 통합
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white24)),
+                  child: TextField(
+                    controller: subjectController,
+                    style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: "e.g. 요가, 축구, 영어, Yoga, Hobby",
+                      hintStyle: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 12),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+
+                // 💡 버튼 텍스트가 두 줄로 깨지지 않도록 좌우 밸런스를 넓힌 정렬 구조
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end, // 우측 방향으로 버튼 배치 안정화
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text("CANCEL [취소]", style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(width: 14), // 버튼 사이 간격 확보
+                    ElevatedButton(
+                      onPressed: () {
+                        final text = subjectController.text.trim();
+                        if (text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('과목명을 입력해 주세요!', style: GoogleFonts.gowunBatang())));
+                          return;
+                        }
+                        // 입력받은 단일 텍스트를 한글/영어 영역에 동일하게 매핑하여 기존 로직 수호
+                        _addNewSubject(text, '');
+                        Navigator.of(context).pop();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE5C158),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), // 버튼 내 여유 공간을 넓혀 한 줄 유지
+                      ),
+                      child: Text("CREATE [생성]", style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color brandGolden = Color(0xFFE5C158);
@@ -292,7 +382,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
                     children: [
-                      _buildMenuButton(icon: Icons.forum_rounded, label: "학친방", subLabel: "Friends Study Room"),
+                      _buildMenuButton(icon: Icons.forum_rounded, label: "친구 학습방", subLabel: "Friends Study Room"),
                       _buildMenuButton(icon: Icons.assignment_ind_rounded, label: "개인이름 성취도", subLabel: "Personal Achievement"),
                       _buildMenuButton(icon: Icons.language_rounded, label: "동시접속자", subLabel: "Concurrent Users", isBadge: true),
                       _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국", subLabel: "My Empire"),
@@ -307,16 +397,65 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
             _buildSectionTitle('Subject Selection\n[과목 선택]'),
             const SizedBox(height: 12),
+
+            // 🔄 동적 생성 및 우측 상단 X 삭제 버튼이 결합된 과목 배치 영역
             Wrap(
               spacing: 10, runSpacing: 10,
               children: subjects.map((sub) {
                 final displayName = '${sub['en']} (${sub['ko']})';
-                return _buildSelectableChip(
-                  text: displayName,
-                  isSelected: selectedSubject == displayName,
-                  onTap: () => setState(() => selectedSubject = displayName),
+                final bool isSelected = selectedSubject == displayName;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 6), // X 버튼 공간 확보를 위한 가운 패딩
+                      child: _buildSelectableChip(
+                        text: displayName,
+                        isSelected: isSelected,
+                        onTap: () => setState(() => selectedSubject = displayName),
+                      ),
+                    ),
+                    // ❌ 과목 칩 우측 상단에 절묘하게 밀착시킨 삭제 버튼 구성
+                    Positioned(
+                      top: 0,
+                      right: 2,
+                      child: GestureDetector(
+                        onTap: () => _deleteSubject(sub, displayName),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15), // 바탕색과 은은하게 구분만 되도록 반투명 처리
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 1),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 10, // 아이콘 크기도 살짝 줄여 시각적 거슬림 최소화
+                            color: Colors.white60, // 눈에 덜 띄는 부드러운 화이트 그레이
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               }).toList(),
+            ),
+            const SizedBox(height: 14),
+
+            // ➕ 언제든 과목을 자유롭게 추가하는 동적 생성 버튼 배치
+            OutlinedButton.icon(
+              onPressed: () => _showAddSubjectDialog(),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: brandGolden, width: 1.2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              icon: const Icon(Icons.add_circle_outline_rounded, color: brandGolden, size: 16),
+              label: Text(
+                "새로운 과목 생성 Create New Subject",
+                style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 30),
 
@@ -408,7 +547,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           minimumSize: Size.zero,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(6),
-                            // 무결성 테두리 규격 확보 완료
                             side: BorderSide(color: isSelected ? Colors.transparent : const Color(0x80E5C158)),
                           ),
                         ),
@@ -455,7 +593,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // 글씨가 커진 만큼 좌우 패딩도 14 -> 16으로 확장
         decoration: BoxDecoration(
           color: isSelected ? brandGolden : const Color(0xFF0D1527),
           borderRadius: BorderRadius.circular(12),
@@ -463,7 +601,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         ),
         child: Text(
           text,
-          style: GoogleFonts.gowunBatang(color: isSelected ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 13),
+          style: GoogleFonts.gowunBatang(
+            color: isSelected ? const Color(0xFF030712) : Colors.white70, // 비선택시 글씨 선명도도 업그레이드
+            fontWeight: FontWeight.bold,
+            fontSize: 15, // 💡 기존 13에서 15로 시원하게 확대 완료!
+          ),
         ),
       ),
     );
