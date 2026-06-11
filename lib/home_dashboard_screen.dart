@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:gsu_studyup/square/member_achievement_screen.dart';
 import 'dart:async';
 import 'package:gsu_studyup/timer/timer_screen.dart'; // 💡 실제 프로젝트 트리 경로 수호
+import 'square/friend_study_room_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -382,8 +384,28 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
                     children: [
-                      _buildMenuButton(icon: Icons.forum_rounded, label: "친구 학습방", subLabel: "Friends Study Room"),
-                      _buildMenuButton(icon: Icons.assignment_ind_rounded, label: "개인이름 성취도", subLabel: "Personal Achievement"),
+                      _buildMenuButton(
+                        icon: Icons.forum_rounded,
+                        label: "친구 학습방",
+                        subLabel: "Friends Study Room",
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const FriendStudyRoomScreen()),
+                          );
+                        },
+                      ),
+                      _buildMenuButton(
+                        icon: Icons.assignment_ind_rounded,
+                        label: "개인이름 성취도",
+                        subLabel: "Personal Achievement",
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const MemberAchievementScreen()),
+                          );
+                        },
+                      ),
                       _buildMenuButton(icon: Icons.language_rounded, label: "동시접속자", subLabel: "Concurrent Users", isBadge: true),
                       _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국", subLabel: "My Empire"),
                       _buildMenuButton(icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling"),
@@ -635,12 +657,27 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildMenuButton({required IconData icon, required String label, required String subLabel, bool isBadge = false}) {
-    const Color brandGolden = Color(0xFFE5C158);
+  Widget _buildMenuButton({
+    required IconData icon,
+    required String label,
+    required String subLabel,
+    bool isBadge = false,
+    VoidCallback? onTap, // 🔓 바깥에서 전달되는 터치 신호를 깔끔하게 접수하는 통로
+  }) {
+    const Color brandGolden = Color(0xFFE5C158); // 웅장한 골드 색상 변수 보존
     return InkWell(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${label.replaceAll('\n', ' ')} 페이지 준비 중입니다.', style: GoogleFonts.gowunBatang())));
+      onTap: onTap ?? () {
+        // 💡 연결된 통로가 없을 때만 기존처럼 준비중 알림을 띄웁니다
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${label.replaceAll('\n', ' ')} 페이지 준비 중입니다. (Page Under Construction)',
+              style: GoogleFonts.gowunBatang(),
+            ),
+          ),
+        );
       },
+// ⭐⭐⭐ [메뉴 버튼 틀 터치 신호 통로 개방 조각 끝] ⭐⭐⭐
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(10), border: Border.all(color: brandGolden.withOpacity(0.2), width: 1.0)),

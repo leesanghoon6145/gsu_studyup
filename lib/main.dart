@@ -26,8 +26,7 @@ class GsuStudyUpApp extends StatelessWidget {
 }
 
 // -----------------------------------------
-// [1] 메인 입장 화면 (설명글 삭제 및 투명 버튼 적용)
-// -----------------------------------------
+// [1] 메인 입장 화면 (설명글 삭제 및 투명 버튼 적용)// -----------------------------------------
 class EntranceScreen extends StatelessWidget {
   const EntranceScreen({super.key});
 
