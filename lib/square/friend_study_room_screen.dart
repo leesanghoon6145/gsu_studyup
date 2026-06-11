@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+// 💡 [연동 가이드]: 홈 대시보드의 과목선택 및 타이머 진입로 세팅을 위한 순정 라우터 파일 결합
+import 'package:gsu_studyup/home_dashboard_screen.dart';
 
 class FriendStudyRoomScreen extends StatefulWidget {
   const FriendStudyRoomScreen({Key? key}) : super(key: key);
@@ -9,13 +11,59 @@ class FriendStudyRoomScreen extends StatefulWidget {
   State<FriendStudyRoomScreen> createState() => _FriendStudyRoomScreenState();
 }
 
-// 🏠 [4번 버그 교정]: 전 페이지로 나갔다 들어와도 생성된 방이 리셋되지 않도록 리스트 데이터를 클래스 외부에 철통 고정 보존
+// ==============================================================================
+// 👥 [원장님 지시 2단계]: 출시 직전 삭제할 가상회원 5명 실시간 시뮬레이션 데이터 센터
+// ==============================================================================
+final List<Map<String, dynamic>> _virtualStudents = [
+  {
+    "id_name": "Seunghun Kim (김승훈)",
+    "schoolInfo": "GSU High School 2nd Grade (GSU고등학교 2학년)",
+    "level": "Lv.7", "stars": "1,250",
+    "status": "🟢 Studying (공부 중)", "statusColor": const Color(0xFF00F0FF),
+    "streak": "🔥 23 Days (23일 연속)", "activity": "📖 Math (수학)",
+    "time": "⏰ Today 2h 15m (오늘 2시간 15분)", "target": "🎯 Target 82% (목표 82%)"
+  },
+  {
+    "id_name": "Gyuhyeon Lee (이규현)",
+    "schoolInfo": "Seoul High School 3rd Grade (서울고등학교 3학년)",
+    "level": "Lv.9", "stars": "1,800",
+    "status": "🟢 Studying (공부 중)", "statusColor": const Color(0xFF00F0FF),
+    "streak": "🔥 45 Days (45일 연속)", "activity": "📖 English (영어)",
+    "time": "⏰ Today 3h 22m (오늘 3시간 22분)", "target": "🎯 Target 95% (목표 95%)"
+  },
+  {
+    "id_name": "Yubin Shin (신유빈)",
+    "schoolInfo": "Global High School 1st Grade (글로벌고등학교 1학년)",
+    "level": "Lv.5", "stars": "700",
+    "status": "⚫ Offline (오프라인)", "statusColor": Colors.grey,
+    "streak": "🔥 12 Days (12일 연속)", "activity": "📚 Reading (독서)",
+    "time": "⏰ Today 0h 00m (오늘 0시간 0분)", "target": "🎯 Target 0% (목표 0%)"
+  },
+  {
+    "id_name": "Minwoo Choi (최민우)",
+    "schoolInfo": "Hankuk High School 2nd Grade (한국고등학교 2학년)",
+    "level": "Lv.6", "stars": "950",
+    "status": "🟢 Studying (공부 중)", "statusColor": const Color(0xFF00F0FF),
+    "streak": "🔥 8 Days (8일 연속)", "activity": "📖 Korean (국어)",
+    "time": "⏰ Today 1h 45m (오늘 1시간 45분)", "target": "🎯 Target 88%)"
+  },
+  {
+    "id_name": "Emma Jung (정엠마)",
+    "schoolInfo": "Daejeon High School 3rd Grade (대전고등학교 3학년)",
+    "level": "Lv.8", "stars": "1,420",
+    "status": "⚫ Offline (오프라인)", "statusColor": Colors.grey,
+    "streak": "🔥 61 Days (61일 연속)", "activity": "📖 Science (과학)",
+    "time": "⏰ Today 2h 05m (오늘 2시간 05분)", "target": "🎯 Target 74%)"
+  }
+];
+
+// 🏠 전 페이지로 나갔다 들어와도 생성된 방이 리셋되지 않도록 리스트 데이터를 클래스 외부에 철통 고정 보존
 final List<Map<String, dynamic>> _globalRooms = [
   {
     "title": "Room A",
-    "sub": "2 / 2 Users (2명방)",
-    "maxUsers": 2,
-    "currentUsers": 2,
+    "sub": "3 / 5 Users (5명 중 3명 공부 중)",
+    "maxUsers": 5,
+    "currentUsers": 3,
     "hasPassword": false,
     "isCreator": false
   },
@@ -39,13 +87,11 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
 
   // 🌟 학생들이 받은 이모지 응원 내역을 실시간 누적 보관하는 데이터 센터
   final Map<String, List<Map<String, String>>> _emojiInbox = {
-    "Seunghun Kim (김승훈)": [
-      {"emoji": "👍", "from": "Gyuhyeon Lee (이규현)"},
-    ],
-    "Gyuhyeon Lee (이규현)": [
-      {"emoji": "🔥", "from": "Yubin Shin (신유빈)"},
-    ],
+    "Seunghun Kim (김승훈)": [{"emoji": "👍", "from": "Gyuhyeon Lee (이규현)"}],
+    "Gyuhyeon Lee (이규현)": [{"emoji": "🔥", "from": "Yubin Shin (신유빈)"}],
     "Yubin Shin (신유빈)": [],
+    "Minwoo Choi (최민우)": [],
+    "Emma Jung (정엠마)": [],
   };
 
   @override
@@ -57,7 +103,7 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
     super.dispose();
   }
 
-  // ⏰ [4번 지시사항]: 10분 백그라운드 카운트다운 타이머 완벽 안착 수식
+  // ⏰ 10분 백그라운드 카운트다운 타이머 완벽 안착 수식
   void _startInactivityTimer(String roomTitle) {
     _inactiveTimers[roomTitle]?.cancel();
     _inactiveTimers[roomTitle] = Timer(const Duration(minutes: 10), () {
@@ -127,7 +173,6 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                 physics: const BouncingScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  // 📐 [1번 지시사항]: 세로 폭을 추가로 10% 더 압축하기 위해 배율을 2.38 -> 2.65로 정밀 수정
                   childAspectRatio: 2.65,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
@@ -141,13 +186,12 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                     onTap: () => _enterRoom(room, index),
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), // [2번 교정]: 패딩 압축
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.black38,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: brandGolden.withOpacity(0.2), width: 1.0),
                       ),
-                      // 🚨 [2번 버그 교정]: 상자가 세로로 줄어들었을 때 안쪽 컴포넌트가 삐져나오지 않도록 정밀 간격 압축
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -179,13 +223,12 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                                   child: IconButton(
                                     padding: EdgeInsets.zero,
                                     icon: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 18),
-                                    // 🗑️ [3번 지시사항]: 즉시 삭제를 차단하고 진짜 지울 것인지 더블 체크 팝업 띄우기
                                     onPressed: () => _showDeleteConfirmDialog(context, index),
                                   ),
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 1), // 오버플로우 차단을 위한 유격 최소화
+                          const SizedBox(height: 1),
                           Text(
                             room["sub"],
                             style: GoogleFonts.gowunBatang(
@@ -208,7 +251,6 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
     );
   }
 
-  // 🗑️ [3번 지시사항]: 권한 확인 및 방 삭제 더블 체크 모달 연산 수식
   void _showDeleteConfirmDialog(BuildContext context, int index) {
     showDialog(
       context: context,
@@ -255,27 +297,6 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
       return;
     }
 
-    final List<Map<String, dynamic>> virtualStudents = [
-      {
-        "id_name": "Seunghun Kim (김승훈)", "level": "Lv.7", "stars": "1,250",
-        "status": "🟢 Studying (공부 중)", "statusColor": const Color(0xFF00F0FF),
-        "streak": "🔥 23 Days (23일 연속)", "activity": "📖 Math (수학)",
-        "time": "⏰ Today 2h 15m (오늘 2시간 15분)", "target": "🎯 Target 82% (목표 82%)"
-      },
-      {
-        "id_name": "Gyuhyeon Lee (이규현)", "level": "Lv.9", "stars": "1,800",
-        "status": "🟢 Studying (공부 중)", "statusColor": const Color(0xFF00F0FF),
-        "streak": "🔥 45 Days (45일 연속)", "activity": "📖 English (영어)",
-        "time": "⏰ Today 3h 22m (오늘 3시간 22분)", "target": "🎯 Target 95% (목표 95%)"
-      },
-      {
-        "id_name": "Yubin Shin (신유빈)", "level": "Lv.5", "stars": "700",
-        "status": "⚫ Offline (오프라인)", "statusColor": Colors.grey,
-        "streak": "🔥 102 Days (102일 연속)", "activity": "📚 Reading (독서)",
-        "time": "⏰ Today 0h 00m (오늘 0시간 0분)", "target": "🎯 Target 0% (목표 0%)"
-      },
-    ];
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -317,8 +338,8 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                Text('Total: ⏰ 17h 35m\n(오늘 방 누적 17시간 35분)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
-                                Text('Avg: ⏰ 3h 31m\n(오늘 방 평균 3시간 31분)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
+                                Text('Total: ⏰ 24h 12m\n(오늘 방 누적 24시간 12m)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
+                                Text('Avg: ⏰ 4h 50m\n(오늘 방 평균 4시간 50m)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
                               ],
                             ),
                           ],
@@ -332,9 +353,9 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                       const SizedBox(height: 10),
                       Expanded(
                         child: ListView.builder(
-                          itemCount: virtualStudents.length,
+                          itemCount: _virtualStudents.length,
                           itemBuilder: (context, studentIndex) {
-                            final student = virtualStudents[studentIndex];
+                            final student = _virtualStudents[studentIndex];
                             final String targetStudent = student["id_name"];
                             final List<Map<String, String>> inbox = _emojiInbox[targetStudent] ?? [];
 
@@ -398,6 +419,11 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                                       children: [
                                         const Divider(color: Colors.white12),
                                         const SizedBox(height: 6),
+                                        Text(
+                                          student["schoolInfo"],
+                                          style: GoogleFonts.gowunBatang(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.normal),
+                                        ),
+                                        const SizedBox(height: 8),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
@@ -448,6 +474,44 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                               ),
                             );
                           },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 🚀 [진짜 보라색 버튼 자산 호출 구역]: 1픽셀 왜곡 없이 원본 이미지 그대로 렌더링
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const HomeDashboardScreen(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          height: 56,
+                          decoration: const BoxDecoration(
+                            image: DecorationImage(
+                              image: AssetImage('assets/images/purple_btn.png'),
+                              fit: BoxFit.fill,
+                            ),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  "Study Settings (학습 설정)",
+                                  style: GoogleFonts.gowunBatang(
+                                    color: const Color(0xFFFFF6D6),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
