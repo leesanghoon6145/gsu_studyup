@@ -12,6 +12,10 @@ class TimerScreen extends StatefulWidget {
   final DateTime? targetExamDate;
   final String selectedSoundFile;
 
+  // 👑 [회의 반영]: 마이페이지 직통 데이터 전선 수혈 파이프라인 개방
+  final String targetUniversity;
+  final bool isVipMember;
+
   const TimerScreen({
     Key? key,
     required this.selectedSubject,
@@ -19,6 +23,8 @@ class TimerScreen extends StatefulWidget {
     required this.dynamicTestTitle,
     this.targetExamDate,
     required this.selectedSoundFile,
+    this.targetUniversity = "Seoul National University (서울대학교)", // 안심 디폴트값 배정
+    this.isVipMember = false, // 기본 FREE 회원 락
   }) : super(key: key);
 
   @override
@@ -33,6 +39,11 @@ class _TimerScreenState extends State<TimerScreen> {
   double progressPercent = 0.0; // 🌟 무지개 바 가산 제어 변수 선언 완벽 보존
 
   late AudioPlayer _timerAudioPlayer;
+
+  // 👑 [애니메이션 상태 머신 코어]: 5분(300초) 주기 숨쉬는 명문대 텍스트 트리거 제어실
+  int _animationCycleTick = 0; // 주기 안에서 현재 초수를 카운트 (0 ~ 305초 순환)
+  String _animatedText = "";   // 별 중앙에 현재 표출할 글자
+  double _textOpacity = 0.0;   // 은은한 페이드 인/아웃 투명도 수식
 
   @override
   void initState() {
@@ -52,7 +63,33 @@ class _TimerScreenState extends State<TimerScreen> {
     super.dispose();
   }
 
-  //  지시사항 1 & 2번 결합 해결: 타이머 연산 복구 및 백색소음 동시 싱크 연동 엔진
+  // 👑 [VIP 전용 타임라인 알고리즘]: 1초마다 시계와 싱크되어 5분 주기 순환 연산 처리
+  void _runVipAuraAnimationLogic() {
+    if (!widget.isVipMember) return; // 일반 회원은 가두리 락 발동 차단
+
+    _animationCycleTick++;
+
+    if (_animationCycleTick == 1) {
+      // 1초째: "목표" 글자 세팅 및 서서히 피어오름
+      _animatedText = "목표";
+      _textOpacity = 1.0;
+    } else if (_animationCycleTick == 3) {
+      // 3초째: 2초 머물렀으니 서서히 사라짐
+      _textOpacity = 0.0;
+    } else if (_animationCycleTick == 5) {
+      // 5초째: 사라지자마자 "내가 마이페이지에 입력한 대학" 장착 후 서서히 피어오름
+      _animatedText = widget.targetUniversity;
+      _textOpacity = 1.0;
+    } else if (_animationCycleTick == 7) {
+      // 7초째: 대학 이름 2초 머물렀으니 다시 서서히 완전 소멸
+      _textOpacity = 0.0;
+    } else if (_animationCycleTick >= 307) {
+      // 7초 이후부터 정확히 300초(5분) 동안은 완전히 소멸한 침묵 상태를 유지하다가,
+      // 307초(5분 7초)가 도달하는 순간 틱 카운터를 초기화하여 "목표"부터 무한 궤도 재출발!
+      _animationCycleTick = 0;
+    }
+  }
+
   void _toggleTimer() async {
     try {
       if (_isRunning) {
@@ -62,17 +99,25 @@ class _TimerScreenState extends State<TimerScreen> {
       } else {
         setState(() => _isRunning = true);
 
-        // 백색소음 파일명이 존재할 때만 정밀 타격하여 플레이 가동
         if (widget.selectedSoundFile.isNotEmpty) {
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
+        }
+
+        // 최초 기동 타임에 VIP 회원이면 강제 0초 즉시 시발점 기폭
+        if (widget.isVipMember && _elapsedSeconds == 0) {
+          _animationCycleTick = 0;
+          _animatedText = "목표";
+          _textOpacity = 1.0;
         }
 
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
           setState(() {
             if (_elapsedSeconds < _totalSeconds) {
               _elapsedSeconds++;
-              // 🌟 원장님의 소중한 무지개 바 실시간 갱신 수식 복원 완료
               progressPercent = _elapsedSeconds / _totalSeconds;
+
+              // 👑 1초 시계 흘러갈 때 VIP 연쇄 애니메이션 엔진 실시간 동시 가동
+              _runVipAuraAnimationLogic();
             } else {
               _timer?.cancel();
               _isRunning = false;
@@ -122,6 +167,8 @@ class _TimerScreenState extends State<TimerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color brandGolden = Color(0xFFE5C158);
+
     return Scaffold(
       backgroundColor: const Color(0xFF050B14),
       body: Container(
@@ -198,7 +245,6 @@ class _TimerScreenState extends State<TimerScreen> {
                           children: [
                             const Icon(Icons.star, color: Color(0xFFE5C158), size: 16),
                             const SizedBox(width: 6),
-                            // 🌟 실시간 별 획득 현황판 스펙 완벽 보존
                             Text(
                               "실시간 별 획득 현황 :  ${_elapsedSeconds ~/ 60} / ${widget.selectedDurationMinutes} Mins",
                               style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5),
@@ -206,9 +252,49 @@ class _TimerScreenState extends State<TimerScreen> {
                           ],
                         ),
                         const SizedBox(height: 1.0),
-                        Text(
-                          _formatDisplayTime(_elapsedSeconds),
-                          style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9),
+
+                        // 👑 [하이라이트 마스터피스 구역]: 중앙 숫자 시계 상단에 숨쉬는 명문대 텍스트 투영
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // ⏱️ 순정 숫자 초시계 레이아웃은 그대로 존재
+                            Text(
+                              _formatDisplayTime(_elapsedSeconds),
+                              style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9),
+                            ),
+
+                            // 👑 VIP 작동 시 황금빛 그라데이션 광채를 품고 숫자를 덮으며 웅장하게 피어오르는 목표 대학 레이어
+                            if (widget.isVipMember)
+                              AnimatedOpacity(
+                                duration: const Duration(milliseconds: 600), // 0.6초 은은한 스르륵 효과
+                                opacity: _textOpacity,
+                                child: Container(
+                                  width: 290, height: 80,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF050B14).withOpacity(0.95), // 숫자를 부드럽게 가리는 블랙 아우라 베이스
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        _animatedText,
+                                        style: GoogleFonts.gowunBatang(
+                                            color: brandGolden,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 26, // 거대하고 웅장한 아우라 폰트 스케일
+                                            shadows: [
+                                              BoxShadow(color: brandGolden.withOpacity(0.6), blurRadius: 10, spreadRadius: 4)
+                                            ]
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),

@@ -29,7 +29,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   Timer? _previewTimer;
   String previewingSound = '';
 
-  // 📚 14대 과목을 정리하고 국어, 수학 남기고 운동, 독서 추가 (동적 변경을 위해 리스트 타입 변경 및 final 제거)
+  // 👑 [비즈니스 모델 연동]: 유료화 VIP 가두리 코어 상태 변수 선제 배치
+  bool _isVipMember = false; // 기본 FREE 회원(false), 활성화 버튼 누르면 VIP(true) 시뮬레이션 스위칭
+  String _targetUniversity = "Seoul National University (서울대학교)";
+
+  // 📚 14대 과목 정리 리스트 수호
   List<Map<String, String>> subjects = [
     {'en': 'Native Language', 'ko': '국어'},
     {'en': 'Math', 'ko': '수학'},
@@ -62,27 +66,22 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     super.dispose();
   }
 
-  // ➕ 자유로운 과목 생성을 위한 함수 (국어 수학 등이 있는 현재 위치에 실시간 자동 배치)
   void _addNewSubject(String nameKo, String nameEn) {
     setState(() {
-      // nameEn이 비어있으면 괄호 없이 한글명만 깔끔하게 노출되도록 처리
       final finalEn = nameEn.isEmpty ? '' : '$nameEn ';
       subjects.add({'en': finalEn, 'ko': nameKo});
     });
   }
 
-  // ❌ 과목 실시간 삭제 함수 (X 버튼 동작)
   void _deleteSubject(Map<String, String> targetSub, String displayName) {
     setState(() {
       subjects.remove(targetSub);
-      // 현재 선택된 과목이 삭제되는 과목이라면 선택 해제
       if (selectedSubject == displayName) {
         selectedSubject = '';
       }
     });
   }
 
-  // 🎧 지시사항 1번 해결: 10초 미리듣기 사운드 파이프라인 표준 정밀 교정 완벽 수호
   void _handleSoundPreview(String displayName, String fileName) async {
     try {
       _previewTimer?.cancel();
@@ -106,7 +105,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     }
   }
 
-  // 🔘 단독 토글 활성화 및 음원 제어 완벽 수호
   void _handleSoundSelect(String displayName, String fileName) async {
     _previewTimer?.cancel();
     await _audioPlayer.stop();
@@ -248,6 +246,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     if (pickedDate != null) {
       if (!mounted) return;
 
+      // 👑 [전선 연결]: 타이머 화면을 호출할 때 마이페이지의 목표 대학과 VIP 변수를 직통으로 던져줍니다!
       final missionResult = await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => TimerScreen(
@@ -256,6 +255,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             dynamicTestTitle: examName,
             targetExamDate: pickedDate,
             selectedSoundFile: selectedSoundFile,
+            targetUniversity: _targetUniversity, // ⚡ 추가 수혈
+            isVipMember: _isVipMember,           // ⚡ 추가 수혈
           ),
         ),
       );
@@ -269,7 +270,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     }
   }
 
-// ➕ 단일 입력 및 버튼 한 줄 정렬이 반영된 과목 생성 팝업창
   void _showAddSubjectDialog() {
     final TextEditingController subjectController = TextEditingController();
 
@@ -291,8 +291,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 18),
-
-                // 💡 편리성을 위해 한글/영어 구분 없이 딱 1개의 입력창으로 통합
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white24)),
@@ -307,16 +305,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 22),
-
-                // 💡 버튼 텍스트가 두 줄로 깨지지 않도록 좌우 밸런스를 넓힌 정렬 구조
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end, // 우측 방향으로 버튼 배치 안정화
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: Text("CANCEL [취소]", style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
-                    const SizedBox(width: 14), // 버튼 사이 간격 확보
+                    const SizedBox(width: 14),
                     ElevatedButton(
                       onPressed: () {
                         final text = subjectController.text.trim();
@@ -324,14 +320,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('과목명을 입력해 주세요!', style: GoogleFonts.gowunBatang())));
                           return;
                         }
-                        // 입력받은 단일 텍스트를 한글/영어 영역에 동일하게 매핑하여 기존 로직 수호
                         _addNewSubject(text, '');
                         Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE5C158),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), // 버튼 내 여유 공간을 넓혀 한 줄 유지
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       ),
                       child: Text("CREATE [생성]", style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
@@ -340,6 +335,150 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  // ==============================================================================
+  // 👑 [마이페이지 개설 및 유료화 VIP 가두리 락 스택 팝업 제어 엔클로저]
+  // ==============================================================================
+  void _openVipMyPagePopup() {
+    final TextEditingController uniController = TextEditingController(text: _targetUniversity);
+    const Color brandGolden = Color(0xFFE5C158);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setPopupState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF0D1527),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(22.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('👑 GSU MY PAGE', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
+                            Text('(마이페이지 / VIP 결제 센터)', style: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 11.5)),
+                          ],
+                        ),
+                        IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 20), onPressed: () => Navigator.pop(context))
+                      ],
+                    ),
+                    const Divider(color: Colors.white10, height: 20),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // ⚙️ [정밀 교정 완료]: 379번 라인 오타였던 'Colors.whiteAA'를 순정 'Colors.white70'으로 완벽 소독!
+                        Text("현재 등급 회원:", style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 13)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _isVipMember ? brandGolden : Colors.black45,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: _isVipMember ? brandGolden : Colors.white12),
+                          ),
+                          child: Text(
+                            _isVipMember ? "👑 PREMIUM VIP" : "FREE 일반 회원",
+                            style: GoogleFonts.gowunBatang(color: _isVipMember ? Colors.black : Colors.white60, fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Text("🎯 나의 목표 대학 설정 (개인별 변경 가능)", style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)),
+                      child: TextField(
+                        controller: uniController,
+                        style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: "목표 대학을 입력하세요",
+                          hintStyle: GoogleFonts.gowunBatang(color: Colors.white24, fontSize: 12),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    if (!_isVipMember)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: const Color(0x1FFF3B30), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0x40FF3B30))),
+                        child: Text(
+                          "🚫 알림: 일반회원은 입력하신 대학명이 타이머 화면 중앙 별 애니메이션 및 성취도 리포트에 실시간 연동 발동되지 않고 강력 제한됩니다.",
+                          style: GoogleFonts.gowunBatang(color: const Color(0xFFFF453A), fontSize: 11.0, fontWeight: FontWeight.bold, height: 1.35),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: const Color(0x1F34C759), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0x4034C759))),
+                        child: Text(
+                          "✨ VIP 연동 잠금이 해제되었습니다! 설정하신 명문대 목표가 타이머 중앙 별 한복판에 5분 주기 황금빛 아우라로 실시간 연동 발동 중입니다.",
+                          style: GoogleFonts.gowunBatang(color: Colors.greenAccent, fontSize: 11.0, fontWeight: FontWeight.bold, height: 1.35),
+                        ),
+                      ),
+                    const SizedBox(height: 22),
+
+                    GestureDetector(
+                      onTap: () {
+                        setState(() { _isVipMember = !_isVipMember; });
+                        setPopupState(() {});
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: _isVipMember
+                                  ? [Colors.grey.shade800, Colors.grey.shade900]
+                                  : [const Color(0xFFF1C40F), brandGolden],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              if (!_isVipMember) BoxShadow(color: brandGolden.withOpacity(0.35), blurRadius: 8, spreadRadius: 1)
+                            ]
+                        ),
+                        // ⚙️ [가독성 수술 마감]: 389번 라인의 삼항 연산자 구조 및 괄호 마감을 무결점으로 완벽 정리!
+                        child: Center(
+                          child: Text(
+                            _isVipMember ? "Membership 해제 (구독 테스트용)" : "👑 GSU VIP 멤버십 활성화 (월 1,900원)",
+                            style: GoogleFonts.gowunBatang(color: _isVipMember ? Colors.white60 : Colors.black, fontWeight: FontWeight.bold, fontSize: 13.0),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() { _targetUniversity = uniController.text.trim().isEmpty ? "미설정" : uniController.text.trim(); });
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.white12, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        child: Text("저장 및 닫기", style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -407,9 +546,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         },
                       ),
                       _buildMenuButton(icon: Icons.language_rounded, label: "동시접속자", subLabel: "Concurrent Users", isBadge: true),
-                      _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국", subLabel: "My Empire"),
+                      _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국 게시판", subLabel: "Empire Forum"),
                       _buildMenuButton(icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling"),
-                      _buildMenuButton(icon: Icons.rate_review_rounded, label: "건의사항", subLabel: "Suggestions"),
+                      _buildMenuButton(
+                        icon: Icons.account_circle_rounded,
+                        label: "👑 마이페이지",
+                        subLabel: "VIP My Page",
+                        onTap: () => _openVipMyPagePopup(),
+                      ),
                     ],
                   ),
                 ],
@@ -420,7 +564,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             _buildSectionTitle('Subject Selection\n[과목 선택]'),
             const SizedBox(height: 12),
 
-            // 🔄 동적 생성 및 우측 상단 X 삭제 버튼이 결합된 과목 배치 영역
             Wrap(
               spacing: 10, runSpacing: 10,
               children: subjects.map((sub) {
@@ -431,14 +574,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   alignment: Alignment.center,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.only(top: 4, right: 6), // X 버튼 공간 확보를 위한 가운 패딩
+                      padding: const EdgeInsets.only(top: 4, right: 6),
                       child: _buildSelectableChip(
                         text: displayName,
                         isSelected: isSelected,
                         onTap: () => setState(() => selectedSubject = displayName),
                       ),
                     ),
-                    // ❌ 과목 칩 우측 상단에 절묘하게 밀착시킨 삭제 버튼 구성
                     Positioned(
                       top: 0,
                       right: 2,
@@ -447,14 +589,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15), // 바탕색과 은은하게 구분만 되도록 반투명 처리
+                            color: Colors.white.withOpacity(0.15),
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white24, width: 1),
                           ),
                           child: const Icon(
                             Icons.close_rounded,
-                            size: 10, // 아이콘 크기도 살짝 줄여 시각적 거슬림 최소화
-                            color: Colors.white60, // 눈에 덜 띄는 부드러운 화이트 그레이
+                            size: 10,
+                            color: Colors.white60,
                           ),
                         ),
                       ),
@@ -465,7 +607,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             ),
             const SizedBox(height: 14),
 
-            // ➕ 언제든 과목을 자유롭게 추가하는 동적 생성 버튼 배치
             OutlinedButton.icon(
               onPressed: () => _showAddSubjectDialog(),
               style: OutlinedButton.styleFrom(
@@ -615,7 +756,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // 글씨가 커진 만큼 좌우 패딩도 14 -> 16으로 확장
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected ? brandGolden : const Color(0xFF0D1527),
           borderRadius: BorderRadius.circular(12),
@@ -624,9 +765,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         child: Text(
           text,
           style: GoogleFonts.gowunBatang(
-            color: isSelected ? const Color(0xFF030712) : Colors.white70, // 비선택시 글씨 선명도도 업그레이드
+            color: isSelected ? const Color(0xFF030712) : Colors.white70,
             fontWeight: FontWeight.bold,
-            fontSize: 15, // 💡 기존 13에서 15로 시원하게 확대 완료!
+            fontSize: 15,
           ),
         ),
       ),
@@ -662,12 +803,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     required String label,
     required String subLabel,
     bool isBadge = false,
-    VoidCallback? onTap, // 🔓 바깥에서 전달되는 터치 신호를 깔끔하게 접수하는 통로
+    VoidCallback? onTap,
   }) {
-    const Color brandGolden = Color(0xFFE5C158); // 웅장한 골드 색상 변수 보존
+    const Color brandGolden = Color(0xFFE5C158);
     return InkWell(
       onTap: onTap ?? () {
-        // 💡 연결된 통로가 없을 때만 기존처럼 준비중 알림을 띄웁니다
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -677,7 +817,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           ),
         );
       },
-// ⭐⭐⭐ [메뉴 버튼 틀 터치 신호 통로 개방 조각 끝] ⭐⭐⭐
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(10), border: Border.all(color: brandGolden.withOpacity(0.2), width: 1.0)),
