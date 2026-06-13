@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:audioplayers/audioplayers.dart'; // 💡 사운드 믹스 오디오 엔진 주입 완벽 수호
+import 'package:audioplayers/audioplayers.dart';
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -12,7 +13,7 @@ class TimerScreen extends StatefulWidget {
   final DateTime? targetExamDate;
   final String selectedSoundFile;
 
-  // 👑 [회의 반영]: 마이페이지 직통 데이터 전선 수혈 파이프라인 개방
+  // 👑 [마이페이지 연동]: 프리미엄 VIP 회원 전선 결합 허브
   final String targetUniversity;
   final bool isVipMember;
 
@@ -23,27 +24,37 @@ class TimerScreen extends StatefulWidget {
     required this.dynamicTestTitle,
     this.targetExamDate,
     required this.selectedSoundFile,
-    this.targetUniversity = "Seoul National University (서울대학교)", // 안심 디폴트값 배정
-    this.isVipMember = false, // 기본 FREE 회원 락
+    this.targetUniversity = "Seoul National University (서울대학교)",
+    this.isVipMember = false,
   }) : super(key: key);
 
   @override
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> {
+// 👑 [감동의 애니메이션 믹스인]: 끊김 현상을 완벽 차단하기 위한 TickerProvider 사수
+class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStateMixin {
   late int _totalSeconds;
   int _elapsedSeconds = 0;
   Timer? _timer;
   bool _isRunning = false;
-  double progressPercent = 0.0; // 🌟 무지개 바 가산 제어 변수 선언 완벽 보존
+  double progressPercent = 0.0;
 
   late AudioPlayer _timerAudioPlayer;
 
-  // 👑 [애니메이션 상태 머신 코어]: 5분(300초) 주기 숨쉬는 명문대 텍스트 트리거 제어실
-  int _animationCycleTick = 0; // 주기 안에서 현재 초수를 카운트 (0 ~ 305초 순환)
-  String _animatedText = "";   // 별 중앙에 현재 표출할 글자
-  double _textOpacity = 0.0;   // 은은한 페이드 인/아웃 투명도 수식
+  // ==============================================================================
+  // 🌌 [원장님 독점 지시]: 15초 시네마틱 무한 확장 및 별 일치 마스킹 제어실
+  //    타임라인: 별 소멸(0~0.5s) → "목표"(0.5~3.0s) → 왕관+대학명(3.0~13.0s) → 별 복귀(13~15s)
+  // ==============================================================================
+  late AnimationController _vipAnimationController;
+
+  // 🚨 [에러 원천 진압]: 변수의 데이터 타입을 명확히 선언하여 빨간 줄 완전 소독
+  late Animation<double> _goalTextOpacity;   // "TARGET/목표" 텍스트가 부드럽게 나타났다 사라지는 곡선
+  late Animation<double> _textOpacity;       // 대학명 유닛이 부드럽게 스며드는 곡선
+  late Animation<double> _textScale;         // 왕관+대학명 구간 동안 줌인->유지->줌아웃되는 곡선
+
+  int _animationCycleTick = 0;
+  bool _showVipOverlay = false;
 
   @override
   void initState() {
@@ -53,6 +64,63 @@ class _TimerScreenState extends State<TimerScreen> {
 
     _timerAudioPlayer = AudioPlayer();
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
+
+    // 🎬 [25초 대서사시 타임라인 선언]
+    _vipAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 25),
+    );
+
+    // 1. "TARGET / 목표" 텍스트 페이드 (0~2초 구간에서만 등장)
+    _goalTextOpacity = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: CurveTween(curve: Curves.easeInCubic)
+            .chain(Tween<double>(begin: 0.0, end: 1.0)),
+        weight: 4.0,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 4.0),
+      TweenSequenceItem(
+        tween: CurveTween(curve: Curves.easeOutCubic)
+            .chain(Tween<double>(begin: 1.0, end: 0.0)),
+        weight: 4.0,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: 88.0),
+    ]).animate(_vipAnimationController);
+
+    // 2. 왕관+대학명 페이드 (2~22초 구간, 줌인 -> 유지 -> 줌아웃)
+    _textOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: 8.0),
+      TweenSequenceItem(
+        tween: CurveTween(curve: Curves.easeInCubic)
+            .chain(Tween<double>(begin: 0.0, end: 1.0)),
+        weight: 4.0,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 64.0),
+      TweenSequenceItem(
+        tween: CurveTween(curve: Curves.easeOutCubic)
+            .chain(Tween<double>(begin: 1.0, end: 0.0)),
+        weight: 4.0,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: 20.0),
+    ]).animate(_vipAnimationController);
+
+    // 3. 대학명 줌인 -> 유지 -> 줌아웃 스케일 (2~22초 구간, 웅장하고 우아한 확대/축소)
+    _textScale = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween<double>(0.3), weight: 8.0),
+      TweenSequenceItem(
+        tween: CurveTween(curve: Curves.easeOutCubic)
+            .chain(Tween<double>(begin: 0.3, end: 1.0)),
+        weight: 12.0,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 56.0),
+      TweenSequenceItem(
+        tween: CurveTween(curve: Curves.easeInCubic)
+            .chain(Tween<double>(begin: 1.0, end: 0.7)),
+        weight: 12.0,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(0.7), weight: 12.0),
+    ]).animate(_vipAnimationController);
+
   }
 
   @override
@@ -60,32 +128,24 @@ class _TimerScreenState extends State<TimerScreen> {
     _timer?.cancel();
     _timerAudioPlayer.stop();
     _timerAudioPlayer.dispose();
+    _vipAnimationController.dispose();
     super.dispose();
   }
 
-  // 👑 [VIP 전용 타임라인 알고리즘]: 1초마다 시계와 싱크되어 5분 주기 순환 연산 처리
-  void _runVipAuraAnimationLogic() {
-    if (!widget.isVipMember) return; // 일반 회원은 가두리 락 발동 차단
+  // 👑 [정밀 우주 회전 궤도]: 15초 감동 연출 후 10분 침묵 사이클 가동
+  void _runVipStarStrictRotationEngine() {
+    if (!widget.isVipMember) return;
 
     _animationCycleTick++;
 
     if (_animationCycleTick == 1) {
-      // 1초째: "목표" 글자 세팅 및 서서히 피어오름
-      _animatedText = "목표";
-      _textOpacity = 1.0;
-    } else if (_animationCycleTick == 3) {
-      // 3초째: 2초 머물렀으니 서서히 사라짐
-      _textOpacity = 0.0;
-    } else if (_animationCycleTick == 5) {
-      // 5초째: 사라지자마자 "내가 마이페이지에 입력한 대학" 장착 후 서서히 피어오름
-      _animatedText = widget.targetUniversity;
-      _textOpacity = 1.0;
-    } else if (_animationCycleTick == 7) {
-      // 7초째: 대학 이름 2초 머물렀으니 다시 서서히 완전 소멸
-      _textOpacity = 0.0;
-    } else if (_animationCycleTick >= 307) {
-      // 7초 이후부터 정확히 300초(5분) 동안은 완전히 소멸한 침묵 상태를 유지하다가,
-      // 307초(5분 7초)가 도달하는 순간 틱 카운터를 초기화하여 "목표"부터 무한 궤도 재출발!
+      setState(() => _showVipOverlay = true);
+      _vipAnimationController.forward(from: 0.0);
+    }
+    else if (_animationCycleTick == 25) {
+      setState(() => _showVipOverlay = false);
+    }
+    else if (_animationCycleTick >= 625) {
       _animationCycleTick = 0;
     }
   }
@@ -96,6 +156,7 @@ class _TimerScreenState extends State<TimerScreen> {
         _timer?.cancel();
         setState(() => _isRunning = false);
         await _timerAudioPlayer.pause();
+        if (widget.isVipMember) _vipAnimationController.stop();
       } else {
         setState(() => _isRunning = true);
 
@@ -103,11 +164,10 @@ class _TimerScreenState extends State<TimerScreen> {
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
         }
 
-        // 최초 기동 타임에 VIP 회원이면 강제 0초 즉시 시발점 기폭
         if (widget.isVipMember && _elapsedSeconds == 0) {
           _animationCycleTick = 0;
-          _animatedText = "목표";
-          _textOpacity = 1.0;
+          setState(() => _showVipOverlay = true);
+          _vipAnimationController.forward(from: 0.0);
         }
 
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -115,9 +175,7 @@ class _TimerScreenState extends State<TimerScreen> {
             if (_elapsedSeconds < _totalSeconds) {
               _elapsedSeconds++;
               progressPercent = _elapsedSeconds / _totalSeconds;
-
-              // 👑 1초 시계 흘러갈 때 VIP 연쇄 애니메이션 엔진 실시간 동시 가동
-              _runVipAuraAnimationLogic();
+              _runVipStarStrictRotationEngine();
             } else {
               _timer?.cancel();
               _isRunning = false;
@@ -128,7 +186,7 @@ class _TimerScreenState extends State<TimerScreen> {
         });
       }
     } catch (e) {
-      debugPrint("타이머 오디오 및 기동 제어 실패: $e");
+      debugPrint("타이머 제어 에러: $e");
     }
   }
 
@@ -165,6 +223,67 @@ class _TimerScreenState extends State<TimerScreen> {
     return "$hourStr:$minStr:$secStr";
   }
 
+  // 👑 [중복 제거]: TARGET 문구를 도려내고 오직 원장님의 프리미엄 목표 대학명만 선명하게 출력
+  Widget _buildVipSmartDynamicText(String text, Color brandGolden) {
+    String firstLine = "";
+    String secondLine = "";
+
+    if (text.contains('(') && text.contains(')')) {
+      int openParenthesis = text.indexOf('(');
+      firstLine = text.substring(0, openParenthesis).trim();
+      secondLine = text.substring(openParenthesis).trim();
+    } else if (text.contains(' ') && text.length > 12) {
+      int middleSpace = text.indexOf(' ', text.length ~/ 2);
+      if (middleSpace == -1) middleSpace = text.indexOf(' ');
+      firstLine = text.substring(0, middleSpace).trim();
+      secondLine = text.substring(middleSpace).trim();
+    } else {
+      firstLine = text;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          firstLine,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.gowunBatang(
+            color: brandGolden,
+            fontWeight: FontWeight.w900, // 원장님 지시: 초고진형 진하고 두껍게 고정
+            fontSize: 19.5,
+            height: 1.15,
+            shadows: const [
+              Shadow(color: Color(0xFF050B14), offset: Offset(0, 1), blurRadius: 3),
+              Shadow(color: Color(0xFF050B14), offset: Offset(0, -1), blurRadius: 3),
+              Shadow(color: Color(0xFF050B14), offset: Offset(1, 0), blurRadius: 3),
+              Shadow(color: Color(0xFF050B14), offset: Offset(-1, 0), blurRadius: 3),
+            ],
+          ),
+        ),
+        if (secondLine.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            secondLine,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.gowunBatang(
+              color: brandGolden,
+              fontWeight: FontWeight.w900,
+              fontSize: 18.0,
+              height: 1.15,
+              shadows: const [
+                Shadow(color: Color(0xFF050B14), offset: Offset(0, 1), blurRadius: 3),
+                Shadow(color: Color(0xFF050B14), offset: Offset(0, -1), blurRadius: 3),
+                Shadow(color: Color(0xFF050B14), offset: Offset(1, 0), blurRadius: 3),
+                Shadow(color: Color(0xFF050B14), offset: Offset(-1, 0), blurRadius: 3),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color brandGolden = Color(0xFFE5C158);
@@ -178,13 +297,9 @@ class _TimerScreenState extends State<TimerScreen> {
         child: SafeArea(
           child: Stack(
             children: [
-              Positioned(
-                top: 10, left: 10,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 22),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
+              // ----------------------------------------------------------------------
+              // ⏱️ [오리지널 순정 레이아웃 벨트]: 철통 방어 구역 (100% 원형 박제)
+              // ----------------------------------------------------------------------
               Positioned.fill(
                 child: Column(
                   children: [
@@ -235,7 +350,10 @@ class _TimerScreenState extends State<TimerScreen> {
                         );
                       },
                     ),
-                    const SizedBox(height: 240),
+
+                    const SizedBox(height: 240), // 🚨 순정 마진 수치 박제 (절대 밀림 없음)
+
+                    // 🚨 캡처로 짚어주신 317~327번 라인 오타 완전 정화 정렬 구역
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -252,49 +370,9 @@ class _TimerScreenState extends State<TimerScreen> {
                           ],
                         ),
                         const SizedBox(height: 1.0),
-
-                        // 👑 [하이라이트 마스터피스 구역]: 중앙 숫자 시계 상단에 숨쉬는 명문대 텍스트 투영
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // ⏱️ 순정 숫자 초시계 레이아웃은 그대로 존재
-                            Text(
-                              _formatDisplayTime(_elapsedSeconds),
-                              style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9),
-                            ),
-
-                            // 👑 VIP 작동 시 황금빛 그라데이션 광채를 품고 숫자를 덮으며 웅장하게 피어오르는 목표 대학 레이어
-                            if (widget.isVipMember)
-                              AnimatedOpacity(
-                                duration: const Duration(milliseconds: 600), // 0.6초 은은한 스르륵 효과
-                                opacity: _textOpacity,
-                                child: Container(
-                                  width: 290, height: 80,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF050B14).withOpacity(0.95), // 숫자를 부드럽게 가리는 블랙 아우라 베이스
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        _animatedText,
-                                        style: GoogleFonts.gowunBatang(
-                                            color: brandGolden,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 26, // 거대하고 웅장한 아우라 폰트 스케일
-                                            shadows: [
-                                              BoxShadow(color: brandGolden.withOpacity(0.6), blurRadius: 10, spreadRadius: 4)
-                                            ]
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                        Text(
+                          _formatDisplayTime(_elapsedSeconds),
+                          style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9),
                         ),
                       ],
                     ),
@@ -410,10 +488,134 @@ class _TimerScreenState extends State<TimerScreen> {
                   ],
                 ),
               ),
+
+              // ----------------------------------------------------------------------
+              // 🌌 [25초 시네마틱 엔진]
+              //    0~2s: "TARGET/목표" 표시 → 2~22s: 왕관+대학명 줌인→유지→줌아웃
+              //    → 22~25s: 오버레이 소멸, 배경 황금별 자연 복귀
+              // ----------------------------------------------------------------------
+              if (widget.isVipMember && _showVipOverlay)
+                Positioned(
+                  top: 220,
+                  left: 0, right: 0,
+                  child: Center(
+                    child: SizedBox(
+                      width: 290,
+                      height: 260,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // 👑 "TARGET / 목표" 텍스트 (별이 사라진 직후 부드럽게 등장 → 2초 유지 → 사라짐)
+                          AnimatedBuilder(
+                            animation: _vipAnimationController,
+                            builder: (context, child) {
+                              return Opacity(
+                                opacity: _goalTextOpacity.value,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      "TARGET",
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.gowunBatang(
+                                        color: brandGolden,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 28,
+                                        letterSpacing: 4.0,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      "목표",
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.gowunBatang(
+                                        color: brandGolden,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 22,
+                                        letterSpacing: 4.0,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+
+                          // 👑 지시사항 2: 작은 점으로부터 최대 크기까지 지속 확장되는 왕관+대학명
+                          AnimatedBuilder(
+                            animation: _vipAnimationController,
+                            builder: (context, child) {
+                              return Opacity(
+                                opacity: _textOpacity.value,
+                                child: Transform.scale(
+                                  scale: _textScale.value,
+                                  child: IntrinsicWidth(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        // 👑 가변 황금관: 대학교 가로폭 길이에 자석처럼 밀착 결합
+                                        Image.asset(
+                                          'assets/images/crown_wings.png',
+                                          height: 42,
+                                          fit: BoxFit.fill,
+                                        ),
+                                        const SizedBox(height: 0.1),
+                                        _buildVipSmartDynamicText(widget.targetUniversity, brandGolden),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              Positioned(
+                top: 10, left: 10,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 22),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class StarClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final Path path = Path();
+    final double cx = size.width / 2;
+    final double cy = size.height / 2;
+
+    final double outerRadius = size.width * 0.48;
+    final double innerRadius = size.width * 0.21;
+
+    double angle = -math.pi / 2;
+    final double angleStep = math.pi / 5;
+
+    path.moveTo(cx + outerRadius * math.cos(angle), cy + outerRadius * math.sin(angle));
+
+    for (int i = 0; i < 10; i++) {
+      angle += angleStep;
+      double r = (i % 2 == 0) ? innerRadius : outerRadius;
+      path.lineTo(cx + r * math.cos(angle), cy + r * math.sin(angle));
+    }
+
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
