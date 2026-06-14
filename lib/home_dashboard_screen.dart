@@ -5,6 +5,7 @@ import 'package:gsu_studyup/square/member_achievement_screen.dart';
 import 'dart:async';
 import 'package:gsu_studyup/timer/timer_screen.dart'; // 💡 실제 프로젝트 트리 경로 수호
 import 'square/friend_study_room_screen.dart';
+import 'package:gsu_studyup/square/live_active_users_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -528,6 +529,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         label: "친구 학습방",
                         subLabel: "Friends Study Room",
                         onTap: () {
+                          // 📡 원래 주소인 친구 학습방 스크린으로만 안전하게 진입!
                           Navigator.push(
                             context,
                             MaterialPageRoute(builder: (context) => const FriendStudyRoomScreen()),
@@ -545,7 +547,18 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           );
                         },
                       ),
-                      _buildMenuButton(icon: Icons.language_rounded, label: "동시접속자", subLabel: "Concurrent Users", isBadge: true),
+                      _buildMenuButton(
+                        icon: Icons.people_alt_rounded,
+                        label: "동시 접속자",
+                        subLabel: "Live Active Users",
+                        onTap: () {
+                          // 📡 웅장한 전 세계 과목 비율 원그래프 라이브 스크린으로 분리 진입!
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LiveActiveUsersScreen()),
+                          );
+                        },
+                      ),
                       _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국 게시판", subLabel: "Empire Forum"),
                       _buildMenuButton(icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling"),
                       _buildMenuButton(
