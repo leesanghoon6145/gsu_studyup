@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+// 👑 [주소지 연결]: 하위 폴더에 안착한 AI 실시간 상담방 연결선 유지
+import 'package:gsu_studyup/square/educational_consultation/ai_consulting_room_screen.dart';
 
 class EducationalConsultationScreen extends StatelessWidget {
   const EducationalConsultationScreen({Key? key}) : super(key: key);
@@ -32,16 +34,18 @@ class EducationalConsultationScreen extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 1행: 영문 가이드라인
             Text(
                 line1,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.gowunBatang(color: const Color(0xFFEFEFEF), fontSize: 15, fontWeight: FontWeight.bold)
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            // 👑 [복원 완수]: 누락되었던 한글 번역 가이드라인 구역 완벽 심폐소생
             Text(
                 line2,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w500)
+                style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13.5, fontWeight: FontWeight.w500)
             ),
           ],
         ),
@@ -59,22 +63,31 @@ class EducationalConsultationScreen extends StatelessWidget {
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  // 👑 [지시사항 2번 수호]: 상담 시작 누를 시 준비중 알림 자동 생성 엔진 이식!
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: const Color(0xFF0D1527),
-                      duration: const Duration(seconds: 3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: const BorderSide(color: Color(0xFFE5C158), width: 1),
+
+                  if (targetRoom == "AI_ROOM") {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AiConsultingRoomScreen(),
                       ),
-                      content: Text(
-                        "Coming Soon! The premium consultation room is preparing to open.\n(개통 준비 중입니다! 프리미엄 상담실 오픈을 준비하고 있습니다.)",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: const Color(0xFF0D1527),
+                        duration: const Duration(seconds: 3),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: Color(0xFFE5C158), width: 1),
+                        ),
+                        content: Text(
+                          "Coming Soon! The premium consultation room is preparing to open.\n(개통 준비 중입니다! 프리미엄 상담실 오픈을 준비하고 있습니다.)",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  }
                 },
                 child: Text(
                   "Start (상담 시작)",
@@ -100,7 +113,6 @@ class EducationalConsultationScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: bgSpaceDark,
         elevation: 0,
-        // 📐 [지시사항 수호]: 상단 바 여백 확보를 위한 높이 패딩 제어
         toolbarHeight: 75,
         leading: Padding(
           padding: const EdgeInsets.only(top: 12.0),
@@ -116,20 +128,12 @@ class EducationalConsultationScreen extends StatelessWidget {
             children: [
               Text(
                 "Educational Consultation",
-                style: GoogleFonts.gowunBatang(
-                  color: textWhite,
-                  fontSize: 23,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: GoogleFonts.gowunBatang(color: textWhite, fontSize: 23, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 2),
               Text(
                 "(교육상담)",
-                style: GoogleFonts.gowunBatang(
-                  color: brandGolden,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -144,7 +148,6 @@ class EducationalConsultationScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
           child: Column(
             children: [
-              // 👑 [지시사항 1번 수호]: 타이틀과 버튼 사이의 공간에 웅장한 장점 요약 박스 매립!
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 16.0),
@@ -175,7 +178,7 @@ class EducationalConsultationScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 25), // 📐 버튼들과의 완벽한 이격 황금 비율 여백
+              const SizedBox(height: 25),
 
               // 💎 1. AI Real-time Consulting (그린 에메랄드)
               _buildJewelButton(
@@ -186,8 +189,9 @@ class EducationalConsultationScreen extends StatelessWidget {
                 onTap: () => _showConsultationPopup(
                     context,
                     "AI Real-time Consulting",
-                    "Analyze your custom study pattern and receive a personalized recipe in 3 seconds.",
-                    "(나의 실시간 학습 패턴을 분석하여 3초 만에 맞춤형 처방전을 발행해 드립니다.)",
+                    "Analyze your custom study pattern and receive a personalized recipe instantly.",
+                    // 👑 [원장님 지시 완수]: "3초 만에"를 "즉시"로 전격 교정 완료!
+                    "(나의 실시간 학습 패턴을 분석하여 즉시 맞춤형 처방전을 발행해 드립니다.)",
                     "AI_ROOM"
                 ),
               ),
@@ -203,7 +207,7 @@ class EducationalConsultationScreen extends StatelessWidget {
                     context,
                     "Global Mentor Room",
                     "Get 1:1 premium exam strategies and feedback from prestigious university mentors.",
-                    "(명문대 수석 멘토들에게 1:1로 비밀 입시 전략 coffee와 초정밀 피드백을 받아보실 수 있습니다.)",
+                    "(명문대 수석 멘토들에게 1:1로 비밀 입시 전략과 초정밀 피드백을 받아보실 수 있습니다.)",
                     "MENTOR_ROOM"
                 ),
               ),
@@ -247,12 +251,10 @@ class EducationalConsultationScreen extends StatelessWidget {
     );
   }
 
-// 👑 [장점 텍스트 빌더 - 1행 영문 / 2행 한글 황금색 20% 확대 스펙 완벽 수호]
   Widget _buildAdvantageRow(String icon, String eng, String kor) {
     const Color brandGolden = Color(0xFFE5C158);
-
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0), // 行간 황금 여백 확보
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -265,26 +267,14 @@ class EducationalConsultationScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1행: 영문 20% 확대 (기존 12.5 -> 15 스펙 업)
                 Text(
                   eng,
-                  style: GoogleFonts.gowunBatang(
-                    color: Colors.white,
-                    fontSize: 15.0,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                  ),
+                  style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 15.0, fontWeight: FontWeight.bold, height: 1.2),
                 ),
-                const SizedBox(height: 3), // 영문과 한글 사이 미세 간격
-                // 2행: 국문 20% 확대 + 황금색 전환 (기존 11.5 -> 14 스펙 업)
+                const SizedBox(height: 3),
                 Text(
                   kor,
-                  style: GoogleFonts.gowunBatang(
-                    color: brandGolden, // 👑 한글 글자색 황금색 교체 완수
-                    fontSize: 14.0,     // 📐 글자 크기 20% 확대 완수
-                    fontWeight: FontWeight.w500,
-                    height: 1.2,
-                  ),
+                  style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 14.0, fontWeight: FontWeight.w500, height: 1.2),
                 ),
               ],
             ),
@@ -294,7 +284,6 @@ class EducationalConsultationScreen extends StatelessWidget {
     );
   }
 
-  // 👑 [보석 에셋 전용 정밀 매립 빌더]
   Widget _buildJewelButton({
     required BuildContext context,
     required String imagePath,

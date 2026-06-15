@@ -6,7 +6,8 @@ import 'dart:async';
 import 'package:gsu_studyup/timer/timer_screen.dart'; // 💡 실제 프로젝트 트리 경로 수호
 import 'square/friend_study_room_screen.dart';
 import 'package:gsu_studyup/square/live_active_users_screen.dart';
-import 'package:gsu_studyup/square/educational_consultation_screen.dart';
+// 👑 [정정 완료]: 폴더 하위 계층 구조에 맞게 주소지를 정밀 보정했습니다.
+import 'package:gsu_studyup/square/educational_consultation/educational_consultation_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
