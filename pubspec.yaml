@@ -66,6 +66,9 @@ flutter:
     - assets/images/crown_wings.png
     - assets/sounds/
     - assets/images/purple_btn.png
+    - assets/images/green_btn.png
+    - assets/images/dark_blue_btn.png
+    - assets/images/light_blue_btn.png
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

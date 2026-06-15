@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:gsu_studyup/timer/timer_screen.dart'; // 💡 실제 프로젝트 트리 경로 수호
 import 'square/friend_study_room_screen.dart';
 import 'package:gsu_studyup/square/live_active_users_screen.dart';
+import 'package:gsu_studyup/square/educational_consultation_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -560,7 +561,20 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         },
                       ),
                       _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국 게시판", subLabel: "Empire Forum"),
-                      _buildMenuButton(icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling"),
+                      _buildMenuButton(
+                        icon: Icons.support_agent_rounded,
+                        label: "교육상담",
+                        subLabel: "Education Counseling",
+                        onTap: () {
+                          // 👑 [교육상담 보석 버튼 성문 개통]: 기존 화면을 보존하고 새 화면으로 진격!
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const EducationalConsultationScreen(),
+                            ),
+                          );
+                        },
+                      ),
                       _buildMenuButton(
                         icon: Icons.account_circle_rounded,
                         label: "👑 마이페이지",

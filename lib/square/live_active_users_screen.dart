@@ -84,18 +84,26 @@ class _LiveActiveUsersScreenState extends State<LiveActiveUsersScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: textWhite, size: 22),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        // 👑 [멤버 성취도 일체화 공학]: 영문 한 줄, 다음 줄 한글 배치 스타일 완벽 적용!
+        // 👑 [친구 학습방 타이틀 스타일 완벽 일체화]: 영문 기준 괄호 안 한국어 수호 및 글자 크기 동기화!
         title: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-          Text(
-          "Live Active Users",
-          style: GoogleFonts.gowunBatang(color: textWhite.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 2),
             Text(
-              "동시 접속자",
-              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 20),
+              "Live Active Users",
+              style: GoogleFonts.gowunBatang(
+                color: brandGolden,
+                fontSize: 23, // 📐 친구 학습방과 완벽하게 동일한 크기로 확대 셋업!
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              "(동시접속자)",
+              style: GoogleFonts.gowunBatang(
+                color: brandGolden,
+                fontSize: 14, // 📐 친구 학습방 부타이틀과 완벽하게 동일한 크기로 일치!
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
