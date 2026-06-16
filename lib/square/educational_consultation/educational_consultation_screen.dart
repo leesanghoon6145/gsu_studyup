@@ -251,10 +251,12 @@ class EducationalConsultationScreen extends StatelessWidget {
     );
   }
 
+// 👑 [장점 텍스트 빌더 - 영문: 고운바탕체 진명조 / 한글: 노토산스 고딕 하이브리드 매립]
   Widget _buildAdvantageRow(String icon, String eng, String kor) {
     const Color brandGolden = Color(0xFFE5C158);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0), // 行간 황금 여백
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -267,14 +269,26 @@ class EducationalConsultationScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1행: 영문 -> 👑 원래 원칙대로 웅장한 한국형 진명조 수호!
                 Text(
                   eng,
-                  style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 15.0, fontWeight: FontWeight.bold, height: 1.2),
+                  style: GoogleFonts.gowunBatang(
+                    color: Colors.white,
+                    fontSize: 15.0,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                  ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 3), // 미세 간격
+                // 2행: 한글 -> 👑 원장님 지시: 제미나이 스타일 Noto Sans KR 고딕체로 전격 교체!
                 Text(
                   kor,
-                  style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 14.0, fontWeight: FontWeight.w500, height: 1.2),
+                  style: GoogleFonts.notoSansKr(
+                    color: brandGolden, // 황금색 유지
+                    fontSize: 13.5,     // 고딕체 특성상 시각적 균형을 맞춘 프리미엄 크기 조정
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
                 ),
               ],
             ),

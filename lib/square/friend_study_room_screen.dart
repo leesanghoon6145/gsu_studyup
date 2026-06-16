@@ -4,15 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 // 💡 [연동 가이드]: 홈 대시보드의 과목선택 및 타이머 진입로 세팅을 위한 순정 라우터 파일 결합
 import 'package:gsu_studyup/home_dashboard_screen.dart';
 
-class FriendStudyRoomScreen extends StatefulWidget {
-  const FriendStudyRoomScreen({Key? key}) : super(key: key);
-
-  @override
-  State<FriendStudyRoomScreen> createState() => _FriendStudyRoomScreenState();
-}
-
 // ==============================================================================
-// 👥 [원장님 지시 2단계]: 출시 직전 삭제할 가상회원 5명 실시간 시뮬레이션 데이터 센터
+// 👥 [원장님 순정 보존]: 출시 직전 삭제할 가상회원 5명 실시간 시뮬레이션 데이터 센터
 // ==============================================================================
 final List<Map<String, dynamic>> _virtualStudents = [
   {
@@ -57,7 +50,7 @@ final List<Map<String, dynamic>> _virtualStudents = [
   }
 ];
 
-// 🏠 전 페이지로 나갔다 들어와도 생성된 방이 리셋되지 않도록 리스트 데이터를 클래스 외부에 철통 고정 보존
+// 🏠 [원장님 순정 보존]: 전 페이지로 나갔다 들어와도 생성된 방이 리셋되지 않도록 리스트 데이터를 클래스 외부에 철통 고정 보존
 final List<Map<String, dynamic>> _globalRooms = [
   {
     "title": "Room A",
@@ -76,6 +69,13 @@ final List<Map<String, dynamic>> _globalRooms = [
     "isCreator": false
   },
 ];
+
+class FriendStudyRoomScreen extends StatefulWidget {
+  const FriendStudyRoomScreen({Key? key}) : super(key: key);
+
+  @override
+  State<FriendStudyRoomScreen> createState() => _FriendStudyRoomScreenState();
+}
 
 class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
   final TextEditingController _nameController = TextEditingController();
@@ -119,11 +119,13 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
   @override
   Widget build(BuildContext context) {
     const Color brandGolden = Color(0xFFE5C158);
+    // 👑 [디자인 일체화]: 홈 대시보드 스크린과 단 1픽셀도 다르지 않은 진짜 프리미엄 우주 심연 순정 배경색
+    const Color bgSpaceDark = Color(0xFF030712);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF141414),
+      backgroundColor: bgSpaceDark,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF141414),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         toolbarHeight: 85,
         leading: IconButton(
@@ -173,7 +175,8 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                 physics: const BouncingScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 2.65,
+                  // 👑 가상 룸 카드의 세로 높이를 여유 있게 수정한 비율(2.2) 완벽 유지
+                  childAspectRatio: 2.2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                 ),
@@ -235,7 +238,6 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                               color: isRoomOnline ? const Color(0xFF00F0FF) : Colors.white60,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
-                              height: 1.1,
                             ),
                           ),
                         ],
@@ -301,224 +303,223 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => StatefulBuilder(
-            builder: (context, setRoomState) {
-              const Color brandGolden = Color(0xFFE5C158);
+          builder: (context, setRoomState) {
+            const Color brandGolden = Color(0xFFE5C158);
 
-              return Scaffold(
-                backgroundColor: const Color(0xFF16161A),
-                appBar: AppBar(
-                  backgroundColor: const Color(0xFF16161A),
-                  elevation: 0,
-                  title: Text(
-                    '${room["title"]} - Study Room',
-                    style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold),
-                  ),
-                  centerTitle: true,
+            return Scaffold(
+              backgroundColor: const Color(0xFF030712),
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                title: Text(
+                  '${room["title"]} - Study Room',
+                  style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold),
                 ),
-                body: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF22222A),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: brandGolden.withOpacity(0.3), width: 1),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Room Statistics (방 전체 통계)',
-                              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                Text('Total: ⏰ 24h 12m\n(오늘 방 누적 24시간 12m)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
-                                Text('Avg: ⏰ 4h 50m\n(오늘 방 평균 4시간 50m)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
-                              ],
-                            ),
-                          ],
-                        ),
+                centerTitle: true,
+              ),
+              body: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF22222A),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: brandGolden.withOpacity(0.3), width: 1),
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Members (참여 학생 목록)',
-                        style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 16),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Room Statistics (방 전체 통계)',
+                            style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Text('Total: ⏰ 24h 12m\n(오늘 방 누적 24시간 12m)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
+                              Text('Avg: ⏰ 4h 50m\n(오늘 방 평균 4시간 50m)', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13, height: 1.3)),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 10),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: _virtualStudents.length,
-                          itemBuilder: (context, studentIndex) {
-                            final student = _virtualStudents[studentIndex];
-                            final String targetStudent = student["id_name"];
-                            final List<Map<String, String>> inbox = _emojiInbox[targetStudent] ?? [];
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Members (참여 학생 목록)',
+                      style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _virtualStudents.length,
+                        itemBuilder: (context, studentIndex) {
+                          final student = _virtualStudents[studentIndex];
+                          final String targetStudent = student["id_name"];
+                          final List<Map<String, String>> inbox = _emojiInbox[targetStudent] ?? [];
 
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E1E24),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white10),
-                              ),
-                              child: ExpansionTile(
-                                iconColor: brandGolden,
-                                collapsedIconColor: Colors.white60,
-                                title: Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(shape: BoxShape.circle, color: student["statusColor"]),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        '$targetStudent [${student["level"]}]',
-                                        style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                                      ),
-                                    ),
-                                    if (inbox.isNotEmpty)
-                                      Row(
-                                        children: inbox.map((msg) {
-                                          return GestureDetector(
-                                            onTap: () {
-                                              showDialog(
-                                                context: context,
-                                                builder: (ctx) => AlertDialog(
-                                                  backgroundColor: const Color(0xFF222222),
-                                                  title: Text('Support Sender (응원 보낸 사람)', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
-                                                  content: Text('From: ${msg["from"]}\n\n"${msg["from"]} 학생이 ${msg["emoji"]} 응원을 보냈습니다!"', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14, height: 1.4)),
-                                                  actions: [
-                                                    TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Confirm (확인)', style: GoogleFonts.gowunBatang(color: brandGolden)))
-                                                  ],
-                                                ),
-                                              );
-                                            },
-                                            child: Container(
-                                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-                                              child: Text(msg["emoji"]!, style: const TextStyle(fontSize: 14)),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ),
-                                  ],
-                                ),
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E1E24),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white10),
+                            ),
+                            child: ExpansionTile(
+                              iconColor: brandGolden,
+                              collapsedIconColor: Colors.white60,
+                              title: Row(
                                 children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 0, left: 16, right: 16, bottom: 16),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Divider(color: Colors.white12),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          student["schoolInfo"],
-                                          style: GoogleFonts.gowunBatang(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.normal),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text('Level: ${student["level"]} (등급)', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 13)),
-                                            Text('Stars: ⭐ ${student["stars"]} (보유 별)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text('Status: ${student["status"]}', style: GoogleFonts.gowunBatang(color: student["statusColor"], fontSize: 13, fontWeight: FontWeight.bold)),
-                                        const SizedBox(height: 4),
-                                        Text('Streak: ${student["streak"]}', style: GoogleFonts.gowunBatang(color: Colors.orangeAccent, fontSize: 13)),
-                                        const SizedBox(height: 4),
-                                        Text('Activity: ${student["activity"]}', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13)),
-                                        const SizedBox(height: 4),
-                                        Text('Time: ${student["time"]}', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13)),
-                                        const SizedBox(height: 4),
-                                        Text('Target: ${student["target"]}', style: GoogleFonts.gowunBatang(color: Colors.greenAccent, fontSize: 13)),
-                                        const SizedBox(height: 16),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                          children: [
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C35), foregroundColor: brandGolden),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _emojiInbox[targetStudent]?.add({"emoji": "👍", "from": "My Self (나 자신)"});
-                                                });
-                                                setRoomState(() {});
-                                              },
-                                              child: Text('👍 Cheer (칭찬)', style: GoogleFonts.gowunBatang(fontSize: 12, fontWeight: FontWeight.bold)),
-                                            ),
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C35), foregroundColor: brandGolden),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _emojiInbox[targetStudent]?.add({"emoji": "🔥", "from": "My Self (나 자신)"});
-                                                });
-                                                setRoomState(() {});
-                                              },
-                                              child: Text('🔥 Motivate (응원)', style: GoogleFonts.gowunBatang(fontSize: 12, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(shape: BoxShape.circle, color: student["statusColor"]),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '$targetStudent [${student["level"]}]',
+                                      style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                                     ),
-                                  )
+                                  ),
+                                  if (inbox.isNotEmpty)
+                                    Row(
+                                      children: inbox.map((msg) {
+                                        return GestureDetector(
+                                          onTap: () {
+                                            showDialog(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                backgroundColor: const Color(0xFF222222),
+                                                title: Text('Support Sender (응원 보낸 사람)', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
+                                                content: Text('From: ${msg["from"]}\n\n"${msg["from"]} 학생이 ${msg["emoji"]} 응원을 보냈습니다!"', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14, height: 1.4)),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Confirm (확인)', style: GoogleFonts.gowunBatang(color: brandGolden)))
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
+                                            child: Text(msg["emoji"]!, style: const TextStyle(fontSize: 14)),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
                                 ],
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // 🚀 [진짜 보라색 버튼 자산 호출 구역]: 1픽셀 왜곡 없이 원본 이미지 그대로 렌더링
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const HomeDashboardScreen(),
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 0, left: 16, right: 16, bottom: 16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Divider(color: Colors.white12),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        student["schoolInfo"],
+                                        style: GoogleFonts.gowunBatang(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.normal),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('Level: ${student["level"]} (등급)', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 13)),
+                                          Text('Stars: ⭐ ${student["stars"]} (보유 별)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text('Status: ${student["status"]}', style: GoogleFonts.gowunBatang(color: student["statusColor"], fontSize: 13, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 4),
+                                      Text('Streak: ${student["streak"]}', style: const TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+                                      const SizedBox(height: 4),
+                                      Text('Activity: ${student["activity"]}', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13)),
+                                      const SizedBox(height: 4),
+                                      Text('Time: ${student["time"]}', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 13)),
+                                      const SizedBox(height: 4),
+                                      Text('Target: ${student["target"]}', style: const TextStyle(color: Colors.greenAccent, fontSize: 13)),
+                                      const SizedBox(height: 16),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                        children: [
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C35), foregroundColor: brandGolden),
+                                            onPressed: () {
+                                              setState(() {
+                                                _emojiInbox[targetStudent]?.add({"emoji": "👍", "from": "My Self (나 자신)"});
+                                              });
+                                              setRoomState(() {});
+                                            },
+                                            child: Text('👍 Cheer (칭찬)', style: GoogleFonts.gowunBatang(fontSize: 12, fontWeight: FontWeight.bold)),
+                                          ),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C35), foregroundColor: brandGolden),
+                                            onPressed: () {
+                                              setState(() {
+                                                _emojiInbox[targetStudent]?.add({"emoji": "🔥", "from": "My Self (나 자신)"});
+                                              });
+                                              setRoomState(() {});
+                                            },
+                                            child: Text('🔥 Motivate (응원)', style: GoogleFonts.gowunBatang(fontSize: 12, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              ],
                             ),
                           );
                         },
-                        child: Container(
-                          width: double.infinity,
-                          height: 56,
-                          decoration: const BoxDecoration(
-                            image: DecorationImage(
-                              image: AssetImage('assets/images/purple_btn.png'),
-                              fit: BoxFit.fill,
-                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomeDashboardScreen(),
                           ),
-                          child: Center(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "Study Settings (학습 설정)",
-                                  style: GoogleFonts.gowunBatang(
-                                    color: const Color(0xFFFFF6D6),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 17,
-                                  ),
+                        );
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 56,
+                        decoration: const BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage('assets/images/purple_btn.png'),
+                            fit: BoxFit.fill,
+                          ),
+                        ),
+                        child: Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "Study Settings (학습 설정)",
+                                style: GoogleFonts.gowunBatang(
+                                  color: const Color(0xFFFFF6D6),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 17,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              );
-            }
+              ),
+            );
+          },
         ),
       ),
     ).then((_) {
