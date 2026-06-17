@@ -112,7 +112,7 @@ class LoginSignupScreen extends StatelessWidget {
 
                   // 서브 타이틀
                   Text(
-                    '공부하는 너를 응원하는 별이 되어 줄게',
+                    '노력하는 너를 응원하는 별이 되어 줄게',
                     style: GoogleFonts.gowunBatang(
                       fontSize: 16,
                       color: Colors.white.withOpacity(0.85),

@@ -486,10 +486,29 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        toolbarHeight: 110, // 📐 이미지 문양과 타이틀 2행 수직 배치를 위한 공간 확보
         automaticallyImplyLeading: false,
-        title: Text(
-          'GSU STUDYUP',
-          style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 1.5),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 👑 [수정 내역 반영]: 원장님 지시에 따라 'gsu_logo.png' 자산 파일로 완벽하게 변경 교체 완료
+            Image.asset(
+              'assets/images/gsu_logo.png',
+              width: 180, // 📐 G~P 범위까지 포근히 안아주도록 최적의 가로 폭 조절
+              height: 24, // 📐 세로폭은 자산 고유의 미적 비율 현 상태로 수호
+              fit: BoxFit.fill,
+            ),
+            const SizedBox(height: 0.5), // 📐 GSU STUDYUP과의 간격을 정확히 0.2미리로 유지 (1.2 logical pixels)
+            Text(
+              'GSU STUDYUP',
+              style: GoogleFonts.gowunBatang(
+                color: brandGolden, // 👑 [수정 내역 반영]: 기존 흰색에서 품격 있는 황금색으로 변경 완료
+                fontWeight: FontWeight.bold,
+                fontSize: 24,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
       ),

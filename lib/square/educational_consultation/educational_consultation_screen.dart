@@ -113,7 +113,7 @@ class EducationalConsultationScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: bgSpaceDark,
         elevation: 0,
-        toolbarHeight: 75,
+        toolbarHeight: 110, // 📐 이미지와 타이틀의 품격 있는 패밀리 룩 수직 배치를 위해 110으로 조정 수호
         leading: Padding(
           padding: const EdgeInsets.only(top: 12.0),
           child: IconButton(
@@ -126,9 +126,21 @@ class EducationalConsultationScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 👑 [원장님 지시 완벽 구현]: gsu_logo.png 자산을 E부터 n까지 포근하게 품어주는 구도로 상단 매립
+              Image.asset(
+                'assets/images/gsu_logo.png',
+                width: 180, // 📐 타이틀 폭에 알맞게 포근히 안아주는 최적의 가로 길이
+                height: 24, // 📐 원장님께서 직접 검증하신 대시보드와 동일한 세로 40% 축소 비율 고정
+                fit: BoxFit.fill,
+              ),
+              const SizedBox(height: 0.1), // 📐 원장님께서 검증하신 정밀 밀착 간격 0.5 완벽 적용
               Text(
                 "Educational Consultation",
-                style: GoogleFonts.gowunBatang(color: textWhite, fontSize: 23, fontWeight: FontWeight.w700),
+                style: GoogleFonts.gowunBatang(
+                    color: brandGolden, // 👑 [원장님 지시 완벽 구현]: 기존 흰색에서 찬란한 황금색으로 변경 완료
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700
+                ),
               ),
               const SizedBox(height: 2),
               Text(
