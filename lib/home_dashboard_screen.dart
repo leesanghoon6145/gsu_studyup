@@ -7,6 +7,7 @@ import 'package:gsu_studyup/timer/timer_screen.dart';
 import 'square/friend_study_room_screen.dart';
 import 'package:gsu_studyup/square/live_active_users_screen.dart';
 import 'package:gsu_studyup/square/educational_consultation/educational_consultation_screen.dart';
+import 'package:gsu_studyup/square/my_page_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -31,6 +32,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   Timer? _previewTimer;
   String previewingSound = '';
 
+  // 🎯 마이페이지와 실시간 연동될 핵심 데이터 필드
   bool _isVipMember = false;
   String _targetUniversity = "Seoul National University (서울대학교)";
 
@@ -203,7 +205,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         String finalExamName = customExamController.text.trim();
                         if (finalExamName.isEmpty) finalExamName = temporarySelectedExam;
                         if (finalExamName.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('시험 종류를 선택하거나 직접 입력해 주세요!', style: GoogleFonts.notoSansKr())));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('試験 종류를 선택하거나 직접 입력해 주세요!', style: GoogleFonts.notoSansKr())));
                           return;
                         }
                         Navigator.of(context).pop();
@@ -338,145 +340,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  void _openVipMyPagePopup() {
-    final TextEditingController uniController = TextEditingController(text: _targetUniversity);
-    const Color brandGolden = Color(0xFFE5C158);
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setPopupState) {
-            return Dialog(
-              backgroundColor: const Color(0xFF0D1527),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(22.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('👑 GSU MY PAGE', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
-                            Text('(마이페이지 / VIP 결제 센터)', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11.5)),
-                          ],
-                        ),
-                        IconButton(icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 20), onPressed: () => Navigator.pop(context))
-                      ],
-                    ),
-                    const Divider(color: Colors.white10, height: 20),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text("현재 등급 회원:", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _isVipMember ? brandGolden : Colors.black45,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: _isVipMember ? brandGolden : Colors.white12),
-                          ),
-                          child: Text(
-                            _isVipMember ? "👑 PREMIUM VIP" : "FREE 일반 회원",
-                            style: GoogleFonts.notoSansKr(color: _isVipMember ? Colors.black : Colors.white60, fontWeight: FontWeight.bold, fontSize: 11),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text("🎯 나의 목표 대학 설정 (개인별 변경 가능)", style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)),
-                      child: TextField(
-                        controller: uniController,
-                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: "목표 대학을 입력하세요",
-                          hintStyle: GoogleFonts.notoSansKr(color: Colors.white24, fontSize: 12),
-                          border: InputBorder.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    if (!_isVipMember)
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: const Color(0x1FFF3B30), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0x40FF3B30))),
-                        child: Text(
-                          "🚫 알림: 일반회원은 입력하신 대학명이 타이머 화면 중앙 별 애니메이션 및 성취도 리포트에 실시간 연동 발동되지 않고 강력 제한됩니다.",
-                          style: GoogleFonts.notoSansKr(color: const Color(0xFFFF453A), fontSize: 11.0, fontWeight: FontWeight.bold, height: 1.35),
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: const Color(0x1F34C759), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0x4034C759))),
-                        child: Text(
-                          "✨ VIP 연동 잠금이 해제되었습니다! 설정하신 명문대 목표가 타이머 중앙 별 한복판에 5분 주기 황금빛 아우라로 실시간 연동 발동 중입니다.",
-                          style: GoogleFonts.notoSansKr(color: Colors.greenAccent, fontSize: 11.0, fontWeight: FontWeight.bold, height: 1.35),
-                        ),
-                      ),
-                    const SizedBox(height: 22),
-
-                    GestureDetector(
-                      onTap: () {
-                        setState(() { _isVipMember = !_isVipMember; });
-                        setPopupState(() {});
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: _isVipMember
-                                  ? [Colors.grey.shade800, Colors.grey.shade900]
-                                  : [const Color(0xFFF1C40F), brandGolden],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              if (!_isVipMember) BoxShadow(color: brandGolden.withOpacity(0.35), blurRadius: 8, spreadRadius: 1)
-                            ]
-                        ),
-                        child: Center(
-                          child: Text(
-                            _isVipMember ? "Membership 해제 (구독 테스트용)" : "👑 GSU VIP 멤버십 활성화 (월 1,900원)",
-                            style: GoogleFonts.notoSansKr(color: _isVipMember ? Colors.white60 : Colors.black, fontWeight: FontWeight.bold, fontSize: 13.0),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() { _targetUniversity = uniController.text.trim().isEmpty ? "미설정" : uniController.text.trim(); });
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.white12, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                        child: Text("저장 및 닫기", style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     const Color brandGolden = Color(0xFFE5C158);
@@ -486,23 +349,22 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        toolbarHeight: 110, // 📐 이미지 문양과 타이틀 2행 수직 배치를 위한 공간 확보
+        toolbarHeight: 110,
         automaticallyImplyLeading: false,
         title: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 👑 [수정 내역 반영]: 원장님 지시에 따라 'gsu_logo.png' 자산 파일로 완벽하게 변경 교체 완료
             Image.asset(
               'assets/images/gsu_logo.png',
-              width: 180, // 📐 G~P 범위까지 포근히 안아주도록 최적의 가로 폭 조절
-              height: 24, // 📐 세로폭은 자산 고유의 미적 비율 현 상태로 수호
+              width: 180,
+              height: 24,
               fit: BoxFit.fill,
             ),
-            const SizedBox(height: 0.5), // 📐 GSU STUDYUP과의 간격을 정확히 0.2미리로 유지 (1.2 logical pixels)
+            const SizedBox(height: 0.5),
             Text(
               'GSU STUDYUP',
               style: GoogleFonts.gowunBatang(
-                color: brandGolden, // 👑 [수정 내역 반영]: 기존 흰색에서 품격 있는 황금색으로 변경 완료
+                color: brandGolden,
                 fontWeight: FontWeight.bold,
                 fontSize: 24,
                 letterSpacing: 1.5,
@@ -585,11 +447,27 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             );
                           },
                         ),
+                        // 👑 [에러 완벽 소독 완료] 신형 마이페이지 전용 최적화 호출 라인! 괄호 일자 정렬!
                         _buildMenuButton(
                           icon: Icons.account_circle_rounded,
                           label: "👑 마이페이지",
-                          subLabel: "VIP My Page",
-                          onTap: () => _openVipMyPagePopup(),
+                          subLabel: "마이페이지",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MyPageScreen(
+                                  isVipMember: _isVipMember,
+                                  onSave: (isVip, university) {
+                                    setState(() {
+                                      _isVipMember = isVip;
+                                      _targetUniversity = university;
+                                    });
+                                  },
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -786,7 +664,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       image: AssetImage('assets/images/light_blue_btn.png'),
                       fit: BoxFit.fill,
                     ),
-                    // 👑 [수술 완료 3번]: 푸른 후광을 완전히 도려내고 투명(현재 바탕색) 처리 완료
                     boxShadow: const [
                       BoxShadow(color: Colors.transparent, blurRadius: 0, spreadRadius: 0),
                     ],
@@ -815,7 +692,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  // 👑 [수술 완료 1번]: 괄호 안 한글 사이즈 크기를 원래 순정 규격인 16으로 정밀 하향 복구
   Widget _buildSectionTitle(String engTitle, String korTitle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -830,7 +706,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           style: GoogleFonts.notoSansKr(
             color: const Color(0xFFE5C158),
             fontWeight: FontWeight.bold,
-            fontSize: 16.0, // 📐 원장님 지시: 한글 크기 기존 순정 규격인 16으로 복구 완료
+            fontSize: 16.0,
             height: 1.3,
           ),
         ),
@@ -838,7 +714,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  // 👑 [수술 완료 2번, 4번, 5번]: 영문은 진명조 수호, 한글만 노토산스, 노란색은 프리미엄 황금색으로 정화
   Widget _buildSelectableChip({
     required String engText,
     required String korText,
@@ -846,7 +721,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     required VoidCallback onTap,
     double horizontalPadding = 16.0,
   }) {
-    const Color brandGolden = Color(0xFFE5C158); // 예쁜 황금색 정의
+    const Color brandGolden = Color(0xFFE5C158);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -860,7 +735,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         child: RichText(
           text: TextSpan(
             children: [
-              // 👑 영문 원상복구: 기존의 전통 진명조(gowunBatang) 철저 수호
               TextSpan(
                 text: "$engText ",
                 style: GoogleFonts.gowunBatang(
@@ -869,7 +743,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   fontSize: 15,
                 ),
               ),
-              // 👑 한글 분리: 오직 괄호 안 한글만 노토산스 한글 적용
               TextSpan(
                 text: "($korText)",
                 style: GoogleFonts.notoSansKr(
@@ -885,7 +758,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  // 👑 [수술 완료 4번]: 학습 모드 버튼 내 영문 진명조 원상복구 및 한글 분리 구조화
   Widget _buildExpandedToggleButton({
     required String engTitle,
     required String korTitle,
@@ -909,12 +781,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             textAlign: TextAlign.center,
             text: TextSpan(
               children: [
-                // 👑 영문: gowunBatang 진명조 복구 수호
                 TextSpan(
                   text: "$engTitle\n",
                   style: GoogleFonts.gowunBatang(color: isActive ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, height: 1.3),
                 ),
-                // 👑 한글: notoSansKr 고딕 매립
                 TextSpan(
                   text: "($korTitle)",
                   style: GoogleFonts.notoSansKr(color: isActive ? const Color(0xFF030712) : brandGolden, fontWeight: FontWeight.bold, fontSize: 12, height: 1.3),

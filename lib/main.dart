@@ -1,9 +1,16 @@
+import 'global_lang.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
+import 'package:gsu_studyup/global_lang.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 👑 [DKE 글로벌 언어 사전 엔진 발동]
+  await DkeLang.initialize();
+
   runApp(const GsuStudyUpApp());
 }
 
