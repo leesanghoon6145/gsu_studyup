@@ -68,7 +68,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   @override
   void initState() {
     super.initState();
-    // 🎯 [지시 반영]: 일간, 주간, 월간, 연간 4단 고급 토글 동기화를 위해 길이를 4로 정밀 확장
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() { if (!_tabController.indexIsChanging) setState(() {}); });
     _warningAnimController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this)..repeat(reverse: true);
@@ -93,7 +92,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         _timerConcentration = DkeLang.current == 'KO' ? "높음" : "High";
         _timerCondition = DkeLang.current == 'KO' ? "좋음 😊" : "Good 😊";
         _timerNextGoal = DkeLang.current == 'KO' ? "함수 심화문제" : "Advanced function problems";
-        _timerTimestamp = "2026-06-18 21:36 UTC"; // 🚨 지시하신 글로벌 UTC 규격 고정
+        _timerTimestamp = "2026-06-18 21:36 UTC";
         _timerDurationMinutes = tempSeconds != null ? (tempSeconds ~/ 60 == 0 ? 72 : tempSeconds ~/ 60) : 72;
       });
     } catch (e) {
@@ -108,7 +107,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     super.dispose();
   }
 
-  // 🚨 [철칙 수호]: 학부모 전용 대형 팝업창 레이아웃 가웃 및 타이포그래피 전면 단일화 개조
   void _showReportPopup(BuildContext context, String mainTitle, String content) {
     showDialog(
       context: context,
@@ -131,7 +129,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 🚨 [지시 반영]: 복잡한 두 줄 표기를 걷어내고 정갈하게 크기 23 단일 언어로 매핑!
                       Expanded(
                         child: Text(
                             mainTitle,
@@ -159,7 +156,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   Widget build(BuildContext context) {
     final double achievementRate = (_timerDurationMinutes / 90) * 100;
 
-    // 🎯 학부모 심리 위안형 프리미엄 리포트 컨텐츠 (언어별 완전 단일화 타겟팅)
     final String summaryDynamicContent = DkeLang.current == 'KO'
         ? "[종합 리포트]\n\n"
         "• 학습일시: $_timerTimestamp\n"
@@ -198,57 +194,63 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
     return Scaffold(
       backgroundColor: _ThemeColors.luxuryDarkBg,
+      // 👑 파트너님 지시사항 완벽 소독 반영: 중앙정렬 정품 로고 바 탑재 완료
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        toolbarHeight: 80,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
-        // 🚨 [지시 반영]: 상단 타이틀을 지시하신 "동시 접속자" 및 언어별 매핑 규격 크기 23으로 대수술!
-        title: Text(
-            DkeLang.memberAchievementTitle,
-            style: DkeLang.current == 'KO'
-                ? GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 23)
-                : GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 22)
+        toolbarHeight: 130,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 👑 1. 맨 위 정중앙에 위치하는 로고 이미지
+            Image.asset(
+              'assets/images/gsu_logo.png',
+              width: 180,
+              height: 24,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 0.5), // 🎯 지시사항: 이미지와 첫줄 타이틀 사이 여백 정확히 0.5미리 적용
+
+            // 👑 2. 첫째 줄 영문 대문자 정중앙 타이틀
+            Text(
+              'MEMBER ACHIEVEMENT',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.gowunBatang(
+                color: _ThemeColors.brandGolden,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+
+            // 👑 3. 둘째 줄 가입회원 이름 매핑 정중앙 정렬
+            Text(
+              '(이규현 성취도)',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(
+                color: Colors.white70,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+      // 🎯 [완벽 청소 구역]: 누락되었던 body 내부 컬럼 구조의 괄호를 완벽하게 재건 완료!
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 학교/이름 정보 배너
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: _ThemeColors.brandGolden.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.35), width: 1.2),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _mySchoolInfo,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 14.5, height: 1.5),
-                    ),
-                    const SizedBox(height: 4),
-                    // 🚨 [지시 반영]: (현재도 전국 전 세계 사람들 학습중입니다.) 안내 문구 한글 크기로 수정 적용!
-                    Text(
-                      DkeLang.currentLearnersMsg,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden.withOpacity(0.85), fontWeight: FontWeight.w600, fontSize: 13.5),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Summary / Detailed Analytics 버튼 (깔끔한 단일 언어로 변경)
+              // Summary / Detailed Analytics 버튼
               Row(
                 children: [
                   _buildTopButton(
@@ -367,7 +369,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ),
               const SizedBox(height: 18),
 
-              // 🎯 [지시 반영]: 4단 결합 고급형 [일간] [주간] [월간] [연간] 탭바로 완벽 교체 완료!
+              // 고급형 4단 토글 탭바 영역
               Container(
                 width: double.infinity,
                 height: 42,
@@ -392,7 +394,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 ),
               ),
               const SizedBox(height: 14),
-
               _buildAdvancedChartDashboard(_tabController.index),
             ],
           ),

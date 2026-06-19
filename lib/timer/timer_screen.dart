@@ -1,3 +1,4 @@
+import 'dart:convert'; // 🎯 과목별 객체 데이터 인코딩용 패키지 주입
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -110,13 +111,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
       }
     });
 
-    // 👑 [DKE 이어하기 엔진]: 빌드 완료 직후 동일 과목 캐싱 이력 체크 진입
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkResumeInterceptionData();
     });
   }
 
-  // 👑 [DKE 이어하기 엔진 제어실]: 진입 시 임시저장 내역 추적 매칭 구조
   Future<void> _checkResumeInterceptionData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -145,7 +144,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                 onPressed: () async {
-                  // 아니오 -> 처음부터 리셋 진행
                   await prefs.remove('dke_temp_subject');
                   await prefs.remove('dke_temp_elapsed');
                   Navigator.of(context).pop();
@@ -155,7 +153,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                 onPressed: () {
-                  // 예 -> 데이터 바인딩 로드 진행
                   setState(() {
                     _elapsedSeconds = tempSeconds;
                     progressPercent = _elapsedSeconds / _totalSeconds;
@@ -293,7 +290,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     }
   }
 
-  // 👑 [지시 반영]: 첫 중단 팝업 문구 및 데이터 임시 세이브 라우팅 개조 완료
   void _showPauseChoiceDialog() {
     const Color brandGolden = Color(0xFFE5C158);
     showDialog(
@@ -319,7 +315,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
             onPressed: () async {
-              // 끝내기 클릭 시 임시 캐시 디스크 킵 기동
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString('dke_temp_subject', widget.selectedSubject);
               await prefs.setInt('dke_temp_elapsed', _elapsedSeconds);
@@ -335,7 +330,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     );
   }
 
-  // 👑 [지시 반영]: 두 번째 중단 안내 경고 팝업 규칙 개조 완료
   void _showRecordWarningDialog() {
     const Color brandGolden = Color(0xFFE5C158);
     showDialog(
@@ -363,7 +357,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     );
   }
 
-  // 👑 [지시 반영]: 학습 탑 완수 성공 다이얼로그 개조 완료
   void _showCompletionDialog() {
     const Color brandGolden = Color(0xFFE5C158);
     showDialog(
@@ -384,7 +377,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
           TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _showGrowthBridgeDialog(); // 중간 징검다리 팝업으로 라우팅 이행
+                _showGrowthBridgeDialog();
               },
               child: Text("OK (확인)", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16))
           ),
@@ -393,7 +386,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     );
   }
 
-  // 👑 [지시 반영]: 완수와 기록장 사이의 중간 성장의 한 걸음 징검다리 팝업 완전체 구축
   void _showGrowthBridgeDialog() {
     const Color brandGolden = Color(0xFFE5C158);
     showDialog(
@@ -423,271 +415,344 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     );
   }
 
-  // 👑 [지시 반영]: DKE 대원칙이 적용된 프리미엄 선택형 데이터 인풋 기록장 폼 대개조 완료
+  // 👑 [DKE 프리미엄 UX 엔진]: 착각 방지 초기화 + 자동 스크롤 추적 + 황금 버튼 실시간 반전 제어 일체형 완벽 정렬본
   void _showStudyInputFieldForm() {
     const Color brandGolden = Color(0xFFE5C158);
     final TextEditingController detailController = TextEditingController();
     final TextEditingController scoreController = TextEditingController();
-    final TextEditingController nextGoalController = TextEditingController(); // 다음 목표 추가
+    final TextEditingController nextGoalController = TextEditingController();
 
-    // 선택형 가변 데이터 싱크 벨트 선언
-    int selectedUnderstanding = 100; // 20, 40, 60, 80, 100
-    String selectedDifficulty = '보통'; // 매우어려움, 어려움, 보통, 쉬움
-    String selectedFocus = '보통'; // 높음, 보통, 낮음
-    String selectedCondition = '보통'; // 좋음, 보통, 피곤함
-    bool isIncorrectNoted = true; // 오답노트 보존 상태
+    final ScrollController dialogScrollController = ScrollController();
+
+    // 🚨 [지시 반영]: 유저의 착각을 막기 위해 모든 선택 초기값을 null(빈 상태)로 완벽 설정!
+    int? selectedUnderstanding;
+    String? selectedDifficulty;
+    String? selectedFocus;
+    String? selectedCondition;
+    bool? isIncorrectNoted;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF0D1527),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: brandGolden, width: 1)),
-          title: Column(
-            children: [
-              Text('STUDY RECORD', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23)),
-              Text('(학습 기록 작성)', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-            ],
-          ),
-          content: Container(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: StatefulBuilder(
+          builder: (context, setDialogState) {
+
+            // 🎯 [지시 반영]: 모든 필수 항목이 완벽히 입력/선택되었을 때만 노란 황금색 저장 버튼이 실시간 활성화됨!
+            bool isAllFilled = detailController.text.trim().isNotEmpty &&
+                scoreController.text.trim().isNotEmpty &&
+                nextGoalController.text.trim().isNotEmpty &&
+                selectedUnderstanding != null &&
+                selectedDifficulty != null &&
+                selectedFocus != null &&
+                selectedCondition != null &&
+                isIncorrectNoted != null;
+
+            // 🎯 항목을 채우거나 클릭할 때 다음 항목 칸으로 화면을 스무스하게 올리는 자동 스크롤 메커니즘
+            void autoScrollNext(double offset) {
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (dialogScrollController.hasClients) {
+                  dialogScrollController.animateTo(
+                    offset,
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeInOut,
+                  );
+                }
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0D1527),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: isAllFilled ? brandGolden : Colors.white12, width: 1)),
+              title: Column(
                 children: [
-                  // 과목명 자동생성 블록
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  Text('STUDY RECORD', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23)),
+                  Text('(학습 기록 작성)', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
+              ),
+              content: Container(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  controller: dialogScrollController,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('SUBJECT (과목) : ', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-                      Text(widget.selectedSubject, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), softWrap: true),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('SUBJECT (과목) : ', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+                          Text(widget.selectedSubject, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), softWrap: true),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
-                  // 상세내용 인풋
-                  Text('DETAILS (상세 내용)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: detailController,
-                    maxLines: 2,
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'e.g., Solved concepts and problems.\n(예: 개념 및 문제풀이 함)',
-                      hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.34), fontSize: 12),
-                      filled: true,
-                      fillColor: const Color(0xFF050B14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.all(10),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 점수 인풋
-                  Text('SCORE (점수)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: scoreController,
-                    keyboardType: TextInputType.number,
-                    style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      hintText: '100',
-                      hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
-                      suffixText: 'Points (점)',
-                      suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
-                      filled: true,
-                      fillColor: const Color(0xFF050B14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 🚨 [철칙 수호]: 오답노트 상태 유지 선언 구역
-                  Text('INCORRECT NOTE STATUS (오답노트 상태)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Container(
-                    decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => setDialogState(() => isIncorrectNoted = true),
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(color: isIncorrectNoted ? brandGolden : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-                              child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
-                            ),
-                          ),
+                      // 1. 상세내용 인풋
+                      Text('DETAILS (상세 내용) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: detailController,
+                        maxLines: 2,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                        onChanged: (_) => setDialogState(() {}),
+                        onSubmitted: (_) => autoScrollNext(80.0),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Solved concepts and problems. (예: 개념 및 문제풀이 함)',
+                          hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFF050B14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.all(10),
                         ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => setDialogState(() => isIncorrectNoted = false),
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(color: !isIncorrectNoted ? brandGolden : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-                              child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: !isIncorrectNoted ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                      ),
+                      const SizedBox(height: 16),
 
-                  // 🎯 [지시 반영 선택 칩]: UNDERSTANDING (이해도)
-                  Text('UNDERSTANDING (이해도)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [20, 40, 60, 80, 100].map((val) {
-                        final bool isSel = selectedUnderstanding == val;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6.0),
-                          child: ChoiceChip(
-                            label: Text('$val%', style: GoogleFonts.rajdhani(color: isSel ? const Color(0xFF030712) : Colors.white, fontWeight: FontWeight.bold)),
+                      // 2. 점수 인풋
+                      Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: scoreController,
+                        keyboardType: TextInputType.number,
+                        style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        onChanged: (_) => setDialogState(() {}),
+                        onSubmitted: (_) => autoScrollNext(180.0),
+                        decoration: InputDecoration(
+                          hintText: '100',
+                          hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
+                          suffixText: 'Points (점)',
+                          suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFF050B14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3. 오답노트 상태 (선택 전에는 미선택 상태 유지)
+                      Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Container(
+                        decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: () {
+                                  setDialogState(() => isIncorrectNoted = true);
+                                  autoScrollNext(260.0);
+                                },
+                                child: Container(
+                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                      color: isIncorrectNoted == true ? brandGolden : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(8)
+                                  ),
+                                  child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () {
+                                  setDialogState(() => isIncorrectNoted = false);
+                                  autoScrollNext(260.0);
+                                },
+                                child: Container(
+                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                      color: isIncorrectNoted == false ? brandGolden : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(8)
+                                  ),
+                                  child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 4. 이해도 선택 칩 (null 상태 대기)
+                      Text('UNDERSTANDING (이해도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [20, 40, 60, 80, 100].map((val) {
+                            final bool isSel = selectedUnderstanding == val;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6.0),
+                              child: ChoiceChip(
+                                label: Text('$val%', style: GoogleFonts.rajdhani(color: isSel ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold)),
+                                selected: isSel,
+                                selectedColor: brandGolden,
+                                backgroundColor: const Color(0xFF050B14),
+                                onSelected: (_) {
+                                  setDialogState(() => selectedUnderstanding = val);
+                                  autoScrollNext(360.0);
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 5. 난이도 선택 칩 (null 상태 대기)
+                      Text('DIFFICULTY (난이도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6.0,
+                        children: ['매우어려움', '어려움', '보통', '쉬움'].map((val) {
+                          final bool isSel = selectedDifficulty == val;
+                          return ChoiceChip(
+                            label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                             selected: isSel,
                             selectedColor: brandGolden,
                             backgroundColor: const Color(0xFF050B14),
-                            onSelected: (_) => setDialogState(() => selectedUnderstanding = val),
-                          ),
-                        );
-                      }).toList(),
+                            onSelected: (_) {
+                              setDialogState(() => selectedDifficulty = val);
+                              autoScrollNext(440.0);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 6. 집중도 선택 칩 (null 상태 대기)
+                      Text('CONCENTRATION (집중도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: ['높음', '보통', '낮음'].map((val) {
+                          final bool isSel = selectedFocus == val;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: ChoiceChip(
+                              label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                              selected: isSel,
+                              selectedColor: brandGolden,
+                              backgroundColor: const Color(0xFF050B14),
+                              onSelected: (_) {
+                                setDialogState(() => selectedFocus = val);
+                                autoScrollNext(520.0);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 7. 학습 컨디션 (null 상태 대기)
+                      Text('LEARNING CONDITION (학습 컨디션) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          {'label': '좋음', 'emoji': '😊'},
+                          {'label': '보통', 'emoji': '😐'},
+                          {'label': '피곤함', 'emoji': '😴'}
+                        ].map((item) {
+                          final String val = item['label']!;
+                          final String emoji = item['emoji']!;
+                          final bool isSel = selectedCondition == val;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: ChoiceChip(
+                              label: Text('$emoji $val', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                              selected: isSel,
+                              selectedColor: brandGolden,
+                              backgroundColor: const Color(0xFF050B14),
+                              onSelected: (_) {
+                                setDialogState(() => selectedCondition = val);
+                                autoScrollNext(620.0);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 8. 다음 목표 인풋
+                      Text('NEXT GOAL (다음 목표) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: nextGoalController,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                        onChanged: (_) => setDialogState(() {}),
+                        onSubmitted: (_) => autoScrollNext(700.0),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Advanced function problems (예: 함수 심화문제)',
+                          hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFF050B14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                Container(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isAllFilled ? brandGolden : const Color(0xFF1F2937),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: isAllFilled ? 4 : 0,
+                    ),
+                    onPressed: !isAllFilled ? null : () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('dke_temp_subject');
+                      await prefs.remove('dke_temp_elapsed');
+
+                      final String subjectKey = "dke_history_${widget.selectedSubject}";
+
+                      final Map<String, dynamic> dkeFinalPacket = {
+                        'subject': widget.selectedSubject,
+                        'details': detailController.text.trim(),
+                        'score': int.tryParse(scoreController.text.trim()) ?? 0,
+                        'incorrectNote': isIncorrectNoted == true ? '정리함' : '정리 안함',
+                        'understanding': selectedUnderstanding,
+                        'difficulty': selectedDifficulty,
+                        'concentration': selectedFocus,
+                        'condition': selectedCondition,
+                        'nextGoal': nextGoalController.text.trim(),
+                        'durationSeconds': _elapsedSeconds,
+                        'timestamp': DateTime.now().toUtc().toString(),
+                      };
+
+                      List<String> subjectHistoryList = prefs.getStringList(subjectKey) ?? [];
+                      subjectHistoryList.add(jsonEncode(dkeFinalPacket));
+                      await prefs.setStringList(subjectKey, subjectHistoryList);
+
+                      if (!mounted) return;
+                      Navigator.of(context).pop();
+                      _showFinalSubjectSetupRedirectDialog();
+                    },
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('SAVE RECORD', style: GoogleFonts.gowunBatang(color: isAllFilled ? const Color(0xFF030712) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 15)),
+                        const SizedBox(height: 2),
+                        Text('(성장 데이터 저장)', style: GoogleFonts.notoSansKr(color: isAllFilled ? const Color(0xFF030712) : Colors.white24, fontWeight: FontWeight.bold, fontSize: 11)),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // 🎯 [지시 반영 선택 칩]: DIFFICULTY (난이도)
-                  Text('DIFFICULTY (난이도)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6.0,
-                    children: ['매우어려움', '어려움', '보통', '쉬움'].map((val) {
-                      final bool isSel = selectedDifficulty == val;
-                      return ChoiceChip(
-                        label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        selected: isSel,
-                        selectedColor: brandGolden,
-                        backgroundColor: const Color(0xFF050B14),
-                        onSelected: (_) => setDialogState(() => selectedDifficulty = val),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 🎯 [지시 반영 선택 칩]: CONCENTRATION (집중도)
-                  Text('CONCENTRATION (집중도)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: ['높음', '보통', '낮음'].map((val) {
-                      final bool isSel = selectedFocus == val;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6.0),
-                        child: ChoiceChip(
-                          label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          selected: isSel,
-                          selectedColor: brandGolden,
-                          backgroundColor: const Color(0xFF050B14),
-                          onSelected: (_) => setDialogState(() => selectedFocus = val),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 🎯 [지시 반영 선택 칩]: CONDITION (학습 컨디션 이모지 일체형)
-                  Text('LEARNING CONDITION (학습 컨디션)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      {'label': '좋음', 'emoji': '😊'},
-                      {'label': '보통', 'emoji': '😐'},
-                      {'label': '피곤함', 'emoji': '😴'}
-                    ].map((item) {
-                      final String val = item['label']!;
-                      final String emoji = item['emoji']!;
-                      final bool isSel = selectedCondition == val;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6.0),
-                        child: ChoiceChip(
-                          label: Text('$emoji $val', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          selected: isSel,
-                          selectedColor: brandGolden,
-                          backgroundColor: const Color(0xFF050B14),
-                          onSelected: (_) => setDialogState(() => selectedCondition = val),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 🎯 [지시 반영]: NEXT GOAL (다음 목표 직접 기록란)
-                  Text('NEXT GOAL (다음 목표)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: nextGoalController,
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'e.g., Advanced function problems (예: 함수 심화문제)',
-                      hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.34), fontSize: 12),
-                      filled: true,
-                      fillColor: const Color(0xFF050B14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: brandGolden, minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-              onPressed: () async {
-                // 임시저장 내역 무력화 소독 진행
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('dke_temp_subject');
-                await prefs.remove('dke_temp_elapsed');
-
-                final Map<String, dynamic> dkeFinalPacket = {
-                  'subject': widget.selectedSubject,
-                  'details': detailController.text.trim(),
-                  'score': int.tryParse(scoreController.text.trim()) ?? 0,
-                  'incorrectNote': isIncorrectNoted ? '정리함' : '정리 안함',
-                  'understanding': selectedUnderstanding,
-                  'difficulty': selectedDifficulty,
-                  'concentration': selectedFocus,
-                  'condition': selectedCondition,
-                  'nextGoal': nextGoalController.text.trim(),
-                  'timestamp': DateTime.now().toUtc().toString(),
-                };
-                debugPrint("👑 DKE 글로벌 마스터 저장 데이터 연동 패킷 성공: $dkeFinalPacket");
-
-                if (!mounted) return;
-                Navigator.of(context).pop();
-                _showFinalSubjectSetupRedirectDialog(); // 최종 대시보드 리다이렉션 징검다리 호출
-              },
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('SAVE RECORD', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(height: 2),
-                  Text('(성장 데이터 저장)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  // 👑 [지시 반영]: 저장 처리 후 로비 대시보드로 복귀 자동 강제 이동 제어 다이얼로그
   void _showFinalSubjectSetupRedirectDialog() {
     const Color brandGolden = Color(0xFFE5C158);
     showDialog(
@@ -707,8 +772,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop(); // 현재 다이얼로그 닫기
-              // 👑 [자동저장 후 로비 복귀 연동]: 현재 화면 스택을 날리고 홈 대시보드로 다이렉트 자동 이동
+              Navigator.of(context).pop();
               Navigator.of(context).pop();
             },
             child: Text("OK (확인)", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
