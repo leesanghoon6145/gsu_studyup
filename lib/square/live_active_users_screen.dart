@@ -78,31 +78,47 @@ class _LiveActiveUsersScreenState extends State<LiveActiveUsersScreen> {
     return Scaffold(
       backgroundColor: bgSpaceDark,
       appBar: AppBar(
-        backgroundColor: bgSpaceDark,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        toolbarHeight: 140, // 🎯 로고와 타이틀이 모두 여유롭고 예쁘게 들어가도록 높이 확보
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: textWhite, size: 22),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
-        // 👑 [친구 학습방 타이틀 스타일 완벽 일체화]: 영문 기준 괄호 안 한국어 수호 및 글자 크기 동기화!
         title: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // 👑 1. L부터 S까지 타이틀 라인을 예쁘게 감싸도록 배치한 정품 로고 이미지
+            Image.asset(
+              'assets/images/gsu_logo.png',
+              width: 190, // 🎯 타이틀 너비와 시각적 밸런스를 맞추기 위해 정밀 스케일업
+              height: 26,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 4), // 🎯 로고와 첫 줄 타이틀 사이 품격 있는 간격
+
+            // 👑 2. 첫째 줄 영문 대문자 정중앙 타이틀 (Bold Serif 스타일)
             Text(
-              "Live Active Users",
+              'LIVE ACTIVE USERS',
+              textAlign: TextAlign.center,
               style: GoogleFonts.gowunBatang(
-                color: brandGolden,
-                fontSize: 23, // 📐 친구 학습방과 완벽하게 동일한 크기로 확대 셋업!
-                fontWeight: FontWeight.w700,
+                color: const Color(0xFFE5C158), // 황금색 현상태 유지
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 1.5,
               ),
             ),
             const SizedBox(height: 2),
+
+            // 👑 3. 둘째 줄 한글 강조 타이틀 (노토산스 한글 및 크기 23 단일화 원칙 적용)
             Text(
-              "(동시접속자)",
-              style: GoogleFonts.gowunBatang(
-                color: brandGolden,
-                fontSize: 14, // 📐 친구 학습방 부타이틀과 완벽하게 동일한 크기로 일치!
+              '동시 접속자',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(
+                color: const Color(0xFFE5C158), // 지시사항 준수: 한글 타이틀 황금색 적용
                 fontWeight: FontWeight.bold,
+                fontSize: 23, // 8번 원칙: 한글 강조 타이틀 크기 23 단일화 엄격 준수
               ),
             ),
           ],

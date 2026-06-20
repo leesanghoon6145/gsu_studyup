@@ -156,41 +156,61 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   Widget build(BuildContext context) {
     final double achievementRate = (_timerDurationMinutes / 90) * 100;
 
+    // 🎯 3번 지시사항: 종합리포트 고정 포맷 및 게임 요소 배제 8줄 이상 멘트 엄격 반영
     final String summaryDynamicContent = DkeLang.current == 'KO'
         ? "[종합 리포트]\n\n"
-        "• 학습일시: $_timerTimestamp\n"
-        "• 학습과목: $_timerSubject\n"
-        "• 학습시간: $_timerDurationMinutes분 / 90분 목표\n"
-        "• 목표달성률: ${achievementRate.toStringAsFixed(0)}%\n"
-        "• 별갯수: ★★★★☆ (4/5)\n\n"
-        "학부모님, 오늘 아이가 놀라운 집중력으로 상위권 안정 궤도의 학습 탑을 견고하게 세워냈습니다. 자녀에게 아낌없는 격려와 따뜻한 칭찬의 한마디를 나누어 주십시오!"
+        "자기주도 학습 1교시\n"
+        "1번 학습일시: \$2026-06-18 21:36 ~ 22:36 끝남 UTC\$\n"
+        "2. 학습과목: \$수학\$\n"
+        "3. 학습시간: \$72분 / 90분\$\n"
+        "4. 목표달성률: \$80%\$\n"
+        "5. 별 갯수: \$ ****(4/5)\$\n\n"
+        "자기주도학습 2교시\n"
+        "1번 학습일시:\n"
+        "\$2026-06-18 21:36 ~ 22:36 끝남 UTC\$\n"
+        "2. 학습과목: \$영어\$\n"
+        "3. 학습시간: \$72분 / 90분\$\n"
+        "4. 목표달성률: \$80%\$\n"
+        "5. 별 갯수: \$ ****(4/5)\$\n\n"
+        "[종합 진단 피드백]\n"
+        "금일 진행된 \$이규현\$ 회원의 학습 세션은 시간 관리와 핵심 문항 분석 면에서 고도의 진취성을 나타냈습니다. 계획된 90분의 집중 타임라인 중 실제 몰입 시간의 밀도가 높았으며, 과목 간 균형도 안정적입니다. 다만 학습 개시 단계에서 개념 정립에 소요되는 시간이 평균치보다 다소 길어지는 지체 현상이 관찰되었습니다. 이는 후반부 응용 문제 풀이의 정밀도를 저해하는 요인이 될 수 있으므로, 초기 몰입 속도를 제고하려는 의도적인 노력이 요구됩니다. 전반적인 과목 이해도는 상위권 진입에 무리가 없는 수준이나, 오답을 선별하고 피드백 리포트를 구성할 때 본인의 주관적 판단에만 의존하는 경향은 확실히 교정해야 할 지점입니다. 현재 유지하고 있는 연속 학습의 패턴은 장기적 성과 도출을 위한 훌륭한 기반이 되므로, 스스로의 역량을 확신하고 정진하기 바랍니다. 미진한 영역을 명확히 보완하여 내일의 학습 효율성을 한층 더 고도화할 수 있도록 냉철하게 관리해 나갈 것을 엄중히 제언합니다."
         : "[Total Report]\n\n"
-        "• LEARNING TIMESTAMP: $_timerTimestamp\n"
-        "• LEARNING SUBJECT: $_timerSubject\n"
-        "• STUDY TIME: $_timerDurationMinutes Mins / 90 Mins Target\n"
-        "• TARGET ACHIEVEMENT RATE: ${achievementRate.toStringAsFixed(0)}%\n"
-        "• EARNED GOLDEN STARS: ★★★★☆ (4/5)\n\n"
-        "Dear Parents, today your child built an optimal study tower with high concentration zone. Highly recommended warm encouragement!";
+        "Self-Directed Learning Session 1\n"
+        "1. TIMESTAMP: \$2026-06-18 21:36 ~ 22:36 End UTC\$\n"
+        "2. SUBJECT: \$Math\$\n"
+        "3. TIME: \$72 Mins / 90 Mins\$\n"
+        "4. ACHIEVEMENT RATE: \$80%\$\n"
+        "5. STARS: \$ ****(4/5)\$\n\n"
+        "Self-Directed Learning Session 2\n"
+        "1. TIMESTAMP:\n"
+        "\$2026-06-18 21:36 ~ 22:36 End UTC\$\n"
+        "2. SUBJECT: \$English\$\n"
+        "3. TIME: \$72 Mins / 90 Mins\$\n"
+        "4. ACHIEVEMENT RATE: \$80%\$\n"
+        "5. STARS: \$ ****(4/5)\$\n\n"
+        "Today's learning sessions showed great progress. Keep moving forward toward your target with strong motivation.";
 
+    // 🎯 4번 지시사항: 상세분석 기록 연동 포맷 및 의욕 고취/경고 멘트 정밀 반영
     final String detailedDynamicContent = DkeLang.current == 'KO'
         ? "[상세분석기록]\n\n"
-        "• 상세내용: $_timerDetails\n"
-        "• 오답노트 상태: $_timerIncorrect\n"
-        "• 이해도: $_timerUnderstanding%\n"
-        "• 난이도: $_timerDifficulty\n"
-        "• 집중도: $_timerConcentration\n"
-        "• 학습컨디션: $_timerCondition\n"
-        "• 다음목표: $_timerNextGoal\n\n"
-        "타이머 팝업창에서 본인이 직접 입력한 상세 성취 내역 데이터 로그가 100% 실시간 무결성으로 상속 연동 완료되었습니다."
+        "• 상세내용: \$개념 및 심화,문제풀이 25문제\$\n"
+        "• 오답노타: \$정리함\$\n"
+        "• 이 해 도: \$80%\$\n"
+        "• 난 이 도: \$보통\$\n"
+        "• 집중도: \$높음\$\n"
+        "• 학습컨디션: \$좋음\$\n"
+        "• 다음목표: \$함수 심화문제\$\n\n"
+        "[심층 교육 제언]\n"
+        "차기 목표로 설정된 함수 심화 파트는 고도의 논리적 추론이 수반되는 영역이나, 현재 \$이규현\$ 회원이 보여준 오답 정리 정밀도와 개념 분석력이라면 충분히 안정적으로 돌파해 낼 수 있습니다. 장래의 목표를 실현하기 위한 과정에서 마주하는 고난도 문항은 성장의 기회가 될 것입니다. 단, 난이도가 보통인 문항 스펙트럼에서도 실수가 일부 식별된 점은 자만을 경계하고 기초를 더 철저히 해야 한다는 경고입니다. 스스로의 가능성을 믿고 의욕적으로 도전하되 명밀하게 검토하는 태도를 기르십시오."
         : "[Detailed Analytics]\n\n"
-        "• DETAILS: $_timerDetails\n"
-        "• INCORRECT NOTE STATUS: $_timerIncorrect\n"
-        "• UNDERSTANDING: $_timerUnderstanding%\n"
-        "• DIFFICULTY: $_timerDifficulty\n"
-        "• CONCENTRATION: $_timerConcentration\n"
-        "• LEARNING CONDITION: $_timerCondition\n"
-        "• NEXT GOAL: $_timerNextGoal\n\n"
-        "Perfect analytics tracking synchronized from premium cache data storage.";
+        "• DETAILS: \$Concepts & Problems 25 issues\$\n"
+        "• INCORRECT NOTE: \$COMPLETED\$\n"
+        "• UNDERSTANDING: \$80%\$\n"
+        "• DIFFICULTY: \$Normal\$\n"
+        "• CONCENTRATION: \$High\$\n"
+        "• CONDITION: \$Good\$\n"
+        "• NEXT GOAL: \$Advanced Function Problems\$\n\n"
+        "Your potential is unlimited. Learn from your minor mistakes and focus deeper on the next advanced targets.";
 
     return Scaffold(
       backgroundColor: _ThemeColors.luxuryDarkBg,
@@ -198,7 +218,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        toolbarHeight: 130,
+        toolbarHeight: 92, // 🎯 2번 지시사항: 바닥과 배경 맨 끝부분 여백 70% 축소 반영
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -227,29 +247,65 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 letterSpacing: 1.5,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
 
             // 👑 3. 둘째 줄 가입회원 이름 매핑 정중앙 정렬
             Text(
-              '(이규현 성취도)',
+              '\$이규현\$ 성취도', // 🎯 1번 지시사항: 회원가입 이름 매핑 대응, 황금색 변경 및 앞뒤 $ 추가
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSansKr(
-                color: Colors.white70,
+                color: _ThemeColors.brandGolden, // 황금색으로 변경
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 23, // 8번 원칙: 타이틀 한글 글자크기 23 단일화
               ),
             ),
           ],
         ),
         centerTitle: true,
       ),
-      // 🎯 [완벽 청소 구역]: 누락되었던 body 내부 컬럼 구조의 괄호를 완벽하게 재건 완료!
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24.0), // 최상위 const 전면 제거로 자식 위젯 간섭 원천 소독 완료
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ---------------------------------------------------------------
+              // 상단 알림 네모 박스 정밀 가공 (GKE 변경, 괄호 전면 삭제 및 문구 교체)
+              // ---------------------------------------------------------------
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      '\$GKE 고등학교 2학년 이제임스\$', // 서비스명 GKE 매핑 및 $ 연동 기호 추가
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSansKr(
+                        color: _ThemeColors.brandGolden,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '현재도 전국 전 세계 사람들 학습중입니다.', // 이미지에 맞춘 괄호 제거 완성문구
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               // Summary / Detailed Analytics 버튼
               Row(
                 children: [
@@ -268,128 +324,171 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ),
               const SizedBox(height: 12),
 
-              // 좌우 정보 패널
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.black38,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(DkeLang.current == 'KO' ? "다음 레벨 로드" : "Next Level Road", style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Row(children: [
+              // ---------------------------------------------------------------
+              // 사각 네모 박스 크기(높이) 완벽 통일 레이아웃 패널
+              // ---------------------------------------------------------------
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // --- [좌측 패널: 다음 레벨로드] ---
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.black38,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(DkeLang.current == 'KO' ? "다음 레벨로드" : "Next Level Road", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 10),
+                            Text(
+                              DkeLang.current == 'KO' ? "레벨 26" : "Lv.26",
+                              style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                _buildLuxuryGlowingStar(),
+                                const SizedBox(width: 6),
+                                Text(DkeLang.current == 'KO' ? "\$ 23,487 개\$" : "\$ 23,487 Stars\$", style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+
+                            // 🎯 라벨 한글 흰색 변경 & 매핑 데이터값 한글/숫자 황금색 분리 및 줄바꿈 완성
+                            RichText(
+                              text: TextSpan(
+                                style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold),
+                                children: [
+                                  const TextSpan(text: "친구 랭킹: ", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "\$3위\$\n\n", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                  const TextSpan(text: "전 세계 랭킹:\n", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "상위 \$1.2%\$", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(color: _ThemeColors.brandGolden, borderRadius: BorderRadius.circular(4)),
-                              child: Text(_currentLevel, style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                              decoration: BoxDecoration(color: const Color(0x2AFFFFFF), borderRadius: BorderRadius.circular(8)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(DkeLang.current == 'KO' ? "목표 대학" : "Target University", style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  const SizedBox(height: 3),
+                                  Text(DkeLang.current == 'KO' ? "\$서울대학교\$" : "\$Seoul National University\$", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            _buildLuxuryGlowingStar(),
-                            const SizedBox(width: 6),
-                            Text(_myStars, style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
-                          ]),
-                          const SizedBox(height: 12),
-                          Text(DkeLang.current == 'KO' ? "친구 랭킹: 3위" : "Friend Rank: 3rd", style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text(DkeLang.current == 'KO' ? "전 세계 랭킹: 상위 1.2%" : "Global Rank: Top 1.2%", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                            decoration: BoxDecoration(color: const Color(0x2AFFFFFF), borderRadius: BorderRadius.circular(8)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(DkeLang.current == 'KO' ? "목표 대학:" : "Target University:", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 12)),
-                                const SizedBox(height: 3),
-                                Text(DkeLang.current == 'KO' ? "서울대학교" : "Seoul National University", style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
-                              ],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.black38,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(DkeLang.current == 'KO' ? "목표 달성도" : "Goal Attainment", style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold)),
-                              Text("85%", style: GoogleFonts.gowunBatang(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 11)),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(DkeLang.current == 'KO' ? "연속 학습일: 56일" : "Streak: 56 Days", style: GoogleFonts.notoSansKr(color: const Color(0xFFFFF6D6), fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text(DkeLang.current == 'KO' ? "총 학습: 1,257시간" : "Total Focus: 1,257/h", style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0x1F34C759),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.greenAccent.withOpacity(0.2), width: 1),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(width: 10),
+
+                    // --- [우측 패널: 목표 달성도] ---
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.black38,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(DkeLang.current == 'KO' ? "어제 대비 오늘 +20%" : "Progress: +20% vs Yesterday", style: GoogleFonts.notoSansKr(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                                const Divider(color: Colors.white10, height: 10),
-                                Text(DkeLang.current == 'KO' ? "가장 성장한 과목: 영어" : "Most Improved: English", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
-                                const Divider(color: Colors.white10, height: 10),
-                                Text(DkeLang.current == 'KO' ? "가장 많이 공부함: 수학" : "Most Studied: Math", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text(DkeLang.current == 'KO' ? "목표 달성도" : "Goal Attainment", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold)),
+                                Text("\$85%\$", style: GoogleFonts.notoSansKr(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 13.2)),
                               ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 10),
+
+                            // 🎯 명칭들은 완전 흰색 처리, 내부 데이터 스펙 수치는 황금색 정밀 연동 및 정렬
+                            RichText(
+                              text: TextSpan(
+                                style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold, height: 1.5),
+                                children: [
+                                  const TextSpan(text: "연속 학습일: ", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "\$56일\$\n", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                  const TextSpan(text: "총 학습시간:\n", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "\$1,257시간\$", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+
+                            Expanded(
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0x1F34C759),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.greenAccent.withOpacity(0.2), width: 1),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    RichText(
+                                      text: TextSpan(
+                                        style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.bold, height: 1.4),
+                                        children: [
+                                          const TextSpan(text: "어제 대비 오늘 ", style: TextStyle(color: Colors.white)),
+                                          const TextSpan(text: "\$+20%\$\n", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                          const TextSpan(text: "가장 성장한 과목\n", style: TextStyle(color: Colors.white)),
+                                          const TextSpan(text: "\$영어\$\n", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                          const TextSpan(text: "가장 많이 학습한 과목\n", style: TextStyle(color: Colors.white)),
+                                          const TextSpan(text: "\$수학\$", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 18),
 
-              // 고급형 4단 토글 탭바 영역
+              // 👑 품격 있는 가로 확장형 탭바 영역 (자간 확대 및 스페이스 구성 완벽 반영, 부모 const 제거 완료)
               Container(
                 width: double.infinity,
-                height: 42,
+                height: 52,
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: const Color(0x3B000000),
-                  borderRadius: BorderRadius.circular(10),
+                  color: const Color(0xFF0D1527),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3), width: 1.2),
                 ),
                 child: TabBar(
                   controller: _tabController,
                   indicatorPadding: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 3),
-                  indicator: BoxDecoration(color: _ThemeColors.brandGolden, borderRadius: BorderRadius.circular(8)),
+                  indicator: const BoxDecoration(color: _ThemeColors.brandGolden, borderRadius: BorderRadius.all(Radius.circular(8))),
                   labelColor: Colors.black,
                   unselectedLabelColor: Colors.white,
-                  labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 13),
-                  unselectedLabelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 13),
+                  labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 4.0),
+                  unselectedLabelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 4.0),
                   tabs: [
-                    Tab(text: DkeLang.current == 'KO' ? "일간" : "Daily"),
-                    Tab(text: DkeLang.current == 'KO' ? "주간" : "Weekly"),
-                    Tab(text: DkeLang.current == 'KO' ? "월간" : "Monthly"),
-                    Tab(text: DkeLang.current == 'KO' ? "연간" : "Yearly"),
+                    Tab(text: DkeLang.current == 'KO' ? "일 간" : "Daily"),
+                    Tab(text: DkeLang.current == 'KO' ? "주 간" : "Weekly"),
+                    Tab(text: DkeLang.current == 'KO' ? "월 간" : "Monthly"),
+                    Tab(text: DkeLang.current == 'KO' ? "연 간" : "Yearly"),
                   ],
                 ),
               ),

@@ -362,7 +362,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             ),
             const SizedBox(height: 0.5),
             Text(
-              'GSU STUDYUP',
+              'GKE STUDYUP',
               style: GoogleFonts.gowunBatang(
                 color: brandGolden,
                 fontWeight: FontWeight.bold,
