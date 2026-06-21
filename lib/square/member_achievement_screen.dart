@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../global_lang.dart'; // 👑 1단계에서 만든 글로벌 사전 연결
+import '../global_lang.dart'; // 👑 글로벌 사전 연결
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -17,17 +17,38 @@ class _ThemeColors {
   static const Color premiumCardBg = Color(0xFF0D1527);
 }
 
+// 🎯 성적 입력을 위한 내부 데이터 모델링 패킷 정의
+class _ExamRecord {
+  final String id;
+  final String type; // 주평가, 단원평가, 중간고사, 기말고사, 모의고사
+  final int grade;   // 1, 2, 3학년
+  final int semester; // 1, 2학기
+  final DateTime date;
+  final String subject;
+  final String unit;
+  final double score;
+
+  _ExamRecord({
+    required this.id,
+    required this.type,
+    required this.grade,
+    required this.semester,
+    required this.date,
+    required this.subject,
+    required this.unit,
+    required this.score,
+  });
+}
+
 class _MemberAchievementScreenState extends State<MemberAchievementScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   late AnimationController _warningAnimController;
   late Animation<double> _warningAnimation;
 
-  // 🎯 국적/언어별 단일 출력을 위해 기존 더블 변수 구조를 사전형 단일 변수로 전면 다이어트
   final String _mySchoolInfo = DkeLang.schoolInfo;
   final String _currentLevel = DkeLang.current == 'KO' ? "레벨 26" : "Lv.26";
   final String _myStars = "12,580";
 
-  // 내부 차트용 연동 데이터 모델 (국적/언어 스위칭 유연화 대응)
   final List<Color> _todayColors = [
     const Color(0xFFFF3B30), const Color(0xFFFF9500), const Color(0xFFFFCC00),
     const Color(0xFF34C759), const Color(0xFF007AFF), const Color(0xFF0500FF),
@@ -40,30 +61,46 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     const Color(0xFFFFCC00), const Color(0xFF5856D6),
   ];
 
-  // 각 언어 모드에 맞춰 차트 라벨이 단일화되어 깔끔하게 출력되도록 로직 개조
+  final List<Color> _evalColors = [
+    const Color(0xFF34C759), // 초
+    const Color(0xFFFF3B30), // 빨
+    const Color(0xFF007AFF), // 파
+    const Color(0xFFFF9500), // 주
+    const Color(0xFF5856D6), // 남
+    const Color(0xFFFFCC00), // 노
+    const Color(0xFFAF52DE), // 보
+  ];
+
   List<Map<String, dynamic>> get _masterSubjectData => [
     {"subject": DkeLang.current == 'KO' ? "수학" : "Math", "score": 0.85, "averageScore": 0.65, "hasStudiedToday": true, "hasStudiedWeekly": true, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 120, "isStarEligible": true},
     {"subject": DkeLang.current == 'KO' ? "영어" : "English", "score": 0.72, "averageScore": 0.70, "hasStudiedToday": true, "hasStudiedWeekly": true, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 90, "isStarEligible": true},
     {"subject": DkeLang.current == 'KO' ? "국어" : "Korean", "score": 0.90, "averageScore": 0.58, "hasStudiedToday": false, "hasStudiedWeekly": true, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 80, "isStarEligible": true},
     {"subject": DkeLang.current == 'KO' ? "과학" : "Science", "score": 0.65, "averageScore": 0.60, "hasStudiedToday": false, "hasStudiedWeekly": true, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 70, "isStarEligible": true},
-    {"subject": DkeLang.current == 'KO' ? "사회" : "Social", "score": 0.78, "averageScore": 0.75, "hasStudiedToday": false, "hasStudiedWeekly": false, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 60, "isStarEligible": true},
+    {"subject": DkeLang.current == 'KO' ? "사회" : "Social", "score": 0.78, "averageScore": 0.75, "hasStudiedToday": false, "hasStudiedWeekly": false, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 30, "isStarEligible": true},
     {"subject": DkeLang.current == 'KO' ? "도덕" : "Ethics", "score": 0.95, "averageScore": 0.80, "hasStudiedToday": false, "hasStudiedWeekly": false, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 50, "isStarEligible": true},
     {"subject": DkeLang.current == 'KO' ? "역사" : "History", "score": 0.80, "averageScore": 0.62, "hasStudiedToday": false, "hasStudiedWeekly": false, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 45, "isStarEligible": true},
     {"subject": DkeLang.current == 'KO' ? "정보" : "Info", "score": 0.88, "averageScore": 0.68, "hasStudiedToday": false, "hasStudiedWeekly": false, "hasStudiedMonthly": true, "hasStudiedYearly": true, "baseMinutes": 40, "isStarEligible": true},
   ];
 
-  // 타이머 연동 실시간 데이터 버퍼 수소화
   String _timerSubject = "";
   String _timerDetails = "";
   int _timerScore = 100;
   String _timerIncorrect = "";
-  int _timerUnderstanding = 100;
-  String _timerDifficulty = "";
-  String _timerConcentration = "";
-  String _timerCondition = "";
-  String _timerNextGoal = "";
-  String _timerTimestamp = "";
   int _timerDurationMinutes = 0;
+
+  String? _selectedExamType;
+  List<_ExamRecord> _allRecords = [];
+
+  final TextEditingController _subjectController = TextEditingController();
+  final TextEditingController _unitController = TextEditingController();
+  final TextEditingController _scoreController = TextEditingController();
+  int _inputGrade = 1;
+  int _inputSemester = 1;
+  DateTime _inputDate = DateTime.now();
+
+  bool _isPastViewMode = false;
+  int _pastSelectedMonth = DateTime.now().month;
+  int _pastSelectedDay = DateTime.now().day;
 
   @override
   void initState() {
@@ -74,6 +111,27 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     _warningAnimation = Tween<double>(begin: 0.0, end: 10.0).animate(CurvedAnimation(parent: _warningAnimController, curve: Curves.easeInOut));
 
     _syncTimerSharedDataPackets();
+    _mockInitialExamRecords();
+  }
+
+  void _mockInitialExamRecords() {
+    _allRecords = [
+      _ExamRecord(id: "1", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "수학" : "Math", unit: "삼각함수", score: 95),
+      _ExamRecord(id: "2", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "영어" : "English", unit: "관계대명사", score: 70),
+      _ExamRecord(id: "3", type: "단원평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "국어" : "Korean", unit: "고전시가", score: 85),
+    ];
+  }
+
+  List<_ExamRecord> _getFilteredRecords(String type) {
+    DateTime now = DateTime.now();
+    return _allRecords.where((rec) {
+      if (rec.type != type) return false;
+      if (_isPastViewMode) {
+        return rec.date.month == _pastSelectedMonth && rec.date.day == _pastSelectedDay;
+      } else {
+        return rec.date.year == now.year && rec.date.month == now.month;
+      }
+    }).toList();
   }
 
   Future<void> _syncTimerSharedDataPackets() async {
@@ -87,12 +145,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         _timerDetails = DkeLang.current == 'KO' ? "개념 및 심화, 문제풀이 25문제" : "Solved concepts and problems 25 issues.";
         _timerScore = 100;
         _timerIncorrect = DkeLang.current == 'KO' ? "정리함" : "COMPLETED";
-        _timerUnderstanding = 80;
-        _timerDifficulty = DkeLang.current == 'KO' ? "보통" : "Normal";
-        _timerConcentration = DkeLang.current == 'KO' ? "높음" : "High";
-        _timerCondition = DkeLang.current == 'KO' ? "좋음 😊" : "Good 😊";
-        _timerNextGoal = DkeLang.current == 'KO' ? "함수 심화문제" : "Advanced function problems";
-        _timerTimestamp = "2026-06-18 21:36 UTC";
         _timerDurationMinutes = tempSeconds != null ? (tempSeconds ~/ 60 == 0 ? 72 : tempSeconds ~/ 60) : 72;
       });
     } catch (e) {
@@ -104,10 +156,23 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   void dispose() {
     _tabController.dispose();
     _warningAnimController.dispose();
+    _subjectController.dispose();
+    _unitController.dispose();
+    _scoreController.dispose();
     super.dispose();
   }
 
   void _showReportPopup(BuildContext context, String mainTitle, String content) {
+    String finalContent = content;
+    final activeExams = _allRecords.where((e) => e.type == "주평가").toList();
+    if (activeExams.isNotEmpty && mainTitle.contains("종합")) {
+      String examSummary = "\n\n[직접 작성 주평가 실시간 연동]\n";
+      for (var ex in activeExams) {
+        examSummary += "• ${ex.subject}(${ex.unit}): \$${ex.score.toInt()}점\$\n";
+      }
+      finalContent = content + examSummary;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -141,7 +206,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     ],
                   ),
                   const Divider(color: Colors.white10, height: 20, thickness: 1.2),
-                  Text(content, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6)),
+                  Text(finalContent, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6)),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -154,9 +219,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   @override
   Widget build(BuildContext context) {
-    final double achievementRate = (_timerDurationMinutes / 90) * 100;
-
-    // 🎯 3번 지시사항: 종합리포트 고정 포맷 및 게임 요소 배제 8줄 이상 멘트 엄격 반영
     final String summaryDynamicContent = DkeLang.current == 'KO'
         ? "[종합 리포트]\n\n"
         "자기주도 학습 1교시\n"
@@ -190,7 +252,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         "5. STARS: \$ ****(4/5)\$\n\n"
         "Today's learning sessions showed great progress. Keep moving forward toward your target with strong motivation.";
 
-    // 🎯 4번 지시사항: 상세분석 기록 연동 포맷 및 의욕 고취/경고 멘트 정밀 반영
     final String detailedDynamicContent = DkeLang.current == 'KO'
         ? "[상세분석기록]\n\n"
         "• 상세내용: \$개념 및 심화,문제풀이 25문제\$\n"
@@ -214,11 +275,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
     return Scaffold(
       backgroundColor: _ThemeColors.luxuryDarkBg,
-      // 👑 파트너님 지시사항 완벽 소독 반영: 중앙정렬 정품 로고 바 탑재 완료
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        toolbarHeight: 92, // 🎯 2번 지시사항: 바닥과 배경 맨 끝부분 여백 70% 축소 반영
+        toolbarHeight: 92,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -227,16 +287,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 👑 1. 맨 위 정중앙에 위치하는 로고 이미지
             Image.asset(
               'assets/images/gsu_logo.png',
               width: 180,
               height: 24,
               fit: BoxFit.contain,
             ),
-            const SizedBox(height: 0.5), // 🎯 지시사항: 이미지와 첫줄 타이틀 사이 여백 정확히 0.5미리 적용
-
-            // 👑 2. 첫째 줄 영문 대문자 정중앙 타이틀
+            const SizedBox(height: 0.5),
             Text(
               'MEMBER ACHIEVEMENT',
               textAlign: TextAlign.center,
@@ -248,15 +305,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ),
             ),
             const SizedBox(height: 2),
-
-            // 👑 3. 둘째 줄 가입회원 이름 매핑 정중앙 정렬
             Text(
-              '\$이규현\$ 성취도', // 🎯 1번 지시사항: 회원가입 이름 매핑 대응, 황금색 변경 및 앞뒤 $ 추가
+              '\$이규현\$ 성취도',
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSansKr(
-                color: _ThemeColors.brandGolden, // 황금색으로 변경
+                color: _ThemeColors.brandGolden,
                 fontWeight: FontWeight.bold,
-                fontSize: 23, // 8번 원칙: 타이틀 한글 글자크기 23 단일화
+                fontSize: 23,
               ),
             ),
           ],
@@ -265,13 +320,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       ),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(24.0), // 최상위 const 전면 제거로 자식 위젯 간섭 원천 소독 완료
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ---------------------------------------------------------------
-              // 상단 알림 네모 박스 정밀 가공 (GKE 변경, 괄호 전면 삭제 및 문구 교체)
-              // ---------------------------------------------------------------
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -284,7 +336,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 child: Column(
                   children: [
                     Text(
-                      '\$GKE 고등학교 2학년 이제임스\$', // 서비스명 GKE 매핑 및 $ 연동 기호 추가
+                      '\$GKE 고등학교 2학년 이제임스\$',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.notoSansKr(
                         color: _ThemeColors.brandGolden,
@@ -294,7 +346,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '현재도 전국 전 세계 사람들 학습중입니다.', // 이미지에 맞춘 괄호 제거 완성문구
+                      '현재도 전국 전 세계 사람들 학습중입니다.',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.notoSansKr(
                         color: Colors.white70,
@@ -306,32 +358,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 ),
               ),
 
-              // Summary / Detailed Analytics 버튼
               Row(
                 children: [
-                  _buildTopButton(
-                    DkeLang.current == 'KO' ? "종합 리포트" : "Total Report",
-                    40,
-                    summaryDynamicContent,
-                  ),
+                  _buildTopButton(DkeLang.current == 'KO' ? "종합 리포트" : "Total Report", 40, summaryDynamicContent),
                   const SizedBox(width: 8),
-                  _buildTopButton(
-                    DkeLang.current == 'KO' ? "상세분석기록" : "Detailed Analytics",
-                    60,
-                    detailedDynamicContent,
-                  ),
+                  _buildTopButton(DkeLang.current == 'KO' ? "상세분석기록" : "Detailed Analytics", 60, detailedDynamicContent),
                 ],
               ),
               const SizedBox(height: 12),
 
-              // ---------------------------------------------------------------
-              // 사각 네모 박스 크기(높이) 완벽 통일 레이아웃 패널
-              // ---------------------------------------------------------------
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // --- [좌측 패널: 다음 레벨로드] ---
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.all(14),
@@ -345,10 +384,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                           children: [
                             Text(DkeLang.current == 'KO' ? "다음 레벨로드" : "Next Level Road", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 10),
-                            Text(
-                              DkeLang.current == 'KO' ? "레벨 26" : "Lv.26",
-                              style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
-                            ),
+                            Text(DkeLang.current == 'KO' ? "레벨 26" : "Lv.26", style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
                             const SizedBox(height: 6),
                             Row(
                               children: [
@@ -358,8 +394,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                               ],
                             ),
                             const SizedBox(height: 12),
-
-                            // 🎯 라벨 한글 흰색 변경 & 매핑 데이터값 한글/숫자 황금색 분리 및 줄바꿈 완성
                             RichText(
                               text: TextSpan(
                                 style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold),
@@ -372,7 +406,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                               ),
                             ),
                             const SizedBox(height: 12),
-
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
@@ -391,8 +424,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       ),
                     ),
                     const SizedBox(width: 10),
-
-                    // --- [우측 패널: 목표 달성도] ---
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.all(14),
@@ -412,21 +443,20 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                               ],
                             ),
                             const SizedBox(height: 10),
-
-                            // 🎯 명칭들은 완전 흰색 처리, 내부 데이터 스펙 수치는 황금색 정밀 연동 및 정렬
                             RichText(
                               text: TextSpan(
                                 style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold, height: 1.5),
                                 children: [
-                                  const TextSpan(text: "연속 학습일: ", style: TextStyle(color: Colors.white)),
-                                  const TextSpan(text: "\$56일\$\n", style: TextStyle(color: _ThemeColors.brandGolden)),
-                                  const TextSpan(text: "총 학습시간:\n", style: TextStyle(color: Colors.white)),
-                                  const TextSpan(text: "\$1,257시간\$", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                  const TextSpan(text: "어제 대비 오늘 ", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "\$+20%\$\n\n", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                  const TextSpan(text: "가장 성장한 과목\n", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "\$영어\$\n\n", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                  const TextSpan(text: "가장 많이 학습한 과목\n", style: TextStyle(color: Colors.white)),
+                                  const TextSpan(text: "\$수학\$", style: TextStyle(color: _ThemeColors.brandGolden)),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 10),
-
                             Expanded(
                               child: Container(
                                 width: double.infinity,
@@ -444,12 +474,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                       text: TextSpan(
                                         style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.bold, height: 1.4),
                                         children: [
-                                          const TextSpan(text: "어제 대비 오늘 ", style: TextStyle(color: Colors.white)),
-                                          const TextSpan(text: "\$+20%\$\n", style: TextStyle(color: _ThemeColors.brandGolden)),
-                                          const TextSpan(text: "가장 성장한 과목\n", style: TextStyle(color: Colors.white)),
-                                          const TextSpan(text: "\$영어\$\n", style: TextStyle(color: _ThemeColors.brandGolden)),
-                                          const TextSpan(text: "가장 많이 학습한 과목\n", style: TextStyle(color: Colors.white)),
-                                          const TextSpan(text: "\$수학\$", style: TextStyle(color: _ThemeColors.brandGolden)),
+                                          const TextSpan(text: "총 학습시간:\n", style: TextStyle(color: Colors.white)),
+                                          const TextSpan(text: "\$1,257시간\$", style: TextStyle(color: _ThemeColors.brandGolden)),
                                         ],
                                       ),
                                     ),
@@ -466,7 +492,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ),
               const SizedBox(height: 18),
 
-              // 👑 품격 있는 가로 확장형 탭바 영역 (자간 확대 및 스페이스 구성 완벽 반영, 부모 const 제거 완료)
+              _buildMyExamScoreSection(),
+              const SizedBox(height: 20),
+
               Container(
                 width: double.infinity,
                 height: 52,
@@ -545,32 +573,434 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     );
   }
 
-  Widget _buildAdvancedChartDashboard(int tabIndex) {
-    List<Map<String, dynamic>> targetSubjects = [];
+  Widget _buildMyExamScoreSection() {
+    final List<String> examTypes = ["주평가", "단원평가", "중간고사", "기말고사", "모의고사"];
 
-    if (tabIndex == 0) {
-      targetSubjects = _masterSubjectData.where((e) => e["hasStudiedToday"] == true).toList();
-    } else if (tabIndex == 1) {
-      targetSubjects = _masterSubjectData.where((e) => e["hasStudiedWeekly"] == true).toList();
-    } else if (tabIndex == 2) {
-      targetSubjects = _masterSubjectData.where((e) => e["hasStudiedMonthly"] == true).toList();
-    } else {
-      targetSubjects = _masterSubjectData.where((e) => e["hasStudiedYearly"] == true).toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _ThemeColors.premiumCardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.2), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            DkeLang.current == 'KO' ? "나의 성적 기록 직접 작성" : "My Score Self Record",
+            style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 12),
+
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: examTypes.map((type) {
+                bool isSelected = _selectedExamType == type;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedExamType = isSelected ? null : type;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? _ThemeColors.brandGolden : Colors.black26,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        type,
+                        style: GoogleFonts.notoSansKr(
+                          color: isSelected ? Colors.black : Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          if (_selectedExamType != null) ...[
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white10),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "[$_selectedExamType 입력 및 차트]",
+                  style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                Row(
+                  children: [
+                    Text("과거 조회: ", style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 11)),
+                    Checkbox(
+                      value: _isPastViewMode,
+                      activeColor: _ThemeColors.brandGolden,
+                      checkColor: Colors.black,
+                      onChanged: (val) {
+                        setState(() { _isPastViewMode = val ?? false; });
+                      },
+                    ),
+                    if (_isPastViewMode) ...[
+                      DropdownButton<int>(
+                        value: _pastSelectedMonth,
+                        dropdownColor: _ThemeColors.premiumCardBg,
+                        style: const TextStyle(color: _ThemeColors.brandGolden, fontSize: 11),
+                        items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text("${i + 1}월"))),
+                        onChanged: (v) { if (v != null) setState(() { _pastSelectedMonth = v; }); },
+                      ),
+                      const SizedBox(width: 4),
+                      DropdownButton<int>(
+                        value: _pastSelectedDay,
+                        dropdownColor: _ThemeColors.premiumCardBg,
+                        style: const TextStyle(color: _ThemeColors.brandGolden, fontSize: 11),
+                        items: List.generate(31, (i) => DropdownMenuItem(value: i + 1, child: Text("${i + 1}일"))),
+                        onChanged: (v) { if (v != null) setState(() { _pastSelectedDay = v; }); },
+                      ),
+                    ]
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    value: _inputGrade,
+                    decoration: const InputDecoration(labelText: "학년", labelStyle: TextStyle(color: Colors.white60, fontSize: 11)),
+                    dropdownColor: _ThemeColors.premiumCardBg,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    items: [1, 2, 3].map((g) => DropdownMenuItem(value: g, child: Text("$g학년"))).toList(),
+                    onChanged: (v) { if (v != null) _inputGrade = v; },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    value: _inputSemester,
+                    decoration: const InputDecoration(labelText: "학기", labelStyle: TextStyle(color: Colors.white60, fontSize: 11)),
+                    dropdownColor: _ThemeColors.premiumCardBg,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text("$s학기"))).toList(),
+                    onChanged: (v) { if (v != null) _inputSemester = v; },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () async {
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: _inputDate,
+                      firstDate: DateTime(2025),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) {
+                      setState(() { _inputDate = picked; });
+                    }
+                  },
+                  child: Text("${_inputDate.month}/${_inputDate.day} 날짜", style: const TextStyle(color: _ThemeColors.brandGolden, fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _subjectController,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: const InputDecoration(hintText: "과목생성", hintStyle: TextStyle(color: Colors.white38, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _unitController,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: const InputDecoration(hintText: "단원생성", hintStyle: TextStyle(color: Colors.white38, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _scoreController,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: const InputDecoration(hintText: "점수", hintStyle: TextStyle(color: Colors.white38, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: _ThemeColors.brandGolden),
+                  onPressed: () {
+                    if (_subjectController.text.isEmpty || _scoreController.text.isEmpty) return;
+                    double? parsedScore = double.tryParse(_scoreController.text);
+                    if (parsedScore == null) return;
+
+                    setState(() {
+                      _allRecords.add(_ExamRecord(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        type: _selectedExamType!,
+                        grade: _inputGrade,
+                        semester: _inputSemester,
+                        date: _inputDate,
+                        subject: _subjectController.text,
+                        unit: _unitController.text,
+                        score: parsedScore,
+                      ));
+                      _subjectController.clear();
+                      _unitController.clear();
+                      _scoreController.clear();
+                    });
+                  },
+                  child: const Text("저장", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 38,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: _getFilteredRecords(_selectedExamType!).length,
+                itemBuilder: (ctx, idx) {
+                  final rec = _getFilteredRecords(_selectedExamType!)[idx];
+                  return Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        "${rec.subject}[${rec.unit}]: ${rec.score.toInt()}점",
+                        style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            _buildFixedEvaluationChart(_selectedExamType!),
+          ]
+        ],
+      ),
+    );
+  }
+
+  // 👑 일간 차트 레이아웃 스펙과 100% 일치하도록 X축 디자인 및 배치 정렬을 완벽하게 교정했습니다.
+  Widget _buildFixedEvaluationChart(String type) {
+    List<_ExamRecord> evalRecords = _getFilteredRecords(type);
+
+    if (evalRecords.isEmpty) {
+      return Container(
+        height: 140,
+        width: double.infinity,
+        alignment: Alignment.center,
+        child: Text(
+          DkeLang.current == 'KO' ? "평가가 기록된 과목만 그래프에 나타나게한다" : "No evaluation marks matching filter.",
+          style: const TextStyle(color: Colors.white38, fontSize: 12),
+        ),
+      );
+    }
+
+    List<String> scoreLabels = ["100점", "90점", "80점", "70점", "60점"];
+    const double hMax = 120.0;
+
+    return SizedBox(
+      height: 200,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Y축 점수 라벨
+          SizedBox(
+            width: 38,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const SizedBox(height: 12),
+                ...scoreLabels.take(4).map((label) => Expanded(
+                    child: Text(label, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold))
+                )),
+                Text(scoreLabels.last, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 48), // 하단 일간 차트의 마진 스펙(48)과 완벽 동기화
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Y축 황금 세로 구분선
+          Container(width: 2.2, margin: const EdgeInsets.only(top: 25, bottom: 44), color: _ThemeColors.brandGolden.withOpacity(0.6)),
+
+          // 🎯 레이아웃 구조 완벽 연동 구역 (일간 차트 구조 복사 복제)
+          Expanded(
+            child: Stack(
+              alignment: Alignment.bottomLeft,
+              children: [
+                Positioned.fill(
+                  top: 10,
+                  bottom: 0,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: List.generate(evalRecords.length, (idx) {
+                        final rec = evalRecords[idx];
+                        final Color barColor = _evalColors[idx % _evalColors.length];
+
+                        double scoreVal = rec.score;
+                        if (scoreVal < 60) scoreVal = 60;
+                        if (scoreVal > 100) scoreVal = 100;
+
+                        double drawScoreHeight = ((scoreVal - 60) / 40) * hMax;
+                        if (drawScoreHeight < 4) drawScoreHeight = 4;
+
+                        return Container(
+                          width: 53, // 일간 차트 전용 방 크기(53) 통일
+                          margin: const EdgeInsets.symmetric(horizontal: 0.5), // 여백 스펙 일치화
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                height: hMax + 16,
+                                child: Stack(
+                                  alignment: Alignment.bottomCenter,
+                                  children: [
+                                    Positioned(
+                                      bottom: 0,
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          Text("${rec.score.toInt()}", style: TextStyle(color: barColor, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            height: drawScoreHeight,
+                                            width: 16, // 일간과 동일한 슬림 두께 사수
+                                            decoration: BoxDecoration(
+                                              color: barColor,
+                                              borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              // X축 기준선 밑으로 예쁘게 흐르는 과목 라벨
+                              SizedBox(
+                                height: 36,
+                                child: Text(
+                                  rec.subject,
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, height: 1.2),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              )
+                            ],
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+                // 🎯 막대 바로 밑을 탄탄하게 받쳐주는 일간 모양의 황금색 X축 기준선 배치
+                Positioned(
+                  left: 0, right: 0, bottom: 44,
+                  child: Container(width: double.infinity, height: 2.2, color: _ThemeColors.brandGolden.withOpacity(0.6)),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedChartDashboard(int tabIndex) {
+    List<Map<String, dynamic>> rawData = _masterSubjectData;
+    double multiplier = (tabIndex == 0) ? 1.0 : (tabIndex == 1) ? 5.0 : (tabIndex == 2) ? 22.0 : 250.0;
+
+    List<Map<String, dynamic>> targetSubjects = [];
+    for (var item in rawData) {
+      bool isValid = false;
+      if (tabIndex == 0 && item["hasStudiedToday"] == true) isValid = true;
+      if (tabIndex == 1 && item["hasStudiedWeekly"] == true) isValid = true;
+      if (tabIndex == 2 && item["hasStudiedMonthly"] == true) isValid = true;
+      if (tabIndex == 3 && item["hasStudiedYearly"] == true) isValid = true;
+
+      if (isValid) {
+        double totalMins = (item["baseMinutes"] as int).toDouble() * multiplier;
+        if (totalMins > 0) {
+          targetSubjects.add({
+            ...item,
+            "calculatedMinutes": totalMins,
+          });
+        }
+      }
+    }
+
+    targetSubjects.sort((a, b) => (b["calculatedMinutes"] as double).compareTo(a["calculatedMinutes"] as double));
+
+    double maxMinutesFound = 0.0;
+    for (var item in targetSubjects) {
+      if ((item["calculatedMinutes"] as double) > maxMinutesFound) {
+        maxMinutesFound = item["calculatedMinutes"] as double;
+      }
+    }
+
+    double minCeiling = 180.0;
+    if (tabIndex == 1) minCeiling = 2.0 * 60.0;
+    if (tabIndex == 2) minCeiling = 5.0 * 60.0;
+    if (tabIndex == 3) minCeiling = 5.0 * 60.0;
+
+    if (maxMinutesFound < minCeiling) {
+      maxMinutesFound = minCeiling;
+    }
+
+    double yAxisMaxBoundary = maxMinutesFound / 0.90;
+    if (yAxisMaxBoundary <= 0) yAxisMaxBoundary = 100.0;
+
+    if (tabIndex == 1 && yAxisMaxBoundary > 25.0 * 60.0) yAxisMaxBoundary = 25.0 * 60.0;
+    if (tabIndex == 2 && yAxisMaxBoundary > 120.0 * 60.0) yAxisMaxBoundary = 120.0 * 60.0;
+    if (tabIndex == 3 && yAxisMaxBoundary > 1500.0 * 60.0) yAxisMaxBoundary = 1500.0 * 60.0;
+
+    List<String> dynamicYAxisLabels = [];
+    for (int i = 4; i >= 0; i--) {
+      double currentSliceValue = (yAxisMaxBoundary / 4) * i;
+      if (tabIndex == 0) {
+        dynamicYAxisLabels.add("${currentSliceValue.round()}m");
+      } else {
+        double hoursValue = currentSliceValue / 60.0;
+        dynamicYAxisLabels.add("${hoursValue.toStringAsFixed(1)}h");
+      }
     }
 
     List<Color> colorPalette = (tabIndex == 1) ? _weeklyColors : _todayColors;
-    List<String> yAxisLabels = (tabIndex == 0)
-        ? ["5h", "4h", "3h", "2h", "1h", "0h"]
-        : (tabIndex == 1)
-        ? ["35h", "30h", "25h", "20h", "15h", "7h", "0h"]
-        : (tabIndex == 2)
-        ? ["120h", "90h", "60h", "30h", "10h", "0h"]
-        : ["1200h", "900h", "600h", "300h", "100h", "0h"];
-
-    double timeMultiplier = (tabIndex == 0) ? 1.0 : (tabIndex == 1) ? 5.0 : (tabIndex == 2) ? 22.0 : 250.0;
 
     int totalMinutes = targetSubjects.fold<int>(0, (sum, item) {
-      return sum + ((item["baseMinutes"] as int) * timeMultiplier).round();
+      return sum + (item["calculatedMinutes"] as double).round();
     });
 
     return Column(
@@ -589,100 +1019,114 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 ]),
               ),
               Positioned.fill(
-                left: 38, right: 0, top: 25, bottom: 44,
+                left: 42, right: 0, top: 25, bottom: 44,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(yAxisLabels.length, (i) => Container(width: double.infinity, height: 0.8, color: Colors.white.withOpacity(0.08))),
+                  children: List.generate(5, (i) => Container(width: double.infinity, height: 0.8, color: Colors.white.withOpacity(0.08))),
                 ),
               ),
               Positioned(
-                left: 38, top: 25, bottom: 44,
+                left: 42, top: 25, bottom: 44,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate((yAxisLabels.length * 2) - 1, (i) => Container(width: i % 2 != 0 ? 4.0 : 0.0, height: 1.5, color: _ThemeColors.brandGolden.withOpacity(0.4))),
+                  children: List.generate(9, (i) => Container(width: i % 2 != 0 ? 4.0 : 0.0, height: 1.5, color: _ThemeColors.brandGolden.withOpacity(0.4))),
                 ),
               ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    width: 30,
+                    width: 34,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         const SizedBox(height: 22),
-                        ...yAxisLabels.take(yAxisLabels.length - 1).map((l) => Expanded(child: Text(l, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10)))),
-                        Text(yAxisLabels.last, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10)),
+                        ...dynamicYAxisLabels.take(4).map((label) => Expanded(child: Text(label, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 9.5)))),
+                        Text(dynamicYAxisLabels.last, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 9.5)),
                         const SizedBox(height: 48),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(width: 2.2, margin: const EdgeInsets.only(top: 25, bottom: 44), color: _ThemeColors.brandGolden.withOpacity(0.6)),
+
                   Expanded(
                     child: Stack(
                       alignment: Alignment.bottomLeft,
                       children: [
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: List.generate(targetSubjects.length, (index) {
-                              final data = targetSubjects[index];
-                              const double hMax = 100.0;
-                              final Color pCol = colorPalette[index % colorPalette.length];
-                              return Container(
-                                width: 54,
-                                margin: const EdgeInsets.symmetric(horizontal: 0.5),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      height: hMax + 16, width: 54,
-                                      child: Stack(
-                                        alignment: Alignment.bottomCenter,
-                                        children: [
-                                          Positioned(
-                                            left: 8, bottom: 0,
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.end,
-                                              children: [
-                                                Text("${(data["averageScore"] * 100).toInt()}%", style: const TextStyle(color: Colors.white54, fontSize: 8.5, fontWeight: FontWeight.bold)),
-                                                Container(
-                                                  height: data["averageScore"] * hMax, width: 18,
-                                                  decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
-                                                ),
-                                              ],
+                        Positioned.fill(
+                          top: 10,
+                          bottom: 0,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: List.generate(targetSubjects.length, (index) {
+                                final data = targetSubjects[index];
+                                const double hMaxDashboard = 120.0;
+                                final Color pCol = colorPalette[index % colorPalette.length];
+
+                                double currentMins = data["calculatedMinutes"] as double;
+                                double drawScoreHeight = (currentMins / yAxisMaxBoundary) * hMaxDashboard;
+                                double drawAvgHeight = ((data["averageScore"] as double) * (currentMins * 0.8) / yAxisMaxBoundary) * hMaxDashboard;
+
+                                if (drawScoreHeight < 4) drawScoreHeight = 4;
+                                if (drawAvgHeight < 2) drawAvgHeight = 2;
+                                if (drawScoreHeight > hMaxDashboard) drawScoreHeight = hMaxDashboard;
+
+                                return Container(
+                                  width: 53,
+                                  margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        height: hMaxDashboard + 16, width: 53,
+                                        child: Stack(
+                                          alignment: Alignment.bottomCenter,
+                                          children: [
+                                            Positioned(
+                                              left: 10, bottom: 0,
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.end,
+                                                children: [
+                                                  Text("${(data["averageScore"] * 100).toInt()}%", style: const TextStyle(color: Colors.white54, fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                                  Container(
+                                                    height: drawAvgHeight, width: 16,
+                                                    decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                          Positioned(
-                                            left: 27, bottom: 0,
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.end,
-                                              children: [
-                                                Text("${(data["score"] * 100).toInt()}%", style: TextStyle(color: pCol, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                                                Container(
-                                                  height: data["score"] * hMax, width: 18,
-                                                  decoration: BoxDecoration(color: pCol, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
-                                                ),
-                                              ],
+                                            Positioned(
+                                              left: 27, bottom: 0,
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.end,
+                                                children: [
+                                                  Text("${(data["score"] * 100).toInt()}%", style: TextStyle(color: pCol, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                                  Container(
+                                                    height: drawScoreHeight, width: 16,
+                                                    decoration: BoxDecoration(color: pCol, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    SizedBox(
-                                      height: 36,
-                                      child: Text(data["subject"], textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.2)),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
+                                      const SizedBox(height: 8),
+                                      SizedBox(
+                                        height: 36,
+                                        child: Text(data["subject"], textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, height: 1.2)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ),
                           ),
                         ),
                         Positioned(
@@ -720,7 +1164,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     children: [
                       CustomPaint(
                         size: const Size(170, 170),
-                        painter: _GsuPiePainter(targetSubjects: targetSubjects, colors: colorPalette, multiplier: timeMultiplier),
+                        painter: _GsuPiePainter(targetSubjects: targetSubjects, colors: colorPalette),
                       ),
                       Container(
                         width: 82, height: 82,
@@ -744,7 +1188,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(targetSubjects.length, (idx) {
                   final item = targetSubjects[idx];
-                  final int calculatedMin = ((item["baseMinutes"] as int) * timeMultiplier).round();
+                  final int calculatedMin = (item["calculatedMinutes"] as double).round();
                   final int percent = totalMinutes > 0 ? ((calculatedMin / totalMinutes) * 100).round() : 0;
                   final Color c = colorPalette[idx % colorPalette.length];
 
@@ -814,20 +1258,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 class _GsuPiePainter extends CustomPainter {
   final List<Map<String, dynamic>> targetSubjects;
   final List<Color> colors;
-  final double multiplier;
 
-  _GsuPiePainter({required this.targetSubjects, required this.colors, required this.multiplier});
+  _GsuPiePainter({required this.targetSubjects, required this.colors});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double total = targetSubjects.fold<double>(0.0, (s, i) => s + ((i["baseMinutes"] as int) * multiplier).toDouble());
+    final double total = targetSubjects.fold<double>(0.0, (s, i) => s + (i["calculatedMinutes"] as double));
     if (total == 0) return;
 
     final Paint p = Paint()..style = PaintingStyle.fill..isAntiAlias = true;
     double start = -math.pi / 2;
 
     for (int i = 0; i < targetSubjects.length; i++) {
-      final double calculatedMin = ((targetSubjects[i]["baseMinutes"] as int) * multiplier).toDouble();
+      final double calculatedMin = targetSubjects[i]["calculatedMinutes"] as double;
       final double sweep = (calculatedMin / total) * 2 * math.pi;
       p.color = colors[i % colors.length];
       canvas.drawArc(Rect.fromLTWH(0, 0, size.width, size.height), start, sweep, true, p);

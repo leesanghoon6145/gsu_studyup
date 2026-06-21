@@ -127,22 +127,46 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        toolbarHeight: 85,
+        toolbarHeight: 140, // 🎯 로고와 타이틀이 겹치지 않고 우아한 공간감을 갖도록 높이 최적화
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              'Friends Study Room',
-              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 21),
+            // 👑 1. 타이틀 상단에서 우아한 조형미를 이루며 감싸주는 정품 로고 이미지
+            Image.asset(
+              'assets/images/gsu_logo.png',
+              width: 190, // 시각적 안정감을 주는 정밀 가로폭 설정
+              height: 26,
+              fit: BoxFit.contain,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 4), // 🎯 로고와 영문 타이틀 사이의 품격 있는 여백
+
+            // 👑 2. 첫째 줄 영문 대문자 정중앙 타이틀 (Bold Serif 톤앤매너)
             Text(
-              '(친구 학습방)',
-              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.normal, fontSize: 17),
+              'FRIENDS STUDY ROOM',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.gowunBatang(
+                color: const Color(0xFFE5C158), // 황금색 폰트체 현상태 유지
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 2),
+
+            // 👑 3. 둘째 줄 한글 강조 타이틀 (노토산스 한글 및 크기 23 단일화 원칙 적용)
+            Text(
+              '친구 학습방',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(
+                color: const Color(0xFFE5C158), // 지시사항 준수: 한글 타이틀 황금색 적용
+                fontWeight: FontWeight.bold,
+                fontSize: 23, // 8번 원칙: 한글 강조 타이틀 크기 23 단일화 엄격 준수
+              ),
             ),
           ],
         ),
