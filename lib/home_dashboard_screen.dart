@@ -36,6 +36,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   bool _isVipMember = false;
   String _targetUniversity = "Seoul National University (서울대학교)";
 
+  // 🆕 목표 시험 종류 동적 관리를 위한 마스터 리스트 패킷
+  List<String> _examTypes = ['학기중 학습', '기말고사', '공무원 시험', 'TOEIC', '2027 대학수능', '운동'];
+
   List<Map<String, String>> subjects = [
     {'en': 'Native Language', 'ko': '국어'},
     {'en': 'Math', 'ko': '수학'},
@@ -121,6 +124,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     });
   }
 
+// 👑 파트너님 지시사항 완벽 반영: Custom Input 행 우측 끝 [생성] 버튼 배치 완료!
   void _showExamSelectionDialog() {
     String temporarySelectedExam = '';
     final TextEditingController customExamController = TextEditingController();
@@ -145,44 +149,115 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.0),
                     ),
                     const SizedBox(height: 18),
+
+                    // 🎯 칩 리스트 (우측 상단 X 삭제 버튼 완벽 유지)
                     Wrap(
-                      spacing: 8, runSpacing: 8,
+                      spacing: 10, runSpacing: 10,
                       alignment: WrapAlignment.center,
-                      children: ['학기중 학습', '기말고사', '공무원 시험', 'TOEIC', '2027 대학수능', '운동'].map((exam) {
+                      children: _examTypes.map((exam) {
                         final bool isCurrentSelected = temporarySelectedExam == exam && customExamController.text.isEmpty;
-                        return GestureDetector(
-                          onTap: () {
-                            setPopupState(() {
-                              temporarySelectedExam = exam;
-                              customExamController.clear();
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isCurrentSelected ? const Color(0xFFE5C158) : Colors.black26,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: isCurrentSelected ? const Color(0xFFE5C158) : Colors.white24),
+
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setPopupState(() {
+                                  temporarySelectedExam = exam;
+                                  customExamController.clear();
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isCurrentSelected ? const Color(0xFFE5C158) : Colors.black26,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: isCurrentSelected ? const Color(0xFFE5C158) : Colors.white24),
+                                ),
+                                child: Text(
+                                  exam,
+                                  style: GoogleFonts.notoSansKr(color: isCurrentSelected ? Colors.black : const Color(0xB3FFFFFF), fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
                             ),
-                            child: Text(
-                              exam,
-                              style: GoogleFonts.notoSansKr(color: isCurrentSelected ? Colors.black : const Color(0xB3FFFFFF), fontWeight: FontWeight.bold, fontSize: 13),
+                            Positioned(
+                              top: -5,
+                              right: -5,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setPopupState(() {
+                                    _examTypes.remove(exam);
+                                    if (temporarySelectedExam == exam) {
+                                      temporarySelectedExam = '';
+                                    }
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black87,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    size: 11,
+                                    color: Color(0xFFE5C158),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 25),
+
+                    // 👑 지시사항 핵심: 글자 행(Row) 정의 및 오른쪽 끝에 [생성] 버튼 칼정렬
                     Row(
                       children: [
                         const Icon(Icons.edit_note_rounded, color: Color(0xFFE5C158), size: 20),
                         const SizedBox(width: 6),
-                        Text("Custom Input (직접 입력)", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                        Text(
+                            "Custom Input (직접 입력)",
+                            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)
+                        ),
+                        const Spacer(), // 왼쪽 글자들을 밀어내어 버튼을 오른쪽 끝으로 고정
+                        SizedBox(
+                          height: 28,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE5C158),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            onPressed: () {
+                              final text = customExamController.text.trim();
+                              if (text.isEmpty) return;
+                              setPopupState(() {
+                                if (!_examTypes.contains(text)) {
+                                  _examTypes.add(text);
+                                }
+                                temporarySelectedExam = text;
+                                customExamController.clear(); // 칩으로 올라간 후 입력창 초기화
+                              });
+                            },
+                            child: Text(
+                                "생성",
+                                style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
+
+                    // 🎯 기존 순정 형태를 그대로 유지한 하단 직사각형 입력창
                     Container(
-                      decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.4))),
+                      decoration: BoxDecoration(
+                          color: Colors.black38,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.4))
+                      ),
                       child: TextField(
                         controller: customExamController,
                         style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
@@ -200,18 +275,23 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+
                     ElevatedButton(
                       onPressed: () {
                         String finalExamName = customExamController.text.trim();
                         if (finalExamName.isEmpty) finalExamName = temporarySelectedExam;
                         if (finalExamName.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('試験 종류를 선택하거나 직접 입력해 주세요!', style: GoogleFonts.notoSansKr())));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('시험 종류를 선택하거나 직접 입력해 주세요!', style: GoogleFonts.notoSansKr())));
                           return;
                         }
                         Navigator.of(context).pop();
                         _openDatePickerAndNavigate(finalExamName);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158), minimumSize: const Size(double.infinity, 48), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE5C158),
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                      ),
                       child: Text("NEXT: SELECT DATE (날짜 선택)", style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -447,7 +527,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             );
                           },
                         ),
-                        // 👑 [에러 완벽 소독 완료] 신형 마이페이지 전용 최적화 호출 라인! 괄호 일자 정렬!
                         _buildMenuButton(
                           icon: Icons.account_circle_rounded,
                           label: "👑 마이페이지",
