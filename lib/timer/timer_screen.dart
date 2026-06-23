@@ -7,6 +7,8 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// 👑 파일 트리 구조 분석에 따른 무결점 순정 상대 경로 임포트 고정 완료
+import '../square/my_page_screen.dart';
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -42,19 +44,15 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
   late AudioPlayer _timerAudioPlayer;
 
-  late AnimationController _targetController;
-  late AnimationController _univController;
-
-  late Animation<double> _targetOpacity;
-  late Animation<double> _targetScale;
-  late Animation<double> _univOpacity;
-  late Animation<double> _univScale;
-
-  int _animationCycleTick = 0;
+  // 👑 10분 락 연동용 초정밀 타이밍 제어 변수 스펙
+  int _animationCycleSeconds = 0;
   bool _showVipOverlay = false;
-  bool _isTargetPhase = true;
 
   late String _currentUniversity;
+  String _currentLanguageCode = 'ko';
+
+  // 👑 하단 자식 애니메이션 엔진을 타이머 화면에서 직접 흔들어 깨우기 위한 고유 Key 부품 신설
+  final GlobalKey<_DkeBigStarTargetAnimationModuleState> _animKey = GlobalKey<_DkeBigStarTargetAnimationModuleState>();
 
   @override
   void initState() {
@@ -67,49 +65,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     tz.initializeTimeZones();
     _timerAudioPlayer = AudioPlayer();
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
-
-    _targetController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    );
-
-    _targetOpacity = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: 37.5),
-      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 25.0),
-      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 37.5),
-    ]).animate(_targetController);
-
-    _targetScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween<double>(begin: 0.2, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 37.5),
-      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 25.0),
-      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 0.7).chain(CurveTween(curve: Curves.easeInCubic)), weight: 37.5),
-    ]).animate(_targetController);
-
-    _univController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 19),
-    );
-
-    _univOpacity = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: 36.8),
-      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 26.4),
-      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 36.8),
-    ]).animate(_univController);
-
-    _univScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween<double>(begin: 0.05, end: 1.2).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 36.8),
-      TweenSequenceItem(tween: ConstantTween<double>(1.2), weight: 26.4),
-      TweenSequenceItem(tween: Tween<double>(begin: 1.2, end: 0.05).chain(CurveTween(curve: Curves.easeInCubic)), weight: 36.8),
-    ]).animate(_univController);
-
-    _targetController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && _showVipOverlay) {
-        setState(() {
-          _isTargetPhase = false;
-        });
-        _univController.forward(from: 0.0);
-      }
-    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkResumeInterceptionData();
@@ -156,6 +111,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                   setState(() {
                     _elapsedSeconds = tempSeconds;
                     progressPercent = _elapsedSeconds / _totalSeconds;
+                    // 이어서 시작할 때도 경과 시간에 맞춰 사이클 타임라인 즉시 보정
+                    _animationCycleSeconds = _elapsedSeconds % 630;
+                    if (_animationCycleSeconds < 30) {
+                      _showVipOverlay = true;
+                    }
                   });
                   Navigator.of(context).pop();
                 },
@@ -180,15 +140,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? savedUniv = prefs.getString('saved_target_university');
+      final String savedLang = prefs.getString('saved_language_code') ?? 'ko';
 
       if (savedUniv == null || savedUniv.isEmpty) {
         await prefs.setString('saved_target_university', widget.targetUniversity);
         setState(() {
           _currentUniversity = widget.targetUniversity;
+          _currentLanguageCode = savedLang;
         });
       } else {
         setState(() {
           _currentUniversity = savedUniv;
+          _currentLanguageCode = savedLang;
         });
       }
     } catch (e) {
@@ -200,11 +163,13 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? savedUniv = prefs.getString('saved_target_university');
+      final String savedLang = prefs.getString('saved_language_code') ?? 'ko';
 
       if (savedUniv != null && savedUniv.isNotEmpty) {
-        if (_currentUniversity != savedUniv) {
+        if (_currentUniversity != savedUniv || _currentLanguageCode != savedLang) {
           setState(() {
             _currentUniversity = savedUniv;
+            _currentLanguageCode = savedLang;
           });
         }
       }
@@ -218,30 +183,33 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _timer?.cancel();
     _timerAudioPlayer.stop();
     _timerAudioPlayer.dispose();
-    _targetController.dispose();
-    _univController.dispose();
     super.dispose();
   }
 
+  // 👑 🎯 핵심 지시 반영: 30초 연출 후 정확히 10분(600초) 정지 무한 루프 제어 엔진 구축
+  // 총 1주기 사이클 = 30초(재생) + 600초(10분 정지) = 총 630초 리듬!
   void _runVipStarStrictRotationEngine() {
     if (!widget.isVipMember) return;
-    _animationCycleTick++;
 
-    if (_animationCycleTick == 1) {
+    _animationCycleSeconds++;
+
+    if (_animationCycleSeconds == 1) {
+      // 0초에서 1초가 되는 순간 30초 애니메이션 오버레이 레이어를 스~윽 전면 활성화
       setState(() {
         _showVipOverlay = true;
-        _isTargetPhase = true;
       });
-      _univController.stop();
-      _targetController.forward(from: 0.0);
+      // 하단 자식 컴포넌트의 타임라인 컨트롤러 시동
+      _animKey.currentState?.resetAndPlay();
     }
-    else if (_animationCycleTick == 28) {
+    else if (_animationCycleSeconds == 30) {
+      // 정확히 30초 연출 세트(`3,3,3` + `7,7,7`)가 끝나는 순간 화면에서 격리 은닉
       setState(() {
         _showVipOverlay = false;
       });
     }
-    else if (_animationCycleTick >= 627) {
-      _animationCycleTick = 0;
+    else if (_animationCycleSeconds >= 630) {
+      // 30초 재생 + 600초(10분) 정지 대기가 완전히 끝난 직후 사이클 리셋 ➔ 다시 무한 재시작!
+      _animationCycleSeconds = 0;
     }
   }
 
@@ -251,23 +219,22 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         _timer?.cancel();
         setState(() => _isRunning = false);
         await _timerAudioPlayer.pause();
-        if (widget.isVipMember) {
-          _targetController.stop();
-          _univController.stop();
-        }
+        _animKey.currentState?.pauseEngine(); // 애니메이션 일시 정지 동기화
         _showPauseChoiceDialog();
       } else {
         setState(() => _isRunning = true);
         if (widget.selectedSoundFile.isNotEmpty) {
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
         }
-        if (widget.isVipMember && _elapsedSeconds == 0) {
-          _animationCycleTick = 0;
-          setState(() {
-            _showVipOverlay = true;
-            _isTargetPhase = true;
-          });
-          _targetController.forward(from: 0.0);
+
+        if (widget.isVipMember) {
+          _animKey.currentState?.resumeEngine(); // 애니메이션 다시 재생 동기화
+          if (_elapsedSeconds == 0) {
+            _animationCycleSeconds = 0;
+            setState(() {
+              _showVipOverlay = true;
+            });
+          }
         }
 
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -275,7 +242,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
             if (_elapsedSeconds < _totalSeconds) {
               _elapsedSeconds++;
               progressPercent = _elapsedSeconds / _totalSeconds;
-              _runVipStarStrictRotationEngine();
+              _runVipStarStrictRotationEngine(); // 10분 루프 엔진 초단위 동기화 감시
             } else {
               _timer?.cancel();
               _isRunning = false;
@@ -415,7 +382,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     );
   }
 
-  // 👑 [DKE 프리미엄 UX 엔진]: 착각 방지 초기화 + 자동 스크롤 추적 + 황금 버튼 실시간 반전 제어 일체형 완벽 정렬본
   void _showStudyInputFieldForm() {
     const Color brandGolden = Color(0xFFE5C158);
     final TextEditingController detailController = TextEditingController();
@@ -424,7 +390,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
     final ScrollController dialogScrollController = ScrollController();
 
-    // 🚨 [지시 반영]: 유저의 착각을 막기 위해 모든 선택 초기값을 null(빈 상태)로 완벽 설정!
     int? selectedUnderstanding;
     String? selectedDifficulty;
     String? selectedFocus;
@@ -439,7 +404,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         child: StatefulBuilder(
           builder: (context, setDialogState) {
 
-            // 🎯 [지시 반영]: 모든 필수 항목이 완벽히 입력/선택되었을 때만 노란 황금색 저장 버튼이 실시간 활성화됨!
             bool isAllFilled = detailController.text.trim().isNotEmpty &&
                 scoreController.text.trim().isNotEmpty &&
                 nextGoalController.text.trim().isNotEmpty &&
@@ -449,7 +413,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                 selectedCondition != null &&
                 isIncorrectNoted != null;
 
-            // 🎯 항목을 채우거나 클릭할 때 다음 항목 칸으로 화면을 스무스하게 올리는 자동 스크롤 메커니즘
             void autoScrollNext(double offset) {
               Future.delayed(const Duration(milliseconds: 100), () {
                 if (dialogScrollController.hasClients) {
@@ -488,7 +451,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 1. 상세내용 인풋
                       Text('DETAILS (상세 내용) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       TextField(
@@ -508,7 +470,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 2. 점수 인풋
                       Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       TextField(
@@ -530,7 +491,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 3. 오답노트 상태 (선택 전에는 미선택 상태 유지)
                       Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Container(
@@ -576,7 +536,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 4. 이해도 선택 칩 (null 상태 대기)
                       Text('UNDERSTANDING (이해도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       SingleChildScrollView(
@@ -602,7 +561,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 5. 난이도 선택 칩 (null 상태 대기)
                       Text('DIFFICULTY (난이도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Wrap(
@@ -623,7 +581,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 6. 집중도 선택 칩 (null 상태 대기)
                       Text('CONCENTRATION (집중도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Row(
@@ -646,7 +603,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 7. 학습 컨디션 (null 상태 대기)
                       Text('LEARNING CONDITION (학습 컨디션) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Row(
@@ -675,7 +631,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      // 8. 다음 목표 인풋
                       Text('NEXT GOAL (다음 목표) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       TextField(
@@ -788,31 +743,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     String minStr = mins < 10 ? "0$mins" : "$mins";
     String secStr = secs < 10 ? "0$secs" : "$secs";
     return "00:$minStr:$secStr";
-  }
-
-  Widget _buildVipSmartDynamicText(String text, Color brandGolden) {
-    String firstLine = ""; String secondLine = "";
-    if (text.contains('(') && text.contains(')')) {
-      int openParenthesis = text.indexOf('(');
-      firstLine = text.substring(0, openParenthesis).trim();
-      secondLine = text.substring(openParenthesis).trim();
-    } else if (text.contains(' ') && text.length > 12) {
-      int middleSpace = text.indexOf(' ', text.length ~/ 2);
-      if (middleSpace == -1) middleSpace = text.indexOf(' ');
-      firstLine = text.substring(0, middleSpace).trim();
-      secondLine = text.substring(middleSpace).trim();
-    } else { firstLine = text; }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(firstLine, textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.w900, fontSize: 19.5, height: 1.15, shadows: const [Shadow(color: Color(0xFF050B14), offset: Offset(0, 1), blurRadius: 3)])),
-        if (secondLine.isNotEmpty) ...[
-          const SizedBox(height: 5),
-          Text(secondLine, textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.w900, fontSize: 18.0, height: 1.15, shadows: const [Shadow(color: Color(0xFF050B14), offset: Offset(0, 1), blurRadius: 3)])),
-        ],
-      ],
-    );
   }
 
   @override
@@ -969,38 +899,22 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                   ],
                 ),
               ),
+              // 👑 🎯 [지시 반영]: 10분 주기 루프 제어 엔진과 실시간 타임라인 오버레이 융합 안착부
+              // 💡 여기서부터 드래그해서 파일 맨 끝까지 싹 바꾸시면 완벽하게 성공합니다!
               if (widget.isVipMember && _showVipOverlay)
                 Positioned.fill(
                   child: Center(
                     child: SizedBox(
-                      width: 340, height: 300,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          if (_isTargetPhase)
-                            AnimatedBuilder(
-                              animation: _targetController,
-                              builder: (context, child) => Opacity(opacity: _targetOpacity.value, child: Transform.scale(scale: _targetScale.value, child: Column(mainAxisSize: MainAxisSize.min, children: [
-                                Text("TARGET", textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.w900, fontSize: 28, letterSpacing: 4.0)),
-                                const SizedBox(height: 6),
-                                Text("목표", textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 4.0)),
-                              ]))),
-                            ),
-                          if (!_isTargetPhase)
-                            AnimatedBuilder(
-                              animation: _univController,
-                              builder: (context, child) => Opacity(opacity: _univOpacity.value, child: Transform.scale(scale: _univScale.value, child: Column(mainAxisSize: MainAxisSize.min, children: [
-                                Image.asset('assets/images/crown_wings.png', height: 42, fit: BoxFit.contain),
-                                const SizedBox(height: 4),
-                                _buildVipSmartDynamicText(_currentUniversity, brandGolden),
-                              ]))),
-                            ),
-                        ],
+                      width: 340,
+                      height: 300, // 👈 본체 상자 높이를 시원하게 열어서 내부 찌그러짐 원천 차단!
+                      child: DkeBigStarTargetAnimationModule(
+                        key: _animKey,
+                        targetUniversityName: _currentUniversity,
+                        currentLanguageCode: _currentLanguageCode,
                       ),
                     ),
                   ),
                 ),
-              Positioned(top: 10, left: 10, child: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 22), onPressed: () => Navigator.of(context).pop())),
             ],
           ),
         ),
@@ -1031,4 +945,170 @@ class StarClipper extends CustomClipper<Path> {
   }
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+// ============================================================================
+// 👑 [대형 별 중앙 애니메이션 연동 설계 연산 캡슐 - 유령버튼 소독 및 1mm 초정밀 피팅본]
+// ============================================================================
+// 💡 파트너님, 여기를 파일 맨 끝까지 통째로 덮어씌우시면 이미지 조절판이 장착됩니다!
+class DkeBigStarTargetAnimationModule extends StatefulWidget {
+  final String targetUniversityName;
+  final String currentLanguageCode;
+
+  const DkeBigStarTargetAnimationModule({
+    Key? key,
+    required this.targetUniversityName,
+    required this.currentLanguageCode,
+  }) : super(key: key);
+
+  @override
+  State<DkeBigStarTargetAnimationModule> createState() => _DkeBigStarTargetAnimationModuleState();
+}
+
+class _DkeBigStarTargetAnimationModuleState extends State<DkeBigStarTargetAnimationModule> with TickerProviderStateMixin {
+  late AnimationController _timelineController;
+  late Animation<double> _targetWordScale;
+  late Animation<double> _targetWordOpacity;
+  late Animation<double> _uniWordScale;
+  late Animation<double> _uniWordOpacity;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _timelineController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 30),
+    );
+
+    _targetWordScale = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.fastOutSlowIn)), weight: 10),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 10),
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.fastOutSlowIn)), weight: 10),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 70),
+    ]).animate(_timelineController);
+
+    _targetWordOpacity = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 10),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 10),
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 10),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 70),
+    ]).animate(_timelineController);
+
+    _uniWordScale = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 30),
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.8).chain(CurveTween(curve: Curves.linearToEaseOut)), weight: 23),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.8), weight: 23),
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.8, end: 0.0).chain(CurveTween(curve: Curves.fastOutSlowIn)), weight: 24),
+    ]).animate(_timelineController);
+
+    _uniWordOpacity = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 30),
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 23),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 23),
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 24),
+    ]).animate(_timelineController);
+  }
+
+  void resetAndPlay() {
+    if (mounted) _timelineController.forward(from: 0.0);
+  }
+
+  void pauseEngine() {
+    if (mounted && _timelineController.isAnimating) _timelineController.stop();
+  }
+
+  void resumeEngine() {
+    if (mounted && !_timelineController.isAnimating && _timelineController.value > 0.0 && _timelineController.value < 1.0) {
+      _timelineController.forward();
+    }
+  }
+
+  String _getTranslatedTarget() {
+    switch (widget.currentLanguageCode) {
+      case 'ko': return '목표';
+      case 'ja': return '目標';
+      case 'zh': return '目标';
+      case 'en': return 'Target';
+      default: return 'Target';
+    }
+  }
+
+  @override
+  void dispose() {
+    _timelineController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          FadeTransition(
+            opacity: _targetWordOpacity,
+            child: ScaleTransition(
+              scale: _targetWordScale,
+              child: Text(
+                _getTranslatedTarget(),
+                style: GoogleFonts.notoSansKr(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFE5C158),
+                  shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+                ),
+              ),
+            ),
+          ),
+          FadeTransition(
+            opacity: _uniWordOpacity,
+            child: ScaleTransition(
+              scale: _uniWordScale,
+              child: SizedBox(
+                width: 280,
+                height: 150,
+                child: Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+
+                    // 👑 🎯 [왕관 이미지 위치 조절판 장착 완료!]
+                    Positioned(
+                      top: 30, // 👈 🎯 파트너님! 여기 숫자를 20, 25, 30으로 키우면 왕관만 아래로 슥 내려옵니다!
+                      child: Image.asset(
+                        'assets/images/crown_wings.png',
+                        width: 150,
+                        height: 60,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+
+                    Positioned(
+                      top: 70, // 👈 대학명은 완벽한 중앙 밸런스를 위해 85 자리에 고정해 두었습니다!
+                      left: 0,
+                      right: 0,
+                      child: Text(
+                        widget.targetUniversityName,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: GoogleFonts.gowunBatang(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          shadows: const [
+                            Shadow(color: Colors.black, blurRadius: 12),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

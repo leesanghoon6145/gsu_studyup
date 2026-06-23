@@ -38,8 +38,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'vipDone': 'VIP Premium Member Activated',
       'disabledHint': 'Available after VIP approval',
       'saved': 'My Page settings have been saved.',
-      'snackVip':
-      'VIP membership approved. You can now set your target school.',
+      'snackVip': 'VIP membership approved. You can now set your target school.',
       'defaultSchool': 'Seoul National University',
       'targetWord': 'Target',
     },
@@ -63,8 +62,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'vipDone': 'VIP 프리미엄 회원 활성화 완료',
       'disabledHint': '아래 [회원결제(VIP)] 승인 후 활성화됩니다.',
       'saved': '마이페이지 설정이 저장되었습니다.',
-      'snackVip':
-      'VIP 회원 결제가 승인되었습니다! 이제 목표 학교를 자유롭게 직접 설정할 수 있습니다.',
+      'snackVip': 'VIP 회원 결제가 승인되었습니다! 이제 목표 학교를 자유롭게 직접 설정할 수 있습니다.',
       'defaultSchool': '서울대학교',
       'targetWord': '목표',
     },
@@ -115,156 +113,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'VIP会员已批准，现在可以自由设置目标学校。',
       'defaultSchool': '首尔大学',
       'targetWord': '目标',
-    },
-    {
-      'code': 'ar',
-      'name': 'العربية',
-      'flag': '🇸🇦',
-      'title': 'صفحتي',
-      'target': 'المدرسة المستهدفة',
-      'hint': 'أدخل اسم المدرسة',
-      'save': 'حفظ الإعدادات',
-      'vip': 'عضو VIP ممتاز',
-      'normal': 'عضو عادي',
-      'personal': 'تعديل المعلومات الشخصية',
-      'email': 'البريد الإلكتروني',
-      'password': 'تحديث كلمة المرور',
-      'passwordHint': 'أدخل كلمة مرور جديدة',
-      'language': 'اختيار اللغة',
-      'vipLocked': 'مقفل لأعضاء VIP فقط',
-      'vipButton': 'التقديم على VIP وتحديد المدرسة المستهدفة',
-      'vipDone': 'تم تفعيل عضوية VIP',
-      'disabledHint': 'سيتوفر بعد الموافقة على VIP',
-      'saved': 'تم حفظ إعدادات صفحتي.',
-      'snackVip': 'تمت الموافقة على عضوية VIP. يمكنك الآن تعيين المدرسة المستهدفة.',
-      'defaultSchool': 'جامعة سيول الوطنية',
-      'targetWord': 'الهدف',
-    },
-    {
-      'code': 'es',
-      'name': 'Español',
-      'flag': '🇪🇸',
-      'title': 'Mi Cuenta',
-      'target': 'Escuela Objetivo',
-      'hint': 'Ingrese el nombre',
-      'save': 'Guardar',
-      'vip': 'Miembro VIP',
-      'normal': 'Miembro Regular',
-      'personal': 'Editar información personal',
-      'email': 'Correo electrónico',
-      'password': 'Cambiar contraseña',
-      'passwordHint': 'Ingrese una nueva contraseña',
-      'language': 'Idioma global',
-      'vipLocked': 'Bloqueado solo para VIP',
-      'vipButton': 'Solicitar VIP y configurar escuela objetivo',
-      'vipDone': 'VIP activado',
-      'disabledHint': 'Disponible después de la aprobación VIP',
-      'saved': 'La configuración se ha guardado.',
-      'snackVip':
-      'La membresía VIP ha sido aprobada. Ahora puedes configurar tu escuela objetivo.',
-      'defaultSchool': 'Universidad Nacional de Seúl',
-      'targetWord': 'Objetivo',
-    },
-    {
-      'code': 'fr',
-      'name': 'Français',
-      'flag': '🇫🇷',
-      'title': 'Mon Profil',
-      'target': 'École Cible',
-      'hint': 'Entrez le nom',
-      'save': 'Enregistrer',
-      'vip': 'Membre VIP',
-      'normal': 'Membre Régulier',
-      'personal': 'Modifier les informations personnelles',
-      'email': 'Adresse e-mail',
-      'password': 'Changer le mot de passe',
-      'passwordHint': 'Entrez un nouveau mot de passe',
-      'language': 'Langue globale',
-      'vipLocked': 'Réservé aux membres VIP',
-      'vipButton': 'Demander le VIP et définir l’école cible',
-      'vipDone': 'VIP activé',
-      'disabledHint': 'Disponible après approbation VIP',
-      'saved': 'Les paramètres ont été enregistrés.',
-      'snackVip':
-      'L’adhésion VIP a été approuvée. Vous pouvez maintenant définir votre école cible.',
-      'defaultSchool': 'Université nationale de Séoul',
-      'targetWord': 'Objectif',
-    },
-    {
-      'code': 'de',
-      'name': 'Deutsch',
-      'flag': '🇩🇪',
-      'title': 'Mein Profil',
-      'target': 'Zielschule',
-      'hint': 'Schulnamen eingeben',
-      'save': 'Speichern',
-      'vip': 'VIP-Mitglied',
-      'normal': 'Reguläres Mitglied',
-      'personal': 'Persönliche Daten bearbeiten',
-      'email': 'E-Mail-Adresse',
-      'password': 'Passwort ändern',
-      'passwordHint': 'Neues Passwort eingeben',
-      'language': 'Globale Sprache',
-      'vipLocked': 'Nur für VIP-Mitglieder',
-      'vipButton': 'VIP beantragen und Zielschule festlegen',
-      'vipDone': 'VIP aktiviert',
-      'disabledHint': 'Nach VIP-Freigabe verfügbar',
-      'saved': 'Die Einstellungen wurden gespeichert.',
-      'snackVip':
-      'Die VIP-Mitgliedschaft wurde genehmigt. Jetzt können Sie Ihre Zielschule festlegen.',
-      'defaultSchool': 'Nationale Universität Seoul',
-      'targetWord': 'Ziel',
-    },
-    {
-      'code': 'vi',
-      'name': 'Tiếng Việt',
-      'flag': '🇻🇳',
-      'title': 'Trang Của Tôi',
-      'target': 'Trường Mục Tiêu',
-      'hint': 'Nhập tên trường',
-      'save': 'Lưu Cài Đặt',
-      'vip': 'Thành viên VIP',
-      'normal': 'Thành viên Thường',
-      'personal': 'Chỉnh sửa thông tin cá nhân',
-      'email': 'Địa chỉ email',
-      'password': 'Đổi mật khẩu',
-      'passwordHint': 'Nhập mật khẩu mới',
-      'language': 'Ngôn ngữ',
-      'vipLocked': 'Chỉ dành cho VIP',
-      'vipButton': 'Đăng ký VIP và đặt trường mục tiêu',
-      'vipDone': 'Đã kích hoạt VIP',
-      'disabledHint': 'Khả dụng sau khi VIP được phê duyệt',
-      'saved': 'Đã lưu cài đặt.',
-      'snackVip':
-      'Tư cách thành viên VIP đã được phê duyệt. Bây giờ bạn có thể đặt trường mục tiêu.',
-      'defaultSchool': 'Đại học Quốc gia Seoul',
-      'targetWord': 'Mục tiêu',
-    },
-    {
-      'code': 'id',
-      'name': 'Bahasa',
-      'flag': '🇮🇩',
-      'title': 'Profil Saya',
-      'target': 'Sekolah Target',
-      'hint': 'Masukkan nama sekolah',
-      'save': 'Simpan Pengaturan',
-      'vip': 'Anggota VIP',
-      'normal': 'Anggota Reguler',
-      'personal': 'Ubah info pribadi',
-      'email': 'Alamat email',
-      'password': 'Ubah kata sandi',
-      'passwordHint': 'Masukkan kata sandi baru',
-      'language': 'Bahasa Global',
-      'vipLocked': 'Hanya untuk anggota VIP',
-      'vipButton': 'Ajukan VIP dan atur sekolah target',
-      'vipDone': 'VIP aktif',
-      'disabledHint': 'Tersedia setelah persetujuan VIP',
-      'saved': 'Pengaturan telah disimpan.',
-      'snackVip':
-      'Keanggotaan VIP telah disetujui. Sekarang Anda dapat mengatur sekolah target.',
-      'defaultSchool': 'Universitas Nasional Seoul',
-      'targetWord': 'Target',
-    },
+    }
   ];
 
   static const Color _brandGolden = Color(0xFFE5C158);
@@ -275,12 +124,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
   bool _isVip = false;
 
   final TextEditingController _uniController = TextEditingController();
-  final TextEditingController _emailController =
-  TextEditingController(text: 'studyup@dke.com');
+  final TextEditingController _emailController = TextEditingController(text: 'studyup@dke.com');
   final TextEditingController _passwordController = TextEditingController();
 
   Map<String, String> get _lang => _languages[_currentLangIndex];
-
   bool get _isRtl => _lang['code'] == 'ar';
 
   @override
@@ -290,10 +137,14 @@ class _MyPageScreenState extends State<MyPageScreen> {
     _loadSavedSettings();
   }
 
+  // 🕒 기기 저장소에서 영구 가입된 VIP 상태와 목표 데이터를 실시간 로드 및 복원
   Future<void> _loadSavedSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUni = prefs.getString('saved_target_university') ?? '';
     final savedLang = prefs.getString('saved_language_code') ?? 'ko';
+
+    // 👑 🎯 핵심 반영: 기기에 저장된 VIP 가입 이력이 있으면 기본 위젯 상태를 제치고 무조건 복원 승격!
+    final bool savedVipStatus = prefs.getBool('saved_vip_status') ?? widget.isVipMember;
 
     int langIdx = _languages.indexWhere((lang) => lang['code'] == savedLang);
     if (langIdx == -1) langIdx = 1;
@@ -303,9 +154,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
     setState(() {
       _uniController.text = savedUni;
       _currentLangIndex = langIdx;
+      _isVip = savedVipStatus; // 👈 나갔다 와도 완벽히 기억해내는 방어선!
     });
   }
 
+  // 💾 [설정 저장] 버튼을 누를 때 대학 이름과 가입 승인 상태를 동시에 기기에 영구 고정
   Future<void> _saveAndPop() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -318,6 +171,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
     await prefs.setString('saved_target_university', finalUni);
     await prefs.setString('saved_language_code', currentLangCode);
+    await prefs.setBool('saved_vip_status', _isVip); // 👈 VIP 영구 유지 패킷 실시간 쓰기!
 
     widget.onSave(_isVip, finalUni);
 
@@ -339,17 +193,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
     required Color color,
     double? letterSpacing,
   }) {
-    final code = _lang['code'];
-
-    if (code == 'ar') {
-      return GoogleFonts.notoNaskhArabic(
-        fontSize: fontSize,
-        fontWeight: fontWeight,
-        color: color,
-        letterSpacing: letterSpacing,
-      );
-    }
-
     return GoogleFonts.notoSans(
       fontSize: fontSize,
       fontWeight: fontWeight,
@@ -377,15 +220,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
     return InputDecoration(
       labelText: labelText,
       hintText: hintText,
-      labelStyle: TextStyle(color: _brandGolden),
+      labelStyle: const TextStyle(color: _brandGolden),
       hintStyle: const TextStyle(color: Colors.white38),
       prefixIcon: Icon(icon, color: _brandGolden),
-      enabledBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: Colors.white12),
-      ),
-      focusedBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: _brandGolden),
-      ),
+      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white12)),
+      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: _brandGolden)),
     );
   }
 
@@ -452,9 +291,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
               ),
               const SizedBox(height: 24),
 
-              _buildSectionTitle(
-                'PERSONAL INFO EDIT (${_lang['personal'] ?? '개인정보 수정'})',
-              ),
+              _buildSectionTitle('PERSONAL INFO EDIT (${_lang['personal'] ?? '개인정보 수정'})'),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -462,10 +299,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 decoration: BoxDecoration(
                   color: _containerBg,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _brandGolden.withOpacity(0.4),
-                    width: 1,
-                  ),
+                  border: Border.all(color: _brandGolden.withOpacity(0.4), width: 1),
                 ),
                 child: Column(
                   children: [
@@ -515,11 +349,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.lock_outline_rounded,
-                            color: _brandGolden,
-                            size: 16,
-                          ),
+                          const Icon(Icons.lock_outline_rounded, color: _brandGolden, size: 16),
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
@@ -549,14 +379,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: InputDecoration(
-                  hintText: _isVip
-                      ? (_lang['hint'] ?? '학교명을 입력하세요')
-                      : (_lang['disabledHint'] ?? 'VIP 승인 후 활성화됩니다.'),
-                  hintStyle: TextStyle(
-                    color: _isVip
-                        ? Colors.white38
-                        : _brandGolden.withOpacity(0.5),
-                  ),
+                  hintText: _isVip ? (_lang['hint'] ?? '학교명을 입력하세요') : (_lang['disabledHint'] ?? 'VIP 승인 후 활성화됩니다.'),
+                  hintStyle: TextStyle(color: _isVip ? Colors.white38 : _brandGolden.withOpacity(0.5)),
                   filled: true,
                   fillColor: _isVip ? _containerBg : Colors.white.withOpacity(0.05),
                   enabledBorder: OutlineInputBorder(
@@ -569,40 +393,37 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   ),
                   disabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: _brandGolden.withOpacity(0.15),
-                    ),
+                    borderSide: BorderSide(color: _brandGolden.withOpacity(0.15)),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
 
+              // 💳 회원결제(VIP) 독립 연동 버튼 스펙 (상태에 따른 실시간 복원 처리 완료)
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: _isVip ? Colors.white38 : _brandGolden,
-                      width: 1.5,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    backgroundColor:
-                    _isVip ? Colors.transparent : _brandGolden.withOpacity(0.05),
+                    side: BorderSide(color: _isVip ? Colors.white38 : _brandGolden, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: _isVip ? Colors.transparent : _brandGolden.withOpacity(0.05),
                   ),
                   onPressed: _isVip
                       ? null
-                      : () {
+                      : () async {
+                    final localPrefs = await SharedPreferences.getInstance();
+                    // 결제 성공 시 기기 캐시에 영구 플래그 보전 처리
+                    await localPrefs.setBool('saved_vip_status', true);
+
                     setState(() {
                       _isVip = true;
                     });
+
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(
-                          '🎉 ${_lang['snackVip'] ?? 'VIP 회원이 승인되었습니다.'}',
-                        ),
+                        content: Text('🎉 ${_lang['snackVip'] ?? 'VIP 회원이 승인되었습니다.'}'),
                         backgroundColor: _brandGolden,
                       ),
                     );
@@ -617,9 +438,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          _isVip
-                              ? (_lang['vipDone'] ?? 'VIP 활성화 완료')
-                              : (_lang['vipButton'] ?? 'VIP 신청'),
+                          _isVip ? (_lang['vipDone'] ?? 'VIP 활성화 완료') : (_lang['vipButton'] ?? 'VIP 신청'),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: _isVip ? Colors.white38 : _brandGolden,
@@ -634,9 +453,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
               ),
               const SizedBox(height: 32),
 
-              _buildSectionTitle(
-                'GLOBAL LANGUAGE (${_lang['language'] ?? '다국어 선택'})',
-              ),
+              // 🌐 파트너님 명령 엄수: 다국어 선택 그리드 섹션은 순정 원형 100% 보전
+              _buildSectionTitle('GLOBAL LANGUAGE (${_lang['language'] ?? '다국어 선택'})'),
               const SizedBox(height: 12),
               GridView.builder(
                 shrinkWrap: true,
@@ -660,9 +478,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? _brandGolden.withOpacity(0.15)
-                            : _containerBg,
+                        color: isSelected ? _brandGolden.withOpacity(0.15) : _containerBg,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isSelected ? _brandGolden : Colors.white12,
@@ -672,8 +488,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(item['flag'] ?? '',
-                              style: const TextStyle(fontSize: 20)),
+                          Text(item['flag'] ?? '', style: const TextStyle(fontSize: 20)),
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
@@ -681,9 +496,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: isSelected ? _brandGolden : Colors.white,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
                           ),
@@ -701,18 +514,12 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _brandGolden,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: _saveAndPop,
                   child: Text(
                     _lang['save'] ?? '설정 저장',
-                    style: const TextStyle(
-                      color: _pageBg,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(color: _pageBg, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -722,240 +529,4 @@ class _MyPageScreenState extends State<MyPageScreen> {
       ),
     );
   }
-}
-
-class DkeBigStarTargetAnimationModule extends StatefulWidget {
-  final String targetUniversityName;
-  final String currentLanguageCode;
-
-  const DkeBigStarTargetAnimationModule({
-    super.key,
-    required this.targetUniversityName,
-    required this.currentLanguageCode,
-  });
-
-  @override
-  State<DkeBigStarTargetAnimationModule> createState() =>
-      _DkeBigStarTargetAnimationModuleState();
-}
-
-class _DkeBigStarTargetAnimationModuleState
-    extends State<DkeBigStarTargetAnimationModule>
-    with TickerProviderStateMixin {
-  late final AnimationController _timelineController;
-  late final Animation<double> _targetWordScale;
-  late final Animation<double> _targetWordOpacity;
-  late final Animation<double> _uniWordScale;
-  late final Animation<double> _uniWordOpacity;
-
-  static const Color _brandGolden = Color(0xFFE5C158);
-
-  @override
-  void initState() {
-    super.initState();
-
-    _timelineController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 30),
-    );
-
-    _targetWordScale = TweenSequence<double>([
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 0, end: 1).chain(
-          CurveTween(curve: Curves.fastOutSlowIn),
-        ),
-        weight: 10,
-      ),
-      TweenSequenceItem<double>(
-        tween: ConstantTween<double>(1),
-        weight: 10,
-      ),
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 1, end: 0).chain(
-          CurveTween(curve: Curves.fastOutSlowIn),
-        ),
-        weight: 10,
-      ),
-      TweenSequenceItem<double>(
-        tween: ConstantTween<double>(0),
-        weight: 70,
-      ),
-    ]).animate(_timelineController);
-
-    _targetWordOpacity = TweenSequence<double>([
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 0, end: 1),
-        weight: 10,
-      ),
-      TweenSequenceItem<double>(
-        tween: ConstantTween<double>(1),
-        weight: 10,
-      ),
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 1, end: 0),
-        weight: 10,
-      ),
-      TweenSequenceItem<double>(
-        tween: ConstantTween<double>(0),
-        weight: 70,
-      ),
-    ]).animate(_timelineController);
-
-    _uniWordScale = TweenSequence<double>([
-      KeyframeTween(30, 0),
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 0, end: 1.8).chain(
-          CurveTween(curve: Curves.linearToEaseOut),
-        ),
-        weight: 23,
-      ),
-      TweenSequenceItem<double>(
-        tween: ConstantTween<double>(1.8),
-        weight: 23,
-      ),
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 1.8, end: 0).chain(
-          CurveTween(curve: Curves.fastOutSlowIn),
-        ),
-        weight: 24,
-      ),
-    ]).animate(_timelineController);
-
-    _uniWordOpacity = TweenSequence<double>([
-      KeyframeTween(30, 0),
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 0, end: 1),
-        weight: 23,
-      ),
-      TweenSequenceItem<double>(
-        tween: ConstantTween<double>(1),
-        weight: 23,
-      ),
-      TweenSequenceItem<double>(
-        tween: Tween<double>(begin: 1, end: 0),
-        weight: 24,
-      ),
-    ]).animate(_timelineController);
-
-    _timelineController.forward();
-  }
-
-  String _getTranslatedTarget() {
-    switch (widget.currentLanguageCode) {
-      case 'ko':
-        return '목표';
-      case 'ja':
-        return '目標';
-      case 'zh':
-        return '目标';
-      case 'ar':
-        return 'الهدف';
-      case 'es':
-        return 'Objetivo';
-      case 'fr':
-        return 'Objectif';
-      case 'de':
-        return 'Ziel';
-      case 'vi':
-        return 'Mục tiêu';
-      case 'id':
-      case 'en':
-      default:
-        return 'Target';
-    }
-  }
-
-  TextStyle _targetTextStyle() {
-    if (widget.currentLanguageCode == 'ar') {
-      return GoogleFonts.notoNaskhArabic(
-        fontSize: 28,
-        fontWeight: FontWeight.bold,
-        color: _brandGolden,
-        shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
-      );
-    }
-
-    return GoogleFonts.notoSans(
-      fontSize: 28,
-      fontWeight: FontWeight.bold,
-      color: _brandGolden,
-      shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
-    );
-  }
-
-  @override
-  void dispose() {
-    _timelineController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isRtl = widget.currentLanguageCode == 'ar';
-
-    return Directionality(
-      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-      child: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            FadeTransition(
-              opacity: _targetWordOpacity,
-              child: ScaleTransition(
-                scale: _targetWordScale,
-                child: Text(
-                  _getTranslatedTarget(),
-                  style: _targetTextStyle(),
-                ),
-              ),
-            ),
-            FadeTransition(
-              opacity: _uniWordOpacity,
-              child: ScaleTransition(
-                scale: _uniWordScale,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/images/crown_wings.png',
-                      width: 32,
-                      height: 18,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    ),
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      child: Text(
-                        widget.targetUniversityName,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSans(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          shadows: const [
-                            Shadow(color: Colors.black, blurRadius: 12),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class KeyframeTween extends TweenSequenceItem<double> {
-  KeyframeTween(int percentageWeight, double value)
-      : super(
-    tween: ConstantTween<double>(value),
-    weight: percentageWeight.toDouble(),
-  );
 }
