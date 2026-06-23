@@ -250,7 +250,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         "Self-Directed Learning Session 2\n"
         "1. TIMESTAMP:\n"
         "\$2026-06-18 21:36 ~ 22:36 End UTC\$\n"
-        "2. SUBJECT: \$English\$\n"
+        "2. SUBJECT: \$English\n"
         "3. TIME: \$72 Mins / 90 Mins\$\n"
         "4. ACHIEVEMENT RATE: \$80%\$\n"
         "5. STARS: \$ ****(4/5)\$\n\n"
@@ -1343,19 +1343,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF2C2514),
+                // 👑 파트너님 지시사항 적용: 하얀색 계열 바탕을 현재 활성화 버튼 색상인 '황금색' 바탕으로 전격 교체!
+                color: _ThemeColors.brandGolden,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _ThemeColors.brandGolden, width: 1.2),
+                // 테두리선 또한 황금색 바탕과 동기화되도록 완전한 화이트 투명 레이어로 정돈
+                border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.2),
               ),
               child: Row(children: [
-                const Icon(Icons.warning_amber_rounded, color: _ThemeColors.brandGolden, size: 20),
+                // 황금색 바탕 위에서 묻히지 않도록 아이콘 색상도 백색(White) 레이어로 전격 교체
+                const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(DkeLang.current == 'KO' ? "데이터베이스 동기화 알림" : "Database Sync Notification", style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
-                      Text(DkeLang.current == 'KO' ? "(데이터를 안전하게 동기화 중입니다...)" : "(Synchronizing data storage safely...)", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden.withOpacity(0.85), fontSize: 11, fontWeight: FontWeight.w600)),
+                      // 👑 지시사항 적용: 글씨체들을 눈에 확 띄도록 흰색(White) 라벨로 커스텀 셋팅 완료
+                      Text(
+                          DkeLang.current == 'KO' ? "데이터베이스 동기화 알림" : "Database Sync Notification",
+                          style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)
+                      ),
+                      Text(
+                          DkeLang.current == 'KO' ? "(데이터를 안전하게 동기화 중입니다...)" : "(Synchronizing data storage safely...)",
+                          style: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.9), fontSize: 11, fontWeight: FontWeight.w600)
+                      ),
                     ],
                   ),
                 ),

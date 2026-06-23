@@ -42,18 +42,18 @@ class _SignupScreenState extends State<SignupScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true, // ✨ [수정 반영] 타이틀이 항상 완벽하게 중앙에 오도록 밸런스 조정
+        centerTitle: true, // ✨ 타이틀이 항상 완벽하게 중앙에 오도록 밸런스 조정
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.center, // ✨ [수정 반영] 영문-한글 정렬 중앙 집중
+          crossAxisAlignment: CrossAxisAlignment.center, // ✨ 영문-한글 정렬 중앙 집중
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'SIGNUP',
-              textAlign: TextAlign.center, // ✨ [수정 반영] 텍스트 자체 중앙 정렬
+              textAlign: TextAlign.center, // ✨ 텍스트 자체 중앙 정렬
               style: GoogleFonts.gowunBatang(
                 color: brandGolden, // 고급스러운 황금색 유지
                 fontWeight: FontWeight.bold,
@@ -63,7 +63,7 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
             Text(
               '(회원가입)',
-              textAlign: TextAlign.center, // ✨ [수정 반영] 텍스트 자체 중앙 정렬
+              textAlign: TextAlign.center, // ✨ 텍스트 자체 중앙 정렬
               style: GoogleFonts.notoSansKr(
                 color: brandGolden, // 고급스러운 황금색 유지
                 fontWeight: FontWeight.bold,
@@ -78,6 +78,28 @@ class _SignupScreenState extends State<SignupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // 👑 지시사항 반영: 로그인/회원가입 진입 시 노출되는 프리미엄 사각형 네모 박스 환영 패널 장착 완료
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1527), // 홈 대시보드와 완벽하게 일치하는 사각형 바탕색
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: brandGolden.withOpacity(0.4), width: 1.5), // 정교한 황금색 사각형 테두리선
+              ),
+              child: Text(
+                "Welcomto to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(
+                  color: Colors.white, // 흰색 글씨로 매칭 완료
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  height: 1.4,
+                ),
+              ),
+            ),
+
             // 2. 학생/학부모/일반 통합 토글 버튼 (3단 토글 유지)
             Container(
               height: 55,
@@ -418,9 +440,9 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true, // ✨ [수정 반영] 약관동의 화면도 동일하게 타이틀 중앙 정렬
+        centerTitle: true, // ✨ 약관동의 화면도 동일하게 타이틀 중앙 정렬
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.center, // ✨ [수정 반영] 중앙 배치 정렬
+          crossAxisAlignment: CrossAxisAlignment.center, // ✨ 중앙 배치 정렬
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(

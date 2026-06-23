@@ -83,6 +83,26 @@ class EntranceScreen extends StatelessWidget {
 class LoginSignupScreen extends StatelessWidget {
   const LoginSignupScreen({super.key});
 
+  // 👑 30년 베테랑의 무결점 60프레임 오버레이 애니메이션 제어 모듈 (화면 먹통/터치 락 완벽 박멸)
+  void _showOverlayWelcomeBar(BuildContext targetContext) {
+    final OverlayState overlayState = Overlay.of(targetContext);
+
+    late OverlayEntry overlayEntry;
+
+    // 부드러운 애니메이션 처리를 위한 독립 위젯 생성
+    overlayEntry = OverlayEntry(
+      builder: (context) {
+        return _SmoothWelcomeOverlayWidget(
+          onRemove: () {
+            overlayEntry.remove();
+          },
+        );
+      },
+    );
+
+    overlayState.insert(overlayEntry);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -212,20 +232,18 @@ class LoginSignupScreen extends StatelessWidget {
                   _buildOutlineButton(
                     title: 'SIGN IN (로그인)',
                     onPressed: () {
-                      // 1. 로그인 환영 메시지 띄우기 (영어 선행 매너 적용)
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Welcome to GSU StudyUp! (GSU StudyUp에 오신 것을 환영합니다!)',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                        ),
-                      );
-
-                      // 2. 🔥 [연결 완성] 버튼 클릭 시 설정 대시보드 화면으로 부드럽게 진입!
+                      // 1. 🔥 [연결 완성] 대시보드 화면으로 먼저 완벽하게 이동 (백 버튼 유발 요인 완전 박멸)
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const HomeDashboardScreen()),
+                        MaterialPageRoute(
+                          builder: (dashboardContext) {
+                            // 2. 🎯 화면이 완전히 렌더링된 뒤 터치 방해를 전혀 주지 않는 비배리어(Non-barrier) 오버레이 호출
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _showOverlayWelcomeBar(dashboardContext);
+                            });
+                            return const HomeDashboardScreen();
+                          },
+                        ),
                       );
                     },
                   ),
@@ -315,4 +333,93 @@ class LoginSignupScreen extends StatelessWidget {
       ),
     );
   }
-} // 👈 main.dart 파일의 진짜 최종 마감 끝자락!
+}
+
+// 👑 30년 베테랑의 60프레임 무결점 오버레이 전용 슬라이딩 애니메이션 내부 조립 위젯
+class _SmoothWelcomeOverlayWidget extends StatefulWidget {
+  final VoidCallback onRemove;
+  const _SmoothWelcomeOverlayWidget({required this.onRemove});
+
+  @override
+  State<_SmoothWelcomeOverlayWidget> createState() => _SmoothWelcomeOverlayWidgetState();
+}
+
+class _SmoothWelcomeOverlayWidgetState extends State<_SmoothWelcomeOverlayWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1), // 화면 외부 바닥 대기
+      end: const Offset(0, 0),   // 화면 내부 정위치 안착
+    ).animate(CurvedAnimation(parent: _animController, curve: Curves.fastOutSlowIn));
+
+    // 실행 즉시 부드럽게 스~윽 업
+    _animController.forward();
+
+    // 2초간 유지 후 부드럽게 스~윽 다운되며 메모리에서 완전 자가 해제 처리
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        _animController.reverse().then((_) {
+          widget.onRemove();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 20),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0D1527), // 프리미엄 다크 네이비 단색 매칭
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)), // 네 모서리 부드러운 라운드
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Text(
+                      'Welcomto to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white, // 흰색 글자 단일 동기화
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
