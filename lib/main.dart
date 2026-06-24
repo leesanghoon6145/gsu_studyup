@@ -33,22 +33,159 @@ class GsuStudyUpApp extends StatelessWidget {
 }
 
 // -----------------------------------------
-// [1] 메인 입장 화면 (설명글 삭제 및 투명 버튼 적용)// -----------------------------------------
-class EntranceScreen extends StatelessWidget {
+// [1] 메인 입장 화면 (지구본 정중앙 18초 순차 줌인/아웃 애니메이션 결합판)
+// -----------------------------------------
+class EntranceScreen extends StatefulWidget {
   const EntranceScreen({super.key});
 
   @override
+  State<EntranceScreen> createState() => _EntranceScreenState();
+}
+
+class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStateMixin {
+
+  // 👑 [명칭: 대문 지구본 응원 애니메이션 제어 엔진]
+  late AnimationController _cheeringController;
+  late Animation<double> _firstWordScale;
+  late Animation<double> _firstWordOpacity;
+  late Animation<double> _secondWordScale;
+  late Animation<double> _secondWordOpacity;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // ⏳ [명칭: 18초 체인 타임라인 제어기] - 3초 단위 시퀀스 구동 설계
+    _cheeringController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 18),
+    );
+
+    // 🔤 [명칭: GKE StudyUp이 줌인/아웃 스케일 필터]
+    _firstWordScale = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 16.6), // 0~3초: 줌인
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),                                                  // 3~6초: 멈춤
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: 16.6),  // 6~9초: 줌아웃
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.2),                                                  // 9~18초: 대기
+    ]).animate(_cheeringController);
+
+    // 🔤 [명칭: GKE StudyUp이 투명도 디졸브 필터]
+    _firstWordOpacity = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 16.6), // 0~3초: 페이드인
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),          // 3~6초: 고정
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 16.6), // 6~9초: 페이드아웃
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.2),          // 9~18초: 소멸
+    ]).animate(_cheeringController);
+
+    // 🇰🇷 [명칭: 응원 합니다 줌인/아웃 스케일 필터]
+    _secondWordScale = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.0),                                                  // 0~9초: 대기
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 16.6), // 9~12초: 줌인
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),                                                  // 12~15초: 멈춤
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: 16.8),  // 15~18초: 줌아웃
+    ]).animate(_cheeringController);
+
+    // 🇰🇷 [명칭: 응원 합니다 투명도 디졸브 필터]
+    _secondWordOpacity = TweenSequence<double>([
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.0),          // 0~9초: 대기
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 16.6), // 9~12초: 페이드인
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),          // 12~15초: 고정
+      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 16.8), // 15~18초: 페이드아웃
+    ]).animate(_cheeringController);
+
+    // ⚡ [명칭: 진입 정각 즉시 가동 스케줄러] - 폰 아이콘 누르자마자 0초 만에 시동 거는 트리거
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _cheeringController.forward(from: 0.0);
+        _cheeringController.repeat();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _cheeringController.dispose(); // 👑 [역할: 자원 해제] 백그라운드 스레드 유령 구동 완전 차단
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    const Color brandGolden = Color(0xFFE5C158); // GKE STUDYUP 전역 황금 컬러 스펙 동기화
+
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
       body: Stack(
         children: [
+          // 🖼️ [명칭: 메인 대문 배경 지구본 패널]
           Positioned.fill(
             child: Image.asset(
               'assets/images/main_bg.png',
               fit: BoxFit.contain,
             ),
           ),
+
+          // 👑 🎯 [명칭: 지구본 원의 정중앙 조준 애니메이션 스크린 컴포넌트]
+          Positioned.fill(
+            child: Center(
+              child: Container(
+                width: double.infinity,
+                height: 150, // 자막이 상하로 흔들림 없이 우아하게 표출될 독립 구역 확보
+                alignment: Alignment.center,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 🔤 [명칭: 1단계 자막 - GKE StudyUp이 가동부]
+                    FadeTransition(
+                      opacity: _firstWordOpacity,
+                      child: ScaleTransition(
+                        scale: _firstWordScale,
+                        child: Text(
+                          'GKE StudyUp이',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.nanumMyeongjo(
+                            color: brandGolden,
+                            fontSize: 23,
+                            // 1. 글자 자체를 가장 두꺼운 등급(w900)으로 상승
+                            fontWeight: FontWeight.w900,
+                            shadows: [
+                              // 2. 글자 뒤편에 진한 외곽선을 겹쳐서 물리적으로 더 두껍게 확장
+                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(-1.5, -1.5)),
+                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(1.5, -1.5)),
+                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(1.5, 1.5)),
+                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(-1.5, 1.5)),
+                              Shadow(color: Colors.black87, blurRadius: 20, offset: const Offset(4, 4)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // 🇰🇷 [명칭: 2단계 자막 - 응원 합니다 가동부]
+                    FadeTransition(
+                      opacity: _secondWordOpacity,
+                      child: ScaleTransition(
+                        scale: _secondWordScale,
+                        child: Text(
+                          '응원 합니다',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSansKr( // 규칙 8: 한글 서체 노토산스 단일화
+                            color: brandGolden,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 23, // 규칙 8: 강조 타이틀 크기 23 고정
+                            shadows: const [
+                              Shadow(color: Colors.black87, blurRadius: 15, offset: Offset(2, 2)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 🖱️ [명칭: 하단 입장용 투명 버튼 터치 영역] - 기존 배치 좌표 및 크기 100% 동결 보존
           Positioned(
             bottom: 15,
             left: 0,
@@ -65,7 +202,7 @@ class EntranceScreen extends StatelessWidget {
                     );
                   },
                   child: Container(
-                    color: Colors.transparent,
+                    color: Colors.transparent, // 투명 터치 기능 유지
                   ),
                 ),
               ),
@@ -83,13 +220,10 @@ class EntranceScreen extends StatelessWidget {
 class LoginSignupScreen extends StatelessWidget {
   const LoginSignupScreen({super.key});
 
-  // 👑 30년 베테랑의 무결점 60프레임 오버레이 애니메이션 제어 모듈 (화면 먹통/터치 락 완벽 박멸)
   void _showOverlayWelcomeBar(BuildContext targetContext) {
     final OverlayState overlayState = Overlay.of(targetContext);
-
     late OverlayEntry overlayEntry;
 
-    // 부드러운 애니메이션 처리를 위한 독립 위젯 생성
     overlayEntry = OverlayEntry(
       builder: (context) {
         return _SmoothWelcomeOverlayWidget(
@@ -99,14 +233,12 @@ class LoginSignupScreen extends StatelessWidget {
         );
       },
     );
-
     overlayState.insert(overlayEntry);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 🌟 키보드가 올라올 때 노란 줄무늬(OVERFLOWED)가 생기지 않도록 방어하는 핵심 설정!
       resizeToAvoidBottomInset: true,
       body: Container(
         width: double.infinity,
@@ -122,7 +254,6 @@ class LoginSignupScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          // 🌟 자판이 올라오면 화면을 위아래로 부드럽게 밀어 올려주는 천하무적 스크롤 부품!
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -132,12 +263,10 @@ class LoginSignupScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   Image.asset(
                     'assets/images/logo.png',
-                    width: 245,  // 👈 크기가 너무 크거나 작으면 이 숫자를 고치면 됩니다!
+                    width: 245,
                     height: 245,
                   ),
                   const SizedBox(height: 10),
-
-                  // 서브 타이틀
                   Text(
                     '노력하는 너를 응원하는 별이 되어 줄게',
                     style: GoogleFonts.gowunBatang(
@@ -147,8 +276,6 @@ class LoginSignupScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ✨ 시그니처 십자 별빛 플레어 효과 효과
                   Stack(
                     alignment: Alignment.center,
                     children: [
@@ -200,44 +327,34 @@ class LoginSignupScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 45),
-
-                  // 📬 이메일 입력창
                   _buildCustomTextField(
                     hintText: 'Email Address',
                     icon: Icons.mail_outline_rounded,
                   ),
                   const SizedBox(height: 15),
-
-                  // 🔒 비밀번호 입력창 (노란줄 완전 제거 + 닫힌 자물쇠로 변경!)
                   _buildCustomTextField(
                     hintText: 'Password',
                     icon: Icons.lock_outline,
                     isPassword: true,
                   ),
                   const SizedBox(height: 45),
-
-                  // 🟡 CREATE ACCOUNT (회원가입) 버튼
                   _buildGradientButton(
                     title: 'CREATE ACCOUNT (회원가입)',
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => SignupScreen()),
+                        MaterialPageRoute(builder: (context) => const SignupScreen()),
                       );
                     },
                   ),
                   const SizedBox(height: 15),
-
-                  // ⚪ SIGN IN (로그인) 테두리 버튼
                   _buildOutlineButton(
                     title: 'SIGN IN (로그인)',
                     onPressed: () {
-                      // 1. 🔥 [연결 완성] 대시보드 화면으로 먼저 완벽하게 이동 (백 버튼 유발 요인 완전 박멸)
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (dashboardContext) {
-                            // 2. 🎯 화면이 완전히 렌더링된 뒤 터치 방해를 전혀 주지 않는 비배리어(Non-barrier) 오버레이 호출
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               _showOverlayWelcomeBar(dashboardContext);
                             });
@@ -257,7 +374,6 @@ class LoginSignupScreen extends StatelessWidget {
     );
   }
 
-// ➔ [입력창 도구 코드 수정] _buildCustomTextField 함수 안을 보세요!
   Widget _buildCustomTextField({
     required String hintText,
     required IconData icon,
@@ -273,14 +389,14 @@ class LoginSignupScreen extends StatelessWidget {
         obscureText: isPassword,
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.bold, // 👈 사용자가 타이핑하는 글자 진하게!
+          fontWeight: FontWeight.bold,
         ),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: const Color(0xFFFCD34D)),
           hintText: hintText,
           hintStyle: const TextStyle(
-            color: Colors.white60,     // 👈 글씨가 더 잘 보이게 색상 명도 업!
-            fontWeight: FontWeight.bold, // 👈 'Email Address', 'Password' 안내 문구 진하게!
+            color: Colors.white60,
+            fontWeight: FontWeight.bold,
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -289,7 +405,6 @@ class LoginSignupScreen extends StatelessWidget {
     );
   }
 
-  // 🛠️ 그라데이션 버튼을 만드는 전용 도구
   Widget _buildGradientButton({required String title, required VoidCallback onPressed}) {
     return Container(
       width: double.infinity,
@@ -315,7 +430,6 @@ class LoginSignupScreen extends StatelessWidget {
     );
   }
 
-  // 🛠️ 테두리 버튼을 만드는 전용 도구
   Widget _buildOutlineButton({required String title, required VoidCallback onPressed}) {
     return SizedBox(
       width: double.infinity,
@@ -335,7 +449,6 @@ class LoginSignupScreen extends StatelessWidget {
   }
 }
 
-// 👑 30년 베테랑의 60프레임 무결점 오버레이 전용 슬라이딩 애니메이션 내부 조립 위젯
 class _SmoothWelcomeOverlayWidget extends StatefulWidget {
   final VoidCallback onRemove;
   const _SmoothWelcomeOverlayWidget({required this.onRemove});
@@ -357,14 +470,12 @@ class _SmoothWelcomeOverlayWidgetState extends State<_SmoothWelcomeOverlayWidget
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1), // 화면 외부 바닥 대기
-      end: const Offset(0, 0),   // 화면 내부 정위치 안착
+      begin: const Offset(0, 1),
+      end: const Offset(0, 0),
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.fastOutSlowIn));
 
-    // 실행 즉시 부드럽게 스~윽 업
     _animController.forward();
 
-    // 2초간 유지 후 부드럽게 스~윽 다운되며 메모리에서 완전 자가 해제 처리
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         _animController.reverse().then((_) {
@@ -398,8 +509,8 @@ class _SmoothWelcomeOverlayWidgetState extends State<_SmoothWelcomeOverlayWidget
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 20),
                   decoration: const BoxDecoration(
-                    color: Color(0xFF0D1527), // 프리미엄 다크 네이비 단색 매칭
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)), // 네 모서리 부드러운 라운드
+                    color: Color(0xFF0D1527),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -407,7 +518,7 @@ class _SmoothWelcomeOverlayWidgetState extends State<_SmoothWelcomeOverlayWidget
                       'Welcomto to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.notoSansKr(
-                        color: Colors.white, // 흰색 글자 단일 동기화
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 13.5,
                         height: 1.4,

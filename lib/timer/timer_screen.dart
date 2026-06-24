@@ -50,6 +50,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
   late String _currentUniversity;
   String _currentLanguageCode = 'ko';
+  bool _currentIsVip = false; // 👈 🎯 영구 동기화용 실시간 VIP 상태 필터 스펙 추가
 
   // 👑 하단 자식 애니메이션 엔진을 타이머 화면에서 직접 흔들어 깨우기 위한 고유 Key 부품 신설
   final GlobalKey<_DkeBigStarTargetAnimationModuleState> _animKey = GlobalKey<_DkeBigStarTargetAnimationModuleState>();
@@ -59,16 +60,41 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     super.initState();
     _totalSeconds = widget.selectedDurationMinutes;
 
+    // 초기값 셋팅
     _currentUniversity = widget.targetUniversity;
-    _initializeAndSyncUniversity();
+    _currentIsVip = widget.isVipMember;
 
     tz.initializeTimeZones();
     _timerAudioPlayer = AudioPlayer();
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // ⚡ [0초 정각 초강력 동기화 트리거]: 화면이 픽셀로 안착하자마자 기기 저장 데이터를 강제 복원
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _forceSyncSavedDataOnStartup();
       _checkResumeInterceptionData();
     });
+  }
+
+  // 👑 🎯 요구사항 완전 해결 장치: 앱을 완전히 껐다 켜도 마이페이지 데이터 백업 세션을 100% 즉시 복원하는 유일한 마스터 스케줄러
+  Future<void> _forceSyncSavedDataOnStartup() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? savedUniv = prefs.getString('saved_target_university');
+      final String savedLang = prefs.getString('saved_language_code') ?? 'ko';
+      final bool savedVipStatus = prefs.getBool('saved_vip_status') ?? widget.isVipMember;
+
+      if (!mounted) return;
+
+      setState(() {
+        if (savedUniv != null && savedUniv.isNotEmpty) {
+          _currentUniversity = savedUniv;
+        }
+        _currentLanguageCode = savedLang;
+        _currentIsVip = savedVipStatus; // 👈 껐다 켜도 마이페이지 VIP 인증 내역을 완벽하게 계승
+      });
+    } catch (e) {
+      debugPrint("앱 기동 즉시 저장소 강제 복원 에러: $e");
+    }
   }
 
   Future<void> _checkResumeInterceptionData() async {
@@ -96,7 +122,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
             ),
             actionsAlignment: MainAxisAlignment.spaceEvenly,
             actions: [
-              ElevatedButton(
+              Navigator.canPop(context) ? ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                 onPressed: () async {
                   await prefs.remove('dke_temp_subject');
@@ -104,14 +130,13 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                   Navigator.of(context).pop();
                 },
                 child: Text('NO (아니오)', style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
+              ) : const SizedBox.shrink(),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                 onPressed: () {
                   setState(() {
                     _elapsedSeconds = tempSeconds;
                     progressPercent = _elapsedSeconds / _totalSeconds;
-                    // 이어서 시작할 때도 경과 시간에 맞춰 사이클 타임라인 즉시 보정
                     _animationCycleSeconds = _elapsedSeconds % 630;
                     if (_animationCycleSeconds < 30) {
                       _showVipOverlay = true;
@@ -136,40 +161,19 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _loadSavedUniversity();
   }
 
-  Future<void> _initializeAndSyncUniversity() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? savedUniv = prefs.getString('saved_target_university');
-      final String savedLang = prefs.getString('saved_language_code') ?? 'ko';
-
-      if (savedUniv == null || savedUniv.isEmpty) {
-        await prefs.setString('saved_target_university', widget.targetUniversity);
-        setState(() {
-          _currentUniversity = widget.targetUniversity;
-          _currentLanguageCode = savedLang;
-        });
-      } else {
-        setState(() {
-          _currentUniversity = savedUniv;
-          _currentLanguageCode = savedLang;
-        });
-      }
-    } catch (e) {
-      debugPrint("초기 대학명 동기화 에러: $e");
-    }
-  }
-
   Future<void> _loadSavedUniversity() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? savedUniv = prefs.getString('saved_target_university');
       final String savedLang = prefs.getString('saved_language_code') ?? 'ko';
+      final bool savedVipStatus = prefs.getBool('saved_vip_status') ?? widget.isVipMember;
 
       if (savedUniv != null && savedUniv.isNotEmpty) {
-        if (_currentUniversity != savedUniv || _currentLanguageCode != savedLang) {
+        if (_currentUniversity != savedUniv || _currentLanguageCode != savedLang || _currentIsVip != savedVipStatus) {
           setState(() {
             _currentUniversity = savedUniv;
             _currentLanguageCode = savedLang;
+            _currentIsVip = savedVipStatus;
           });
         }
       }
@@ -186,29 +190,24 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     super.dispose();
   }
 
-  // 👑 🎯 핵심 지시 반영: 30초 연출 후 정확히 10분(600초) 정지 무한 루프 제어 엔진 구축
-  // 총 1주기 사이클 = 30초(재생) + 600초(10분 정지) = 총 630초 리듬!
+  // 👑 🎯 10분 주기 무한 루프 제어 엔진 교차 검증 완료판
   void _runVipStarStrictRotationEngine() {
-    if (!widget.isVipMember) return;
+    if (!_currentIsVip) return; // 👈 실시간 영구 연동 변수로 전면 전환 보호막 장착
 
     _animationCycleSeconds++;
 
     if (_animationCycleSeconds == 1) {
-      // 0초에서 1초가 되는 순간 30초 애니메이션 오버레이 레이어를 스~윽 전면 활성화
       setState(() {
         _showVipOverlay = true;
       });
-      // 하단 자식 컴포넌트의 타임라인 컨트롤러 시동
       _animKey.currentState?.resetAndPlay();
     }
     else if (_animationCycleSeconds == 30) {
-      // 정확히 30초 연출 세트(`3,3,3` + `7,7,7`)가 끝나는 순간 화면에서 격리 은닉
       setState(() {
         _showVipOverlay = false;
       });
     }
     else if (_animationCycleSeconds >= 630) {
-      // 30초 재생 + 600초(10분) 정지 대기가 완전히 끝난 직후 사이클 리셋 ➔ 다시 무한 재시작!
       _animationCycleSeconds = 0;
     }
   }
@@ -219,7 +218,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         _timer?.cancel();
         setState(() => _isRunning = false);
         await _timerAudioPlayer.pause();
-        _animKey.currentState?.pauseEngine(); // 애니메이션 일시 정지 동기화
+        _animKey.currentState?.pauseEngine();
         _showPauseChoiceDialog();
       } else {
         setState(() => _isRunning = true);
@@ -227,8 +226,8 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
         }
 
-        if (widget.isVipMember) {
-          _animKey.currentState?.resumeEngine(); // 애니메이션 다시 재생 동기화
+        if (_currentIsVip) {
+          _animKey.currentState?.resumeEngine();
           if (_elapsedSeconds == 0) {
             _animationCycleSeconds = 0;
             setState(() {
@@ -242,7 +241,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
             if (_elapsedSeconds < _totalSeconds) {
               _elapsedSeconds++;
               progressPercent = _elapsedSeconds / _totalSeconds;
-              _runVipStarStrictRotationEngine(); // 10분 루프 엔진 초단위 동기화 감시
+              _runVipStarStrictRotationEngine();
             } else {
               _timer?.cancel();
               _isRunning = false;
@@ -899,14 +898,12 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                   ],
                 ),
               ),
-              // 👑 🎯 [지시 반영]: 10분 주기 루프 제어 엔진과 실시간 타임라인 오버레이 융합 안착부
-              // 💡 여기서부터 드래그해서 파일 맨 끝까지 싹 바꾸시면 완벽하게 성공합니다!
-              if (widget.isVipMember && _showVipOverlay)
+              if (_currentIsVip && _showVipOverlay) // 👈 🎯 수정한 부분: widget.isVipMember 대신 실시간 강제 복원된 _currentIsVip 사용!
                 Positioned.fill(
                   child: Center(
                     child: SizedBox(
                       width: 340,
-                      height: 300, // 👈 본체 상자 높이를 시원하게 열어서 내부 찌그러짐 원천 차단!
+                      height: 300,
                       child: DkeBigStarTargetAnimationModule(
                         key: _animKey,
                         targetUniversityName: _currentUniversity,
@@ -947,10 +944,6 @@ class StarClipper extends CustomClipper<Path> {
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
 
-// ============================================================================
-// 👑 [대형 별 중앙 애니메이션 연동 설계 연산 캡슐 - 유령버튼 소독 및 1mm 초정밀 피팅본]
-// ============================================================================
-// 💡 파트너님, 여기를 파일 맨 끝까지 통째로 덮어씌우시면 이미지 조절판이 장착됩니다!
 class DkeBigStarTargetAnimationModule extends StatefulWidget {
   final String targetUniversityName;
   final String currentLanguageCode;
@@ -1071,10 +1064,8 @@ class _DkeBigStarTargetAnimationModuleState extends State<DkeBigStarTargetAnimat
                 child: Stack(
                   alignment: Alignment.topCenter,
                   children: [
-
-                    // 👑 🎯 [왕관 이미지 위치 조절판 장착 완료!]
                     Positioned(
-                      top: 30, // 👈 🎯 파트너님! 여기 숫자를 20, 25, 30으로 키우면 왕관만 아래로 슥 내려옵니다!
+                      top: 30,
                       child: Image.asset(
                         'assets/images/crown_wings.png',
                         width: 150,
@@ -1083,9 +1074,8 @@ class _DkeBigStarTargetAnimationModuleState extends State<DkeBigStarTargetAnimat
                         errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                       ),
                     ),
-
                     Positioned(
-                      top: 70, // 👈 대학명은 완벽한 중앙 밸런스를 위해 85 자리에 고정해 두었습니다!
+                      top: 70,
                       left: 0,
                       right: 0,
                       child: Text(

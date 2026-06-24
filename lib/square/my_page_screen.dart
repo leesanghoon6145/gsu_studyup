@@ -17,14 +17,15 @@ class MyPageScreen extends StatefulWidget {
 }
 
 class _MyPageScreenState extends State<MyPageScreen> {
+  // 🌐 [명칭: 글로벌 10개국 다국어 사전 탑재] - 요구사항 5번: 10개국 언어 지원 스펙 완벽 확장
   final List<Map<String, String>> _languages = const [
     {
       'code': 'en',
       'name': 'English',
       'flag': '🇺🇸',
       'title': 'My Page',
-      'target': 'Target School',
-      'hint': 'Enter school name',
+      'target': 'Target', // 👈 요구사항 1번: 'School' 문구 완전 삭제
+      'hint': 'Enter target name',
       'save': 'Save Settings',
       'vip': 'VIP Premium Member',
       'normal': 'Regular Member',
@@ -34,11 +35,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'passwordHint': 'Enter new password',
       'language': 'Global Language',
       'vipLocked': 'Locked for VIP members only',
-      'vipButton': 'Apply VIP and set target school',
+      'vipButton': 'Apply VIP and set target',
       'vipDone': 'VIP Premium Member Activated',
       'disabledHint': 'Available after VIP approval',
       'saved': 'My Page settings have been saved.',
-      'snackVip': 'VIP membership approved. You can now set your target school.',
+      'snackVip': 'VIP membership approved. You can now set your target.',
       'defaultSchool': 'Seoul National University',
       'targetWord': 'Target',
     },
@@ -47,8 +48,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'name': '한국어',
       'flag': '🇰🇷',
       'title': '마이 페이지',
-      'target': '목표 학교',
-      'hint': '학교명을 입력하세요',
+      'target': '목표', // 👈 요구사항 1번: '학교' 문구 완전 삭제 완료!
+      'hint': '목표명을 입력하세요',
       'save': '설정 저장',
       'vip': 'VIP 프리미엄 회원',
       'normal': '일반 회원',
@@ -58,11 +59,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'passwordHint': '새 비밀번호를 입력하세요',
       'language': '다국어 선택',
       'vipLocked': 'VIP 결제 전용 잠김',
-      'vipButton': '회원결제(VIP) 신청하고 목표학교 설정하기',
+      'vipButton': '회원결제(VIP) 신청하고 목표 설정하기',
       'vipDone': 'VIP 프리미엄 회원 활성화 완료',
       'disabledHint': '아래 [회원결제(VIP)] 승인 후 활성화됩니다.',
       'saved': '마이페이지 설정이 저장되었습니다.',
-      'snackVip': 'VIP 회원 결제가 승인되었습니다! 이제 목표 학교를 자유롭게 직접 설정할 수 있습니다.',
+      'snackVip': 'VIP 회원 결제가 승인되었습니다! 이제 목표를 자유롭게 직접 설정할 수 있습니다.',
       'defaultSchool': '서울대학교',
       'targetWord': '목표',
     },
@@ -71,8 +72,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'name': '日本語',
       'flag': '🇯🇵',
       'title': 'マイページ',
-      'target': '目標学校',
-      'hint': '学校名を入力してください',
+      'target': '目標', // 👈 요구사항 1번: '学校' 문구 완전 삭제
+      'hint': '目標名を入力してください',
       'save': '設定保存',
       'vip': 'VIPプレミアム会員',
       'normal': '一般会員',
@@ -82,11 +83,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'passwordHint': '新しいパスワードを入力してください',
       'language': '言語選択',
       'vipLocked': 'VIP会員専用ロック',
-      'vipButton': 'VIPを申請して目標学校を設定',
+      'vipButton': 'VIPを申請して目標を設定',
       'vipDone': 'VIPプレミアム会員有効化完了',
       'disabledHint': 'VIP承認後に有効になります。',
       'saved': 'マイページ設定が保存されました。',
-      'snackVip': 'VIP会員登録が承認されました。目標学校を設定できます。',
+      'snackVip': 'VIP会員登録が承認されました。目標を設定できます。',
       'defaultSchool': 'ソウル大学校',
       'targetWord': '目標',
     },
@@ -95,8 +96,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'name': '简体中文',
       'flag': '🇨🇳',
       'title': '个人中心',
-      'target': '目标学校',
-      'hint': '请输入学校名称',
+      'target': '目标', // 👈 요구사항 1번: '学校' 문구 완전 삭제
+      'hint': '请输入目标名称',
       'save': '保存设置',
       'vip': 'VIP高级会员',
       'normal': '普通会员',
@@ -106,13 +107,157 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'passwordHint': '请输入新密码',
       'language': '多语言选择',
       'vipLocked': '仅限VIP会员',
-      'vipButton': '申请VIP并设置目标学校',
+      'vipButton': '申请VIP并设置目标',
       'vipDone': 'VIP高级会员已激活',
       'disabledHint': 'VIP批准后可启用',
       'saved': '个人中心设置已保存。',
-      'snackVip': 'VIP会员已批准，现在可以自由设置目标学校。',
+      'snackVip': 'VIP会员已批准，现在可以自由设置目标。',
       'defaultSchool': '首尔大学',
       'targetWord': '目标',
+    },
+    {
+      'code': 'fr',
+      'name': 'Français',
+      'flag': '🇫🇷',
+      'title': 'Ma Page',
+      'target': 'Cible',
+      'hint': 'Entrez le nom de la cible',
+      'save': 'Enregistrer',
+      'vip': 'Membre Premium VIP',
+      'normal': 'Membre Régulier',
+      'personal': 'Modifier les infos',
+      'email': 'Adresse e-mail',
+      'password': 'Changer le mot de passe',
+      'passwordHint': 'Entrez le nouveau mot de passe',
+      'language': 'Choix de la langue',
+      'vipLocked': 'Verrouillé pour les membres VIP',
+      'vipButton': 'Demander un accès VIP et définir la cible',
+      'vipDone': 'Membre Premium VIP Activé',
+      'disabledHint': 'Disponible après approbation VIP',
+      'saved': 'Les paramètres ont été enregistrés.',
+      'snackVip': 'L\'accès VIP a été approuvé. Vous pouvez définir votre cible.',
+      'defaultSchool': 'Université Nationale de Séoul',
+      'targetWord': 'Cible',
+    },
+    {
+      'code': 'de',
+      'name': 'Deutsch',
+      'flag': '🇩🇪',
+      'title': 'Meine Seite',
+      'target': 'Ziel',
+      'hint': 'Zielnamen eingeben',
+      'save': 'Einstellungen speichern',
+      'vip': 'VIP-Premium-Mitglied',
+      'normal': 'Reguläres Mitglied',
+      'personal': 'Info bearbeiten',
+      'email': 'E-Mail-Adresse',
+      'password': 'Kennwort ändern',
+      'passwordHint': 'Neues Kennwort eingeben',
+      'language': 'Sprachauswahl',
+      'vipLocked': 'Nur für VIP-Mitglieder gesperrt',
+      'vipButton': 'VIP beantragen und Ziel festlegen',
+      'vipDone': 'VIP-Premium-Mitglied Aktiviert',
+      'disabledHint': 'Verfügbar nach VIP-Genehmigung',
+      'saved': 'Einstellungen wurden gespeichert.',
+      'snackVip': 'VIP-Mitgliedschaft genehmigt. Sie können nun Ihr Ziel festlegen.',
+      'defaultSchool': 'Nationaluniversität Seoul',
+      'targetWord': 'Ziel',
+    },
+    {
+      'code': 'ru',
+      'name': 'Русский',
+      'flag': '🇷🇺',
+      'title': 'Моя страница',
+      'target': 'Цель',
+      'hint': 'Введите название цели',
+      'save': 'Сохранить настройки',
+      'vip': 'VIP Премиум Участник',
+      'normal': 'Обычный Участник',
+      'personal': 'Изменить инфо',
+      'email': 'E-mail адрес',
+      'password': 'Сменить пароль',
+      'passwordHint': 'Введите новый пароль',
+      'language': 'Выбор языка',
+      'vipLocked': 'Заблокировано для VIP',
+      'vipButton': 'Подать заявку на VIP и установить цель',
+      'vipDone': 'VIP Премиум Участник Активирован',
+      'disabledHint': 'Доступно после одобрения VIP',
+      'saved': 'Настройки сохранены.',
+      'snackVip': 'VIP-членство одобрено. Теперь вы можете установить цель.',
+      'defaultSchool': 'Сеульский национальный университет',
+      'targetWord': 'Цель',
+    },
+    {
+      'code': 'ar',
+      'name': 'العربية',
+      'flag': '🇸🇦',
+      'title': 'صفحتي',
+      'target': 'الهدف',
+      'hint': 'أدخل اسم الهدف',
+      'save': 'حفظ الإعدادات',
+      'vip': 'عضو VIP ممتاز',
+      'normal': 'عضو عادي',
+      'personal': 'تعديل البيانات',
+      'email': 'البريد الإلكتروني',
+      'password': 'تغيير كلمة المرور',
+      'passwordHint': 'أدخل كلمة المرور الجديدة',
+      'language': 'اختيار اللغة',
+      'vipLocked': 'مغلق لأعضاء VIP فقط',
+      'vipButton': 'طلب VIP وتحديد الهدف',
+      'vipDone': 'تم تفعيل عضوية VIP الممتازة',
+      'disabledHint': 'متاح بعد الموافقة على VIP',
+      'saved': 'تم حفظ الإعدادات.',
+      'snackVip': 'تمت الموافقة على عضوية VIP. يمكنك الآن تحديد هدفك.',
+      'defaultSchool': 'جامعة سيول الوطنية',
+      'targetWord': 'الهدف',
+    },
+    {
+      'code': 'hi',
+      'name': 'हिन्दी',
+      'flag': '🇮🇳',
+      'title': 'मेरा पृष्ठ',
+      'target': 'लक्ष्य',
+      'hint': 'लक्ष्य का नाम दर्ज करें',
+      'save': 'सेटिंग्स सहेजें',
+      'vip': 'वीआईपी प्रीमियम सदस्य',
+      'normal': 'सामान्य सदस्य',
+      'personal': 'जानकारी बदलें',
+      'email': 'ईमेल पता',
+      'password': 'पासवर्ड बदलें',
+      'passwordHint': 'नया पासवर्ड दर्ज करें',
+      'language': 'भाषा चयन',
+      'vipLocked': 'केवल वीआईपी सदस्यों के लिए लॉक',
+      'vipButton': 'वीआईपी के लिए आवेदन करें और लक्ष्य सेट करें',
+      'vipDone': 'वीआईपी प्रीमियम सदस्य सक्रिय',
+      'disabledHint': 'वीआईपी अनुमोदन के बाद उपलब्ध',
+      'saved': 'सेटिंग्स सहेज ली गई हैं।',
+      'snackVip': 'वीआईपी सदस्यता स्वीकृत। अब आप अपना लक्ष्य सेट कर सकते हैं।',
+      'defaultSchool': 'सियोल नेशनल यूनिवर्सिटी',
+      'targetWord': 'लक्ष्य',
+    },
+    {
+      'code': 'vi',
+      'name': 'Tiếng Việt',
+      'flag': '🇻🇳',
+      'title': 'Trang của tôi',
+      'target': 'Mục tiêu',
+      'hint': 'Nhập tên mục tiêu',
+      'save': 'Lưu cài đặt',
+      'vip': 'Thành viên Premium VIP',
+      'normal': 'Thành viên thường',
+      'personal': 'Sửa thông tin',
+      'email': 'Địa chỉ Email',
+      'password': 'Đổi mật khẩu',
+      'passwordHint': 'Nhập mật khẩu mới',
+      'language': 'Chọn ngôn ngữ',
+      'vipLocked': 'Chỉ dành cho thành viên VIP',
+      'vipButton': 'Đăng ký VIP và đặt mục tiêu',
+      'vipDone': 'Đã kích hoạt thành viên Premium VIP',
+      'disabledHint': 'Sẽ khả dụng sau khi phê duyệt VIP',
+      'saved': 'Cài đặt đã được lưu thành công.',
+      'snackVip': 'Đã phê duyệt thành viên VIP. Bạn có thể tự do đặt mục tiêu.',
+      'defaultSchool': 'Đại học Quốc gia Seoul',
+      'targetWord': 'Mục tiêu',
     }
   ];
 
@@ -154,7 +299,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
     setState(() {
       _uniController.text = savedUni;
       _currentLangIndex = langIdx;
-      _isVip = savedVipStatus; // 👈 나갔다 와도 완벽히 기억해내는 방어선!
+      _isVip = savedVipStatus;
     });
   }
 
@@ -171,8 +316,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
     await prefs.setString('saved_target_university', finalUni);
     await prefs.setString('saved_language_code', currentLangCode);
-    await prefs.setBool('saved_vip_status', _isVip); // 👈 VIP 영구 유지 패킷 실시간 쓰기!
+    await prefs.setBool('saved_vip_status', _isVip);
 
+    // 👑 요구사항 2번 가이드 장치: 실시간 메모리 데이터 세션 동기화 호출단 연동 유지
     widget.onSave(_isVip, finalUni);
 
     if (!mounted) return;
@@ -254,9 +400,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
           title: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 🖼️ [명칭: 마이페이지 최상단 GSU 로고 컴포넌트]
+              // 🎯 요구사항 4번 반영: 가로 크기를 기존 255에서 친구학습방 규격인 165로, 세로를 32로 축소 조정!
               SizedBox(
-                width: 255,
-                height: 48,
+                width: 165, // 👈 [역할: 로고 가로 크기 축소 동기화 완료]
+                height: 32, // 👈 [역할: 로고 세로 크기 축소 동기화 완료]
                 child: Image.asset(
                   'assets/images/gsu_logo.png',
                   fit: BoxFit.contain,
@@ -264,13 +412,14 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 ),
               ),
               const SizedBox(height: 4),
+// 🔤 [명칭: 마이페이지 상단 앱바 타이틀 자판]
               Text(
-                'MY PAGE DKE STUDYUP',
-                style: _localizedTextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
+                'MY PAGE GKE STUDYUP',
+                style: GoogleFonts.cinzel( // 👈 Cinzel 엔진 조준
+                  fontSize: 23,            // 파트너님 지정 크기 23
+                  fontWeight: FontWeight.bold, // 👈 진하게(Bold) 기본 내장형 매칭
                   color: _brandGolden,
-                  letterSpacing: 1.5,
+                  letterSpacing: 1.2,
                 ),
               ),
             ],
@@ -335,7 +484,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      _lang['target'] ?? 'Target School',
+                      _lang['target'] ?? 'Target',
                       style: _localizedTextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -379,7 +528,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   fontWeight: FontWeight.bold,
                 ),
                 decoration: InputDecoration(
-                  hintText: _isVip ? (_lang['hint'] ?? '학교명을 입력하세요') : (_lang['disabledHint'] ?? 'VIP 승인 후 활성화됩니다.'),
+                  hintText: _isVip ? (_lang['hint'] ?? '목표명을 입력하세요') : (_lang['disabledHint'] ?? 'VIP 승인 후 활성화됩니다.'),
                   hintStyle: TextStyle(color: _isVip ? Colors.white38 : _brandGolden.withOpacity(0.5)),
                   filled: true,
                   fillColor: _isVip ? _containerBg : Colors.white.withOpacity(0.05),
@@ -399,7 +548,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 💳 회원결제(VIP) 독립 연동 버튼 스펙 (상태에 따른 실시간 복원 처리 완료)
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -413,7 +561,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                       ? null
                       : () async {
                     final localPrefs = await SharedPreferences.getInstance();
-                    // 결제 성공 시 기기 캐시에 영구 플래그 보전 처리
+                    // 👑 요구사항 2번 구현 핵심 장치: 결제 승인과 동시에 로컬 캐시에 영구 플래그 보전 유도
                     await localPrefs.setBool('saved_vip_status', true);
 
                     setState(() {
@@ -453,9 +601,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
               ),
               const SizedBox(height: 32),
 
-              // 🌐 파트너님 명령 엄수: 다국어 선택 그리드 섹션은 순정 원형 100% 보전
               _buildSectionTitle('GLOBAL LANGUAGE (${_lang['language'] ?? '다국어 선택'})'),
               const SizedBox(height: 12),
+              // 🌐 다국어 선택 그리드 뷰 섹션
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -465,7 +613,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                 ),
-                itemCount: _languages.length,
+                itemCount: _languages.length, // 👈 확장된 10개국 언어 팩 리스트 길이 연동
                 itemBuilder: (context, index) {
                   final isSelected = _currentLangIndex == index;
                   final item = _languages[index];

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'parent/parent_main_dashboard_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -9,7 +10,6 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  // 1. 상태 관리 변수 (기존 로직 완벽 유지)
   bool isStudent = true;
   bool isGeneral = false;
   bool isUnder14 = false;
@@ -17,7 +17,6 @@ class _SignupScreenState extends State<SignupScreen> {
   bool isEmailSent = false;
   bool isPasswordVisible = false;
 
-  // 입력 컨트롤러 (기존 로직 완벽 유지)
   final TextEditingController _nationalityController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -27,47 +26,63 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _schoolController = TextEditingController();
   final TextEditingController _gradeController = TextEditingController();
-
-  // 클래스 코드 및 학부모 전용 컨트롤러 (기존 로직 완벽 유지)
   final TextEditingController _classCodeController = TextEditingController();
   final TextEditingController _childEmailController = TextEditingController();
   final TextEditingController _relationshipController = TextEditingController();
 
+  // ✅ 학부모 대시보드 진입 함수 (build 밖으로 분리)
+  void _goToParentDashboard() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ParentMainDashboardScreen(
+          parentEmail: _emailController.text.isNotEmpty
+              ? _emailController.text
+              : "parent@test.com",
+          childName: _nameController.text.isNotEmpty
+              ? _nameController.text
+              : "홍길동",
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    const Color brandGolden = Color(0xFFE5C158); // GKE STUDYUP 글로벌 브랜드 지정 컬러
+    const Color brandGolden = Color(0xFFE5C158);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030712), // 진한 밤하늘 배경
+      backgroundColor: const Color(0xFF030712),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true, // ✨ 타이틀이 항상 완벽하게 중앙에 오도록 밸런스 조정
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.center, // ✨ 영문-한글 정렬 중앙 집중
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'SIGNUP',
-              textAlign: TextAlign.center, // ✨ 텍스트 자체 중앙 정렬
+              textAlign: TextAlign.center,
               style: GoogleFonts.gowunBatang(
-                color: brandGolden, // 고급스러운 황금색 유지
+                color: brandGolden,
                 fontWeight: FontWeight.bold,
-                fontSize: 23, // 규칙 8: 타이틀 글자크기 23 고정
+                fontSize: 23,
                 letterSpacing: 1.0,
               ),
             ),
+            const SizedBox(height: 15),
             Text(
               '(회원가입)',
-              textAlign: TextAlign.center, // ✨ 텍스트 자체 중앙 정렬
+              textAlign: TextAlign.center,
               style: GoogleFonts.notoSansKr(
-                color: brandGolden, // 고급스러운 황금색 유지
+                color: brandGolden,
                 fontWeight: FontWeight.bold,
-                fontSize: 16, // 규칙 10: 영문 한줄 다음줄 한글배치
+                fontSize: 16,
               ),
             ),
           ],
@@ -78,21 +93,24 @@ class _SignupScreenState extends State<SignupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 👑 지시사항 반영: 로그인/회원가입 진입 시 노출되는 프리미엄 사각형 네모 박스 환영 패널 장착 완료
+            // 환영 패널
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1527), // 홈 대시보드와 완벽하게 일치하는 사각형 바탕색
+                color: const Color(0xFF0D1527),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: brandGolden.withOpacity(0.4), width: 1.5), // 정교한 황금색 사각형 테두리선
+                border: Border.all(
+                  color: brandGolden.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
               ),
               child: Text(
-                "Welcomto to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )",
+                "Welcome to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.notoSansKr(
-                  color: Colors.white, // 흰색 글씨로 매칭 완료
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 13.5,
                   height: 1.4,
@@ -100,7 +118,7 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
 
-            // 2. 학생/학부모/일반 통합 토글 버튼 (3단 토글 유지)
+            // 3단 토글 버튼
             Container(
               height: 55,
               decoration: BoxDecoration(
@@ -110,43 +128,47 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Row(
                 children: [
                   _buildToggleButton(
-                      title: 'STUDENT\n(학생)',
-                      active: isStudent && !isGeneral,
-                      onTap: () => setState(() {
-                        isStudent = true;
-                        isGeneral = false;
-                      })
+                    title: 'STUDENT\n(학생)',
+                    active: isStudent && !isGeneral,
+                    onTap: () => setState(() {
+                      isStudent = true;
+                      isGeneral = false;
+                    }),
                   ),
                   _buildToggleButton(
-                      title: 'PARENT\n(학부모)',
-                      active: !isStudent && !isGeneral,
-                      onTap: () => setState(() {
-                        isStudent = false;
-                        isGeneral = false;
-                      })
+                    title: 'PARENT\n(학부모)',
+                    active: !isStudent && !isGeneral,
+                    onTap: () => setState(() {
+                      isStudent = false;
+                      isGeneral = false;
+                    }),
                   ),
                   _buildToggleButton(
-                      title: 'GENERAL\n(일반)',
-                      active: !isStudent && isGeneral,
-                      onTap: () => setState(() {
-                        isStudent = false;
-                        isGeneral = true;
-                      })
+                    title: 'GENERAL\n(일반)',
+                    active: !isStudent && isGeneral,
+                    onTap: () => setState(() {
+                      isStudent = false;
+                      isGeneral = true;
+                    }),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 30),
 
-            // 3. 무조건 보여주는 공통 정보
+            // 공통 입력 필드
             _buildInputField(hint: 'Nationality (국적)', icon: Icons.public, controller: _nationalityController),
             _buildInputField(hint: 'Full Name (본인 이름)', icon: Icons.person, controller: _nameController),
 
-            // 이메일 및 인증 레이아웃
+            // 이메일 + 인증 버튼
             Row(
               children: [
                 Expanded(
-                  child: _buildInputField(hint: 'Email Address (이메일 주소)', icon: Icons.email, controller: _emailController),
+                  child: _buildInputField(
+                    hint: 'Email Address (이메일 주소)',
+                    icon: Icons.email,
+                    controller: _emailController,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Container(
@@ -154,9 +176,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   height: 55,
                   child: ElevatedButton(
                     onPressed: () {
-                      setState(() {
-                        isEmailSent = true;
-                      });
+                      setState(() => isEmailSent = true);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -173,7 +193,10 @@ class _SignupScreenState extends State<SignupScreen> {
                     child: Text(
                       'AUTH\n(인증)',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold),
+                      style: GoogleFonts.gowunBatang(
+                        color: const Color(0xFF030712),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -181,12 +204,15 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
 
             if (isEmailSent) ...[
-              _buildInputField(hint: 'Verification Code (인증번호 6자리 입력)', icon: Icons.lock_clock, controller: _emailAuthOpacityController),
+              _buildInputField(
+                hint: 'Verification Code (인증번호 6자리 입력)',
+                icon: Icons.lock_clock,
+                controller: _emailAuthOpacityController,
+              ),
             ],
 
             _buildInputField(hint: 'Phone Number (전화번호)', icon: Icons.phone, controller: _phoneController),
 
-            // 눈동자 토글 기능이 들어간 비밀번호 입력창
             _buildInputField(
               hint: 'Password (비밀번호)',
               icon: Icons.lock,
@@ -210,14 +236,14 @@ class _SignupScreenState extends State<SignupScreen> {
               hideText: !isPasswordVisible,
             ),
 
-            // 4-1. STUDENT (학생) 전용 추가 입력 필드
+            // 학생 전용 필드
             if (isStudent && !isGeneral) ...[
               _buildInputField(hint: 'School Name (학교명)', icon: Icons.school, controller: _schoolController),
               _buildInputField(hint: 'Grade (학년)', icon: Icons.grade, controller: _gradeController),
               _buildInputField(hint: 'Class Code (클래스 코드 - 선택입력)', icon: Icons.qr_code, controller: _classCodeController),
             ],
 
-            // 4-2. PARENT (학부모) 전용 추가 입력 필드
+            // 학부모 전용 필드
             if (!isStudent && !isGeneral) ...[
               _buildInputField(hint: "Child's Email (연동할 자녀 이메일 주소)", icon: Icons.child_care, controller: _childEmailController),
               _buildInputField(hint: 'Relationship to Child (자녀와의 관계 - 예: 부/모)', icon: Icons.family_restroom, controller: _relationshipController),
@@ -225,7 +251,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
             const SizedBox(height: 10),
 
-            // 5. 14세 미만 보호 로직 (학생일 때만 작동)
+            // 14세 미만 체크박스
             if (isStudent && !isGeneral) ...[
               Row(
                 children: [
@@ -253,15 +279,14 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ],
               ),
-
               if (isUnder14) ...[
                 Container(
                   margin: const EdgeInsets.only(top: 10, bottom: 10),
                   padding: const EdgeInsets.all(15),
                   decoration: BoxDecoration(
-                    color: brandGolden.withOpacity(0.1),
+                    color: brandGolden.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: brandGolden.withOpacity(0.3)),
+                    border: Border.all(color: brandGolden.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,33 +339,75 @@ class _SignupScreenState extends State<SignupScreen> {
 
             const SizedBox(height: 30),
 
-            // 6. 다음 단계 버튼
-            ButtonTheme(
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const TermsAgreementScreen()),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: brandGolden,
-                  minimumSize: const Size(double.infinity, 55),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'NEXT STEP',
-                      style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 18),
+            // NEXT STEP 버튼
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TermsAgreementScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: brandGolden,
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'NEXT STEP',
+                    style: GoogleFonts.gowunBatang(
+                      color: const Color(0xFF030712),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
                     ),
-                    Text(
-                      '(다음 단계로)',
-                      style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  Text(
+                    '(다음 단계로)',
+                    style: GoogleFonts.notoSansKr(
+                      color: const Color(0xFF030712),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ✅ 임시 학부모 대시보드 진입 버튼
+            ElevatedButton(
+              onPressed: _goToParentDashboard,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E3A5F),
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFF38BDF8), width: 1.5),
                 ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'PARENT LOGIN (임시)',
+                    style: GoogleFonts.gowunBatang(
+                      color: const Color(0xFF38BDF8),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Text(
+                    '(학부모 대시보드 진입)',
+                    style: GoogleFonts.notoSansKr(
+                      color: const Color(0xFF38BDF8),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -419,7 +486,7 @@ class _SignupScreenState extends State<SignupScreen> {
 }
 
 // -----------------------------------------------------------------------
-// 7. 화면 2: 약관 동의 화면 (TermsAgreementScreen)
+// 약관 동의 화면
 // -----------------------------------------------------------------------
 class TermsAgreementScreen extends StatefulWidget {
   const TermsAgreementScreen({super.key});
@@ -440,20 +507,20 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true, // ✨ 약관동의 화면도 동일하게 타이틀 중앙 정렬
+        centerTitle: true,
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.center, // ✨ 중앙 배치 정렬
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'TERMS AGREEMENT',
               textAlign: TextAlign.center,
-              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23), // 황금색 및 크기 23 고정
+              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23),
             ),
             Text(
               '(이용약관 동의)',
               textAlign: TextAlign.center,
-              style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15), // 황금색 반영 및 개행 배치
+              style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ],
         ),
@@ -586,7 +653,8 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: isAgreed ? () {
+              onPressed: isAgreed
+                  ? () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -597,7 +665,8 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
                 );
                 Navigator.of(context).pop();
                 Navigator.of(context).pop();
-              } : null,
+              }
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: brandGolden,
                 disabledBackgroundColor: Colors.white10,
