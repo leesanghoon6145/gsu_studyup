@@ -88,19 +88,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   String _timerIncorrect = "";
   int _timerDurationMinutes = 0;
 
-  String? _selectedExamType;
+  // 👑 선배님 지시사항 연동 필터 마스터 기본 진입점 셋팅
+  String? _selectedExamType = "주평가";
   List<_ExamRecord> _allRecords = [];
 
   final TextEditingController _subjectController = TextEditingController();
-  final TextEditingController _unitController = TextEditingController();
+  final TextEditingController _unitController = TextEditingController(); // 호환용 원본 컨트롤러 보존
   final TextEditingController _scoreController = TextEditingController();
-  int _inputGrade = 1;
+
+  int _inputGrade = 2; // 원본 기본값 2학년 동기화
   int _inputSemester = 1;
 
-  // 과거 조회 필터링 다중 조건 변수
+  // 과거 조회 필터링 다중 조건 변수 (부모 페이지 미러링용 원본 필터 유지)
   String _filterExamType = "주평가";
   int _filterGrade = 2;
   int _filterSemester = 1;
+
+  // 🆕 [선배님 핵심 명세]: 과거 이력 추적 및 단원분기 동적 세션 선택용 바인딩 데이터팩
+  String _inputYear = "2026년";
+  String _inputMonth = "6월";
+  String _inputWeek = "1주차";
+  String _inputBigUnit = "대단원 1";
+  String _inputMidUnit = "중단원 1";
+  String _inputSemesterGroup = "1학기";
 
   @override
   void initState() {
@@ -116,9 +126,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   void _mockInitialExamRecords() {
     _allRecords = [
-      _ExamRecord(id: "1", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "수학" : "Math", unit: "삼각함수", score: 95),
-      _ExamRecord(id: "2", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "영어" : "English", unit: "관계대명사", score: 70),
-      _ExamRecord(id: "3", type: "단원평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "국어" : "Korean", unit: "고전시가", score: 85),
+      _ExamRecord(id: "1", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "수학" : "Math", unit: "2026년 6월 1주차", score: 95),
+      _ExamRecord(id: "2", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "영어" : "English", unit: "2026년 6월 1주차", score: 70),
+      _ExamRecord(id: "3", type: "단원평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "국어" : "Korean", unit: "대단원 1 (중단원 1)", score: 85),
     ];
   }
 
@@ -496,6 +506,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ),
               const SizedBox(height: 18),
 
+              // 👑 1. 선배님의 3대 분기조건을 100% 임베딩한 직접 작성 섹션 가동
               _buildMyExamScoreSection(),
               const SizedBox(height: 20),
 
@@ -533,52 +544,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     );
   }
 
-  Widget _buildTopButton(String title, int flex, String contentText) {
-    return Expanded(
-      flex: flex,
-      child: InkWell(
-        onTap: () => _showReportPopup(context, title, contentText),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: _ThemeColors.premiumCardBg,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(title, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13.5)),
-              const SizedBox(width: 4),
-              const Icon(Icons.play_arrow_rounded, color: Color(0xFFE5C158), size: 14),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLuxuryGlowingStar() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: 16, height: 16,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: _ThemeColors.brandGolden.withOpacity(0.7), blurRadius: 7, spreadRadius: 2.0),
-            ],
-          ),
-        ),
-        const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 17),
-      ],
-    );
-  }
-
   Widget _buildMyExamScoreSection() {
     final List<String> examTypes = ["주평가", "단원평가", "중간고사", "기말고사", "모의고사"];
+
+    // 4년 뒤 완벽한 추적 조회를 지원하는 연도 데이터 인프라셋
+    final List<String> years = ["2026년", "2027년", "2028년", "2029년", "2030년"];
+    final List<String> months = List.generate(12, (i) => "${i + 1}월");
+    final List<String> weeks = ["1주차", "2주차", "3주차", "4주차", "5주차"];
+    final List<String> bigUnits = ["대단원 1", "대단원 2", "대단원 3", "대단원 4"];
+    final List<String> midUnits = ["중단원 1", "중단원 2", "중단원 3", "중단원 4"];
+    final List<String> semesters = ["1학기", "2학기"];
 
     return Container(
       width: double.infinity,
@@ -597,6 +572,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           ),
           const SizedBox(height: 12),
 
+          // 1단계: 시험 카테고리 칩셋 레이아웃
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -647,113 +623,85 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      "[${_selectedExamType} 입력 및 차트]",
-                      style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    Text(
-                      "과거 조회 필터",
-                      style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+                      "[${_selectedExamType} 입력 및 과거 선택 조회]",
+                      style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
+                // 🔥 [선배님 핵심 명세 분기 인프라]: 주평가 vs 단원평가 vs 고사 세부 변환
+                if (_selectedExamType == "주평가") ...[
+                  _buildSubFilterLabel("년도 선택"),
+                  _buildSubScrollRow(years, _inputYear, (v) => setState(() => _inputYear = v!)),
+                  const SizedBox(height: 8),
+                  _buildSubFilterLabel("월 선택"),
+                  _buildSubScrollRow(months, _inputMonth, (v) => setState(() => _inputMonth = v!)),
+                  const SizedBox(height: 8),
+                  _buildSubFilterLabel("주 선택"),
+                  _buildSubScrollRow(weeks, _inputWeek, (v) => setState(() => _inputWeek = v!)),
+                ] else if (_selectedExamType == "단원평가") ...[
+                  _buildSubFilterLabel("대단원 선택"),
+                  _buildSubScrollRow(bigUnits, _inputBigUnit, (v) => setState(() => _inputBigUnit = v!)),
+                  const SizedBox(height: 8),
+                  _buildSubFilterLabel("중단원 선택"),
+                  _buildSubScrollRow(midUnits, _inputMidUnit, (v) => setState(() => _inputMidUnit = v!)),
+                ] else ...[
+                  _buildSubFilterLabel("학기 선택"),
+                  Row(
+                    children: semesters.map((sem) => _buildSubMiniBtn(sem, _inputSemesterGroup == sem, () => setState(() => _inputSemesterGroup = sem))).toList(),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: examTypes.map((t) {
-                            bool isCurrentFilter = _filterExamType == t;
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _filterExamType = t;
-                                  _selectedExamType = t;
-                                });
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: isCurrentFilter ? _ThemeColors.brandGolden.withOpacity(0.2) : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: isCurrentFilter ? _ThemeColors.brandGolden : Colors.white24),
-                                ),
-                                child: Text(
-                                  t,
-                                  style: GoogleFonts.notoSansKr(
-                                    color: isCurrentFilter ? _ThemeColors.brandGolden : Colors.white70,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
+                ],
+
+                const SizedBox(height: 14),
+                const Divider(color: Colors.white10, height: 1),
+                const SizedBox(height: 12),
+
+                // 과거 조회 필터 동기화 브릿지 프레임 (Y축 그래프 데이터 바인딩용 필터 보존)
+                Text("그래프 출력 타겟 지정 (학년 / 학기)", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 11.5, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: _filterGrade,
+                            dropdownColor: _ThemeColors.premiumCardBg,
+                            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            icon: const Icon(Icons.arrow_drop_down, color: _ThemeColors.brandGolden, size: 16),
+                            items: [1, 2, 3].map((g) => DropdownMenuItem(value: g, child: Text("$g학년"))).toList(),
+                            onChanged: (v) { if (v != null) setState(() { _filterGrade = v; }); },
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Divider(color: Colors.white10, height: 1),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: _filterGrade,
-                                  dropdownColor: _ThemeColors.premiumCardBg,
-                                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                  icon: const Icon(Icons.arrow_drop_down, color: _ThemeColors.brandGolden, size: 16),
-                                  items: [1, 2, 3].map((g) => DropdownMenuItem(value: g, child: Text("$g학년"))).toList(),
-                                  onChanged: (v) {
-                                    if (v != null) setState(() { _filterGrade = v; });
-                                  },
-                                ),
-                              ),
-                            ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: _filterSemester,
+                            dropdownColor: _ThemeColors.premiumCardBg,
+                            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            icon: const Icon(Icons.arrow_drop_down, color: _ThemeColors.brandGolden, size: 16),
+                            items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text("$s학기"))).toList(),
+                            onChanged: (v) { if (v != null) setState(() { _filterSemester = v; }); },
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: _filterSemester,
-                                  dropdownColor: _ThemeColors.premiumCardBg,
-                                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                  icon: const Icon(Icons.arrow_drop_down, color: _ThemeColors.brandGolden, size: 16),
-                                  items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text("$s학기"))).toList(),
-                                  onChanged: (v) {
-                                    if (v != null) setState(() { _filterSemester = v; });
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 14),
 
+            // 학년/학기 직접 매핑 입력 드롭다운
             Row(
               children: [
                 Expanded(
@@ -780,6 +728,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ],
             ),
             const SizedBox(height: 8),
+
+            // 과목명, 단원명, 점수 생성 필드셋
             Row(
               children: [
                 Expanded(
@@ -814,6 +764,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     double? parsedScore = double.tryParse(_scoreController.text);
                     if (parsedScore == null) return;
 
+                    // 동적 결합 레이블 문자열 추적 패킷 제작
+                    String generatedUnitLabel = _unitController.text;
+                    if (_selectedExamType == "주평가") {
+                      generatedUnitLabel = "$_inputYear $_inputMonth $_inputWeek";
+                    } else if (_selectedExamType == "단원평가") {
+                      generatedUnitLabel = "$_inputBigUnit ($_inputMidUnit)";
+                    } else {
+                      generatedUnitLabel = _inputSemesterGroup;
+                    }
+
                     setState(() {
                       _allRecords.add(_ExamRecord(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -822,7 +782,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                         semester: _inputSemester,
                         date: DateTime.now(),
                         subject: _subjectController.text,
-                        unit: _unitController.text,
+                        unit: generatedUnitLabel,
                         score: parsedScore,
                       ));
                       _subjectController.clear();
@@ -882,6 +842,86 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           ]
         ],
       ),
+    );
+  }
+
+  // 📐 가로 스크롤 소필터 전용 로우 헬퍼 위젯
+  Widget _buildSubScrollRow(List<String> items, String selectedValue, ValueChanged<String?> onSelected) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: items.map((item) => _buildSubMiniBtn(item, selectedValue == item, () => onSelected(item))).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSubFilterLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+      child: Text(label, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w500)),
+    );
+  }
+
+  Widget _buildSubMiniBtn(String text, bool isSelected, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6.0),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? _ThemeColors.brandGolden : Colors.black38,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _ThemeColors.brandGolden.withOpacity(isSelected ? 0.7 : 0.2)),
+          ),
+          child: Text(text, style: GoogleFonts.notoSansKr(color: isSelected ? Colors.black : Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopButton(String title, int flex, String contentText) {
+    return Expanded(
+      flex: flex,
+      child: InkWell(
+        onTap: () => _showReportPopup(context, title, contentText),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: _ThemeColors.premiumCardBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(title, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13.5)),
+              const SizedBox(width: 4),
+              const Icon(Icons.play_arrow_rounded, color: Color(0xFFE5C158), size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLuxuryGlowingStar() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 16, height: 16,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: _ThemeColors.brandGolden.withOpacity(0.7), blurRadius: 7, spreadRadius: 2.0),
+            ],
+          ),
+        ),
+        const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 17),
+      ],
     );
   }
 
@@ -970,7 +1010,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const SizedBox(width: 6), // 👑 Y축 구분선과 첫 막대 사이 여백 (20px 고정 매칭)
+                        const SizedBox(width: 6),
                         ...List.generate(evalRecords.length, (idx) {
                           final rec = evalRecords[idx];
                           final Color barColor = _evalColors[idx % _evalColors.length];
@@ -981,7 +1021,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                           if (drawScoreHeight > hMax) drawScoreHeight = hMax;
 
                           return Container(
-                            width: 24, // 👑 컴팩트한 막대 가로 배치 공간 확보
+                            width: 24,
                             margin: const EdgeInsets.symmetric(horizontal: 2.0),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
@@ -1014,7 +1054,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                // 👑 꼬여있던 과목명 렌더링 위젯을 Container 구조 내부로 귀속시켜 완벽하게 복원 완료
                                 SizedBox(
                                   height: 36,
                                   child: Text(
@@ -1343,21 +1382,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                // 👑 파트너님 지시사항 적용: 하얀색 계열 바탕을 현재 활성화 버튼 색상인 '황금색' 바탕으로 전격 교체!
                 color: _ThemeColors.brandGolden,
                 borderRadius: BorderRadius.circular(10),
-                // 테두리선 또한 황금색 바탕과 동기화되도록 완전한 화이트 투명 레이어로 정돈
                 border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.2),
               ),
               child: Row(children: [
-                // 황금색 바탕 위에서 묻히지 않도록 아이콘 색상도 백색(White) 레이어로 전격 교체
                 const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 👑 지시사항 적용: 글씨체들을 눈에 확 띄도록 흰색(White) 라벨로 커스텀 셋팅 완료
                       Text(
                           DkeLang.current == 'KO' ? "데이터베이스 동기화 알림" : "Database Sync Notification",
                           style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)
