@@ -896,11 +896,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       const Color(0xFF0500FF), // 남색
     ];
 
-    const double chartMaxHeight = 140.0;
-    final List<String> scores = ["100", "90", "80", "70", "60"];
+    const double chartMaxHeight = 185.0;
+    final List<String> scores = ["100점", "90점", "80점", "70점", "60점"];
 
     // 6️⃣ [여백 알고리즘]: 막대 두께가 24px일 때, 양옆 마진을 6px씩 주면 사이 공백은 딱 12px(50%)가 됩니다.
-    const double barWidth = 24.0;
+    const double barWidth = 20.0;
     const double barMargin = 6.0;
 
     return Container(
@@ -915,7 +915,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
               children: [
                 // 1️⃣ Y축 텍스트: 40% 전격 확대(14px) 및 100% 명품 황금색(brandGolden) 대체 완료
                 SizedBox(
-                  width: 35,
+                  width: 37,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: scores.map((s) => Container(
@@ -924,7 +924,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                       padding: const EdgeInsets.only(right: 6),
                       child: Text(
                         s,
-                        style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 14, fontWeight: FontWeight.w900),
+                        style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     )).toList(),
                   ),
@@ -958,7 +958,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                       final rec = rawRecords[idx];
 
                       // 평균 과목 분기 유연화 처리 후 무지개 고정 순서 매핑
-                      Color barColor = scoreColors[idx % scoreColors.length];
+                      Color barColor = rec.subject == "평균"
+                          ? Colors.grey        // 👈 여기서 평균 색상 변경
+                          : scoreColors[idx % scoreColors.length];
 
                       double normalizedScore = (rec.score - 60).clamp(0, 40);
                       double finalBarHeight = (normalizedScore / 40) * (chartMaxHeight - 15);
@@ -971,7 +973,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                           children: [
                             // 꼭대기 껌딱지 점수 텍스트 (% 기입)
                             Positioned(
-                              bottom: finalBarHeight + 10,
+                              bottom: finalBarHeight + 1,
                               child: Text(
                                 "${rec.score.toInt()}%",
                                 style: GoogleFonts.rajdhani(color: barColor, fontSize: 11, fontWeight: FontWeight.bold),
@@ -1006,7 +1008,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
 
           // 5️⃣ X축 황금선 '아래'에 정렬되는 과목명 배치 보드
           Padding(
-            padding: const EdgeInsets.only(left: 37),
+            padding: const EdgeInsets.only(left: 49),
             child: SizedBox(
               height: 24,
               child: Row(
@@ -1126,7 +1128,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                       width: 38,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: yTicks.map((t) => Text(t, style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 10, fontWeight: FontWeight.bold))).toList(),
+                        children: yTicks.map((t) => Text(t, style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold))).toList(),
                       ),
                     ),
                     Container(width: 1.5, color: brandGolden),
