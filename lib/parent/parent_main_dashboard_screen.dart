@@ -1,4 +1,4 @@
-import 'dart:async'; // 비동기 타이머 엔진 및 실시간 모니터링 구동용 마스터 패킷
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
@@ -17,7 +17,6 @@ class ParentMainDashboardScreen extends StatefulWidget {
   _ParentMainDashboardScreenState createState() => _ParentMainDashboardScreenState();
 }
 
-// 학생 성취도 화면 데이터 모델 스펙트럼과 100% 무결점 동기화
 class _ParentExamRecord {
   final String id;
   final String type;
@@ -42,30 +41,24 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   int _currentIndex = 0;
   bool _isVipMember = false;
 
-  // 디자인 톤앤매너 테마 상수 (home_dashboard_screen과 100% 동기화)
   static const Color luxuryDarkBg = Color(0xFF030712);
   static const Color premiumCardBg = Color(0xFF0D1527);
   static const Color brandGolden = Color(0xFFE5C158);
 
-  // 실시간 1분 감시 하이브리드 제어 변수
   bool _isMonitoringActive = false;
   int _monitoringCountdown = 60;
-  num _currentElapsedTime = 36; // 실시간 누적 분 패킷
-  int _totalCollectedStars = 387; // 오늘의 별 수집 현황 마스터 데이터
+  num _currentElapsedTime = 36;
+  int _totalCollectedStars = 387;
 
-  // 평가 결과 필터 상태 보존 마스터 분기 팩
   String _selectedEvaluationType = "주평가";
-  String _selectedBigUnit = "대단원 1"; // 대단원 1 ~ 4 선택 수정 스펙
+  String _selectedBigUnit = "대단원 1";
   String _selectedMidUnit = "중단원 1";
-  int _selectedSemesterFilter = 1; // 1학기, 2학기 선택 수정 스펙
+  int _selectedSemesterFilter = 1;
 
-  // 학습 시간 동기화 전용 독립 탭 컨트롤러 스펙
   late TabController _timeTabController;
 
-  // 학생 성취도 입력 창에서 저장된 원본 성적 패킷 미러링 데이터 로드
   List<_ParentExamRecord> _mirroredExamRecords = [];
 
-  // "정성 피드백 5대 절대 규칙" 임베딩 데이터셋 (종합 리포트 팩)
   final String _embeddedStrictFeedbackReport =
       "[종합 진단 피드백]\n\n"
       "금일 진행된 이규현 학습자의 주도적 학업 세션은 메타인지적 관점에서 매우 유의미한 행동 변화를 나타냈습니다. "
@@ -86,7 +79,6 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       "[심층 교육 제언]\n"
       "차기 목표로 설정된 함수 심화 파트는 고도의 논리적 추론이 수반되는 영역이나, 현재 보여준 오답 정리 정밀도와 개념 분석력이라면 충분히 안정적으로 돌파해 낼 수 있습니다.";
 
-  // 멤버 아카이브먼트 그래프 렌더링용 마스터 타임 벨류 패킷 정의
   List<Map<String, dynamic>> get _parentMasterTimeData => [
     {"subject": "수학", "score": 0.85, "averageScore": 0.65, "hasDaily": true, "hasWeekly": true, "hasMonthly": true, "hasYearly": true, "baseMinutes": 120},
     {"subject": "영어", "score": 0.72, "averageScore": 0.70, "hasDaily": true, "hasWeekly": true, "hasMonthly": true, "hasYearly": true, "baseMinutes": 90},
@@ -123,7 +115,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: brandGolden.withOpacity(0.4), width: 1.5),
+              border: Border.all(color: brandGolden.withValues(alpha: 0.4), width: 1.5),
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -218,7 +210,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                   decoration: BoxDecoration(
                     color: _isVipMember ? brandGolden : Colors.white10,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: brandGolden.withOpacity(0.5)),
+                    border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
                   ),
                   child: Text(
                     _isVipMember ? "👑 VIP" : "회원 연동",
@@ -278,7 +270,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             decoration: BoxDecoration(
               color: premiumCardBg,
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: brandGolden.withOpacity(0.3), width: 1.2),
+              border: Border.all(color: brandGolden.withValues(alpha: 0.3), width: 1.2),
             ),
             child: Column(
               children: [
@@ -342,7 +334,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             decoration: BoxDecoration(
               color: premiumCardBg,
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: brandGolden.withOpacity(0.2)),
+              border: Border.all(color: brandGolden.withValues(alpha: 0.2)),
             ),
             child: Column(
               children: [
@@ -386,7 +378,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                     decoration: BoxDecoration(
                       color: Colors.black45,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blueAccent.withOpacity(0.4)),
+                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
                     ),
                     child: Column(
                       children: [
@@ -411,7 +403,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                             opacity: 0.9,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              decoration: BoxDecoration(color: luxuryDarkBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: brandGolden.withOpacity(0.3))),
+                              decoration: BoxDecoration(color: luxuryDarkBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: brandGolden.withValues(alpha: 0.3))),
                               child: Text(
                                 "00:${_currentElapsedTime < 10 ? '0$_currentElapsedTime' : _currentElapsedTime}:24",
                                 style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 1.5),
@@ -452,7 +444,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
         decoration: BoxDecoration(
           color: luxuryDarkBg,
           shape: BoxShape.circle,
-          border: Border.all(color: brandGolden.withOpacity(0.3)),
+          border: Border.all(color: brandGolden.withValues(alpha: 0.3)),
         ),
         child: Text(emoji, style: const TextStyle(fontSize: 22)),
       ),
@@ -514,7 +506,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           decoration: BoxDecoration(
             color: premiumCardBg,
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: brandGolden.withOpacity(0.2)),
+            border: Border.all(color: brandGolden.withValues(alpha: 0.2)),
           ),
           child: Column(
             children: [
@@ -531,7 +523,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           decoration: BoxDecoration(
             color: Colors.black38,
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: brandGolden.withOpacity(0.25)),
+            border: Border.all(color: brandGolden.withValues(alpha: 0.25)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -738,7 +730,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             decoration: BoxDecoration(
               color: premiumCardBg,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: brandGolden.withOpacity(0.2)),
+              border: Border.all(color: brandGolden.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -825,7 +817,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           const SizedBox(height: 12),
           Container(
             width: double.infinity, height: 42, padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(color: const Color(0xFF0D1527), borderRadius: BorderRadius.circular(10), border: Border.all(color: brandGolden.withOpacity(0.3))),
+            decoration: BoxDecoration(color: const Color(0xFF0D1527), borderRadius: BorderRadius.circular(10), border: Border.all(color: brandGolden.withValues(alpha: 0.3))),
             child: TabBar(
               controller: _timeTabController,
               indicator: const BoxDecoration(color: brandGolden, borderRadius: BorderRadius.all(Radius.circular(6))),
@@ -838,6 +830,49 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           const SizedBox(height: 14),
 
           _buildParentTimeChartDashboard(_timeTabController.index),
+
+          const Divider(color: Colors.white10, height: 32),
+          _buildCustomSectionTitle("Diagnostic Evaluation Analysis", "[ 오늘의 평가 분석 ]", fontSize: 14.0),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D1527),
+              side: const BorderSide(color: brandGolden, width: 1.2),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 4,
+              shadowColor: brandGolden.withValues(alpha: 0.1),
+            ),
+            onPressed: () {
+              bool hasEvaluationToday = true;
+              if (hasEvaluationToday) {
+                _showReportPopup(
+                    context,
+                    "👑 오늘의 교육성취 정밀 진단서",
+                    "[학습 분석 보고 요약]\n\n"
+                        "금일 분석된 자녀의 성적 메트릭스는 메타인지적 관점에서 매우 유의미한 학업적 성취를 나타냈습니다. "
+                        "지정된 교과 평가 내부에서 인지적 과부하를 능동적으로 제어하며, "
+                        "고난도 문항에 대한 학업적 몰입 밀도를 최상위권 수준으로 유지하였습니다.\n\n"
+                        "교과 단원별 균형 수치 또한 안정권에 안착했으나, 특정 문항 단계에서 정합성을 검증하는 프로세스에 다소 과도한 시간이 할당되는 지체 현상이 식별되었습니다. "
+                        "전반적인 교과 이해도는 매우 고도화된 수준이나, 오답 변별 과정에서 자아참조효과에 지나치게 의존하는 경향은 향후 정밀 데이터 분석을 통해 보완되어야 할 지점입니다. "
+                        "가정 내에서도 자녀의 학업적 도약을 위해 따뜻한 격려를 전해주시길 권장합니다."
+                );
+              } else {
+                _showReportPopup(context, "👑 오늘의 평가 안내", "아쉽게도 금일은 예정된 평가 일정이 진행되지 않았습니다.");
+              }
+            },
+            icon: const Icon(Icons.analytics_rounded, color: brandGolden, size: 18),
+            label: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "금일 자녀 학업 성취도 정밀 분석 리포트 조회",
+                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, color: brandGolden, size: 12),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -859,13 +894,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     }
 
     final List<Color> scoreColors = [
-      const Color(0xFF34C759), // 초록
-      const Color(0xFFFF3B30), // 빨강
-      const Color(0xFF007AFF), // 파랑
-      const Color(0xFFFFCC00), // 노랑
-      const Color(0xFFAF52DE), // 보라
-      const Color(0xFFFF9500), // 주황
-      const Color(0xFF0500FF), // 남색
+      const Color(0xFF34C759),
+      const Color(0xFFFF3B30),
+      const Color(0xFF007AFF),
+      const Color(0xFFFFCC00),
+      const Color(0xFFAF52DE),
+      const Color(0xFFFF9500),
+      const Color(0xFF0500FF),
     ];
 
     const double chartMaxHeight = 205.0;
@@ -892,10 +927,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                       height: 16,
                       alignment: Alignment.centerRight,
                       padding: const EdgeInsets.only(right: 6),
-                      child: Text(
-                        s,
-                        style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
+                      child: Text(s, style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 12, fontWeight: FontWeight.w600)),
                     )).toList(),
                   ),
                 ),
@@ -1049,10 +1081,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     }
 
     final List<Color> subjectColors = [
-      const Color(0xFFFF3B30), // 수학 - 빨강
-      const Color(0xFF007AFF), // 영어 - 파랑
-      const Color(0xFF34C759), // 국어 - 초록
-      const Color(0xFFFF9500), // 과학 - 주황
+      const Color(0xFFFF3B30),
+      const Color(0xFF007AFF),
+      const Color(0xFF34C759),
+      const Color(0xFFFF9500),
     ];
 
     double calcBarH(double val) {
@@ -1110,7 +1142,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           decoration: BoxDecoration(
             color: const Color(0xFF070E1E),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: brandGolden.withOpacity(0.15)),
+            border: Border.all(color: brandGolden.withValues(alpha: 0.15)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1135,14 +1167,38 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             SizedBox(
-                              width: 42,
+                              width: 55,
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 crossAxisAlignment: CrossAxisAlignment.end,
-                                children: yTicks.map((t) => Text(t, style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold))).toList(),
+                                children: yTicks.map((t) {
+                                  String formattedText = t.contains('h') ? t : '${t.replaceAll('m', '')}m';
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 6.0),
+                                    child: Text(
+                                      formattedText,
+                                      style: GoogleFonts.rajdhani(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                             ),
-                            Container(width: 2, color: brandGolden),
+                            Stack(
+                              alignment: Alignment.center,
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(width: 2, color: brandGolden),
+                                Positioned.fill(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: List.generate(4, (idx) => Container(
+                                      width: 6, height: 6,
+                                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                    )),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -1173,17 +1229,21 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: List.generate(subjectData.length, (idx) {
-                              return Container(
-                                width: (barW * 2) + pairGap + groupGap,
-                                padding: const EdgeInsets.only(left: 8.0),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  subjectData[idx]["subject"] as String,
-                                  style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                              );
-                            }),
+                            children: [
+                              const SizedBox(width: 1),
+                              ...List.generate(subjectData.length, (idx) {
+                                return Container(
+                                  width: 36.0,
+                                  margin: const EdgeInsets.only(left: 18),
+                                  padding: const EdgeInsets.only(left: 0.0),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    subjectData[idx]["subject"] as String,
+                                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                );
+                              }),
+                            ],
                           ),
                         ),
                       ],
@@ -1196,28 +1256,31 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           ),
         ),
         const Divider(color: Colors.white10, height: 24),
-
         Row(
           children: [
             Expanded(
+              flex: 6,
               child: Center(
                 child: SizedBox(
-                  width: 120, height: 120,
+                  width: 180,
+                  height: 180,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       CustomPaint(
-                        size: const Size(120, 120),
+                        size: const Size(180, 180),
                         painter: _ParentDashboardPiePainter(),
                       ),
                       Container(
-                        width: 60, height: 60,
+                        width: 100,
+                        height: 100,
                         decoration: const BoxDecoration(color: premiumCardBg, shape: BoxShape.circle),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('Total', style: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 9)),
-                            Text("${totalMinutes.round()}m", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 11)),
+                            Text('Total', style: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 11)),
+                            const SizedBox(height: 2),
+                            Text("${totalMinutes.round()}m", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
                           ],
                         ),
                       ),
@@ -1227,16 +1290,31 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
               ),
             ),
             Expanded(
+              flex: 4,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: ["수학 (39%)", "영어 (28%)", "국어 (18%)", "과학 (15%)"].map((txt) {
+                children: ["수학 (39%)", "영어 (28%)", "국어 (18%)", "과학 (15%)"]
+                    .asMap()
+                    .entries
+                    .map((entry) {
+                  int idx = entry.key;
+                  String txt = entry.value;
+                  List<Color> cols = [
+                    const Color(0xFFFF3B30),
+                    const Color(0xFF007AFF),
+                    const Color(0xFF34C759),
+                    const Color(0xFFFF9500),
+                  ];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: Row(
                       children: [
-                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: brandGolden, shape: BoxShape.circle)),
+                        Container(
+                          width: 8, height: 8,
+                          decoration: BoxDecoration(color: cols[idx % cols.length], shape: BoxShape.circle),
+                        ),
                         const SizedBox(width: 6),
-                        Text(txt, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        Text(txt, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   );
@@ -1254,7 +1332,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(color: isSelected ? brandGolden : Colors.black38, borderRadius: BorderRadius.circular(6), border: Border.all(color: brandGolden.withOpacity(0.25))),
+        decoration: BoxDecoration(
+          color: isSelected ? brandGolden : Colors.black38,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: brandGolden.withValues(alpha: 0.25)),
+        ),
         child: Text(label, style: GoogleFonts.notoSansKr(color: isSelected ? Colors.black : Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
       ),
     );
@@ -1297,6 +1379,7 @@ class _ParentDashboardPiePainter extends CustomPainter {
       start += sweeps[i];
     }
   }
+
   @override
   bool shouldRepaint(CustomPainter old) => false;
 }
