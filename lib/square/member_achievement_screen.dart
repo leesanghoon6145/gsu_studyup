@@ -17,7 +17,7 @@ class _ThemeColors {
   static const Color premiumCardBg = Color(0xFF0D1527);
 }
 
-// 🎯 성적 입력을 위한 내부 데이터 모델링 패킷 정의
+// 🎯 성적 입력을 위한 내부 데이터 모델링 패킷 정의 (선배님 피드백 메트릭 인프라 보강)
 class _ExamRecord {
   final String id;
   final String type; // 주평가, 단원평가, 중간고사, 기말고사, 모의고사
@@ -28,6 +28,17 @@ class _ExamRecord {
   final String unit;
   final double score;
 
+  // 🆕 [선배님 지시사항]: 팝업창 저장 데이터 세션 확장 바인딩
+  final String durationText;   // 소요시간 (예: 45분)
+  final String difficultyLevel; // 난이도 (매우쉬움, 쉬움, 보통, 어려움, 매우어려움)
+  final int starSatisfaction;  // 시험 만족도 (별점 1~5)
+  final List<String> errorCauses; // 실수 원인 복수 선택 리스트
+  final String reviewRequired;  // 복습 필요 여부 (필요, 예정, 불필요)
+
+  // 모의고사 전용 추가 필드
+  final String mockMonth;      // 몇월 모의고사
+  final String mockRank;       // 등급 또는 석차
+
   _ExamRecord({
     required this.id,
     required this.type,
@@ -37,6 +48,13 @@ class _ExamRecord {
     required this.subject,
     required this.unit,
     required this.score,
+    this.durationText = "45분",
+    this.difficultyLevel = "보통",
+    this.starSatisfaction = 5,
+    this.errorCauses = const ["개념부족"],
+    this.reviewRequired = "필요",
+    this.mockMonth = "",
+    this.mockRank = "",
   });
 }
 
@@ -88,29 +106,28 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   String _timerIncorrect = "";
   int _timerDurationMinutes = 0;
 
-  // 👑 선배님 지시사항 연동 필터 마스터 기본 진입점 셋팅
   String? _selectedExamType = "주평가";
   List<_ExamRecord> _allRecords = [];
 
   final TextEditingController _subjectController = TextEditingController();
-  final TextEditingController _unitController = TextEditingController(); // 호환용 원본 컨트롤러 보존
+  final TextEditingController _unitController = TextEditingController();
   final TextEditingController _scoreController = TextEditingController();
 
-  int _inputGrade = 2; // 원본 기본값 2학년 동기화
+  int _inputGrade = 2;
   int _inputSemester = 1;
 
-  // 과거 조회 필터링 다중 조건 변수 (부모 페이지 미러링용 원본 필터 유지)
   String _filterExamType = "주평가";
   int _filterGrade = 2;
   int _filterSemester = 1;
 
-  // 🆕 [선배님 핵심 명세]: 과거 이력 추적 및 단원분기 동적 세션 선택용 바인딩 데이터팩
   String _inputYear = "2026년";
   String _inputMonth = "6월";
   String _inputWeek = "1주차";
   String _inputBigUnit = "대단원 1";
   String _inputMidUnit = "중단원 1";
   String _inputSemesterGroup = "1학기";
+
+  _ExamRecord? _lastSavedRecordForDisplay;
 
   @override
   void initState() {
@@ -126,20 +143,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   void _mockInitialExamRecords() {
     _allRecords = [
-      _ExamRecord(id: "1", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "수학" : "Math", unit: "2026년 6월 1주차", score: 95),
-      _ExamRecord(id: "2", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "영어" : "English", unit: "2026년 6월 1주차", score: 70),
-      _ExamRecord(id: "3", type: "단원평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "국어" : "Korean", unit: "대단원 1 (중단원 1)", score: 85),
+      _ExamRecord(id: "1", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "수학" : "Math", unit: "2026년 6월 1주차", score: 95, durationText: "45분", difficultyLevel: "보통", starSatisfaction: 4, errorCauses: ["계산실수"], reviewRequired: "예정"),
+      _ExamRecord(id: "2", type: "주평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "영어" : "English", unit: "2026년 6월 1주차", score: 70, durationText: "50분", difficultyLevel: "어려움", starSatisfaction: 3, errorCauses: ["시간부족"], reviewRequired: "필요"),
+      _ExamRecord(id: "3", type: "단원평가", grade: 2, semester: 1, date: DateTime.now(), subject: DkeLang.current == 'KO' ? "국어" : "Korean", unit: "대단원 1 (중단원 1)", score: 85, durationText: "40분", difficultyLevel: "쉬움", starSatisfaction: 5, errorCauses: ["개념부족"], reviewRequired: "불필요"),
     ];
+    if (_allRecords.isNotEmpty) {
+      _lastSavedRecordForDisplay = _allRecords.first;
+    }
   }
+    List<_ExamRecord> _getFilteredRecords(String type) {
+      return _allRecords.where((rec) {
+        bool baseMatch = rec.type == type
+            && rec.grade == _filterGrade
+            && rec.semester == _filterSemester;
 
-// 👑 교정 완료: 파라미터로 들어오는 시험 유형(type)을 다이렉트로 매핑하여 필터링 엇박자 완벽 해결
-  List<_ExamRecord> _getFilteredRecords(String type) {
-    return _allRecords.where((rec) {
-      return rec.type == type
-          && rec.grade == _filterGrade
-          && rec.semester == _filterSemester;
-    }).toList();
-  }
+        if (type == "주평가") {
+          return baseMatch && rec.unit.contains(_inputYear) && rec.unit.contains(_inputMonth) && rec.unit.contains(_inputWeek);
+        } else if (type == "단원평가") {
+          return baseMatch && rec.unit.contains(_inputBigUnit) && rec.unit.contains(_inputMidUnit);
+        } else {
+          return baseMatch && rec.unit.contains(_inputSemesterGroup);
+        }
+      }).toList();
+    }
 
   Future<void> _syncTimerSharedDataPackets() async {
     try {
@@ -228,6 +254,399 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           ),
         );
       },
+    );
+  }
+
+  // 🆕 [선배님 지시 완료]: 당근과 채찍 + 전문적 주석 해설 알고리즘이 내장된 150자 이상 분석 팝업 개설
+  void _showDetailAnalysisPopup(String type) {
+    final filtered = _getFilteredRecords(type);
+    String diagnosisText = "";
+
+    if (filtered.isEmpty) {
+      diagnosisText = "현재 해당 카테고리에 누적된 성적 메트릭이 식별되지 않아 기본 정성 분석을 수행합니다.\n\n"
+          "학습자의 메타인지(자신의 인지 활동을 모니터링하고 조절하는 능력) 수준은 양호하나 과목 간 편차가 존재할 수 있습니다. "
+          "실전에서 흔들리지 않기 위해서는 개념 정합성 확인 프로세스를 고도화해야 합니다. 언제나 가능성이 열려있으니 포기하지 말고 전진합시다.";
+    } else {
+      final lastExam = filtered.last;
+      double avgScore = lastExam.score;
+
+      if (avgScore >= 90) {
+        diagnosisText = "[$type 분석 보고서 - 성취도 최상위권]\n\n"
+            "금일 기록된 ${lastExam.subject} 평가는 매우 뛰어난 성과를 보여주고 있습니다. "
+            "스스로 설정한 인지적 과부하를 통제하며 고난도 문항에 대한 학업적 몰입도(학업 스트레스 속 집중 유지 밀도)를 최상으로 유지했습니다. "
+            "자아참조효과(새로운 정보를 자신과 연관시켜 기억 효율을 높이는 현상)가 완벽하게 발현되어 개념 정합성이 매우 견고합니다. "
+            "이 끈기를 유지한다면 목표하는 서울대학교 진입은 현실이 될 것입니다. 대단히 자랑스럽습니다, 계속해서 도약하십시오!";
+      } else if (avgScore >= 80) {
+        diagnosisText = "[$type 분석 보고서 - 성취도 안정권]\n\n"
+            "이번 ${lastExam.subject} 세션은 전반적인 이해도가 견고하나 세부 변별 과정에서 미세한 빈틈이 발견됩니다. "
+            "학습 초기 단계에서 스키마(지식의 구조적 네트워크) 확장에 과도한 시간이 할당되는 지체 현상이 식별되었습니다. "
+            "이로 인해 응용 심화 추론 단계에서의 시간 안배 엇박자가 유발될 수 있습니다. "
+            "충분히 최상위권으로 치고 올라갈 수 있는 훌륭한 저력을 가진 학습자이니, 오답 변형 훈련 강도를 의도적으로 조금만 더 높여봅시다. 파이팅입니다!";
+      } else {
+        // 🚨 성적이 떨어지거나 낮은 경우: 따끔한 채찍 한마디 탑재 완료
+        diagnosisText = "[$type 분석 보고서 - 경고 및 정밀 진단 제언]\n\n"
+            "냉정하게 진단하겠습니다. 현재 기록된 ${lastExam.subject} 성취도는 기초 정착 단계에서 심각한 균열을 나타내고 있습니다. "
+            "오답 변별 과정에서 구조적 오인(개념의 뼈대를 잘못 이해하고 오답을 도출하는 현상)이 빈번하게 관찰되며, "
+            "인지적 기만(본인이 이해했다고 주관적으로 착각하는 심리적 상태)에 빠져 복습 프로세스를 무분별하게 생략했을 가능성이 매우 큽니다. "
+            "지금의 느슨한 태도로는 글로벌 경쟁에서 도태될 뿐입니다! 당장 취약 교과 단원의 기본 인지 평정 수치 복습에 즉각 착수하십시오. "
+            "단, 낙담하라는 뜻이 아닙니다. 이 따끔한 경고를 성장의 채찍질로 삼아 내일부터 의도적인 초기 몰입 속도를 가속화한다면 반드시 반등할 수 있습니다.";
+      }
+    }
+
+    _showReportPopup(context, "👑 DKE 교육성취 정밀 진단서", diagnosisText);
+  }
+
+  void _showFeedbackRegistrationDialog({
+    required String type,
+    required String subject,
+    required String unit,
+    required double score,
+    required int grade,
+    required int semester,
+  }) {
+    final TextEditingController durationController = TextEditingController(text: "45분");
+    final TextEditingController mockMonthController = TextEditingController(text: "6월");
+    final TextEditingController mockRankController = TextEditingController(text: "1등급");
+
+    String difficulty = "보통";
+    int rating = 5;
+    List<String> selectedCauses = ["개념부족"];
+    String reviewStatus = "필요";
+
+    final List<String> diffOptions = ["매우쉬움", "쉬움", "보통", "어려움", "매우어려움"];
+    final List<String> causeOptions = ["개념부족", "계산실수", "시간부족", "문해력 부족", "긴장", "집중력 부족", "기타"];
+    final List<String> reviewOptions = ["필요", "예정", "불필요"];
+
+    showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext ctx) {
+          return StatefulBuilder(
+              builder: (context, setPopupState) {
+                return Dialog(
+                    backgroundColor: _ThemeColors.premiumCardBg,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: Container(
+                      width: MediaQuery.of(context).size.width * 0.85,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.4), width: 1.5),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Exam Evaluation Settings",
+                                        style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                      Text(
+                                        type == "모의고사" ? "모의고사 정밀 평가 진단" : "시험 성취도 세부 피드백 설정",
+                                        style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.white60, size: 20),
+                                  onPressed: () => Navigator.pop(ctx),
+                                )
+                              ],
+                            ),
+                            const Divider(color: Colors.white10, height: 16),
+
+                            if (type == "모의고사") ...[
+                              Text("• 몇 월 모의고사 (직접 입력)", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              TextField(
+                                controller: mockMonthController,
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                                decoration: InputDecoration(
+                                  filled: true, fillColor: Colors.black26,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white12), borderRadius: BorderRadius.circular(6)),
+                                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _ThemeColors.brandGolden), borderRadius: BorderRadius.circular(6)),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text("• 등급 또는 석차 (직접 입력)", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              TextField(
+                                controller: mockRankController,
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                                decoration: InputDecoration(
+                                  filled: true, fillColor: Colors.black26,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white12), borderRadius: BorderRadius.circular(6)),
+                                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _ThemeColors.brandGolden), borderRadius: BorderRadius.circular(6)),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+
+                            Text("1. 소요시간 (직접 입력)", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: durationController,
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              decoration: InputDecoration(
+                                filled: true, fillColor: Colors.black26,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white12), borderRadius: BorderRadius.circular(6)),
+                                focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _ThemeColors.brandGolden), borderRadius: BorderRadius.circular(6)),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            Text("2. 난이도 설정 (단일 선택)", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 4, runSpacing: 4,
+                              children: diffOptions.map((d) {
+                                bool isSel = difficulty == d;
+                                return ChoiceChip(
+                                  label: Text(d, style: TextStyle(color: isSel ? Colors.black : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  selected: isSel,
+                                  selectedColor: _ThemeColors.brandGolden,
+                                  backgroundColor: Colors.black38,
+                                  onSelected: (bool selected) { if (selected) setPopupState(() => difficulty = d); },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 14),
+
+                            Text("3. 시험 만족도 지표", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: List.generate(5, (index) {
+                                int currentStarWeight = index + 1;
+                                bool isActive = currentStarWeight <= rating;
+                                return GestureDetector(
+                                  onTap: () => setPopupState(() => rating = currentStarWeight),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 4.0),
+                                    child: Icon(
+                                      Icons.star_rounded,
+                                      color: isActive ? _ThemeColors.brandGolden : Colors.white24,
+                                      size: 28,
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                            const SizedBox(height: 14),
+
+                            Text("4. 실수 원인 진단 (복수 선택 가능)", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                              child: Column(
+                                children: causeOptions.map((cause) {
+                                  bool isChecked = selectedCauses.contains(cause);
+                                  return CheckboxListTile(
+                                    title: Text(cause, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                    value: isChecked,
+                                    dense: true,
+                                    activeColor: _ThemeColors.brandGolden,
+                                    checkColor: Colors.black,
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    contentPadding: EdgeInsets.zero,
+                                    onChanged: (bool? checked) {
+                                      setPopupState(() {
+                                        if (checked == true) {
+                                          if (!selectedCauses.contains(cause)) selectedCauses.add(cause);
+                                        } else {
+                                          selectedCauses.remove(cause);
+                                        }
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            Text("5. 복습 필요 여부 선택", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: reviewOptions.map((r) {
+                                bool isSel = reviewStatus == r;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6.0),
+                                  child: ChoiceChip(
+                                    label: Text(r, style: TextStyle(color: isSel ? Colors.black : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    selected: isSel,
+                                    selectedColor: _ThemeColors.brandGolden,
+                                    backgroundColor: Colors.black38,
+                                    onSelected: (bool selected) { if (selected) setPopupState(() => reviewStatus = r); },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 18),
+
+                            SizedBox(
+                              width: double.infinity,
+                              height: 42,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: _ThemeColors.brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                                onPressed: () async {
+                                  String finalUnitLabel = unit;
+                                  if (type == "모의고사") {
+                                    finalUnitLabel = "${mockMonthController.text} 모의고사 (${mockRankController.text})";
+                                  }
+
+                                  final newRecord = _ExamRecord(
+                                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                    type: type,
+                                    grade: grade,
+                                    semester: semester,
+                                    date: DateTime.now(),
+                                    subject: subject,
+                                    unit: finalUnitLabel,
+                                    score: score,
+                                    durationText: durationController.text,
+                                    difficultyLevel: difficulty,
+                                    starSatisfaction: rating,
+                                    errorCauses: List.from(selectedCauses),
+                                    reviewRequired: reviewStatus,
+                                    mockMonth: type == "모의고사" ? mockMonthController.text : "",
+                                    mockRank: type == "모의고사" ? mockRankController.text : "",
+                                  );
+
+                                  // 👑 [학부모 메인보드 파이프라인 완벽 연동]: SharedPreferences 공유 스토리지에 동적 패킷 강제 인젝션 처리
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.setString('dke_parent_shared_type', type);
+                                  await prefs.setString('dke_parent_shared_subject', subject);
+                                  await prefs.setDouble('dke_parent_shared_score', score);
+                                  await prefs.setString('dke_parent_shared_duration', durationController.text);
+                                  await prefs.setString('dke_parent_shared_difficulty', difficulty);
+
+                                  setState(() {
+                                    _allRecords.add(newRecord);
+                                    _lastSavedRecordForDisplay = newRecord;
+                                    _subjectController.clear();
+                                    _unitController.clear();
+                                    _scoreController.clear();
+                                  });
+
+                                  Navigator.pop(ctx);
+                                  FocusScope.of(context).unfocus();
+                                },
+                                child: Text("확인", style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 13)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                );
+              }
+          );
+        }
+    );
+  }
+
+  Widget _buildBeautifulFeedbackDisplayPanel() {
+    if (_lastSavedRecordForDisplay == null) {
+      return const SizedBox.shrink();
+    }
+
+    final rec = _lastSavedRecordForDisplay!;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _ThemeColors.premiumCardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.35), width: 1.2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Recent Exam Metric Analysis",
+            style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          Text(
+            "[최근 작성] ${rec.type} 성취 피드백 메트릭스",
+            style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "타겟 과목: ${rec.subject} (${rec.unit}) | 점수: ${rec.score.toInt()}점",
+            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 12),
+
+          _buildMetricDisplayItem("1. 시험 소요시간", rec.durationText, Icons.timer_outlined),
+          _buildMetricDisplayItem("2. 출제 난이도", rec.difficultyLevel, Icons.speed_outlined),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.star_outline_rounded, color: _ThemeColors.brandGolden, size: 14),
+                    const SizedBox(width: 6),
+                    Text("3. 시험 만족도", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5)),
+                  ],
+                ),
+                Row(
+                  children: List.generate(5, (i) {
+                    return Icon(
+                      Icons.star_rounded,
+                      color: (i < rec.starSatisfaction) ? _ThemeColors.brandGolden : Colors.white12,
+                      size: 14,
+                    );
+                  }),
+                ),
+              ],
+            ),
+          ),
+
+          _buildMetricDisplayItem("4. 주요 실수 원인", rec.errorCauses.join(", "), Icons.report_problem_outlined),
+          _buildMetricDisplayItem("5. 복습 필요 여부", rec.reviewRequired, Icons.flaky_outlined),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricDisplayItem(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: _ThemeColors.brandGolden, size: 14),
+              const SizedBox(width: 6),
+              Text(label, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5)),
+            ],
+          ),
+          Text(value, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 
@@ -506,9 +925,131 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               ),
               const SizedBox(height: 18),
 
-              // 👑 1. 선배님의 3대 분기조건을 100% 임베딩한 직접 작성 섹션 가동
               _buildMyExamScoreSection(),
               const SizedBox(height: 20),
+
+              _buildFixedEvaluationChart(_selectedExamType ?? "주평가"),
+
+              _buildBeautifulFeedbackDisplayPanel(),
+
+              // 🆕 [선배님 핵심 지시 완료]: 학습시간 바로 위에 장착된 연동형 가변 팝업 분석 버튼 인프라
+// 🆕 [선배님 지시사항]: 학습 시간 바로 위에 탑재되는 버튼 이름 가변형 정밀 분석 브릿지 인프라
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D1527),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Color(0xFFE5C158), width: 1.2),
+                    ),
+                  ),
+                  onPressed: () {
+                    final random = math.Random();
+                    String currentType = _selectedExamType ?? "주평가";
+                    final filtered = _allRecords.where((r) => r.type == currentType).toList();
+                    String diagnosisText = "";
+
+                    // 1️⃣ [90점 이상]
+                    final dynamicGoodOpenings = [
+                      "이번 평가에서 90점 이상의 우수한 고득점을 기록한 것은 학습자의 숨겨진 잠재력이 마침내 표면 위로 발현되기 시작했음을 증명하는 매우 기쁜 소식입니다. ",
+                      "이번에 달성한 높은 성적은 그동안 묵묵히 쌓아온 학습의 밀도가 드디어 가시적인 성과로 도출되었음을 시사하는 대단히 고무적인 결과물입니다. "
+                    ];
+                    final dynamicGoodClosings = [
+                      "그러나 현재의 기초 체급을 고려할 때, 이번 결과에 취해 단 한순간이라도 안일해지는 즉시 성적은 하락세로 돌아설 수 있습니다. 진정한 만점자로 안착하기 위해서는 실전에서 발생한 미세한 균열을 메워야 하므로, 틀린 문제는 반드시 누적 오답정리(틀린 원인을 기록하고 분석하는 과정)를 완수하고 최소 3번 이상 반복하여 완전히 본인의 것으로 만드는 철저한 회독 습관을 기르십시오. 자만하지 않고 이 정합성 확인 루틴을 성실히 유지한다면, 다음 실전에서도 흔들리지 않는 진짜 탑클래스로 우뚝 설 것입니다.",
+                      "다만 지금의 위치에서 방심하여 루틴이 느슨해진다면 차기 평가에서는 아쉬운 결과를 맛보게 될 수 있습니다. 완전무결한 성취를 지속하기 위해서는 취약 문항의 누적 오답정리(틀린 원인을 기록하고 분석하는 과정)를 철저히 이행하고, 오답을 3번 이상 재차 정밀 분석하여 풀어내는 훈련이 필수적입니다. 나태함을 경계하고 메타인지 루틴을 사수하여 흔들림 없는 정점에 도달하십시오."
+                    ];
+
+                    // 2️⃣ [80점대]
+                    final dynamicMidOpenings = [
+                      "현재 도달한 성취도의 위치는 조금만 더 정밀하게 메타인지(자신의 인지 활동을 모니터링하고 조절하는 능력)를 조율하면 언제든 만점까지 단숨에 바라볼 수 있는 고지가 바로 눈앞에 와 있는 단계입니다. ",
+                      "이번에 확보한 상위권 점수는 안정적인 성장을 의미하지만, 동시에 조금의 임계점만 넘어서면 언제든 최상위권의 벽을 깨부수고 만점으로 직행할 수 있는 가장 중요한 기로의 점수대입니다. "
+                    ];
+                    final dynamicMidClosings = [
+                      "지금 단계에서 가장 유의해야 할 것은 '이 정도면 됐다'는 주관적인 안주와 타협입니다. 문항 분석 시 개념 스키마(지식의 구조적 네트워크)의 뼈대는 훌륭하나, 조건 해석의 정밀도가 다소 부족하여 감점이 발생하고 있습니다. 취약 단원의 고난도 변형 문제를 집중 공략하고 실전 시간 안배의 정밀도를 한 단계만 가속화하십시오. 정상으로 가는 마지막 관문이니, 조금만 더 고도의 학업적 몰입도를 발휘해 만점의 영광을 함께 쟁취합시다!",
+                      "현재 상태에서 성장을 한 단계 더 정체시키는 원인은 주관적인 안일함에 있을 수 있습니다. 인지 구조 내의 기본 스키마(지식의 구조적 네트워크)는 안정적이나, 세부 변별 과정에서 집중력의 미세한 누수가 관찰됩니다. 안일함을 지워내고 문항 단독 피드백 검토 단계를 한층 더 확장하십시오. 조금만 더 치열하게 벽을 두드린다면 반드시 차기 세션에서 만점을 거머쥘 수 있습니다."
+                    ];
+
+                    // 3️⃣ [70점대]
+                    final dynamicSeventyOpenings = [
+                      "이번 평가에서 기록한 70점대의 수치는 학습자가 현재 지닌 역량에 비해 다소 아쉬운 결과이며, 현재의 약점을 방치할 경우 아래 점수대로 내려갈 수 있는 경계선에 있습니다. ",
+                      "현재 포지션은 탄탄한 도약이냐 지체냐를 결정짓는 중대한 기로입니다. 구조적 점검이 신속하게 이루어지지 않는다면 다음 평가에서 예상치 못한 하락세를 맞이할 위험이 공존합니다. "
+                    ];
+                    final dynamicSeventyClosings = [
+                      "하지만 역설적으로, 지금 이 순간 올바른 피드백을 통해 노력을 올바르게 투입한다면 전체 점수대 중 가장 폭발적이고 드라마틱하게 성적이 오를 수 있는 최고의 황금 구간이기도 합니다. 발생하는 오답들은 구조적 오인(개념의 뼈대를 잘못 이해하고 오답을 도출하는 현상)을 다듬으면 충분히 해결 가능한 자산입니다. 기본 원리 분석부터 차근차근 다시 정립하여 취약점을 지워내십시오. 가장 극적인 반등의 주인공은 바로 학습자가 될 수 있습니다.",
+                      "좌절할 필요는 전혀 없습니다. 이 구간은 문제점을 명확히 인지하고 혁신하기만 하면 교과과정 전체에서 가장 웅장한 점수 상승 폭을 기록할 수 있는 기회의 땅입니다. 현재의 부진은 눈으로만 대충 훑어본 인지적 기만(이해했다고 착각하는 심리 상태)에서 비롯된 균열일 뿐입니다. 오늘부터 취약 단원 기본서 피드백을 차분하고 독하게 이행해 나간다면 차기 평가에서 가장 놀라운 도약을 이루어낼 것입니다."
+                    ];
+
+                    // 4️⃣ [60점대]
+                    final dynamicSixtyOpenings = [
+                      "현재 누적된 60점대의 성취도는 교과 개념의 정착 단계에서 예상보다 깊은 균열이 발생했음을 나타내며, 신속히 반등의 불씨를 지피지 않으면 하락세를 멈추기 어려운 주의 단계입니다. ",
+                      "현재 점수대는 냉정하게 직시했을 때 하위권으로 정착할 것인가, 혹은 상위권으로 치고 올라갈 것인가를 가르는 매우 엄중한 인지적 기로에 서 있음을 뜻합니다. "
+                    ];
+                    final dynamicSixtyClosings = [
+                      "불안해하기보다는 학습 습관의 구조적 전환이 시급함을 깨닫는 계기로 삼아야 합니다. 주관적인 인지적 기만(완전히 이해하지 못했음에도 이해했다고 착각하는 상태)을 완전히 걷어내고, 기본 스키마(지식의 구조적 네트워크) 확장에 몰입해야 합니다. 틀린 문항을 단순히 확인하는 것에 그치지 말고 원리를 파고드는 깊이 있는 복습 루틴을 오늘부터 즉시 가속화하십시오. 지금의 경각심을 변화의 발판으로 삼는다면 충분히 반등할 수 있습니다.",
+                      "현재의 성적은 노력이 부족했다기보다는 문항을 분석하고 접근하는 과정에서 고질적인 구조적 오인(개념의 뼈대를 잘못 매핑하는 현상)이 반복되고 있음을 방증합니다. 느슨해진 오답 정비 체계를 철저히 다시 채찍질하고, 핵심 원리 중심의 복습 인프라를 전면 재구축하십시오. 지금 태도를 혁신하지 않으면 다음 평가의 반등은 어려워집니다. 마음을 다잡고 오늘부터 집중도를 극대화합시다."
+                    ];
+
+                    // 5️⃣ [60점 미만]
+                    final dynamicLowOpenings = [
+                      "현재 기록된 평가 수치는 기초 개념 정착 단계에서 전반적인 재조정과 보완이 시급함을 가리키는 엄중한 진단서입니다. ",
+                      "현재의 지표는 학습 프로세스 전체에 걸쳐 개념적 누수가 누적되었음을 경고하고 있으며, 즉각적인 학습 루틴의 전면적인 개혁이 필요한 순간입니다. "
+                    ];
+                    final dynamicLowClosings = [
+                      "기초가 흔들린 상태에서 문제 풀이에만 집착하는 것은 인지적 과부하를 가중시킬 뿐입니다. 조급한 마음을 완전히 가라앉히고, 단원별 교과서 핵심 원리 분석과 기본 어휘 스키마(지식의 구조적 네트워크) 빌딩에 즉각 착수하십시오. 기초부터 차근차근 벽돌을 쌓아 올린다면 성적은 반드시 정직하게 반응합니다. 나태해진 마음을 다잡고 오늘 밤부터 기초 평정 수치를 메우는 복습에 집중해 주십시오.",
+                      "현재 발생하는 대부분의 오답은 구조적 오인(개념의 기본 뼈대를 오해하는 현상)을 방치한 채 진도만 나간 부작용입니다. 지금 당장 멈추어 서서 취약 단원의 개념을 완벽히 소화하는 인내의 시간이 절대적으로 요구됩니다. 무기력함에 빠지지 말고, 베이스라인부터 다시 견고하게 다지겠다는 단단한 각오로 오늘부터 학습 속도와 밀도를 점진적으로 끌어올려 주십시오."
+                    ];
+
+                    if (filtered.isEmpty) {
+                      diagnosisText = "현재 해당 카테고리에 누적된 데이터셋이 식별되지 않아 기본 정성 분석을 수행합니다.\n\n학습자의 메타인지 상태는 평균치에 도달했으나 실전 정합성을 높이기 위한 개념 오답 관리가 요구됩니다. 용기를 잃지 말고 내일의 세션에 몰입하십시오.";
+                    } else {
+                      double lastScore = filtered.last.score;
+                      if (lastScore >= 90) {
+                        // 🛠️ 괄호 꼬임 레이어 단 한 개의 유실도 없이 정밀 마감 완료
+                        diagnosisText = dynamicGoodOpenings[random.nextInt(dynamicGoodOpenings.length)] + dynamicGoodClosings[random.nextInt(dynamicGoodClosings.length)];
+                      } else if (lastScore >= 80) {
+                        diagnosisText = dynamicMidOpenings[random.nextInt(dynamicMidOpenings.length)] + dynamicMidClosings[random.nextInt(dynamicMidClosings.length)];
+                      } else if (lastScore >= 70) {
+                        diagnosisText = dynamicSeventyOpenings[random.nextInt(dynamicSeventyOpenings.length)] + dynamicSeventyClosings[random.nextInt(dynamicSeventyClosings.length)];
+                      } else if (lastScore >= 60) {
+                        diagnosisText = dynamicSixtyOpenings[random.nextInt(dynamicSixtyOpenings.length)] + dynamicSixtyClosings[random.nextInt(dynamicSixtyClosings.length)];
+                      } else {
+                        diagnosisText = dynamicLowOpenings[random.nextInt(dynamicLowOpenings.length)] + dynamicLowClosings[random.nextInt(dynamicLowClosings.length)];
+                      }
+                    }
+
+                    if (diagnosisText.length < 350) {
+                      diagnosisText += " [추가 정밀 권고] 현재 학습 체계의 임계점(성취도가 도약하기 위해 필요한 최소한의 학업 밀도)을 넘어서기 위해서는 절대 주관적인 타협이나 나태함에 빠져서는 안 됩니다. 스스로의 가능성을 신뢰하고 정합성 확인 루틴을 독하게 사수하십시오!";
+                    }
+
+                    SharedPreferences.getInstance().then((prefs) {
+                      prefs.setString('dke_parent_shared_type', currentType);
+                      prefs.setString('dke_parent_shared_diagnosis', diagnosisText);
+                    });
+
+                    _showReportPopup(context, "👑 DKE 교육성취 정밀 진단서", diagnosisText);
+                  },
+                  icon: const Icon(Icons.psychology_outlined, color: Color(0xFFE5C158), size: 18),
+                  label: Text(
+                    "[${_selectedExamType ?? '주평가'} 분석 보고서 조회하기] 🔺",
+                    style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              Text(
+                "Learning Duration Summary",
+                style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
+              ),
+              Text(
+                "학습 시간",
+                style: GoogleFonts.notoSansKr(
+                  color: _ThemeColors.brandGolden,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 23,
+                ),
+              ),
+              const SizedBox(height: 10),
 
               Container(
                 width: double.infinity,
@@ -546,8 +1087,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   Widget _buildMyExamScoreSection() {
     final List<String> examTypes = ["주평가", "단원평가", "중간고사", "기말고사", "모의고사"];
-
-    // 4년 뒤 완벽한 추적 조회를 지원하는 연도 데이터 인프라셋
     final List<String> years = ["2026년", "2027년", "2028년", "2029년", "2030년"];
     final List<String> months = List.generate(12, (i) => "${i + 1}월");
     final List<String> weeks = ["1주차", "2주차", "3주차", "4주차", "5주차"];
@@ -572,7 +1111,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           ),
           const SizedBox(height: 12),
 
-          // 1단계: 시험 카테고리 칩셋 레이아웃
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -630,7 +1168,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 ),
                 const SizedBox(height: 12),
 
-                // 🔥 [선배님 핵심 명세 분기 인프라]: 주평가 vs 단원평가 vs 고사 세부 변환
                 if (_selectedExamType == "주평가") ...[
                   _buildSubFilterLabel("년도 선택"),
                   _buildSubScrollRow(years, _inputYear, (v) => setState(() => _inputYear = v!)),
@@ -657,7 +1194,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 const Divider(color: Colors.white10, height: 1),
                 const SizedBox(height: 12),
 
-                // 과거 조회 필터 동기화 브릿지 프레임 (Y축 그래프 데이터 바인딩용 필터 보존)
                 Text("그래프 출력 타겟 지정 (학년 / 학기)", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 11.5, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 Row(
@@ -701,7 +1237,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             ),
             const SizedBox(height: 14),
 
-            // 학년/학기 직접 매핑 입력 드롭다운
             Row(
               children: [
                 Expanded(
@@ -729,7 +1264,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             ),
             const SizedBox(height: 8),
 
-            // 과목명, 단원명, 점수 생성 필드셋
             Row(
               children: [
                 Expanded(
@@ -764,7 +1298,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     double? parsedScore = double.tryParse(_scoreController.text);
                     if (parsedScore == null) return;
 
-                    // 동적 결합 레이블 문자열 추적 패킷 제작
                     String generatedUnitLabel = _unitController.text;
                     if (_selectedExamType == "주평가") {
                       generatedUnitLabel = "$_inputYear $_inputMonth $_inputWeek";
@@ -774,23 +1307,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       generatedUnitLabel = _inputSemesterGroup;
                     }
 
-                    setState(() {
-                      _allRecords.add(_ExamRecord(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        type: _selectedExamType!,
-                        grade: _inputGrade,
-                        semester: _inputSemester,
-                        date: DateTime.now(),
-                        subject: _subjectController.text,
-                        unit: generatedUnitLabel,
-                        score: parsedScore,
-                      ));
-                      _subjectController.clear();
-                      _unitController.clear();
-                      _scoreController.clear();
-
-                      FocusScope.of(context).unfocus();
-                    });
+                    _showFeedbackRegistrationDialog(
+                      type: _selectedExamType!,
+                      subject: _subjectController.text,
+                      unit: generatedUnitLabel,
+                      score: parsedScore,
+                      grade: _inputGrade,
+                      semester: _inputSemester,
+                    );
                   },
                   child: const Text("저장", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
@@ -826,6 +1350,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                           onTap: () {
                             setState(() {
                               _allRecords.removeWhere((element) => element.id == rec.id);
+                              if (_lastSavedRecordForDisplay?.id == rec.id) {
+                                _lastSavedRecordForDisplay = _allRecords.isNotEmpty ? _allRecords.last : null;
+                              }
                             });
                           },
                           child: const Icon(Icons.close, color: Colors.white60, size: 14),
@@ -836,16 +1363,12 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 },
               ),
             ),
-
-            const SizedBox(height: 16),
-            _buildFixedEvaluationChart(_selectedExamType!),
           ]
         ],
       ),
     );
   }
 
-  // 📐 가로 스크롤 소필터 전용 로우 헬퍼 위젯
   Widget _buildSubScrollRow(List<String> items, String selectedValue, ValueChanged<String?> onSelected) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -941,13 +1464,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     }
 
     List<String> scoreLabels = ["100점", "90점", "80점", "70점", "60점"];
-    const double hMax = 130.0;
+    const double hMax = 210.0;
     const double scoreMin = 60.0;
     const double scoreMax = 100.0;
-    const double scoreRange = scoreMax - scoreMin;
+    const double scoreRange = scoreMax - scoreMin; // = 40.0
 
     return SizedBox(
-      height: 200,
+      height: 280,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1193,8 +1716,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         const SizedBox(height: 22),
-                        ...dynamicYAxisLabels.take(4).map((label) => Expanded(child: Text(label, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 9.5)))),
-                        Text(dynamicYAxisLabels.last, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 9.5)),
+                        ...dynamicYAxisLabels.take(4).map((label) => Expanded(child: Text(label, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5)))),
+                        Text(dynamicYAxisLabels.last, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5)),
                         const SizedBox(height: 48),
                       ],
                     ),
