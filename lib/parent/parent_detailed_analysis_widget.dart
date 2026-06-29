@@ -31,7 +31,7 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
       padding: const EdgeInsets.all(24.0),
       children: [
         // 🛠️ 선배님의 완벽한 기획 문구를 보존하되, 요청하신 "(멤버)" 글자만 깔끔하게 제거 처리했습니다.
-        buildCustomSectionTitle("Self-Directed Learning Records", "$childName 오늘 학습 성취도 상세결과", fontSize: 14.0),
+        buildCustomSectionTitle("Self-Directed Learning Records", "$childName 오늘 자기주도 학습 성취도 상세보기", fontSize: 14.0),
         const SizedBox(height: 14),
 
         // 💎 선배님 고유의 상세 레이아웃 및 하드코딩 매트릭스 텍스트를 단 한 글자도 건드리지 않고 원본 그대로 유지합니다.

@@ -8,7 +8,7 @@ import 'package:gsu_studyup/global_lang.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 👑 [DKE 글로벌 언어 사전 엔진 발동]
+  // 👑 [DKE 글로벌 언어 사전 사전 엔진 발동]
   await DkeLang.initialize();
 
   runApp(const GsuStudyUpApp());
@@ -215,10 +215,18 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
 }
 
 // -----------------------------------------
-// [2] 회원가입 / 로그인 화면 (이미지 디자인 완벽 반영 버전)
+// [2] 회원가입 / 로그인 화면 (체크박스 상태 유지를 위해 StatefulWidget으로 완벽 세공 및 승격)
 // -----------------------------------------
-class LoginSignupScreen extends StatelessWidget {
+class LoginSignupScreen extends StatefulWidget {
   const LoginSignupScreen({super.key});
+
+  @override
+  State<LoginSignupScreen> createState() => _LoginSignupScreenState();
+}
+
+class _LoginSignupScreenState extends State<LoginSignupScreen> {
+  // 🗺️ [선배님 지시: 로그인 전용 계정 기억하기 단일 상태 레버 변수 안착]
+  bool _isRememberMeChecked = false;
 
   void _showOverlayWelcomeBar(BuildContext targetContext) {
     final OverlayState overlayState = Overlay.of(targetContext);
@@ -337,7 +345,43 @@ class LoginSignupScreen extends StatelessWidget {
                     icon: Icons.lock_outline,
                     isPassword: true,
                   ),
-                  const SizedBox(height: 45),
+
+                  // 📐 기존 45 간격을 네모 박스 배치를 위해 슬림하게 10으로 축소 조율
+                  const SizedBox(height: 10),
+
+                  // ============================================================================
+                  // 🗺️ SECTION: LOGIN REMEMBER ME CHECKBOX (선배님 지시: 이메일 / 패스워드 기억하기 박스 구현)
+                  // ============================================================================
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start, // 폰 화면 좌측 정렬 단속
+                    children: [
+                      Checkbox(
+                        value: _isRememberMeChecked, // 🚨 파일 최상단에 선언된 정품 변수 연동
+                        activeColor: const Color(0xFFE5C158), // 시그니처 프리미엄 황금색 테마 일치화
+                        checkColor: const Color(0xFF030712),  // 체크 표시 색상 (뒷배경과 동일한 다크 니트 톤)
+                        side: const BorderSide(color: Colors.white38, width: 1.5), // 빈 박스일 때 테두리 색상
+                        onChanged: (bool? value) {
+                          // 🕹️ 클릭 시 네모 박스 실시간 토글 완벽 가동
+                          setState(() {
+                            _isRememberMeChecked = value ?? false;
+                          });
+                        },
+                      ), // end of Checkbox
+
+                      const SizedBox(width: 4), // 네모 박스와 글자 사이 미세 여백 단속
+
+                      Text(
+                        "이메일 / 패스워드 기억하기",
+                        style: GoogleFonts.gowunBatang( // 프로젝트 시그니처 서체 '고운바탕' 완벽 일치화
+                          color: Colors.white.withOpacity(0.85),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ), // end of GoogleFonts
+                      ), // end of Text
+                    ], // end of Row children
+                  ), // end of Row
+
+                  const SizedBox(height: 25), // 📐 네모 박스와 아래 'CREATE ACCOUNT' 버튼 사이의 최적 황금 마진 확보
                   _buildGradientButton(
                     title: 'CREATE ACCOUNT (회원가입)',
                     onPressed: () {
@@ -515,7 +559,7 @@ class _SmoothWelcomeOverlayWidgetState extends State<_SmoothWelcomeOverlayWidget
                   child: SafeArea(
                     top: false,
                     child: Text(
-                      'Welcomto to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )',
+                      'Welcome to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.notoSansKr(
                         color: Colors.white,

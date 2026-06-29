@@ -8,6 +8,7 @@ import 'square/friend_study_room_screen.dart';
 import 'package:gsu_studyup/square/live_active_users_screen.dart';
 import 'package:gsu_studyup/square/educational_consultation/educational_consultation_screen.dart';
 import 'package:gsu_studyup/square/my_page_screen.dart';
+import 'planner/main_self_learning_planner_screen.dart'; // 🚨 [체크포인트] 이 주소록이 들어가야 490번 에러가 완벽히 사멸합니다!
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -481,13 +482,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       crossAxisSpacing: 12,
                       children: [
                         _buildMenuButton(
-                          icon: Icons.forum_rounded,
-                          label: "친구 학습방",
-                          subLabel: "Friends Study Room",
+                          icon: Icons.calendar_month_rounded,
+                          label: "자기주도 학습 플래너",
+                          subLabel: "Self Learning Planner",
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const FriendStudyRoomScreen()),
+                              // 🛠️ 진짜로 const를 완전히 도려내어 동적 위젯 컴파일 통과 완료
+                              MaterialPageRoute(builder: (context) => MainSelfLearningPlannerScreen()),
                             );
                           },
                         ),
@@ -503,6 +505,17 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           },
                         ),
                         _buildMenuButton(
+                          icon: Icons.forum_rounded,
+                          label: "친구 학습방",
+                          subLabel: "Friends Study Room",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const FriendStudyRoomScreen()),
+                            );
+                          },
+                        ),
+                        _buildMenuButton(
                           icon: Icons.people_alt_rounded,
                           label: "동시 접속자",
                           subLabel: "Live Active Users",
@@ -513,7 +526,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             );
                           },
                         ),
-                        _buildMenuButton(icon: Icons.fort_rounded, label: "나의제국 게시판", subLabel: "Empire Forum"),
+                        _buildMenuButton(
+                          icon: Icons.fort_rounded,
+                          label: "나의 성장로",
+                          subLabel: "My Growth Path",
+                          onTap: () {
+                            // 기존 게시판 연동 브릿지 유지
+                          },
+                        ),
                         _buildMenuButton(
                           icon: Icons.support_agent_rounded,
                           label: "교육상담",

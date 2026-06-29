@@ -404,7 +404,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.bolt_rounded), label: '실시간 현황'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_rounded), label: '상세 기록'),
+          BottomNavigationBarItem(icon: Icon(Icons.assignment_rounded), label: '상세 보기'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics_rounded), label: '평가 분석'),
         ],
       ),
