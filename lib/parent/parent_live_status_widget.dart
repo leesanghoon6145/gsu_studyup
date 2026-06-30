@@ -127,59 +127,6 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
           // ============================================================================
           // 🗺️ 명당 128번 줄: 지시하신 이모지 박스 바로 밑 고급형 [자녀 실시간 타이머 보기] 버튼
           // ============================================================================
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            height: 56,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [widget.brandGolden, const Color(0xFFE5C158)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: widget.brandGolden.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                )
-              ],
-            ),
-            child: ElevatedButton(
-              onPressed: () {
-                // 버튼 클릭 시 100% 쌍둥이 독립 스크린(전체 화면)으로 정밀 대이동 가동!
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => FullMirrorTimerScreen(
-                      brandGolden: widget.brandGolden,
-                      childName: widget.childName,
-                    ),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.fullscreen_rounded, color: Color(0xFF030712), size: 26),
-                  const SizedBox(width: 8),
-                  Text(
-                    "자녀 실시간 타이머 보기",
-                    style: GoogleFonts.gowunBatang(
-                      color: const Color(0xFF030712),
-                      fontSize: 16.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           // ============================================================================
 
           widget.buildCustomSectionTitle("Encourage Self-Directed Learning", "자기주도 학습 응원하기", fontSize: 14.0),
