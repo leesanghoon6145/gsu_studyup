@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 // [주석] 사용자의 마지막 제어 상태 및 마스터 데이터를 기기 내부에 영구 보존하기 위한 shared_preferences 임포트
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'widgets/study_timeline_section.dart'; // [주석] 새로 분가한 학습 타임라인 섹션 임포트
+import 'widgets/planner_calendar_view.dart'; // [주석] 새로 분가한 플래너 달력 그리드 위젯 임포트
+import 'widgets/daily_todo_list_section.dart'; // [주석] 새로 분가한 하루 주요 일정 섹션 임포트
 /// ============================================================================
 /// [GKE StudyUp] 자기주도 학습 플래너 - 학습 계획 스크린 (planning_screen.dart)
 /// ============================================================================
@@ -57,37 +59,113 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   late DateTime _selectedDayDate;
 
   // ============================================================================
-  // [주석] 글로벌 마스터 데이터 센터: 달력과 4대 탭이 완벽하게 실시간 공유 연동됨
+  // [GKE StudyUp] 글로벌 마스터 데이터 센터
   // ============================================================================
   late Map<String, List<Map<String, dynamic>>> _yearlyTargetsMap;
   late List<Map<String, dynamic>> _globalSchedules;
 
-  // [주석] 일간 날짜별 정밀 고정 타임라인 관리 데이터 센터
+  // [주석] 5개 주차(0~4) × 7개 요일(1~7) 단위의 순환형 주간 고정 시간표 템플릿 마스터
+  late Map<int, Map<int, List<Map<String, dynamic>>>> _weeklyTemplateMaster;
+
+  // [주석] 사용자가 특정 날짜에 수행하고 완료(별 획득)한 실제 기록 인스턴스 저장소
+  late Map<String, List<Map<String, dynamic>>> _dailyExecutionInstanceMap;
+
+  // [주석] 일간 날짜별 정밀 고정 타임라인 관리 실시간 화면 매핑 변수
   late List<Map<String, dynamic>> _fixedDayTimelines;
+
+  // [주석] 역방향 폭포수 연동을 위한 월간 실시간 달성도 지표 게이지 (0.0 ~ 1.0)
+  double _monthlyProgressGauge = 0.0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
 
-    // [주석] 시스템 실시간 오늘 날짜 감지 및 자동 매핑 로직 (달력 연동 핵심 기술)
     final DateTime today = DateTime.now();
     _selectedDayDate = DateTime(today.year, today.month, today.day);
 
-    // 현재 실제 연도가 리스트 범위 내에 있는 경우 동적으로 해당 인덱스 자동 매핑
     final String currentYearStr = '${today.year}년';
     final int matchedYearIdx = _scrollableYears.indexOf(currentYearStr);
     _selectedYearIndex = matchedYearIdx != -1 ? matchedYearIdx : 0;
-
-    // 현재 실제 월을 완벽하게 인식하여 기본 월간 가로 레인 인덱스 자동 지정 (0~11)
     _selectedMonthIndex = today.month - 1;
 
-    // [주석] 탭 전환이 완전히 종료되었을 때, 탭 상태값을 영구 보존하기 위한 리스너 탑재
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         _saveState();
       }
     });
+
+    // --------------------------------------------------------------------------
+    // 🎯 주간 토요일/일요일 이미지 스펙 완벽 반영 고정 템플릿 구조
+    // --------------------------------------------------------------------------
+    _weeklyTemplateMaster = {
+      for (int w = 0; w < 5; w++)
+        w: {
+          // 월요일(1) ~ 금요일(5) 기존 루틴 유지
+          for (int d = 1; d <= 5; d++)
+            d: [
+              {'time': '06:00 ~ 07:00', 'title': '기상 및 암기', 'memo': '새벽 기상 후 핵심 단어 및 암기과정 마스터 리프레시', 'category': '기타', 'custom_book': '', 'is_starred': false},
+              {'time': '07:00 ~ 08:00', 'title': '등교', 'memo': '오전 등교 및 주간 자율 플래너 로드 진입 완료', 'category': '기타', 'custom_book': '', 'is_starred': false},
+              {'time': '08:00 ~ 16:00', 'title': '학교생활', 'memo': '학교 정규 교과 수업 집중 이수 및 학업 성취도 빌드업', 'category': '교과서', 'custom_book': '', 'is_starred': false},
+              {'time': '16:00 ~ 17:00', 'title': '휴식', 'memo': '에너지 충전 및 하교 후 자기주도 학습 모드 전환 휴식', 'category': '기타', 'custom_book': '', 'is_starred': false},
+              {'time': '17:00 ~ 18:00', 'title': '고등수학', 'memo': '고등 수학 기본 개념 맵핑 및 유형별 고난도 문제 격파', 'category': '문제집', 'custom_book': '블랙라벨', 'is_starred': false},
+              {'time': '18:00 ~ 19:00', 'title': '저녁식사', 'memo': '균형 잡힌 영양 섭취 및 야간 집중 자습 리커버리 시간', 'category': '기타', 'custom_book': '', 'is_starred': false},
+              {'time': '19:00 ~ 20:00', 'title': '고등영어 자이스토리 실전', 'memo': '자이스토리 실전 모의고사 분석 및 고난도 구문 독해 트레이닝', 'category': '문제집', 'custom_book': '기출문제집', 'is_starred': false},
+              {'time': '20:00 ~ 21:00', 'title': '중등2-2 진도', 'memo': '중등 2학년 2학기 핵심 기하 파트 심화 진도 선행 점검', 'category': '동영상', 'custom_book': '', 'is_starred': false},
+              {'time': '21:00 ~ 22:00', 'title': '세계사', 'memo': '세계사 주요 연표 마인드맵핑 및 흐름 정리 암기 트랙', 'category': '교과서', 'custom_book': '', 'is_starred': false},
+              {'time': '22:00 ~ 23:00', 'title': '오늘것 오답 또는 총정리', 'memo': '오늘 진행된 전체 진도 오답노트 정밀 기록 및 최종 스터디업 클로징', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            ],
+
+          // 토요일 템플릿(6)
+          6: [
+            {'time': '06:00 ~ 07:00', 'title': '기상 + 가벼운 운동/스트레칭', 'memo': '물 마시고 산책 or 홈트', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '07:00 ~ 08:00', 'title': '아침 준비 + 명상/일기', 'memo': '하루 계획 세우기', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '08:00 ~ 08:40', 'title': '아침 식사', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '08:40 ~ 09:00', 'title': '휴식 / 산책', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '09:00 ~ 10:30', 'title': '학습 블록 1 (90분)', 'memo': '가장 집중력 좋은 시간 (고등수학/과학 등 사고력 중심)', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '10:30 ~ 10:50', 'title': '휴식 + 간식', 'memo': '20분 충분히 쉬기', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '11:00 ~ 12:30', 'title': '학습 블록 2 (90분)', 'memo': '심화 문제풀이 및 핵심 개념 고착화', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '12:30 ~ 13:30', 'title': '점심 식사 + 여유로운 휴식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '13:30 ~ 14:00', 'title': '낮잠 or 가벼운 산책', 'memo': '피로 회복 및 오후 몰입 준비', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '14:00 ~ 15:20', 'title': '학습 블록 3 (80분)', 'memo': '오후 집중력 보통 (영어 구문 독해 및 모의고사 분석)', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '15:20 ~ 15:40', 'title': '휴식 + 운동 or 스트레칭', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '15:40 ~ 16:40', 'title': '학습 블록 4 (60분)', 'memo': '짧게 마무리 및 주간 누락 진도 보완', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '16:40 ~ 20:00', 'title': '자유 시간 / 취미 / 가족 / 저녁 식사 / 휴식', 'memo': '충분한 여유 시간 (정신적 리커버리)', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '20:00 ~ 21:30', 'title': '학습 블록 5 (90분)', 'memo': '추가된 저녁 블록 (당일 오답 정리 및 핵심 피드백 암기)', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '21:30 ~ 22:00', 'title': '휴식 / 가벼운 정리', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '22:00 ~ 23:00', 'title': '취침 준비', 'memo': '샤워, 명상 (※ 스마트폰 멀리하기 철저 이행)', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '23:00 ~ 07:00', 'title': '취침 (8시간 수면)', 'memo': '다음날 07:00 기상', 'category': '기타', 'custom_book': '', 'is_starred': false},
+          ],
+
+          // 일요일 템플릿(7)
+          7: [
+            {'time': '06:00 ~ 07:00', 'title': '기상 + 가벼운 운동/스트레칭', 'memo': '토요일과 동일', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '07:00 ~ 08:00', 'title': '아침 준비 + 명상/일기', 'memo': '하루 평가 계획 세우기', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '08:00 ~ 08:40', 'title': '아침 식사', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '08:40 ~ 09:00', 'title': '휴식 / 산책', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '09:00 ~ 10:00', 'title': '총복습 1', 'memo': '이번 주 전체 과목 빠르게 훑기', 'category': '교과서', 'custom_book': '', 'is_starred': false},
+            {'time': '10:00 ~ 10:20', 'title': '휴식 + 간식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '10:20 ~ 11:20', 'title': '총복습 2', 'memo': '취약했던 부분 중심 타격 복습', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '11:20 ~ 11:40', 'title': '휴식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '11:40 ~ 12:30', 'title': '총복습 3 + 정리', 'memo': '약점 체크리스트 만들기', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '12:30 ~ 14:00', 'title': '점심 + 산책 + 여유 시간', 'memo': '충분히 쉬기', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '14:00 ~ 14:50', 'title': '주평가 1 (50분)', 'memo': '국어 or 영어 실전 테스트', 'category': '문제집', 'custom_book': '기출문제집', 'is_starred': false},
+            {'time': '14:50 ~ 15:05', 'title': '짧은 휴식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '15:05 ~ 15:55', 'title': '주평가 2 (50분)', 'memo': '수학 단원 완성 정밀 평가', 'category': '문제집', 'custom_book': '블랙라벨', 'is_starred': false},
+            {'time': '15:55 ~ 16:10', 'title': '휴식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '16:10 ~ 17:00', 'title': '주평가 3 (50분)', 'memo': '과학 or 사회 평가', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '17:00 ~ 18:30', 'title': '자유 시간 + 저녁 식사', 'memo': '완전 휴식 (멘탈 리셋 및 충전)', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '18:30 ~ 19:20', 'title': '주평가 4 (50분)', 'memo': '고등수학 심화 트랙 테스트', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '19:20 ~ 19:35', 'title': '휴식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '19:35 ~ 20:25', 'title': '주평가 5 (50분)', 'memo': '고등영어 고난도 구문 독해 평가', 'category': '문제집', 'custom_book': '', 'is_starred': false},
+            {'time': '20:25 ~ 20:40', 'title': '휴식', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '20:40 ~ 21:30', 'title': '주평가 6 + 오답 정리', 'memo': '일주일 누적 오답 백서 기록 최종 정밀 검증', 'category': '문제집', 'custom_book': '오답노트', 'is_starred': false},
+            {'time': '21:30 ~ 22:00', 'title': '자유 시간 / 가벼운 정리', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '22:00 ~ 23:00', 'title': '취침 준비', 'memo': '-', 'category': '기타', 'custom_book': '', 'is_starred': false},
+            {'time': '23:00 ~ 07:00', 'title': '취침', 'memo': '8시간 수면', 'category': '기타', 'custom_book': '', 'is_starred': false},
+          ],
+        }
+    };
 
     _yearlyTargetsMap = {
       '2026년': [
@@ -95,96 +173,181 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         {'title': '2026 수학 내신 1등급 완성', 'done': false},
         {'title': '2026 영어 수능 최저학력기준 충족', 'done': false},
       ],
-      '2027년': [
-        {'title': '2027 고등 전과목 심화 마스터', 'done': false},
-      ],
+      '2027년': [{'title': '2027 고등 전과목 심화 마스터', 'done': false}],
       '2028년': [], '2029년': [], '2030년': [],
     };
 
+    // 💡 [안정성 패치]: 캘린더 에러 방지를 위해 변수들을 여기서 확실하게 강제 초기화
     _globalSchedules = [
       {
-        'year': 2026, 'month': 7, 'day': 1, 'time': '08:00',
-        'title': '고등학교 학업 평가단 입과 수행', 'color': schoolColor, 'memo': '새로운 고등 학업의 시작점 세팅',
-      },
-      {
-        'year': 2026, 'month': 7, 'day': 1, 'time': '16:00',
-        'title': '대성학원 대입 종합 윈터클리닉 연동', 'color': academyColor, 'memo': '심화 연동 마스터 코스 배정 완료',
-      },
-      {
-        'year': 2026, 'month': 7, 'day': 1, 'time': '21:00',
-        'title': '전국 연합 모의고사 오답 백서 검증', 'color': examColor, 'memo': '오답노트 완벽 정리 및 취약 영역 분석',
-      },
-      {
-        'year': 2026, 'month': 7, 'day': 1, 'time': '22:30',
-        'title': '개인 플래너 별 누적 리프레시', 'color': personalColor, 'memo': '대시보드 별 누적 시스템 가동',
-      },
-      {
-        'year': 2026, 'month': 7, 'day': 15, 'time': '09:00',
-        'title': '기말고사 1일차 통합 평가 수행', 'color': examColor, 'memo': '전과목 만점 목표 진입',
-      },
+        'year': 2026, 'month': 7, 'day': 3, 'time': '12:00',
+        'title': '자기주도 학습 핵심 아키텍처 가동', 'color': schoolColor, 'memo': '시스템 리팩토링 및 캘린더 엔진 결합',
+      }
     ];
-
-    _fixedDayTimelines = [
-      {'time': '06:00 ~ 07:00', 'title': '기상 및 암기', 'memo': '새벽 기상 후 핵심 단어 및 암기과정 마스터 리프레시', 'category': '기타', 'custom_book': '', 'is_starred': false},
-      {'time': '07:00 ~ 08:00', 'title': '등교', 'memo': '오전 등교 및 주간 자율 플래너 로드 진입 완료', 'category': '기타', 'custom_book': '', 'is_starred': false},
-      {'time': '08:00 ~ 16:00', 'title': '학교생활', 'memo': '학교 정규 교과 수업 집중 이수 및 학업 성취도 빌드업', 'category': '교과서', 'custom_book': '', 'is_starred': false},
-      {'time': '16:00 ~ 17:00', 'title': '휴식', 'memo': '에너지 충전 및 하교 후 자기주도 학습 모드 전환 휴식', 'category': '기타', 'custom_book': '', 'is_starred': false},
-      {'time': '17:00 ~ 18:00', 'title': '고등수학', 'memo': '고등 수학 기본 개념 맵핑 및 유형별 고난도 문제 격파', 'category': '문제집', 'custom_book': '블랙라벨', 'is_starred': false},
-      {'time': '18:00 ~ 19:00', 'title': '저녁식사', 'memo': '균형 잡힌 영양 섭취 및 야간 집중 자습 리커버리 시간', 'category': '기타', 'custom_book': '', 'is_starred': false},
-      {'time': '19:00 ~ 20:00', 'title': '고등영어 자이스토리 실전', 'memo': '자이스토리 실전 모의고사 분석 및 고난도 구문 독해 트레이닝', 'category': '문제집', 'custom_book': '기출문제집', 'is_starred': false},
-      {'time': '20:00 ~ 21:00', 'title': '중등2-2 진도', 'memo': '중등 2학년 2학기 핵심 기하 파트 심화 진도 선행 점검', 'category': '동영상', 'custom_book': '', 'is_starred': false},
-      {'time': '21:00 ~ 22:00', 'title': '세계사', 'memo': '세계사 주요 연표 마인드맵핑 및 흐름 정리 암기 트랙', 'category': '교과서', 'custom_book': '', 'is_starred': false},
-      {'time': '22:00 ~ 23:00', 'title': '오늘것 오답 또는 총정리', 'memo': '오늘 진행된 전체 진도 오답노트 정밀 기록 및 최종 스터디업 클로징', 'category': '문제집', 'custom_book': '', 'is_starred': false},
-    ];
+    _fixedDayTimelines = [];
 
     _sortGlobalSchedules();
 
-    // [주석] 데이터 로딩 순서 정밀 제어: 마스터 데이터를 먼저 복원한 뒤, 이어서 제어 인덱스 값을 최종 갱신
-    _initStorageAndLoad();
+    // 동적 데이터 연동 파이프라인 작동
+    _initStorageAndLoad().then((_) {
+      _syncDailyTimelineForDate(_selectedDayDate);
+      _calculateMonthlyProgress();
+    });
   }
 
   /// ============================================================================
-  /// [주석] SharedPreferences 영구 저장 및 동적 복원 메소드 모듈 (베테랑의 기술)
+  /// [GKE StudyUp] 톱니바퀴형 연속 주차 알고리즘 및 폭포수 연동 엔진
   /// ============================================================================
+  int _getContinuousWeekIndex(DateTime date) {
+    final DateTime yearStart = DateTime(date.year, 1, 1);
+    final int daysDiff = date.difference(yearStart).inDays;
+    final int yearWeekNumber = ((daysDiff + yearStart.weekday) / 7).ceil();
+    return (yearWeekNumber - 1) % 5;
+  }
 
-  /// [주석] 저장소 초기화 및 순차 복원을 동시 비동기 실행하는 모듈
+  void _syncDailyTimelineForDate(DateTime date) async {
+    final String dateKey = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+    final prefs = await SharedPreferences.getInstance();
+
+    // [주석] 홈 대시보드 연동용 마스터 키값 안전하게 로드
+    final String? examType = prefs.getString('gke_selected_exam_type'); // 중간고사, 기말고사 등
+    final String? startStr = prefs.getString('gke_exam_start_date');
+    final String? endStr = prefs.getString('gke_exam_end_date');
+    final String? prepPeriod = prefs.getString('gke_exam_prep_period'); // 2주 전, 3주 전, 4주 전
+    final bool timelineEnabled = prefs.getBool('gke_exam_timeline_enabled') ?? false;
+
+    bool isExamModeActive = false;
+    String examStatusTitleEn = "REGULAR STUDY RUN";
+    String examStatusTitleKo = "평상시 자율 학습 계획 트랙";
+
+    if (timelineEnabled && startStr != null && endStr != null) {
+      final DateTime examStartDate = DateTime.parse(startStr);
+      final DateTime examEndDate = DateTime.parse(endStr);
+
+      // [주석] 선택한 준비 기간(2주/3주/4주)에 따른 역산 일수 계산 가드
+      int prepDays = 28; // 기본값 4주 전
+      if (prepPeriod == '2주 전') prepDays = 14;
+      if (prepPeriod == '3주 전') prepDays = 21;
+
+      final DateTime prepStartDate = examStartDate.subtract(Duration(days: prepDays));
+      // [주석] 시험 종료일 밤 24:00 정밀 매핑을 위해 하루를 더한 뒤 자정으로 기준 설정
+      final DateTime examEndMidnight = DateTime(examEndDate.year, examEndDate.month, examEndDate.day).add(const Duration(days: 1));
+
+      // 🎯 [원장님 핵심 지시사항]: 현재 날짜가 시험 준비 시작일과 종료일 자정 사이에 있는지 판정
+      if ((date.isAfter(prepStartDate) || date.isAtSameMomentAs(prepStartDate)) && date.isBefore(examEndMidnight)) {
+        isExamModeActive = true;
+
+        // [주석] 몇 주차 몇 일차인지 자동 연산 메커니즘 가동
+        int daysDiffFromStart = date.difference(prepStartDate).inDays;
+        int currentExamWeek = (daysDiffFromStart / 7).floor() + 1;
+        int currentExamDayNum = (daysDiffFromStart % 7) + 1;
+
+        // [주석] 정밀 요일별 D-Day 카운터 분기 트랙 반영
+        int dDayCount = DateTime(examStartDate.year, examStartDate.month, examStartDate.day).difference(date).inDays;
+        String dDayLabel = "";
+        if (dDayCount > 0) {
+          dDayLabel = "D-$dDayCount";
+        } else if (dDayCount == 0) {
+          dDayLabel = "D-Day";
+        } else {
+          dDayLabel = "D+${dDayCount.abs()}";
+        }
+
+        examStatusTitleEn = "EXAM PREP: WEEK $currentExamWeek DAY $currentExamDayNum ($dDayLabel)";
+        examStatusTitleKo = "[$examType 대비] $currentExamWeek주차 $currentExamDayNum일차 실전 모드 ($dDayLabel)";
+      }
+    }
+
+    // [주석] 이미 기록된 인스턴스가 없을 때만 새로운 시간표 인스턴스를 동적 조립
+    if (!_dailyExecutionInstanceMap.containsKey(dateKey)) {
+      List<Map<String, dynamic>> freshInstance = [];
+
+      if (isExamModeActive) {
+        // 🎯 [원장님 지시 스펙]: 시험 기간 전용 시간표 레이아웃 빌드업
+        freshInstance = [
+          {'time': '06:00 ~ 08:00', 'title': 'EXAM INTENSIVE MEMORY\n[시험과목 핵심 요약 암기 특강]', 'memo': examStatusTitleKo, 'category': '교과서', 'custom_book': '', 'is_starred': false},
+          {'time': '08:00 ~ 16:00', 'title': 'SCHOOL EXAM CONTEXT\n[학교 시험 대비 집중 수업 청취]', 'memo': '학교 기출 유형 완벽 분석 및 오답 정리', 'category': '교과서', 'custom_book': '', 'is_starred': false},
+          {'time': '16:00 ~ 18:00', 'title': 'MOCK EXAM PRACTICE\n[기출문제집 실전 모의고사 제한시간 격파]', 'memo': '과거 3개년 인근 학교 족보 정밀 마스터', 'category': '문제집', 'custom_book': '기출문제집', 'is_starred': false},
+          {'time': '18:00 ~ 22:00', 'title': 'INTENSIVE WEAKNESS FEEDBACK\n[단원별 취약점 파괴 및 1:1 오답 클리닉]', 'memo': '완벽한 개념 이해를 위한 수집 레이스 트랙', 'category': '문제집', 'custom_book': '오답노트', 'is_starred': false},
+          {'time': '22:00 ~ 23:00', 'title': 'CLOSING SUMMARY & STAR COLLECT\n[오늘 시험 범위 최종 마감 및 별 수집]', 'memo': '자정 전 완벽 리커버리', 'category': '기타', 'custom_book': '', 'is_starred': false},
+        ];
+      } else {
+        // [주석] 평상시(상시) 기간일 때는 기존 순환형 5주차 기본 시간표 템플릿 적용
+        int calculatedWeekIdx = _getContinuousWeekIndex(date);
+        int weekdayIdx = date.weekday;
+        List<Map<String, dynamic>> templateList = _weeklyTemplateMaster[calculatedWeekIdx]?[weekdayIdx] ?? [];
+        freshInstance = templateList.map((item) => Map<String, dynamic>.from(item)).toList();
+      }
+
+      _dailyExecutionInstanceMap[dateKey] = freshInstance;
+    } else {
+      // [주석] 기존에 편집된 인스턴스가 존재하더라도 시험 모드에 돌입했다면 실시간 정보 업데이트 반영
+      if (isExamModeActive && _dailyExecutionInstanceMap[dateKey]!.isNotEmpty) {
+        _dailyExecutionInstanceMap[dateKey]![0]['memo'] = examStatusTitleKo;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _fixedDayTimelines = _dailyExecutionInstanceMap[dateKey]!;
+        _selectedWeekIndex = _getContinuousWeekIndex(date);
+      });
+    }
+  }
+
+  void _calculateMonthlyProgress() {
+    int totalTasks = 0;
+    int completedTasks = 0;
+    final String monthPrefix = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-";
+
+    _dailyExecutionInstanceMap.forEach((key, list) {
+      if (key.startsWith(monthPrefix)) {
+        for (var task in list) {
+          totalTasks++;
+          if (task['is_starred'] == true) { completedTasks++; }
+        }
+      }
+    });
+
+    setState(() {
+      _monthlyProgressGauge = totalTasks == 0 ? 0.0 : completedTasks / totalTasks;
+    });
+  }
+
+  /// ============================================================================
+  /// [주석] SharedPreferences 영구 저장 및 동적 복원 메소드 모듈
+  /// ============================================================================
+  /// ============================================================================
+  /// [주석] SharedPreferences 영구 저장 및 동적 복원 메소드 모듈
+  /// ============================================================================
   Future<void> _initStorageAndLoad() async {
     await _loadMasterData();
     await _loadSavedState();
   }
 
-  /// [주석] 현재 사용자가 선택하고 제어 중인 인덱스 및 토글 상태를 영구 저장소에 저장
   Future<void> _saveState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-
-      // 주요 탭 및 리스트 제어 인덱스 저장
       await prefs.setInt('gke_tab_index', _tabController.index);
       await prefs.setInt('gke_selected_year_index', _selectedYearIndex);
       await prefs.setInt('gke_selected_month_index', _selectedMonthIndex);
       await prefs.setInt('gke_selected_week_index', _selectedWeekIndex);
-
-      // 일간 탭의 정밀 캘린더 일자 날짜 저장 (ISO 8601 표준 포맷 대응)
       await prefs.setString('gke_selected_day_date', _selectedDayDate.toIso8601String());
 
-      // 이원화 선택 스위치 및 가시성, 확장 상태 영구 보존
       await prefs.setBool('gke_is_year_target_selected', _isYearTargetSelected);
       await prefs.setBool('gke_is_month_target_selected', _isMonthTargetSelected);
       await prefs.setBool('gke_is_week_timeline_selected', _isWeekTimelineSelected);
       await prefs.setBool('gke_is_time_view_selected', _isTimeViewSelected);
       await prefs.setBool('gke_is_year_target_expanded', _isYearTargetExpanded);
       await prefs.setBool('gke_is_day_calendar_visible', _isDayCalendarVisible);
-
     } catch (e) {
       debugPrint('[GKE StudyUp] Error saving configuration state: $e');
     }
   }
 
-  /// [주석] 기기 저장소로부터 상태 정보를 완벽히 읽어와 실시간 UI에 강제 맵핑
   Future<void> _loadSavedState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-
       final int? savedTabIndex = prefs.getInt('gke_tab_index');
       final int? savedYearIndex = prefs.getInt('gke_selected_year_index');
       final int? savedMonthIndex = prefs.getInt('gke_selected_month_index');
@@ -199,21 +362,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       final bool? savedDayCalendarVis = prefs.getBool('gke_is_day_calendar_visible');
 
       setState(() {
-        if (savedTabIndex != null) {
-          _tabController.index = savedTabIndex;
-        }
-        if (savedYearIndex != null && savedYearIndex < _scrollableYears.length) {
-          _selectedYearIndex = savedYearIndex;
-        }
-        if (savedMonthIndex != null && savedMonthIndex < 12) {
-          _selectedMonthIndex = savedMonthIndex;
-        }
-        if (savedWeekIndex != null && savedWeekIndex < _scrollableWeeks.length) {
-          _selectedWeekIndex = savedWeekIndex;
-        }
-        if (savedDayDateStr != null) {
-          _selectedDayDate = DateTime.parse(savedDayDateStr);
-        }
+        if (savedTabIndex != null) { _tabController.index = savedTabIndex; }
+        if (savedYearIndex != null && savedYearIndex < _scrollableYears.length) { _selectedYearIndex = savedYearIndex; }
+        if (savedMonthIndex != null && savedMonthIndex < 12) { _selectedMonthIndex = savedMonthIndex; }
+        if (savedWeekIndex != null && savedWeekIndex < _scrollableWeeks.length) { _selectedWeekIndex = savedWeekIndex; }
+        if (savedDayDateStr != null) { _selectedDayDate = DateTime.parse(savedDayDateStr); }
 
         if (savedYearTargetSel != null) _isYearTargetSelected = savedYearTargetSel;
         if (savedMonthTargetSel != null) _isMonthTargetSelected = savedMonthTargetSel;
@@ -222,44 +375,34 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         if (savedYearTargetExp != null) _isYearTargetExpanded = savedYearTargetExp;
         if (savedDayCalendarVis != null) _isDayCalendarVisible = savedDayCalendarVis;
       });
+
+      // [주석] 홈 대시보드 팝업창에서 저장된 시험 설정 정보 실시간 강제 연동 동기화
+      _syncDailyTimelineForDate(_selectedDayDate);
     } catch (e) {
       debugPrint('[GKE StudyUp] Error loading configuration state: $e');
     }
   }
 
-  /// [주석] 인메모리에서 일시적으로 관리되는 마스터 데이터(추가된 일정, 체크박스 달성도, 스타 획득여부 등)를 JSON화 하여 영구 로드 보관
   Future<void> _saveMasterData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('gke_yearly_targets_map', jsonEncode(_yearlyTargetsMap));
 
-      // 1. 연간 세부 체크리스트 인포맵 직렬화 저장
-      final String yearlyTargetsJson = jsonEncode(_yearlyTargetsMap);
-      await prefs.setString('gke_yearly_targets_map', yearlyTargetsJson);
-
-      // 2. 글로벌 일정 정보 직렬화 저장 (Color 구조는 .value 정수값으로 치환 가공)
       final List<Map<String, dynamic>> serializableSchedules = _globalSchedules.map((item) {
         final Map<String, dynamic> copy = Map.from(item);
-        if (copy['color'] is Color) {
-          copy['color'] = (copy['color'] as Color).value;
-        }
+        if (copy['color'] is Color) { copy['color'] = (copy['color'] as Color).value; }
         return copy;
       }).toList();
       await prefs.setString('gke_global_schedules', jsonEncode(serializableSchedules));
-
-      // 3. 일간 타임 루틴 데이터 직렬화 저장 (별 획득 수집 상태 추적용)
-      await prefs.setString('gke_fixed_day_timelines', jsonEncode(_fixedDayTimelines));
-
+      await prefs.setString('gke_daily_execution_instance_map', jsonEncode(_dailyExecutionInstanceMap));
     } catch (e) {
       debugPrint('[GKE StudyUp] Error serializing master data: $e');
     }
   }
 
-  /// [주석] 영구 보존된 JSON 포맷을 디코딩하여 메모리 테이블에 재주입 역직렬화 트래킹
   Future<void> _loadMasterData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-
-      // 1. 연간 목표 맵 데이터 복원
       final String? yearlyTargetsJson = prefs.getString('gke_yearly_targets_map');
       if (yearlyTargetsJson != null) {
         final Map<String, dynamic> decoded = jsonDecode(yearlyTargetsJson);
@@ -271,37 +414,33 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         });
       }
 
-      // 2. 글로벌 주요 스케줄러 복원 (정수형 컬러값을 복구하여 다시 Color 인스턴스로 대입)
       final String? globalSchedulesJson = prefs.getString('gke_global_schedules');
       if (globalSchedulesJson != null) {
         final List<dynamic> decodedList = jsonDecode(globalSchedulesJson);
         setState(() {
           _globalSchedules = decodedList.map((item) {
             final Map<String, dynamic> map = Map<String, dynamic>.from(item as Map);
-            if (map['color'] is int) {
-              map['color'] = Color(map['color'] as int);
-            }
+            if (map['color'] is int) { map['color'] = Color(map['color'] as int); }
             return map;
           }).toList();
           _sortGlobalSchedules();
         });
       }
 
-      // 3. 정밀 고정 타임라인 및 수집 완료한 상태값 복원
-      final String? fixedTimelinesJson = prefs.getString('gke_fixed_day_timelines');
-      if (fixedTimelinesJson != null) {
-        final List<dynamic> decodedList = jsonDecode(fixedTimelinesJson);
+      final String? dailyExecJson = prefs.getString('gke_daily_execution_instance_map');
+      if (dailyExecJson != null) {
+        final Map<String, dynamic> decodedMap = jsonDecode(dailyExecJson);
         setState(() {
-          _fixedDayTimelines = decodedList.map((item) {
-            return Map<String, dynamic>.from(item as Map);
-          }).toList();
+          _dailyExecutionInstanceMap = decodedMap.map((key, value) {
+            final List<dynamic> list = value as List<dynamic>;
+            return MapEntry(key, list.map((item) => Map<String, dynamic>.from(item as Map)).toList());
+          });
         });
       }
     } catch (e) {
       debugPrint('[GKE StudyUp] Error deserializing master data: $e');
     }
   }
-
   void _sortGlobalSchedules() {
     _globalSchedules.sort((a, b) {
       int yearComp = (a['year'] as int).compareTo(b['year'] as int);
@@ -391,9 +530,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       ),
     );
   }
-
   /// ============================================================================
-  /// 📅 1. 연간 뷰 (YEAR VIEW) - 지시사항 2번 버그 완벽 수정 교정 완료
+  /// 📅 1. 연간 뷰 (YEAR VIEW)
   /// ============================================================================
   Widget _buildYearView() {
     String currentYearKey = _scrollableYears[_selectedYearIndex];
@@ -417,7 +555,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               return GestureDetector(
                 onTap: () {
                   setState(() { _selectedYearIndex = index; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
+                  _saveState();
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 10),
@@ -442,10 +580,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isYearTargetSelected = true; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isYearTargetSelected = true; }); _saveState(); },
                 child: Container(
                   margin: const EdgeInsets.only(right: 6),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -467,10 +602,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isYearTargetSelected = false; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isYearTargetSelected = false; }); _saveState(); },
                 child: Container(
                   margin: const EdgeInsets.only(left: 6),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -505,10 +637,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               title: Text('$currentYearKey 목표 분석 레일', style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
               iconColor: goldColor,
               collapsedIconColor: slate400,
-              onExpansionChanged: (val) {
-                setState(() { _isYearTargetExpanded = val; });
-                _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-              },
+              onExpansionChanged: (val) { setState(() { _isYearTargetExpanded = val; }); _saveState(); },
               children: [
                 if (currentTargets.isEmpty)
                   Padding(
@@ -516,7 +645,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     child: Text('등록된 연간 목표 목표치가 없습니다.', style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)),
                   )
                 else
-                // [주석] 지시사항 2 완벽 타격 교정: 위젯 전체 묶음을 없애고 개별 함수 바인딩으로 간섭 원천 배제
                   ...currentTargets.asMap().entries.map((entry) {
                     return _buildYearChecklistItem(entry.value['title'], entry.value['done'], entry.key, currentYearKey);
                   }).toList(),
@@ -528,9 +656,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           if (filteredYearSchedules.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 40.0),
-              child: Center(
-                child: Text('해당 연도에 편성된 주요 일정이 없습니다.', style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)),
-              ),
+              child: Center(child: Text('해당 연도에 편성된 주요 일정이 없습니다.', style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12))),
             )
           else
             ...filteredYearSchedules.asMap().entries.map((entry) {
@@ -553,6 +679,35 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       children: [
         _buildDynamicSectionHeader('MONTHLY MANAGEMENT', '월간 학습 계획 관리', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 15),
+
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(10), border: Border.all(color: slate800)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('MONTHLY ACHIEVEMENT GAUGE', style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
+                  Text('${(_monthlyProgressGauge * 100).toStringAsFixed(1)}%', style: GoogleFonts.notoSerif(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: _monthlyProgressGauge,
+                  minHeight: 8,
+                  backgroundColor: const Color(0xFF0F172A),
+                  valueColor: AlwaysStoppedAnimation<Color>(goldColor),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
         SizedBox(
           height: 38,
           child: ListView.builder(
@@ -563,7 +718,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               return GestureDetector(
                 onTap: () {
                   setState(() { _selectedMonthIndex = index; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
+                  _saveState();
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 8),
@@ -588,10 +743,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isMonthTargetSelected = true; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isMonthTargetSelected = true; }); _saveState(); },
                 child: Container(
                   margin: const EdgeInsets.only(right: 6),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -613,10 +765,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isMonthTargetSelected = false; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isMonthTargetSelected = false; }); _saveState(); },
                 child: Container(
                   margin: const EdgeInsets.only(left: 6),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -730,7 +879,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               return GestureDetector(
                 onTap: () {
                   setState(() { _selectedWeekIndex = index; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
+                  _saveState();
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 10),
@@ -755,10 +904,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isWeekTimelineSelected = true; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isWeekTimelineSelected = true; }); _saveState(); },
                 child: Container(
                   margin: const EdgeInsets.only(right: 6),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -780,10 +926,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isWeekTimelineSelected = false; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isWeekTimelineSelected = false; }); _saveState(); },
                 child: Container(
                   margin: const EdgeInsets.only(left: 6),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
@@ -808,45 +951,43 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         const SizedBox(height: 16),
 
         if (_isWeekTimelineSelected) ...[
-          Text('$currentWeekLabel 요일별 학습 루틴 트랙 (상세보기 연동)', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
+          Text('$currentWeekLabel 요일별 고정 기본 템플릿 정보 조망', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
           const SizedBox(height: 10),
           ...weekdays.map((day) {
-            String uniqueScheduleKey = '${currentWeekLabel}_$day';
-            Map<String, dynamic> weekSchedule = {
-              'week_key': uniqueScheduleKey,
-              'title': day == '월' ? '월요 영단어 1000개 심화 암기' : (day == '수' ? '수요 수학 고난도 문제집 단원 완성' : '$day요일 자기주도 학습 목표 도달 훈련'),
-              'memo': '$day요일 진도 계획 준수 및 플래너 별 누적 리프레시 검증.',
-              'time': '종일 고정',
-              'color': goldColor,
-              'is_weekly': true
+            int dayIdx = weekdays.indexOf(day) + 1;
+            var list = _weeklyTemplateMaster[_selectedWeekIndex]?[dayIdx] ?? [];
+            String mainTaskTitle = list.isNotEmpty ? list[0]['title'] : '자율 학습 설정 트랙';
+
+            Map<String, dynamic> weekSummary = {
+              'title': '$day요일: $mainTaskTitle 등 대표 편성',
+              'memo': '순환형 주차 톱니바퀴 결합에 따른 고정 템플릿 루틴 구간입니다.',
+              'time': '고정 템플릿',
+              'color': goldColor
             };
 
-            return GestureDetector(
-              onTap: () { _showUnifiedPopupTrack(weekSchedule, typeKey: 'WEEK'); },
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: day == '일' ? examColor : goldColor.withValues(alpha: 0.2), shape: BoxShape.circle),
-                      child: Text(day, style: GoogleFonts.notoSansKr(fontSize: 12, color: day == '일' ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: day == '일' ? examColor : goldColor.withValues(alpha: 0.2), shape: BoxShape.circle),
+                    child: Text(day, style: GoogleFonts.notoSansKr(fontSize: 12, color: day == '일' ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(weekSummary['title'], style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
+                        Text(weekSummary['memo'], style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500), overflow: TextOverflow.ellipsis),
+                      ],
                     ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(weekSchedule['title'], style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
-                          Text(weekSchedule['memo'], style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500), overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.edit_calendar, color: goldColor.withValues(alpha: 0.6), size: 16),
-                  ],
-                ),
+                  ),
+                  Icon(Icons.lock_clock, color: slate500, size: 16),
+                ],
               ),
             );
           }).toList(),
@@ -873,7 +1014,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   /// ============================================================================
-  /// 📅 4. 일간 뷰 (DAY VIEW)
+  /// 📅 4. 일간 뷰 (DAY VIEW) - [핵심 패치] 오버플로우 방지 및 무한 시간 확장 지원
   /// ============================================================================
   Widget _buildDayView() {
     List<Map<String, dynamic>> targetDaySchedules = _globalSchedules
@@ -903,188 +1044,83 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         _buildDynamicSectionHeader('DAILY SCHEDULER NAVI', '오늘 일정 관리 및 날짜 변경 레일', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
 
-        GestureDetector(
-          onTap: () {
+        _buildDynamicSectionHeader('DAILY SCHEDULER NAVI', '오늘 일정 관리 및 날짜 변경 레일', () { _showAddScheduleBottomSheet(context, '일정'); }),
+        const SizedBox(height: 12),
+
+        // [주석] 복잡했던 달력 제어 판 전체를 widgets/planner_calendar_view.dart 새집으로 분가시켜 가동
+        PlannerCalendarView(
+          selectedDayDate: _selectedDayDate,
+          isDayCalendarVisible: _isDayCalendarVisible,
+          globalSchedules: _globalSchedules,
+          goldColor: goldColor,
+          examColor: examColor,
+          schoolColor: schoolColor,
+          academyColor: academyColor,
+          personalColor: personalColor,
+          slate400: slate400,
+          slate500: slate500,
+          slate800: slate800,
+          onToggleCalendar: () {
             setState(() { _isDayCalendarVisible = !_isDayCalendarVisible; });
-            _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
+            _saveState();
           },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF020617),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: goldColor.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+          onDaySelected: (newDate) {
+            setState(() { _selectedDayDate = newDate; });
+            _saveState();
+            _syncDailyTimelineForDate(_selectedDayDate);
+            _calculateMonthlyProgress();
+            _showCalendarDaySchedulesPopup(_selectedDayDate.day);
+          },
+        ),
+
+        // 일간 뷰 좌측 정밀 날짜 인디케이터 블록
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(10), border: Border.all(color: slate800, width: 1.5)),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(color: goldColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: goldColor, width: 1.5)),
+                child: Text(
+                  '${_selectedDayDate.month.toString().padLeft(2, '0')}/${_selectedDayDate.day.toString().padLeft(2, '0')}',
+                  style: GoogleFonts.notoSerif(fontSize: 23, color: goldColor, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.calendar_month, color: goldColor, size: 20),
-                    const SizedBox(width: 10),
-                    // [주석] 지시사항 8 & 9조 완벽 대응: 캘린더 온오프 헤더의 영문-한글 상하배치 가공 트랙
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('CALENDAR CONTROLLER', style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
-                        Text('달력 열기·닫기', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
-                      ],
+                    Text(
+                      _selectedDayDate.year == DateTime.now().year && _selectedDayDate.month == DateTime.now().month && _selectedDayDate.day == DateTime.now().day
+                          ? 'SELECTED TARGET DATE / TODAY STATUS'
+                          : 'SELECTED TARGET DATE / ARCHIVE STATUS',
+                      style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_selectedDayDate.month}월 ${_selectedDayDate.day}일 (${['월', '화', '수', '목', '금', '토', '일'][_selectedDayDate.weekday - 1]}요일) 오늘의 학습 상태',
+                      style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
-                Icon(_isDayCalendarVisible ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: goldColor)
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-
-        if (_isDayCalendarVisible) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(12), border: Border.all(color: slate800)),
-            child: Column(
-              children: [
-                Text('DATE CONTROL RAIL', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
-                Text('${_selectedDayDate.year}년 ${_selectedDayDate.month}월 달력 제어 레일', style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: 7,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 2),
-                  itemBuilder: (context, index) {
-                    return Center(
-                      child: Text(
-                        weekLabelList[index],
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 11,
-                          color: weekLabelList[index] == '일' ? examColor : (weekLabelList[index] == '토' ? schoolColor : slate400),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(color: Color(0xFF1E293B), height: 10),
-
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: totalCalendarGridItemsCount,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 0.85
-                  ),
-                  itemBuilder: (context, index) {
-                    int displayDayNum = 1;
-                    bool isBlurred = false;
-
-                    if (index < emptyPrefixCellsCount) {
-                      displayDayNum = prevMonthTotalDays - (emptyPrefixCellsCount - index - 1);
-                      isBlurred = true;
-                    } else if (index >= (emptyPrefixCellsCount + totalDaysInMonth)) {
-                      displayDayNum = index - (emptyPrefixCellsCount + totalDaysInMonth) + 1;
-                      isBlurred = true;
-                    } else {
-                      displayDayNum = index - emptyPrefixCellsCount + 1;
-                    }
-
-                    bool hasSchool = false;
-                    bool hasAcademy = false;
-                    bool hasExam = false;
-                    bool hasPersonal = false;
-                    int dayScheduleCount = 0;
-
-                    if (!isBlurred) {
-                      var daySchedules = _globalSchedules.where((s) => s['year'] == _selectedDayDate.year && s['month'] == _selectedDayDate.month && s['day'] == displayDayNum);
-                      dayScheduleCount = daySchedules.length;
-                      for (var s in daySchedules) {
-                        if (s['color'] == schoolColor) hasSchool = true;
-                        if (s['color'] == academyColor) hasAcademy = true;
-                        if (s['color'] == examColor) hasExam = true;
-                        if (s['color'] == personalColor) hasPersonal = true;
-                      }
-                    }
-
-                    bool isSelected = !isBlurred && _selectedDayDate.day == displayDayNum;
-
-                    return GestureDetector(
-                      onTap: () {
-                        if (isBlurred) return;
-                        setState(() {
-                          _selectedDayDate = DateTime(_selectedDayDate.year, _selectedDayDate.month, displayDayNum);
-                        });
-                        _saveState(); // [주석] 사용자가 다른 날짜를 선택할 때마다 실시간 영구 자동저장 수행
-                        _showCalendarDaySchedulesPopup(displayDayNum);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: isSelected ? goldColor.withValues(alpha: 0.15) : const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: isSelected ? goldColor : slate800, width: isSelected ? 1.5 : 1),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '$displayDayNum',
-                              style: GoogleFonts.notoSerif(
-                                  fontSize: 11, color: isBlurred ? slate500 : (isSelected ? goldColor : Colors.white), fontWeight: FontWeight.bold
-                              ),
-                            ),
-                            if (!isBlurred)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (hasSchool) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: schoolColor),
-                                  if (hasAcademy) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: academyColor),
-                                  if (hasExam) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: examColor),
-                                  if (hasPersonal) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: personalColor),
-                                ],
-                              )
-                            else
-                              const SizedBox(height: 5),
-
-                            if (!isBlurred && dayScheduleCount > 0)
-                              Text(
-                                '$dayScheduleCount개',
-                                style: GoogleFonts.notoSansKr(fontSize: 9, color: goldColor, fontWeight: FontWeight.bold),
-                              )
-                            else
-                              const SizedBox(height: 10),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isTimeViewSelected = true; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isTimeViewSelected = true; }); _saveState(); },
                 child: Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF020617),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _isTimeViewSelected ? goldColor : slate800, width: 1.5),
-                  ),
+                  margin: const EdgeInsets.only(right: 6), padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                  decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: _isTimeViewSelected ? goldColor : slate800, width: 1.5)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1098,18 +1134,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
             Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() { _isTimeViewSelected = false; });
-                  _saveState(); // [주석] 상태 변화 즉시 디스크 영구 동기화
-                },
+                onTap: () { setState(() { _isTimeViewSelected = false; }); _saveState(); },
                 child: Container(
-                  margin: const EdgeInsets.only(left: 6),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF020617),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: !_isTimeViewSelected ? goldColor : slate800, width: 1.5),
-                  ),
+                  margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                  decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: !_isTimeViewSelected ? goldColor : slate800, width: 1.5)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1125,73 +1153,37 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         ),
         const SizedBox(height: 16),
 
+        // 🎯 [핵심 패치] 내용이 아무리 길어도 무한 줄바꿈 처리 및 우측 아이콘 배치 안정화
         if (_isTimeViewSelected) ...[
-          ..._fixedDayTimelines.asMap().entries.map((entry) {
-            final timelineItem = entry.value;
-            return GestureDetector(
-              onTap: () { _showUnifiedPopupTrack(timelineItem, typeKey: 'DAY_TIME', index: entry.key); },
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
-                child: Row(
-                  children: [
-                    Text(timelineItem['time'], style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Text(timelineItem['title'], style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
-                          if (timelineItem['is_starred'] == true) ...[
-                            const SizedBox(width: 6),
-                            Icon(Icons.star, color: goldColor, size: 14),
-                          ]
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.remove_red_eye, color: slate500, size: 14),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
+          // [주석] 복잡한 타임라인 렌더링을 widgets/study_timeline_section.dart 새집으로 이사하여 연결 가동
+          StudyTimelineSection(
+            fixedDayTimelines: _fixedDayTimelines,
+            selectedDayDate: _selectedDayDate,
+            goldColor: goldColor,
+            slate400: slate400,
+            slate800: slate800,
+            examColor: examColor,
+            onUnifiedPopupTrack: (timelineItem, index) {
+              _showUnifiedPopupTrack(timelineItem, typeKey: 'DAY_TIME', index: index);
+            },
+            onAddNewTimeSlot: () {
+              _showAddNewTimeSlotDialog();
+            },
+          ),
         ] else ...[
-          if (targetDaySchedules.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40.0),
-              child: Center(
-                child: Text('오늘 등록된 주요 일정이 없습니다.', style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)),
-              ),
-            )
-          else
-            ...targetDaySchedules.map((item) {
-              String categoryLabel = '[학교]';
-              Color squareColor = schoolColor;
-
-              if (item['color'] == academyColor) { categoryLabel = '[학원]'; squareColor = academyColor; }
-              else if (item['color'] == examColor) { categoryLabel = '[시험]'; squareColor = examColor; }
-              else if (item['color'] == personalColor) { categoryLabel = '[개인]'; squareColor = personalColor; }
-
-              return GestureDetector(
-                onTap: () { _showUnifiedPopupTrack(item, typeKey: 'DAY_MAIN'); },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: const Color(0xFF020617), border: Border.all(color: squareColor.withValues(alpha: 0.3))),
-                  child: Row(
-                    children: [
-                      Text('■ ', style: TextStyle(color: squareColor, fontSize: 26, fontWeight: FontWeight.bold)),
-                      Text('$categoryLabel ', style: GoogleFonts.notoSansKr(color: squareColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text('${item['time']} - ${item['title']}', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                      ),
-                      Icon(Icons.remove_red_eye, color: goldColor.withValues(alpha: 0.7), size: 18),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
+// [주석] 길었던 오늘 주요 일정 렌더링 파트를 widgets/daily_todo_list_section.dart 새집으로 완전히 분가시켜 무선 연결 가동
+          DailyTodoListSection(
+            targetDaySchedules: targetDaySchedules,
+            schoolColor: schoolColor,
+            academyColor: academyColor,
+            examColor: examColor,
+            personalColor: personalColor,
+            goldColor: goldColor,
+            slate500: slate500,
+            onUnifiedPopupTrack: (item) {
+              _showUnifiedPopupTrack(item, typeKey: 'DAY_MAIN');
+            },
+          ),
         ],
         const SizedBox(height: 10),
       ],
@@ -1199,7 +1191,109 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   /// ============================================================================
-  /// 📅 [달력 연동] 1단계: 깔끔한 주요 일정 목록 브리핑 보기 팝업
+  /// ➕ [신규 함수 결합] 사용자가 직접 시간대를 무한 확장하여 주입할 수 있는 팝업창
+  /// ============================================================================
+  void _showAddNewTimeSlotDialog() {
+    final TextEditingController newTimeRangeController = TextEditingController();
+    final TextEditingController newTitleController = TextEditingController();
+    final TextEditingController newMemoController = TextEditingController();
+    String customCategory = '기타';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext popContext, StateSetter setPopState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF020617),
+              shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('EXTEND TIMELINE SLOT', style: GoogleFonts.notoSerif(fontSize: 14, color: goldColor, fontWeight: FontWeight.bold)),
+                  Text('새로운 커스텀 학습 시간대 추가', style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('TIME RANGE / 확장 시간 범위 (예: 23:00 ~ 24:00)', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: newTimeRangeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: '예) 23:00 ~ 24:00 또는 24:00 ~ 01:00',
+                        filled: true, fillColor: const Color(0xFF0F172A),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('ACTIVITY TITLE / 활동 계획 과목명', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: newTitleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: '심화 자율 학습 및 오답 정밀 피드백 등', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                        filled: true, fillColor: const Color(0xFF0F172A),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('MEMO / 세부 계획 내용', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: newMemoController, maxLines: 2, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: '상세 진도 혹은 점검 계획 기입', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                        filled: true, fillColor: const Color(0xFF0F172A),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () { Navigator.of(dialogContext).pop(); },
+                  child: Text('CANCEL / 취소', style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    if (newTimeRangeController.text.trim().isEmpty || newTitleController.text.trim().isEmpty) return;
+
+                    final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+
+                    setState(() {
+                      _fixedDayTimelines.add({
+                        'time': newTimeRangeController.text.trim(),
+                        'title': newTitleController.text.trim(),
+                        'memo': newMemoController.text.trim(),
+                        'category': customCategory,
+                        'custom_book': '',
+                        'is_starred': false
+                      });
+
+                      // 인스턴스 테이블에 실시간 강제 보관 조립
+                      _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                    });
+
+                    _calculateMonthlyProgress();
+                    _saveMasterData(); // 영구 디스크 저장소 파일 백업 동기화
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: Text('EXTEND ADD / 시간표 추가 적용', style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// ============================================================================
+  /// 📅 [달력 연동] 주요 일정 브리핑 팝업창
   /// ============================================================================
   void _showCalendarDaySchedulesPopup(int dayNum) {
     showDialog(
@@ -1225,8 +1319,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 width: double.maxFinite,
                 child: SingleChildScrollView(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Divider(color: Color(0xFF1E293B), height: 10),
                       const SizedBox(height: 8),
@@ -1234,9 +1327,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       if (targetSchedules.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 24.0),
-                          child: Center(
-                            child: Text('해당 날짜에 등록된 주요 일정이 없습니다.', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500)),
-                          ),
+                          child: Center(child: Text('해당 날짜에 등록된 주요 일정이 없습니다.', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500))),
                         )
                       else
                         ...targetSchedules.map((item) {
@@ -1246,13 +1337,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           if (item['color'] == personalColor) catStr = '[개인]';
 
                           return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 5),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: item['color'].withValues(alpha: 0.4), width: 1),
-                            ),
+                            margin: const EdgeInsets.symmetric(vertical: 5), padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8), border: Border.all(color: item['color'].withValues(alpha: 0.4), width: 1)),
                             child: Row(
                               children: [
                                 Text('■ ', style: TextStyle(color: item['color'], fontSize: 16)),
@@ -1262,18 +1348,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                                     children: [
                                       Text('$catStr ${item['title']}', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
                                       if ((item['memo'] ?? '').toString().isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 2.0),
-                                          child: Text(item['memo'], style: GoogleFonts.notoSansKr(fontSize: 11, color: slate400)),
-                                        ),
+                                        Padding(padding: const EdgeInsets.only(top: 2.0), child: Text(item['memo'], style: GoogleFonts.notoSansKr(fontSize: 11, color: slate400))),
                                     ],
                                   ),
                                 ),
                                 InkWell(
-                                  onTap: () {
-                                    Navigator.of(dialogContext).pop();
-                                    _showActualEditorPopup(item, typeKey: 'DAY_MAIN');
-                                  },
+                                  onTap: () { Navigator.of(dialogContext).pop(); _showActualEditorPopup(item, typeKey: 'DAY_MAIN'); },
                                   child: Icon(Icons.settings, color: goldColor, size: 16),
                                 )
                               ],
@@ -1296,10 +1376,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       style: ElevatedButton.styleFrom(backgroundColor: goldColor, visualDensity: VisualDensity.compact),
                       icon: const Icon(Icons.add, size: 14, color: Color(0xFF020617)),
                       label: Text('ADD / 일정 추가', style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        _showCalendarQuickAddPopup(dayNum);
-                      },
+                      onPressed: () { Navigator.of(dialogContext).pop(); _showCalendarQuickAddPopup(dayNum); },
                     ),
                   ],
                 ),
@@ -1312,7 +1389,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   /// ============================================================================
-  /// 🎯 [지시사항 1번 완벽 수정] 2단계: 자판이 터지던 오버플로우 에러를 스크롤로 완벽 무력화 교정 완료
+  /// 🎯 [오버플로우 무력화] 일정 신규 생성 입력 팝업창
   /// ============================================================================
   void _showCalendarQuickAddPopup(int dayNum) {
     final TextEditingController quickTitleController = TextEditingController();
@@ -1334,13 +1411,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   Text('${_selectedDayDate.month}월 ${dayNum}일 새 주요 일정 추가', style: GoogleFonts.notoSansKr(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
                 ],
               ),
-              // [주석] 핵심 패치: 최외곽을 SingleChildScrollView로 전격 감싸 하단 상세내용 기입 칸 오버플로우 에러 원천 해결
               content: SizedBox(
                 width: double.maxFinite,
                 child: SingleChildScrollView(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('CATEGORY / 일정 분류', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
@@ -1351,9 +1426,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Radio<String>(
-                                value: cat,
-                                groupValue: tempCategory,
-                                activeColor: goldColor,
+                                value: cat, groupValue: tempCategory, activeColor: goldColor,
                                 onChanged: (value) { setPopState(() { tempCategory = value!; }); },
                               ),
                               Text(cat, style: GoogleFonts.notoSansKr(fontSize: 11, color: Colors.white)),
@@ -1366,14 +1439,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       Text('TITLE / 일정 제목', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       TextField(
-                        controller: quickTitleController,
-                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                        controller: quickTitleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                         decoration: InputDecoration(
-                          hintText: '간단한 일정 제목을 입력하세요',
-                          hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                          hintText: '간단한 일정 제목을 입력하세요', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
                           filled: true, fillColor: const Color(0xFF0F172A),
-                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
-                          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -1381,15 +1451,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       Text('MEMO / 상세 내용', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
                       TextField(
-                        controller: quickMemoController,
-                        maxLines: 2,
-                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                        controller: quickMemoController, maxLines: 2, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                         decoration: InputDecoration(
-                          hintText: '상세 일정 내용(메모)을 입력하세요',
-                          hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                          hintText: '상세 일정 내용(메모)을 입력하세요', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
                           filled: true, fillColor: const Color(0xFF0F172A),
-                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
-                          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
                         ),
                       ),
                     ],
@@ -1412,19 +1478,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
                         setState(() {
                           _globalSchedules.add({
-                            'year': _selectedDayDate.year,
-                            'month': _selectedDayDate.month,
-                            'day': dayNum,
-                            'time': '12:00',
-                            'title': quickTitleController.text.trim(),
-                            'color': choiceColor,
-                            'memo': quickMemoController.text.trim(),
+                            'year': _selectedDayDate.year, 'month': _selectedDayDate.month, 'day': dayNum, 'time': '12:00',
+                            'title': quickTitleController.text.trim(), 'color': choiceColor, 'memo': quickMemoController.text.trim(),
                           });
                           _sortGlobalSchedules();
                         });
 
-                        _saveMasterData(); // [주석] 신규 일정을 마스터 스케줄 저장소에 반영구 저장
-
+                        _saveMasterData();
                         Navigator.of(dialogContext).pop();
                         _showCalendarDaySchedulesPopup(dayNum);
                       },
@@ -1456,6 +1516,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     );
   }
 
+  /// ============================================================================
+  /// 📢 미션 상세 조회 및 게이미피케이션 별 수집 동적 통제 팝업창
+  /// ============================================================================
   void _showUnifiedPopupTrack(Map<String, dynamic> targetItem, {required String typeKey, int index = 0}) {
     showDialog(
       context: context,
@@ -1479,8 +1542,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               ),
               content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Divider(color: Color(0xFF1E293B), height: 10),
                     const SizedBox(height: 8),
@@ -1513,7 +1575,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           onPressed: () {
                             setViewState(() { isStarred = !isStarred; });
                             setState(() { _fixedDayTimelines[index]['is_starred'] = isStarred; });
-                            _saveMasterData(); // [주석] 획득한 별 수집 상태를 즉각 데이터베이스 디스크 파일에 영구 매핑
+                            _calculateMonthlyProgress();
+                            _saveMasterData();
                           },
                         ),
                       ),
@@ -1534,10 +1597,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       style: ElevatedButton.styleFrom(backgroundColor: goldColor, visualDensity: VisualDensity.compact),
                       icon: const Icon(Icons.settings, size: 14, color: Color(0xFF020617)),
                       label: Text('EDIT / 수정·삭제', style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        _showActualEditorPopup(targetItem, typeKey: typeKey, index: index);
-                      },
+                      onPressed: () { Navigator.of(dialogContext).pop(); _showActualEditorPopup(targetItem, typeKey: typeKey, index: index); },
                     ),
                   ],
                 ),
@@ -1563,6 +1623,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     );
   }
 
+  /// ============================================================================
+  /// 🛠️ 세부 계획 정밀 에디터 변경 모달 제어판
+  /// ============================================================================
   void _showActualEditorPopup(Map<String, dynamic> targetItem, {required String typeKey, int index = 0}) {
     final TextEditingController editTimeController = TextEditingController(text: targetItem['time'] ?? '');
     final TextEditingController editTitleController = TextEditingController(text: targetItem['title'] ?? '');
@@ -1589,30 +1652,25 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               ),
               content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('TIME', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                     TextField(
-                      controller: editTimeController,
-                      style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      controller: editTimeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
                         hintText: 'TIME / 시간 입력', hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
                         filled: true, fillColor: const Color(0xFF0F172A),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
                       ),
                     ),
                     const SizedBox(height: 12),
                     Text('SUBJECT OR TITLE', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                     TextField(
-                      controller: editTitleController,
-                      style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      controller: editTitleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
                         hintText: 'TITLE / 제목 입력', hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
                         filled: true, fillColor: const Color(0xFF0F172A),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1635,13 +1693,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       if (currentCategory == '문제집') ...[
                         Text('WORKBOOK NAME', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                         TextField(
-                          controller: bookInputController,
-                          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                          controller: bookInputController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                           decoration: InputDecoration(
                             hintText: '예) "블랙라벨"', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
                             filled: true, fillColor: const Color(0xFF0F172A),
-                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
-                            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1650,13 +1706,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
                     Text('MEMO / DETAILS', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                     TextField(
-                      controller: editMemoController, maxLines: 2,
-                      style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      controller: editMemoController, maxLines: 2, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
                         hintText: 'MEMO / 상세 메모 입력', hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
                         filled: true, fillColor: const Color(0xFF0F172A),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
                       ),
                     ),
                   ],
@@ -1666,11 +1720,25 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    if (typeKey != 'DAY_TIME')
+                    if (typeKey == 'DAY_TIME')
+                      TextButton(
+                        onPressed: () {
+                          final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                          setState(() {
+                            _fixedDayTimelines.removeAt(index);
+                            _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                          });
+                          _calculateMonthlyProgress();
+                          _saveMasterData();
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Text('DELETE / 삭제', style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                      )
+                    else if (typeKey != 'DAY_TIME')
                       TextButton(
                         onPressed: () {
                           setState(() { _globalSchedules.removeWhere((s) => s['title'] == targetItem['title'] && s['day'] == targetItem['day'] && s['month'] == targetItem['month']); });
-                          _saveMasterData(); // [주석] 일정이 완전히 삭제된 최신 정보 리스트를 내부 저장소에 반영
+                          _saveMasterData();
                           Navigator.of(dialogContext).pop();
                         },
                         child: Text('DELETE / 삭제', style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
@@ -1701,8 +1769,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           }
                         });
 
-                        _saveMasterData(); // [주석] 수정하여 재편성된 고정 시간표 및 세부 계획을 내부 저장소에 반영
-
+                        _calculateMonthlyProgress();
+                        _saveMasterData();
                         Navigator.of(dialogContext).pop();
                       },
                       child: Text('SAVE / 저장', style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
@@ -1719,8 +1787,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
   Widget _buildDynamicSectionHeader(String eng, String kor, VoidCallback onAddTap) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1741,56 +1808,33 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     );
   }
 
-  /// ============================================================================
-  /// 🎯 [지시사항 2번 완벽 수정] 연간 체크박스 컴포넌트 독립 분리 구축 완료
-  /// ============================================================================
   Widget _buildYearChecklistItem(String title, bool isChecked, int index, String yearKey) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
-          // [체크박스 아이콘 독립 클릭 감지기] -> 부근 간섭을 없애고 오직 토글 기능만 정확히 수행함
           GestureDetector(
             onTap: () {
-              setState(() {
-                _yearlyTargetsMap[yearKey]![index]['done'] = !isChecked;
-              });
-              _saveMasterData(); // [주석] 체크 목표 목록 달성 상태를 저장소에 즉각 업데이트
+              setState(() { _yearlyTargetsMap[yearKey]![index]['done'] = !isChecked; });
+              _saveMasterData();
             },
             child: Container(
-              padding: const EdgeInsets.all(4.0),
-              color: Colors.transparent, // 터치 인식 영역 확보
-              child: Icon(
-                  isChecked ? Icons.check_box : Icons.check_box_outline_blank,
-                  color: isChecked ? goldColor : slate500,
-                  size: 20
-              ),
+              padding: const EdgeInsets.all(4.0), color: Colors.transparent,
+              child: Icon(isChecked ? Icons.check_box : Icons.check_box_outline_blank, color: isChecked ? goldColor : slate500, size: 20),
             ),
           ),
           const SizedBox(width: 8),
-
-          // [글자 명칭 내용 독립 클릭 감지기] -> 텍스트 문구 부근을 터치할 때만 웅장하고 깔끔한 상세보기 팝업창을 띄워줌
           Expanded(
             child: GestureDetector(
               onTap: () {
                 _showUnifiedPopupTrack({
-                  'time': '$yearKey 전반 마스터 리전',
-                  'title': title,
-                  'memo': '국내 및 글로벌 상용화 목표 달성을 위한 연간 전개 스케줄 목표치입니다.',
-                  'done': isChecked,
+                  'time': '$yearKey 전반 마스터 리전', 'title': title,
+                  'memo': '국내 및 글로벌 상용화 목표 달성을 위한 연간 전개 스케줄 목표치입니다.', 'done': isChecked,
                 }, typeKey: 'YEAR');
               },
               child: Container(
-                color: Colors.transparent, // 터치 인식 영역 전체 확장
-                alignment: Alignment.centerLeft,
-                child: Text(
-                    title,
-                    style: GoogleFonts.notoSansKr(
-                        fontSize: 12,
-                        color: isChecked ? slate400 : Colors.white,
-                        decoration: isChecked ? TextDecoration.lineThrough : null
-                    )
-                ),
+                color: Colors.transparent, alignment: Alignment.centerLeft,
+                child: Text(title, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
               ),
             ),
           ),
@@ -1804,8 +1848,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     return GestureDetector(
       onTap: () { if (index >= 0 && index < _globalSchedules.length) { _showUnifiedPopupTrack(_globalSchedules[index], typeKey: 'YEAR'); } },
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.symmetric(vertical: 4), padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: const Color(0xFF020617), border: Border(left: BorderSide(color: leftBarColor, width: 4))),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1820,8 +1863,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   void _showAddScheduleBottomSheet(BuildContext context, String initialType) {
-    String entryType = initialType;
-    String selectedCategory = '학교';
+    String entryType = initialType; String selectedCategory = '학교';
     final TextEditingController titleController = TextEditingController();
     final TextEditingController monthController = TextEditingController();
     final TextEditingController dayController = TextEditingController();
@@ -1837,8 +1879,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               padding: EdgeInsets.only(left: 20.0, right: 20.0, top: 20.0, bottom: MediaQuery.of(modalContext).viewInsets.bottom + 20.0),
               child: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('ADD NEW ENTRY', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
                     Text('새 리스트 추가하기', style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
@@ -1892,7 +1933,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           if (entryType == '목표') {
                             String currentYearKey = _scrollableYears[_selectedYearIndex];
                             setState(() { _yearlyTargetsMap[currentYearKey]!.add({'title': titleController.text.trim(), 'done': false}); });
-                            _saveMasterData(); // [주석] 신규 연간 체크박스 목표 리스트를 로컬 디스크로 백업
+                            _saveMasterData();
                           } else {
                             Color sColor = schoolColor;
                             if (selectedCategory == '학원') sColor = academyColor;
@@ -1910,8 +1951,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                               _selectedDayDate = DateTime(2026, inputMonth, inputDay);
                             });
 
-                            _saveState(); // [주석] 새로 설정한 날짜 포지션을 기억 저장
-                            _saveMasterData(); // [주석] 생성한 글로벌 일정을 디바이스 내부에 반영구 저장
+                            _syncDailyTimelineForDate(_selectedDayDate);
+                            _calculateMonthlyProgress();
+                            _saveState();
+                            _saveMasterData();
                           }
                           Navigator.pop(modalContext);
                         },

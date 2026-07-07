@@ -16,7 +16,9 @@ class TimerScreen extends StatefulWidget {
   final String dynamicTestTitle;
   final DateTime? targetExamDate;
   final String selectedSoundFile;
-
+  final DateTime targetExamEndDate;
+  final String prepPeriodStr;
+  final bool needTimelineGen;
   final String targetUniversity;
   final bool isVipMember;
 
@@ -26,6 +28,9 @@ class TimerScreen extends StatefulWidget {
     required this.selectedDurationMinutes,
     required this.dynamicTestTitle,
     this.targetExamDate,
+    required this.targetExamEndDate,
+    required this.prepPeriodStr,
+    required this.needTimelineGen,
     required this.selectedSoundFile,
     this.targetUniversity = "Seoul National University (서울대학교)",
     this.isVipMember = false,
