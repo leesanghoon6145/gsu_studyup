@@ -557,7 +557,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       children: [
                         _buildMenuButton(
                           icon: Icons.calendar_month_rounded, label: "자기주도 학습 플래너", subLabel: "Self Learning Planner",
-                          onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => MainSelfLearningPlannerScreen())); },
+                          // [확인된 위치] 564번 줄부터 572번 줄까지의 기존 onTap 영역
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MainSelfLearningPlannerScreen(),
+                              ),
+                            );
+                          },
                         ),
                         _buildMenuButton(
                           icon: Icons.assignment_ind_rounded, label: "개인이름 성취도", subLabel: "Personal Achievement",

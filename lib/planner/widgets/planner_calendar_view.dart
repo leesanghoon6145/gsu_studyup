@@ -19,12 +19,12 @@ class PlannerCalendarView extends StatelessWidget {
   final Color slate500;
   final Color slate800;
 
-  // [주석] 부모 위젯(본가)과 통신하기 위한 콜백 함수 채널
+  // [주석] 부모 위젯과 통신하기 위한 콜백 함수 채널
   final VoidCallback onToggleCalendar;
   final Function(DateTime) onDaySelected;
 
   const PlannerCalendarView({
-    Key? key,
+    super.key,
     required this.selectedDayDate,
     required this.isDayCalendarVisible,
     required this.globalSchedules,
@@ -38,7 +38,7 @@ class PlannerCalendarView extends StatelessWidget {
     required this.slate800,
     required this.onToggleCalendar,
     required this.onDaySelected,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -58,63 +58,99 @@ class PlannerCalendarView extends StatelessWidget {
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // [주석] 달력 컨트롤러 대문 토글 버튼
+        // [주석] 👑 "07/02" 형태의 달력 열기·닫기 토글 버튼 (팝업 삭제 및 순수 토글 기능만 연동)
         GestureDetector(
-          onTap: onToggleCalendar,
+          onTap: () {
+            // [주석] 팝업 호출 코드를 삭제하고 오직 달력 열기/닫기 토글만 실행
+            onToggleCalendar();
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
-              color: const Color(0xFF020617),
+              color: const Color(0xFF0F2017), // 홈 대시보드 동일 톤 유지
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: goldColor.withOpacity(0.3)),
+              border: Border.all(
+                color: const Color(0xFFE5C158).withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.calendar_month, color: goldColor, size: 20),
+                    const Icon(
+                      Icons.calendar_month,
+                      color: Color(0xFFE5C158),
+                      size: 20,
+                    ),
                     const SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('CALENDAR CONTROLLER', style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
-                        Text('달력 열기·닫기', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
+                        // [주석] 👑 "07/02" 월일 동적 표시 (명조체 글자크기 15, 황금색)
+                        Text(
+                          '${selectedDayDate.month.toString().padLeft(2, '0')}/${selectedDayDate.day.toString().padLeft(2, '0')}',
+                          style: GoogleFonts.notoSerif(
+                            fontSize: 15,
+                            color: const Color(0xFFE5C158),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        // [주석] 👑 한글 글자 크기 12 (노토 산스 한글, 황금색 유지)
+                        Text(
+                          '선택 날짜 메모 보기',
+                          style: GoogleFonts.notoSansKr(
+                            fontSize: 12,
+                            color: const Color(0xFFE5C158),
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
-                Icon(isDayCalendarVisible ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: goldColor)
+                Icon(
+                  isDayCalendarVisible ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: const Color(0xFFE5C158),
+                  size: 20,
+                ),
               ],
             ),
           ),
         ),
 
-        // [주석] 펼침 상태일 때 달력 본판 그리드 출력
+        // [주석] 펼침 상태일 때 달력 본판 그리드 출력 (오버플로 방지 패딩 및 비율 최적화)
         if (isDayCalendarVisible) ...[
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(12), border: Border.all(color: slate800)),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF020617),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: slate800),
+            ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text('DATE CONTROL RAIL', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
                 Text('${selectedDayDate.year}년 ${selectedDayDate.month}월 달력 제어 레일', style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
                 // [주석] 요일 헤더 라인 (일~토)
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: 7,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 2),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 2.2),
                   itemBuilder: (context, index) {
                     return Center(
                       child: Text(
                         weekLabelList[index],
                         style: GoogleFonts.notoSansKr(
-                          fontSize: 12, // 규격 준수
+                          fontSize: 12,
                           color: weekLabelList[index] == '일' ? examColor : (weekLabelList[index] == '토' ? schoolColor : slate400),
                           fontWeight: FontWeight.bold,
                         ),
@@ -122,14 +158,19 @@ class PlannerCalendarView extends StatelessWidget {
                     );
                   },
                 ),
-                const Divider(color: Color(0xFF1E293B), height: 10),
+                const Divider(color: Color(0xFF1E293B), height: 6),
 
-                // [주석] 날짜 숫자 그리드 빌더
+                // [주석] 날짜 숫자 그리드 빌더 (오버플로 차단 규격)
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: totalCalendarGridItemsCount,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 0.85),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    mainAxisSpacing: 4,
+                    crossAxisSpacing: 4,
+                    childAspectRatio: 0.95,
+                  ),
                   itemBuilder: (context, index) {
                     int displayDayNum = 1;
                     bool isBlurred = false;
@@ -167,9 +208,9 @@ class PlannerCalendarView extends StatelessWidget {
                         onDaySelected(DateTime(selectedDayDate.year, selectedDayDate.month, displayDayNum));
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: isSelected ? goldColor.withOpacity(0.15) : const Color(0xFF0F172A),
+                          color: isSelected ? goldColor.withValues(alpha: 0.15) : const Color(0xFF0F172A),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: isSelected ? goldColor : slate800, width: isSelected ? 1.5 : 1),
                         ),
@@ -182,19 +223,19 @@ class PlannerCalendarView extends StatelessWidget {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  if (hasSchool) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: schoolColor),
-                                  if (hasAcademy) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: academyColor),
-                                  if (hasExam) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: examColor),
-                                  if (hasPersonal) Container(width: 5, height: 5, margin: const EdgeInsets.symmetric(horizontal: 1), color: personalColor),
+                                  if (hasSchool) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: schoolColor),
+                                  if (hasAcademy) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: academyColor),
+                                  if (hasExam) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: examColor),
+                                  if (hasPersonal) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: personalColor),
                                 ],
                               )
                             else
-                              const SizedBox(height: 5),
+                              const SizedBox(height: 3),
 
                             if (!isBlurred && dayScheduleCount > 0)
-                              Text('$dayScheduleCount개', style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold))
+                              Text('$dayScheduleCount개', style: GoogleFonts.notoSansKr(fontSize: 10, color: goldColor, fontWeight: FontWeight.bold))
                             else
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 6),
                           ],
                         ),
                       ),

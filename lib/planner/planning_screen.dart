@@ -17,7 +17,9 @@ class PlanningScreen extends StatefulWidget {
   State<PlanningScreen> createState() => _PlanningScreenState();
 }
 
-class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProviderStateMixin {
+class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // 👑 [주석] 탭 전환 시 화면 유지 및 버벅임 방지
   // [주석] 상단 [연간][월간][주간][일간] 4개 탭 제어 컨트롤러
   late TabController _tabController;
 
@@ -317,9 +319,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   /// ============================================================================
   /// [주석] SharedPreferences 영구 저장 및 동적 복원 메소드 모듈
   /// ============================================================================
-  /// ============================================================================
-  /// [주석] SharedPreferences 영구 저장 및 동적 복원 메소드 모듈
-  /// ============================================================================
+
   Future<void> _initStorageAndLoad() async {
     await _loadMasterData();
     await _loadSavedState();
@@ -1044,9 +1044,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         _buildDynamicSectionHeader('DAILY SCHEDULER NAVI', '오늘 일정 관리 및 날짜 변경 레일', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
 
-        _buildDynamicSectionHeader('DAILY SCHEDULER NAVI', '오늘 일정 관리 및 날짜 변경 레일', () { _showAddScheduleBottomSheet(context, '일정'); }),
-        const SizedBox(height: 12),
-
         // [주석] 복잡했던 달력 제어 판 전체를 widgets/planner_calendar_view.dart 새집으로 분가시켜 가동
         PlannerCalendarView(
           selectedDayDate: _selectedDayDate,
@@ -1101,7 +1098,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${_selectedDayDate.month}월 ${_selectedDayDate.day}일 (${['월', '화', '수', '목', '금', '토', '일'][_selectedDayDate.weekday - 1]}요일) 오늘의 학습 상태',
+                      '${['월', '화', '수', '목', '금', '토', '일'][_selectedDayDate.weekday - 1]}요일 오늘의 학습 상태',
                       style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ],
