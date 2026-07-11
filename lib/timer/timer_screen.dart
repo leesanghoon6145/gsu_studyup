@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // 👑 파일 트리 구조 분석에 따른 무결점 순정 상대 경로 임포트 고정 완료
 import '../square/my_page_screen.dart';
+import '../planner/widgets/study_timelines.dart'; // 타임라인 연동용 임포트
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -16,7 +17,7 @@ class TimerScreen extends StatefulWidget {
   final String dynamicTestTitle;
   final DateTime? targetExamDate;
   final String selectedSoundFile;
-  final DateTime targetExamEndDate;
+  final DateTime? targetExamEndDate;
   final String prepPeriodStr;
   final bool needTimelineGen;
   final String targetUniversity;
@@ -35,12 +36,15 @@ class TimerScreen extends StatefulWidget {
     this.targetUniversity = "Seoul National University (서울대학교)",
     this.isVipMember = false,
   }) : super(key: key);
-
   @override
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
 class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin {
+  // 타임라인 관련 상태 변수
+  late DateTime _currentSelectedDate;
+  List<Map<String, String>> _activeTimeline = [];
+
   late int _totalSeconds;
   int _elapsedSeconds = 0;
   Timer? _timer;
@@ -69,6 +73,10 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _currentUniversity = widget.targetUniversity;
     _currentIsVip = widget.isVipMember;
 
+    // 타임라인 초기화
+    _currentSelectedDate = DateTime.now();
+    _updateActiveTimeline();
+
     tz.initializeTimeZones();
     _timerAudioPlayer = AudioPlayer();
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
@@ -78,6 +86,20 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
       await _forceSyncSavedDataOnStartup();
       _checkResumeInterceptionData();
     });
+  }
+
+  void _onDateChanged(DateTime newDate) {
+    setState(() {
+      _currentSelectedDate = newDate;
+      _updateActiveTimeline();
+    });
+  }
+
+  void _updateActiveTimeline() {
+    _activeTimeline = StudyTimelines.getTimelineForDate(
+      _currentSelectedDate,
+      widget.targetExamDate ?? DateTime.now(),
+    );
   }
 
   // 👑 🎯 요구사항 완전 해결 장치: 앱을 완전히 껐다 켜도 마이페이지 데이터 백업 세션을 100% 즉시 복원하는 유일한 마스터 스케줄러
