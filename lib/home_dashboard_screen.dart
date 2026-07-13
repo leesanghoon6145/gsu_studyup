@@ -10,6 +10,10 @@ import 'package:gsu_studyup/square/educational_consultation/educational_consulta
 import 'package:gsu_studyup/square/my_page_screen.dart';
 import 'planner/main_self_learning_planner_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:gsu_studyup/planner/widgets/study_timeline_section.dart';
+// 14번 라인 주변을 이렇게 수정하세요
+   // ← 이 줄로 변경
+// 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -556,7 +560,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       mainAxisSpacing: 12, crossAxisSpacing: 12,
                       children: [
                         _buildMenuButton(
-                          icon: Icons.calendar_month_rounded, label: "자기주도 학습 플래너", subLabel: "Self Learning Planner",
+                          icon: Icons.calendar_month_rounded, label: "자기주도 플래너", subLabel: "Self Learning Planner",
                           // [확인된 위치] 564번 줄부터 572번 줄까지의 기존 onTap 영역
                           onTap: () {
                             Navigator.push(
@@ -567,10 +571,37 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             );
                           },
                         ),
+
+                        _buildMenuButton(
+                          icon: Icons.calendar_month_rounded,
+                          label: "학사 타임라인",
+                          subLabel: "Academic Timeline",
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => Scaffold(
+                                  appBar: AppBar(
+                                    title: const Text('학사 타임라인'),
+                                    backgroundColor: const Color(0xFF1E1E1E),
+                                  ),
+                                  body: const Center(
+                                    child: Text(
+                                      '타임라인 준비 중',
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
                         _buildMenuButton(
                           icon: Icons.assignment_ind_rounded, label: "개인이름 성취도", subLabel: "Personal Achievement",
                           onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const MemberAchievementScreen())); },
                         ),
+
                         _buildMenuButton(
                           icon: Icons.forum_rounded, label: "친구 학습방", subLabel: "Friends Study Room",
                           onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const FriendStudyRoomScreen())); },

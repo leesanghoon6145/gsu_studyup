@@ -11,7 +11,19 @@ import 'widgets/daily_todo_list_section.dart'; // [주석] 새로 분가한 하�
 /// [GKE StudyUp] 자기주도 학습 플래너 - 학습 계획 스크린 (planning_screen.dart)
 /// ============================================================================
 class PlanningScreen extends StatefulWidget {
-  const PlanningScreen({Key? key}) : super(key: key);
+  // 상위 컨트롤러에서 전달받을 필수 데이터 및 콜백 정의
+  final DateTime selectedDate;
+  final String currentWeekday;
+  final List<String> mainSchedules;
+  final Function(DateTime) onDateTap;
+
+  const PlanningScreen({
+    Key? key,
+    required this.selectedDate,
+    required this.currentWeekday,
+    required this.mainSchedules,
+    required this.onDateTap,
+  }) : super(key: key);
 
   @override
   State<PlanningScreen> createState() => _PlanningScreenState();
@@ -24,10 +36,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   late TabController _tabController;
 
   // [주석] 카테고리별 테마 색상 (지시사항 엄격 준수)
-  final Color schoolColor = const Color(0xFF3B82F6);   // 학교 일정 (파랑색)
-  final Color academyColor = const Color(0xFF10B981);  // 학원 일정 (녹색)
-  final Color examColor = const Color(0xFFEF4444);     // 시험 일정 (빨강색)
-  final Color personalColor = const Color(0xFFFACC15); // 개인 일정 (노랑색)
+  final Color schoolColor = const Color(0xFF3B82F6);  // 학교 일정 (파랑색)
+  final Color companyColor = const Color(0xFF8B5CF6); // 👑 회사 일정 (퍼플 색상 적용)
+  final Color academyColor = const Color(0xFF10B981);   // 학원 일정 (녹색) 복구 완료
+  final Color examColor = const Color(0xFFEF4444);    // 시험 일정 (빨강색)
+  final Color personalColor = const Color(0xFFFFACC15); // 개인 일정 (노랑색)
   final Color goldColor = const Color(0xFFD4AF37);     // 공식 황금색
 
   // [주석] 테마 컬러 상수 정의
@@ -1096,6 +1109,62 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           : 'SELECTED TARGET DATE / ARCHIVE STATUS',
                       style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                     ),
+                    const SizedBox(height: 16),
+                    _isTimeViewSelected
+                        ? (_fixedDayTimelines.isEmpty
+                        ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24.0),
+                      child: Center(
+                        child: Text(
+                          '해당 날짜에 등록된 타임라인이 없습니다.',
+                          style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                        ),
+                      ),
+                    )
+                        : Column(
+                      children: _fixedDayTimelines.asMap().entries.map((entry) {
+                        final item = entry.value;
+                        return GestureDetector(
+                          onTap: () { _showUnifiedPopupTrack(item, typeKey: 'DAY_TIME', index: entry.key); },
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF020617),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: slate800),
+                            ),
+                            child: Row(
+                              children: [
+                                Text('■ ', style: TextStyle(color: item['is_starred'] == true ? goldColor : slate400, fontSize: 14)),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(item['time'] ?? '', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor)),
+                                      Text(item['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                                Icon(item['is_starred'] == true ? Icons.star : Icons.star_border, color: goldColor, size: 16),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ))
+                        : DailyTodoListSection(
+                      targetDaySchedules: targetDaySchedules,
+                      schoolColor: schoolColor,
+                      academyColor: academyColor,
+                      examColor: examColor,
+                      personalColor: personalColor,
+                      goldColor: goldColor,
+                      slate500: slate500,
+                      onUnifiedPopupTrack: (item) {
+                        _showUnifiedPopupTrack(item, typeKey: 'DAY_MAIN');
+                      },
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '${['월', '화', '수', '목', '금', '토', '일'][_selectedDayDate.weekday - 1]}요일 오늘의 학습 상태',
@@ -1108,7 +1177,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           ),
         ),
         const SizedBox(height: 16),
-
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1123,7 +1191,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     children: [
                       Text('DATE TIMELINE', style: GoogleFonts.notoSerif(fontSize: 14, color: _isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text('학습 타임라인', style: GoogleFonts.notoSansKr(fontSize: 12, color: _isTimeViewSelected ? Colors.white : slate500, fontWeight: FontWeight.bold)),
+                      Text('일정 타임라인 상세', style: GoogleFonts.notoSansKr(fontSize: 12, color: _isTimeViewSelected ? Colors.white : slate500, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -1149,40 +1217,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           ],
         ),
         const SizedBox(height: 16),
-
-        // 🎯 [핵심 패치] 내용이 아무리 길어도 무한 줄바꿈 처리 및 우측 아이콘 배치 안정화
-        if (_isTimeViewSelected) ...[
-          // [주석] 복잡한 타임라인 렌더링을 widgets/study_timeline_section.dart 새집으로 이사하여 연결 가동
-          StudyTimelineSection(
-            fixedDayTimelines: _fixedDayTimelines,
-            selectedDayDate: _selectedDayDate,
-            goldColor: goldColor,
-            slate400: slate400,
-            slate800: slate800,
-            examColor: examColor,
-            onUnifiedPopupTrack: (timelineItem, index) {
-              _showUnifiedPopupTrack(timelineItem, typeKey: 'DAY_TIME', index: index);
-            },
-            onAddNewTimeSlot: () {
-              _showAddNewTimeSlotDialog();
-            },
-          ),
-        ] else ...[
-// [주석] 길었던 오늘 주요 일정 렌더링 파트를 widgets/daily_todo_list_section.dart 새집으로 완전히 분가시켜 무선 연결 가동
-          DailyTodoListSection(
-            targetDaySchedules: targetDaySchedules,
-            schoolColor: schoolColor,
-            academyColor: academyColor,
-            examColor: examColor,
-            personalColor: personalColor,
-            goldColor: goldColor,
-            slate500: slate500,
-            onUnifiedPopupTrack: (item) {
-              _showUnifiedPopupTrack(item, typeKey: 'DAY_MAIN');
-            },
-          ),
-        ],
-        const SizedBox(height: 10),
       ],
     );
   }
@@ -1329,7 +1363,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       else
                         ...targetSchedules.map((item) {
                           String catStr = '[학교]';
-                          if (item['color'] == academyColor) catStr = '[학원]';
+                          if (item['color'] == companyColor) catStr = '[회사]';
+                          if (item['color'] == academyColor) { catStr = '[학원]'; }
                           if (item['color'] == examColor) catStr = '[시험]';
                           if (item['color'] == personalColor) catStr = '[개인]';
 
@@ -1418,7 +1453,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: ['학교', '학원', '시험', '개인'].map((cat) {
+                        // [수정] '회사'와 '학원' 사이의 누락된 콤마(,) 추가
+                        children: ['학교', '회사', '학원', '시험', '개인'].map((cat) {
                           return Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1892,7 +1928,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     if (entryType == '일정') ...[
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: ['학교', '학원', '시험', '개인'].map((cat) {
+                        children: ['학교', '회사' '학원', '시험', '개인'].map((cat) {
                           return Row(mainAxisSize: MainAxisSize.min, children: [
                             Radio<String>(value: cat, groupValue: selectedCategory, activeColor: goldColor, onChanged: (value) { setModalState(() { selectedCategory = value!; }); }),
                             Text(cat, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white)),

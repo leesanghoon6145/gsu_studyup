@@ -13,16 +13,28 @@ class MainSelfLearningPlannerScreen extends StatefulWidget {
   State<MainSelfLearningPlannerScreen> createState() => _MainSelfLearningPlannerScreenState();
 }
 
-class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerScreen> with SingleTickerProviderStateMixin {
+class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerScreen> with TickerProviderStateMixin {
   // ============================================================================
   // 🗺️ SECTION: 1. CORE CONTROLLER PROPERTY (핵심 제어 컨트롤러 정의 구역)
   // ============================================================================
   late TabController _tabController;
 
+  // 지시사항 2, 3번: 접속 시 오늘 날짜 및 요일 자동 연동 및 오토 포커스 상태 관리
+  late DateTime _todayDate;
+  late DateTime _selectedDate;
+
+  final List<String> _todayMainSchedules = [];
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+
+    // 현재 UTC/KST 기준 오늘 날짜 자동 할당 (지시사항 2, 3번)
+    final now = DateTime.now();
+    _todayDate = DateTime(now.year, now.month, now.day);
+    _selectedDate = _todayDate; // 접속 시 자동으로 오늘 날짜에 선택 표시
   }
 
   @override
@@ -31,13 +43,17 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
     super.dispose();
   }
 
+  // ============================================================================
+  // 🗺️ SECTION: 2. GLOBAL BRAND COLOR SETTING (시그니처 테마 정의 구역)
+  // ============================================================================
   @override
   Widget build(BuildContext context) {
-    // ============================================================================
-    // 🗺️ SECTION: 2. GLOBAL BRAND COLOR SETTING (시그니처 테마 정의 구역)
-    // ============================================================================
-    const Color brandDarkBg = Color(0xFF070B14); // 프리미엄 다크 니트 베이스
-    const Color brandGolden = Color(0xFFE5C158); // 👑 선배님 지시: 모든 타이틀 통합 황금색
+    const Color brandDarkBg = Color(0xFF070B14);
+    const Color brandGolden = Color(0xFFE5C158);
+
+    // [수정] build 시작 부분에 요일 매핑 배치 (에러 원천 차단)
+    const List<String> weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    String currentWeekdayStr = weekdays[_selectedDate.weekday - 1];
 
     return Scaffold(
       backgroundColor: brandDarkBg,
@@ -90,7 +106,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
 
             // 🇰🇷 [한글 수칙] 문구 변경 명세 수용 + 황금색 23크기 센터링 완전 이식
             Text(
-              "자기주도 학습 계획", // 🚨 선배님 지시: "자기주도 학습 계획"으로 문구 최종 변경
+              "자기주도 플래너", // 🚨 선배님 지시: "자기주도 학습 계획"으로 문구 최종 변경
               style: GoogleFonts.notoSansKr(
                 color: brandGolden, // 🚨 선배님 지시: 한글 타이틀 황금색 유지
                 fontSize: 23,       // 🚨 규격 크기 23 칼준수
@@ -106,12 +122,24 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
       // ============================================================================
       body: TabBarView(
         controller: _tabController,
-        children: const [
-          PlanningScreen(), // 📅 1단계: 학습 계획 레이어
-          LearningScreen(), // 📚 2단계: 학습 실행 레이어
-          ReportScreen(),   // 📊 3단계: 학습 리포트 레이어
-        ], // end of TabBarView children
-      ), // end of body
+        children: [
+          // 1단계: 필수 파라미터와 함께 구동되는  계획 레이어
+          PlanningScreen(
+            selectedDate: _selectedDate,
+            currentWeekday: currentWeekdayStr,
+            mainSchedules: _todayMainSchedules,
+            onDateTap: (date) {
+              setState(() {
+                _selectedDate = date;
+              });
+            },
+          ),
+          // 2단계:  실행 레이어
+          const LearningScreen(),
+          // 3단계:  리포트 레이어
+          const ReportScreen(),
+        ],
+      ),
 
       // ============================================================================
       // 🗺️ SECTION: 5. BOTTOM NAVIGATION TAB BAR (하단 안착 메뉴 탭바 구역)
@@ -131,7 +159,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text("PLANNING", style: GoogleFonts.notoSerif(fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text("학습 계획", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
+                  Text("계 획", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
                 ], // end of PLANNING tab children
               ), // end of Column
             ), // end of PLANNING Tab
@@ -140,7 +168,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text("LEARNING", style: GoogleFonts.notoSerif(fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text("학습 실행", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
+                  Text("실 행", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
                 ], // end of LEARNING tab children
               ), // end of Column
             ), // end of LEARNING Tab
@@ -149,7 +177,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text("REPORT", style: GoogleFonts.notoSerif(fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text("학습 리포트", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
+                  Text("리포트", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
                 ], // end of REPORT tab children
               ), // end of Column
             ), // end of REPORT Tab
