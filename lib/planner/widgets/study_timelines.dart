@@ -389,7 +389,7 @@ class StudyTimelines {
     ]
   };
 
-  // 2. VACAYION_SUMMER_WINTER: 방학 포모도로 타임라인 1~4
+  // 2. VACATION_SUMMER_WINTER: 방학 포모도로 타임라인 1~4
   static final List<Map<String, String>> vacationPomodoro1 = [
     {'time': '06:00 ~ 06:30', 'task': '기상 및 체조'},
     {'time': '06:30 ~ 07:00', 'task': '아침식사'},

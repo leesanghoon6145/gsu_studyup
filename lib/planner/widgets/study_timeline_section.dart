@@ -150,4 +150,143 @@ class StudyTimelineSection extends StatelessWidget {
       ],
     );
   }
+  // [주석] 학사 타임라인 전용 렌더링 및 수정/삭제 팝업 연동 위젯 (study_timeline_section.dart 최하단 추가)
+  Widget _buildAcademicTimelineSection(BuildContext context, String timelineName, List<Map<String, String>> scheduleList) {
+    return ListView(
+      shrinkWrap: true, // 👈 스크롤 충돌 방지
+      physics: const NeverScrollableScrollPhysics(), // 👈 외부 스크롤과 연동
+      padding: EdgeInsets.zero, // 👈 사이공간 없이 최소한으로 붙이기 위한 패딩 제거
+      children: [
+        // 1. gsu_logo.png 최상단 밀착 배치 (사이공간 최소화)
+        Image.asset(
+          'assets/gsu_logo.png',
+          height: 40,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+        ),
+        const SizedBox(height: 4), // 👈 로고와 타이틀 사이 최소한의 간격
+
+        // 2. 타이틀 영역: 영문 명조체 + 노토 산스 한글 "학사 타임라인"
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ACADEMIC TIMELINE', style: GoogleFonts.notoSerif(fontSize: 16, color: goldColor, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text('학사 타임라인', style: GoogleFonts.notoSansKr(fontSize: 18, color: goldColor, fontWeight: FontWeight.bold)),
+            const Divider(color: Color(0xFF1E293B), height: 20),
+          ],
+        ),
+
+        // 3. 타임라인 명칭 표시 (좌측 정렬 뱃지 스타일)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: goldColor, width: 1),
+          ),
+          child: Text(
+            timelineName,
+            style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // 4. 시간표 목록 아래로 좌악 렌더링 + 각 타임별 [수정] / [삭제] 팝업 연동
+        if (scheduleList.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Center(
+              child: Text('등록된 타임라인 상세 일정이 없습니다.', style: GoogleFonts.notoSansKr(color: Colors.grey, fontSize: 13)),
+            ),
+          )
+        else
+          ...scheduleList.asMap().entries.map((entry) {
+            int index = entry.key;
+            Map<String, String> item = entry.value;
+
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 4.0),
+              padding: const EdgeInsets.all(10.0),
+              decoration: BoxDecoration(
+                color: const Color(0xFF020617),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF1E293B)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 85,
+                    child: Text(item['time'] ?? '', style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
+                  ),
+                  Container(width: 2, height: 28, margin: const EdgeInsets.symmetric(horizontal: 8), color: goldColor),
+                  Expanded(
+                    child: Text(item['task'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 16, color: Colors.amberAccent),
+                    tooltip: '수정',
+                    onPressed: () {
+                      _showEditTaskPopup(context, index, item);
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 16, color: Colors.redAccent),
+                    tooltip: '삭제',
+                    onPressed: () {
+                      _showDeleteTaskPopup(context, index);
+                    },
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+      ],
+    );
+  }
+
+  void _showEditTaskPopup(BuildContext context, int index, Map<String, String> currentItem) {
+    TextEditingController timeController = TextEditingController(text: currentItem['time']);
+    TextEditingController taskController = TextEditingController(text: currentItem['task']);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          title: Text('타임라인 항목 수정', style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: timeController, style: const TextStyle(color: Colors.white, fontSize: 12), decoration: const InputDecoration(labelText: '시간', labelStyle: TextStyle(color: Colors.grey))),
+              const SizedBox(height: 8),
+              TextField(controller: taskController, style: const TextStyle(color: Colors.white, fontSize: 12), decoration: const InputDecoration(labelText: '내용/과목', labelStyle: TextStyle(color: Colors.grey))),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소', style: TextStyle(color: Colors.grey))),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text('저장', style: TextStyle(color: goldColor))),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteTaskPopup(BuildContext context, int index) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          title: Text('항목 삭제', style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Text('선택하신 타임라인 일정을 정말 삭제하시겠습니까?', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소', style: TextStyle(color: Colors.grey))),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('삭제', style: TextStyle(color: Colors.redAccent))),
+          ],
+        );
+      },
+    );
+  }
 }
