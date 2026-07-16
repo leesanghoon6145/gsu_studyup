@@ -10,7 +10,7 @@ import 'package:gsu_studyup/square/educational_consultation/educational_consulta
 import 'package:gsu_studyup/square/my_page_screen.dart';
 import 'planner/main_self_learning_planner_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:gsu_studyup/planner/widgets/study_timeline_section.dart';
+import 'package:gsu_studyup/square/academic_timeline/academic_timeline_screen.dart';
 // 14번 라인 주변을 이렇게 수정하세요
    // ← 이 줄로 변경
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
@@ -580,18 +580,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => Scaffold(
-                                  appBar: AppBar(
-                                    title: const Text('학사 타임라인'),
-                                    backgroundColor: const Color(0xFF1E1E1E),
-                                  ),
-                                  body: const Center(
-                                    child: Text(
-                                      '타임라인 준비 중',
-                                      style: TextStyle(color: Colors.white, fontSize: 16),
-                                    ),
-                                  ),
-                                ),
+                                builder: (context) => const AcademicTimelineScreen(),
                               ),
                             );
                           },
