@@ -582,7 +582,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('VACATION SUMMER/WINTER', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
-        Text('방학 포모도로 타임라인 - 기간 및 스타일 설정', style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+        Text('방학 포모도로 타임라인 - 기간 및 스타일 설정', style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 14, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
 
         Container(
@@ -592,7 +592,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('VACATION PERIOD / 방학 기간', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+              Text('VACATION PERIOD / 방학 기간', style: GoogleFonts.notoSerif(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -617,7 +617,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         _vacationStartDate == null
                             ? '시작일 선택'
                             : '${_vacationStartDate!.year}.${_vacationStartDate!.month}.${_vacationStartDate!.day}',
-                        style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white),
+                        style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white),
                       ),
                     ),
                   ),
@@ -645,7 +645,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         _vacationEndDate == null
                             ? '종료일 선택'
                             : '${_vacationEndDate!.year}.${_vacationEndDate!.month}.${_vacationEndDate!.day}',
-                        style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white),
+                        style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white),
                       ),
                     ),
                   ),
@@ -665,7 +665,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('POMODORO STYLE / 포모도로 스타일 (직접 선택)',
-                  style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                  style: GoogleFonts.notoSerif(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text('스타일마다 구성이 달라 자동 전환하지 않습니다. 원하는 스타일을 직접 골라주세요.',
                   style: GoogleFonts.notoSansKr(fontSize: 11, color: slate500)),
@@ -729,8 +729,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           )
         else ...[
           Text('선택된 스타일: ${_getPomodoroDisplayName(_selectedPomodoroKey!)}',
-              style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+              style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 13),
           _buildScheduleHeaderBar(),
           const SizedBox(height: 8),
           ..._buildScheduleList(schedule),
@@ -746,7 +746,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('EXAM PREP PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('EXAM PREP PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 17, fontWeight: FontWeight.bold)),
         Text('시험 준비 타임라인 - 시험 정보를 입력하면 자동 계산됩니다',
             style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
@@ -765,12 +765,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('EXAM INFO / 시험 정보 입력', style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+          Text('EXAM INFO / 시험 정보 입력', style: GoogleFonts.notoSerif(fontSize: 14, color: goldColor, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Row(
             children: ['중간고사', '기말고사'].map((type) {
               return Padding(
-                padding: const EdgeInsets.only(right: 16.0),
+                padding: const EdgeInsets.only(right: 17.0),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -812,7 +812,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               _examStartDate == null
                   ? '시험 시작일(D-day) 선택'
                   : '시험 시작일: ${_examStartDate!.year}.${_examStartDate!.month}.${_examStartDate!.day}',
-              style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white),
+              style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white),
             ),
           ),
         ],
