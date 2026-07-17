@@ -21,6 +21,18 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   final Color slate400 = const Color(0xFF94A3B8);
   final Color slate500 = const Color(0xFF64748B);
   final Color slate800 = const Color(0xFF1E293B);
+  final Color darkGrey = const Color(0xFF333333); // 취침용 진한 회색 정의
+
+  // 1개 세트 구분용 7가지 색상 순서 (빨, 파, 노, 초, 주, 남, 보)
+  final List<Color> _rainbowColors = [
+    Colors.red,      // 빨간색
+    Colors.blue,     // 파란색
+    Colors.yellow,   // 노란색
+    Colors.green,    // 초록색
+    Colors.orange,   // 주황색
+    Colors.indigo,   // 남색
+    Colors.purple,   // 보라색
+  ];
 
   // ============================================================
   // 상단 트랙 선택 상태
@@ -304,6 +316,110 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       }
     } catch (_) {}
     return false;
+  }
+
+  // ============================================================
+  // [신규 기능] 타임라인 세트별 바("|") 색상 지정 함수 (대표님 지시사항 반영)
+  // ============================================================
+  Color _getTimelineBarColor(String track, String timeText, String taskText, int index) {
+    // 1. 공통 예외 항목 처리: 아침 기상/체조, 식사, 학교생활, 저녁, 취침준비, 마무리 등은 보라색
+    if (taskText.contains('기상') ||
+        taskText.contains('체조') ||
+        taskText.contains('아침식사') ||
+        taskText.contains('점심') ||
+        taskText.contains('저녁') ||
+        taskText.contains('학교생활') ||
+        taskText.contains('취침 준비') ||
+        taskText.contains('마무리')) {
+      return Colors.purple;
+    }
+    // 취침은 진한 회색
+    if (taskText.contains('취침')) {
+      return darkGrey;
+    }
+
+    // 2. 평상시(NORMAL_PERIOD) 트랙 색상 지정
+    if (track == 'NORMAL_PERIOD') {
+      if (_selectedWeekdayEn == 'Saturday' || _selectedWeekdayEn == 'Sunday') {
+        // 토요일, 일요일 규칙: 07:00~08:00 보라, 이후 2개 항목씩 세트(빨, 파, 노, 초, 주, 남, 보)
+        if (timeText.contains('07:00') && timeText.contains('08:00')) {
+          return Colors.purple;
+        }
+        int adjustedIndex = (index > 0 ? index - 1 : 0) ~/ 2;
+        return _rainbowColors[adjustedIndex % _rainbowColors.length];
+      } else {
+        // 평일 규칙: 07:00~08:00 빨강, 08:00~16:00 및 16:00~17:00 보라, 17:00~17:50, 17:50~18:00 파랑 등 순차 진행
+        if (timeText.contains('07:00') && timeText.contains('08:00')) {
+          return Colors.red;
+        }
+        if ((timeText.contains('08:00') && timeText.contains('16:00')) ||
+            (timeText.contains('16:00') && timeText.contains('17:00'))) {
+          return Colors.purple;
+        }
+        // 그 외 시간대는 순서에 맞춰 1개 세트(보통 2~3개 블록) 단위로 빨, 파, 노, 초, 주, 남, 보 반복 적용
+        int adjustedIndex = index >= 3 ? (index - 3) ~/ 2 : index;
+        return _rainbowColors[adjustedIndex % _rainbowColors.length];
+      }
+    }
+
+    // 3. 방학 포모도로 스타일 1 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro1') {
+      if ((timeText.contains('06:00') && timeText.contains('06:30')) ||
+          (timeText.contains('06:30') && timeText.contains('07:00'))) {
+        return Colors.purple;
+      }
+      if (index >= 2 && index <= 7) return Colors.red;     // 1세트
+      if (index >= 8 && index <= 13) return Colors.blue;    // 2세트
+      if (index >= 14 && index <= 19) return Colors.yellow; // 3세트
+      if (index >= 20 && index <= 20) return Colors.purple; // 점심
+      if (index >= 21 && index <= 26) return Colors.green;  // 4세트
+      if (index >= 27 && index <= 32) return Colors.orange; // 5세트
+      if (index >= 33 && index <= 40) return Colors.indigo; // 6세트 (저녁 포함)
+      if (index >= 41 && index <= 47) return Colors.red;    // 7세트
+      if (index >= 48) return Colors.purple;               // 마무리 및 취침
+    }
+
+    // 4. 방학 포모도로 스타일 2 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro2') {
+      if (taskText.contains('기상') || taskText.contains('아침식사') || taskText.contains('점심') || taskText.contains('취침')) {
+        return Colors.purple;
+      }
+      // 2개 항목씩 묶어서 세트별 순서(빨, 파, 노, 초, 주, 남, 보) 순환
+      int setIndex = index >= 2 ? (index - 2) ~/ 2 : 0;
+      return _rainbowColors[setIndex % _rainbowColors.length];
+    }
+
+    // 5. 방학 포모도로 스타일 3 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro3') {
+      if (index >= 2 && index <= 7) return Colors.red;      // 1세트
+      if (index >= 8 && index <= 13) return Colors.blue;    // 2세트
+      if (index >= 14 && index <= 14) return Colors.purple; // 점심
+      if (index >= 15 && index <= 20) return Colors.yellow; // 3세트
+      if (index >= 21 && index <= 21) return Colors.purple; // 저녁
+      if (index >= 22 && index <= 27) return Colors.green;  // 4세트
+      if (index >= 28 && index <= 29) return Colors.orange; // 5세트
+      if (index >= 30) return Colors.purple;               // 취침준비
+    }
+
+    // 6. 방학 포모도로 스타일 4 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro4') {
+      // 06:00 ~ 07:00 (기상 및 체조, 아침식사) -> 보라색
+      if ((timeText.contains('06:00') && timeText.contains('06:30')) ||
+          (timeText.contains('06:30') && timeText.contains('07:00'))) {
+        return Colors.purple;
+      }
+      if (index >= 2 && index <= 5) return Colors.red;      // 1세트: 집중 수학 ~ 긴 휴식 (빨강색)
+      if (index >= 6 && index <= 9) return Colors.blue;     // 2세트: 집중 과학 ~ 긴 휴식 (파랑색)
+      if (index >= 10 && index <= 10) return Colors.purple; // 점심 및 휴식 (보라색)
+      if (index >= 11 && index <= 14) return Colors.yellow; // 3세트: 집중 수학 ~ 긴 휴식 (노랑색)
+      if (index >= 15 && index <= 18) return Colors.green;  // 4세트: 집중 과학 ~ 긴 휴식 (초록색)
+      if (index >= 19 && index <= 19) return Colors.purple; // 저녁 및 휴식 (보라색)
+      if (index >= 20 && index <= 22) return Colors.orange; // 5세트: 집중 수학 ~ 집중 영어 (주황색)
+      if (index >= 23) return Colors.purple;               // 마무리 및 취침 준비 (보라색)
+    }
+
+    // 기본 무지개 순환 폴백
+    return _rainbowColors[index % _rainbowColors.length];
   }
 
   // ============================================================
@@ -988,6 +1104,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       final String taskText = item['task'] ?? '';
       final bool timePassed = _isTimePassed(timeText);
 
+      // [색상 적용] 지시사항에 맞춘 세트별 바("|") 색상 매핑 함수 호출
+      final Color barColor = _getTimelineBarColor(_selectedTrack, timeText, taskText, index);
+
       final Color timeColor = timePassed ? slate500 : goldColor;
       final Color taskColor = timePassed ? slate400 : Colors.white;
 
@@ -995,7 +1114,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         onTap: () => _showEditItemDialog(
           index: index,
           initialTime: timeText,
-          initialTask: taskText,
+          initialTask: timeText,
         ),
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -1008,6 +1127,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // [시간 영역]
               SizedBox(
                 width: 92,
                 child: Text(
@@ -1019,7 +1139,15 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              // [구분 바 추가] 지시하신 바("|") 위젯 및 세트별 색상 반영
+              Container(
+                width: 4.0,
+                height: 18.0,
+                color: timePassed ? slate500 : barColor,
+              ),
+              const SizedBox(width: 10),
+              // [내용 영역]
               Expanded(
                 child: Text(
                   taskText,
