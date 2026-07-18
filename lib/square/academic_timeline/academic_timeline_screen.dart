@@ -57,7 +57,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   // 3 & 4. 시험 공통
   bool _isFinalExamMode = false;
   DateTime? _examStartDate;
-
+  DateTime? _examEndDate; // [추가] 시험 종료일
+  int? _manualExamPrepWeek; // [추가] 4/3/2주 수동 선택 (null=날짜 자동계산)
   bool _isExamSettingExpanded = true;
   final List<Map<String, String>> _customExamRecords = [];
 
@@ -95,6 +96,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     final bool freeMode = prefs.getBool('gke_pomodoro_free_mode') ?? false;
     final String? examType = prefs.getString('gke_selected_exam_type');
     final String? examStartStr = prefs.getString('gke_exam_start_date');
+    final String? examEndStr = prefs.getString('gke_exam_end_date');
 
     if (mounted) {
       setState(() {
@@ -104,6 +106,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         _isPomodoroFreeModeEnabled = freeMode;
         _isFinalExamMode = (examType == '기말고사');
         _examStartDate = examStartStr != null ? DateTime.tryParse(examStartStr) : null;
+        _examEndDate = examEndStr != null ? DateTime.tryParse(examEndStr) : null;
       });
     }
   }
@@ -135,6 +138,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       await prefs.setString('gke_exam_start_date', _examStartDate!.toIso8601String());
     } else {
       await prefs.remove('gke_exam_start_date');
+    }
+    if (_examEndDate != null) {
+      await prefs.setString('gke_exam_end_date', _examEndDate!.toIso8601String());
+    } else {
+      await prefs.remove('gke_exam_end_date');
     }
   }
 
@@ -191,6 +199,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         cacheKey = 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w4_weekday';
         defaultList = _getExamPrepList(4, 'weekday', _isFinalExamMode);
       }
+
     } else if (_selectedTrack == 'EXAM_DAY_TRACK') {
       final DateTime today = DateTime.now();
       final DateTime cleanToday = DateTime(today.year, today.month, today.day);
@@ -264,6 +273,31 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } else {
       return (targetDate.weekday == 6 || targetDate.weekday == 7) ? 'weekend' : 'weekday';
     }
+  }
+// [추가] 주차 계산 통합 (중복 로직 제거)
+  int _calcExamPrepWeekNum(int diffDays) {
+    if (diffDays > 21) return 4;
+    if (diffDays > 14) return 3;
+    if (diffDays > 7) return 2;
+    return 1;
+  }
+
+  // [추가] 시험 종료일 23시가 지났는지 체크 → 지났으면 평일 시간표로 자동 복귀
+  bool _isAfterExamEnd() {
+    if (_examEndDate == null) return false;
+    final DateTime cutoff = DateTime(_examEndDate!.year, _examEndDate!.month, _examEndDate!.day, 23, 0);
+    return DateTime.now().isAfter(cutoff);
+  }
+
+  // [추가] 'yyyy.m.d' 형식 문자열을 DateTime으로 파싱
+  DateTime? _parseRecordDate(String formatted) {
+    try {
+      final parts = formatted.split('.');
+      if (parts.length == 3) {
+        return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      }
+    } catch (_) {}
+    return null;
   }
 
   List<Map<String, String>> _getPomodoroListByKey(String key) {
