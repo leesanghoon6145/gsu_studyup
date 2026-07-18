@@ -113,15 +113,16 @@ class StudyTimelines {
   static final List<Map<String, String>> finalFriDPlus3 = [{'time': '06:00', 'task': '기말 금요 D+3'}];
   static final List<Map<String, String>> finalFriDPlus4 = [{'time': '06:00', 'task': '기말 금요 D+4'}];
 
-  // ==========================================
-  // 5. getTimelineForDate: D-day 요일 및 우선순위 충돌 제어 매칭 메서드
-  // ==========================================
+// ==========================================
+// 5. getTimelineForDate: D-day 요일 및 우선순위 충돌 제어 매칭 메서드
+// [수정] 더미 데이터 대신 StudyTimelinesMidTermAllDays의 실제 상세 시간표를 연결
+// ==========================================
   static List<Map<String, String>> getTimelineForDate(
       DateTime selectedDate,
       DateTime examDDay, {
         bool isExamPeriod = true,
         bool isActualExamWeek = true,
-        bool isFinalExam = false, // 👈 추가: false(기본값)=중간고사 데이터, true=기말고사 데이터 사용
+        bool isFinalExam = false,
       }) {
     int differenceInDays = selectedDate.difference(examDDay).inDays;
     int dDayWeekday = examDDay.weekday; // 1: 월, 2: 화, 3: 수, 4: 목, 5: 금
@@ -131,119 +132,119 @@ class StudyTimelines {
         // ---------- 중간고사 ----------
         if (dDayWeekday == 1) {
           switch (differenceInDays) {
-            case -3: return midMonD3;
-            case -2: return midMonD2;
-            case -1: return midMonD1;
-            case 0:  return midMonDDay;
-            case 1:  return midMonDPlus1;
-            case 2:  return midMonDPlus2;
-            case 3:  return midMonDPlus3;
+            case -3: return StudyTimelinesMidTermAllDays.midMonD3;
+            case -2: return StudyTimelinesMidTermAllDays.midMonD2;
+            case -1: return StudyTimelinesMidTermAllDays.midMonD1;
+            case 0:  return StudyTimelinesMidTermAllDays.midMonDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.midMonDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.midMonDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.midMonDPlus3;
           }
         } else if (dDayWeekday == 2) {
           switch (differenceInDays) {
-            case -3: return midTueD3;
-            case -2: return midTueD2;
-            case -1: return midTueD1;
-            case 0:  return midTueDDay;
-            case 1:  return midTueDPlus1;
-            case 2:  return midTueDPlus2;
-            case 3:  return midTueDPlus3;
+            case -3: return StudyTimelinesMidTermAllDays.midTueD3;
+            case -2: return StudyTimelinesMidTermAllDays.midTueD2;
+            case -1: return StudyTimelinesMidTermAllDays.midTueD1;
+            case 0:  return StudyTimelinesMidTermAllDays.midTueDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.midTueDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.midTueDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.midTueDPlus3;
           }
         } else if (dDayWeekday == 3) {
           switch (differenceInDays) {
-            case -3: return midWedD3;
-            case -2: return midWedD2;
-            case -1: return midWedD1;
-            case 0:  return midWedDDay;
-            case 1:  return midWedDPlus1;
-            case 2:  return midWedDPlus2;
-            case 3:  return midWedDPlus3;
-            case 4:  return midWedDPlus4;
+            case -3: return StudyTimelinesMidTermAllDays.midWedD3;
+            case -2: return StudyTimelinesMidTermAllDays.midWedD2;
+            case -1: return StudyTimelinesMidTermAllDays.midWedD1;
+            case 0:  return StudyTimelinesMidTermAllDays.midWedDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.midWedDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.midWedDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.midWedDPlus3;
+            case 4:  return StudyTimelinesMidTermAllDays.midWedDPlus4;
           }
         } else if (dDayWeekday == 4) {
           switch (differenceInDays) {
-            case -3: return midThuD3;
-            case -2: return midThuD2;
-            case -1: return midThuD1;
-            case 0:  return midThuDDay;
-            case 1:  return midThuDPlus1;
-            case 2:  return midThuDPlus2;
-            case 3:  return midThuDPlus3;
-            case 4:  return midThuDPlus4;
+            case -3: return StudyTimelinesMidTermAllDays.midThuD3;
+            case -2: return StudyTimelinesMidTermAllDays.midThuD2;
+            case -1: return StudyTimelinesMidTermAllDays.midThuD1;
+            case 0:  return StudyTimelinesMidTermAllDays.midThuDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.midThuDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.midThuDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.midThuDPlus3;
+            case 4:  return StudyTimelinesMidTermAllDays.midThuDPlus4;
           }
         } else if (dDayWeekday == 5) {
           switch (differenceInDays) {
-            case -3: return midFriD3;
-            case -2: return midFriD2;
-            case -1: return midFriD1;
-            case 0:  return midFriDDay;
-            case 1:  return midFriDPlus1;
-            case 2:  return midFriDPlus2;
-            case 3:  return midFriDPlus3;
-            case 4:  return midFriDPlus4;
+            case -3: return StudyTimelinesMidTermAllDays.midFriD3;
+            case -2: return StudyTimelinesMidTermAllDays.midFriD2;
+            case -1: return StudyTimelinesMidTermAllDays.midFriD1;
+            case 0:  return StudyTimelinesMidTermAllDays.midFriDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.midFriDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.midFriDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.midFriDPlus3;
+            case 4:  return StudyTimelinesMidTermAllDays.midFriDPlus4;
           }
         }
       } else {
         // ---------- 기말고사 ----------
         if (dDayWeekday == 1) {
           switch (differenceInDays) {
-            case -3: return finalMonD3;
-            case -2: return finalMonD2;
-            case -1: return finalMonD1;
-            case 0:  return finalMonDDay;
-            case 1:  return finalMonDPlus1;
-            case 2:  return finalMonDPlus2;
-            case 3:  return finalMonDPlus3;
+            case -3: return StudyTimelinesMidTermAllDays.finalMonD3;
+            case -2: return StudyTimelinesMidTermAllDays.finalMonD2;
+            case -1: return StudyTimelinesMidTermAllDays.finalMonD1;
+            case 0:  return StudyTimelinesMidTermAllDays.finalMonDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.finalMonDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.finalMonDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.finalMonDPlus3;
           }
         } else if (dDayWeekday == 2) {
           switch (differenceInDays) {
-            case -3: return finalTueD3;
-            case -2: return finalTueD2;
-            case -1: return finalTueD1;
-            case 0:  return finalTueDDay;
-            case 1:  return finalTueDPlus1;
-            case 2:  return finalTueDPlus2;
-            case 3:  return finalTueDPlus3;
+            case -3: return StudyTimelinesMidTermAllDays.finalTueD3;
+            case -2: return StudyTimelinesMidTermAllDays.finalTueD2;
+            case -1: return StudyTimelinesMidTermAllDays.finalTueD1;
+            case 0:  return StudyTimelinesMidTermAllDays.finalTueDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.finalTueDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.finalTueDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.finalTueDPlus3;
           }
         } else if (dDayWeekday == 3) {
           switch (differenceInDays) {
-            case -3: return finalWedD3;
-            case -2: return finalWedD2;
-            case -1: return finalWedD1;
-            case 0:  return finalWedDDay;
-            case 1:  return finalWedDPlus1;
-            case 2:  return finalWedDPlus2;
-            case 3:  return finalWedDPlus3;
-            case 4:  return finalWedDPlus4;
+            case -3: return StudyTimelinesMidTermAllDays.finalWedD3;
+            case -2: return StudyTimelinesMidTermAllDays.finalWedD2;
+            case -1: return StudyTimelinesMidTermAllDays.finalWedD1;
+            case 0:  return StudyTimelinesMidTermAllDays.finalWedDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.finalWedDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.finalWedDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.finalWedDPlus3;
+            case 4:  return StudyTimelinesMidTermAllDays.finalWedDPlus4;
           }
         } else if (dDayWeekday == 4) {
           switch (differenceInDays) {
-            case -3: return finalThuD3;
-            case -2: return finalThuD2;
-            case -1: return finalThuD1;
-            case 0:  return finalThuDDay;
-            case 1:  return finalThuDPlus1;
-            case 2:  return finalThuDPlus2;
-            case 3:  return finalThuDPlus3;
-            case 4:  return finalThuDPlus4;
+            case -3: return StudyTimelinesMidTermAllDays.finalThuD3;
+            case -2: return StudyTimelinesMidTermAllDays.finalThuD2;
+            case -1: return StudyTimelinesMidTermAllDays.finalThuD1;
+            case 0:  return StudyTimelinesMidTermAllDays.finalThuDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.finalThuDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.finalThuDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.finalThuDPlus3;
+            case 4:  return StudyTimelinesMidTermAllDays.finalThuDPlus4;
           }
         } else if (dDayWeekday == 5) {
           switch (differenceInDays) {
-            case -3: return finalFriD3;
-            case -2: return finalFriD2;
-            case -1: return finalFriD1;
-            case 0:  return finalFriDDay;
-            case 1:  return finalFriDPlus1;
-            case 2:  return finalFriDPlus2;
-            case 3:  return finalFriDPlus3;
-            case 4:  return finalFriDPlus4;
+            case -3: return StudyTimelinesMidTermAllDays.finalFriD3;
+            case -2: return StudyTimelinesMidTermAllDays.finalFriD2;
+            case -1: return StudyTimelinesMidTermAllDays.finalFriD1;
+            case 0:  return StudyTimelinesMidTermAllDays.finalFriDDay;
+            case 1:  return StudyTimelinesMidTermAllDays.finalFriDPlus1;
+            case 2:  return StudyTimelinesMidTermAllDays.finalFriDPlus2;
+            case 3:  return StudyTimelinesMidTermAllDays.finalFriDPlus3;
+            case 4:  return StudyTimelinesMidTermAllDays.finalFriDPlus4;
           }
         }
       }
     }
 
     // 기본값 (시험 기간 외 일반 타임라인)
-    return isFinalExam ? finalMonDDay : midMonDDay;
+    return isFinalExam ? StudyTimelinesMidTermAllDays.finalMonDDay : StudyTimelinesMidTermAllDays.midMonDDay;
   }
 
 
@@ -546,7 +547,7 @@ class StudyTimelines {
 // [주석] DKE StudyUp - 스터디 타임라인 데이터 관리 파일 (2단계: 중간고사 준비 기간)
 class StudyTimelinesExamPrepMid {
 
-  // 1. 중간고사 4주 전 평일 (D-28 ~ D-24) 및 (D-23, D-22 등 반복 구간)
+  // 1. 중간고사 4주 전 평일 (D-28 ~ D-24)
   static final List<Map<String, String>> midTermWeek4Weekday = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭'},
     {'time': '06:30 ~ 07:30', 'task': '사회 시험대비 개념1강/ 문제풀이 20%'},
@@ -564,7 +565,7 @@ class StudyTimelinesExamPrepMid {
     {'time': '23:00 ~ 06:00', 'task': '취침'},
   ];
 
-  // 2. 중간고사 4주 전 토·일 타임라인 (4주차 주말)
+  // 2. 중간고사 4주 전 토·일 타임라인 (4주차 주말)(D-23, D-22 등 반복 구간)
   static final List<Map<String, String>> midTermWeek4Weekend = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동/아침식사'},
     {'time': '08:00 ~ 09:00', 'task': '사회 개념1강/ 문제풀이 20%'},
@@ -589,7 +590,7 @@ class StudyTimelinesExamPrepMid {
     {'time': '22:10 ~ 07:00', 'task': '취침 (토요일, 일요일 아침 07:00기상)'},
   ];
 
-  // 3. 중간고사 3주 전 평일 (D-21 ~ D-17 및 D-16, D-15 반복)
+  // 3. 중간고사 3주 전 평일 (D-21 ~ D-17 )
   static final List<Map<String, String>> midTermWeek3Weekday = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭'},
     {'time': '06:30 ~ 07:30', 'task': '사회 시험대비 개념 정리 40%/ 문제풀이 60%'},
@@ -607,7 +608,7 @@ class StudyTimelinesExamPrepMid {
     {'time': '23:00 ~ 06:00', 'task': '취침'},
   ];
 
-  // 4. 중간고사 3주 전 토·일 타임라인 (3주차 주말)
+  // 4. 중간고사 3주 전 토·일 타임라인 (3주차 주말) (D-16, D-15 반복)
   static final List<Map<String, String>> midTermWeek3Weekend = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동/아침식사'},
     {'time': '08:00 ~ 09:00', 'task': '사회 개념1강/ 문제풀이 20%'},
@@ -650,7 +651,7 @@ class StudyTimelinesExamPrepMid {
     {'time': '23:00 ~ 06:00', 'task': '취침'},
   ];
 
-  // 6. 중간고사 2주 전 토·일 타임라인 (2주차 주말)
+  // 6. 중간고사 2주 전 토·일 타임라인 (2주차 주말)(D-6, D-5)
   static final List<Map<String, String>> midTermWeek2Weekend = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동/아침식사'},
     {'time': '08:00 ~ 09:00', 'task': '사회 개념1강/ 문제풀이 20%'},
@@ -1526,7 +1527,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '15:00 ~ 15:20', 'task': '휴식'},
     {'time': '15:20 ~ 16:20', 'task': '시험대비3 총정리'},
     {'time': '16:20 ~ 16:40', 'task': '휴식'},
-    {'time': '16:40 ~ 17:40', 'task': '시험대비3 총정리'},
+    {'time': '16:40 ~ 17:40', 'task': '시험대비3 문제풀이'},
     {'time': '17:40 ~ 19:00', 'task': '저녁식사 및 휴식'},
     {'time': '19:00 ~ 20:00', 'task': '시험대비1 총정리'},
     {'time': '20:00 ~ 20:20', 'task': '휴식'},
@@ -1613,7 +1614,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:00 ~ 06:00', 'task': '취침'},
   ];
 
-  static final List<Map<String, String>> midTheDDay = [
+  static final List<Map<String, String>> midThuDDay = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교'},
@@ -1633,7 +1634,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:20 ~ 06:00', 'task': '취침'},
   ];
 
-  static final List<Map<String, String>> midTheDPlus1 = [
+  static final List<Map<String, String>> midThuDPlus1 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교'},
@@ -1653,7 +1654,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:20 ~ 06:00', 'task': '취침'},
   ];
 
-  static final List<Map<String, String>> midTheDPlus2 = [
+  static final List<Map<String, String>> midThuDPlus2 = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동'},
     {'time': '08:00 ~ 08:30', 'task': '아침식사'},
     {'time': '08:30 ~ 09:30', 'task': '시험대비1 총정리'},
@@ -1677,7 +1678,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:00 ~ 07:00', 'task': '취침'},
   ];
 
-  static final List<Map<String, String>> midTheDPlus3 = [
+  static final List<Map<String, String>> midThuDPlus3 = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동'},
     {'time': '08:00 ~ 08:30', 'task': '아침식사'},
     {'time': '08:30 ~ 09:30', 'task': '시험대비1 총정리'},
@@ -1701,7 +1702,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:00 ~ 06:00', 'task': '취침'},
   ];
 
-  static final List<Map<String, String>> midTheDPlus4 = [
+  static final List<Map<String, String>> midThuDPlus4 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교'},
@@ -1773,7 +1774,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:00 ~ 06:00', 'task': '취침'}
   ];
 
-  static final List<Map<String, String>> midFreDDay = [
+  static final List<Map<String, String>> midFriDDay = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교'},
@@ -1793,7 +1794,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:20 ~ 06:00', 'task': '취침'}
   ];
 
-  static final List<Map<String, String>> midFreDPlus1 = [
+  static final List<Map<String, String>> midFriDPlus1 = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동'},
     {'time': '08:00 ~ 08:30', 'task': '아침식사'},
     {'time': '08:30 ~ 09:30', 'task': '시험대비1 총정리'},
@@ -1817,7 +1818,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:00 ~ 07:00', 'task': '취침'}
   ];
 
-  static final List<Map<String, String>> midFreDPlus2 = [
+  static final List<Map<String, String>> midFriDPlus2 = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동'},
     {'time': '08:00 ~ 08:30', 'task': '아침식사'},
     {'time': '08:30 ~ 09:30', 'task': '시험대비1 총정리'},
@@ -1841,7 +1842,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:00 ~ 06:00', 'task': '취침'}
   ];
 
-  static final List<Map<String, String>> midFreDPlus3 = [
+  static final List<Map<String, String>> midFriDPlus3 = [
     {'time': '06:00 ~ 06:30', 'task': '기상'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교'},
@@ -1862,7 +1863,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:10 ~ 06:00', 'task': '취침'}
   ];
 
-  static final List<Map<String, String>> midFreDPlus4 = [
+  static final List<Map<String, String>> midFriDPlus4 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교'},
@@ -1979,7 +1980,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// D+1일까지 (화요일) 타임라인
-  static final List<Map<String, String>> finalMonDPuls1 = [
+  static final List<Map<String, String>> finalMonDPlus1 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리\nReview of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
@@ -2000,7 +2001,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// D+2일까지 (수요일) 타임라인
-  static final List<Map<String, String>> finalMonDPuls2 = [
+  static final List<Map<String, String>> finalMonDPlus2 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리\nReview of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
@@ -2021,7 +2022,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// D+3일까지 (목요일) 타임라인
-  static final List<Map<String, String>> finalMonDPuls3 = [
+  static final List<Map<String, String>> finalMonDPlus3 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리\nReview of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
@@ -2120,7 +2121,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// 기말고사 D-Day (화요일) 타임라인
-  static final List<Map<String, String>>  finalTueDday = [
+  static final List<Map<String, String>>  finalTueDDay = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 총정리\nFinal review of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
@@ -2142,7 +2143,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// D+1일까지 (수요일) 타임라인
-  static final List<Map<String, String>> finalTueDPuls1 = [
+  static final List<Map<String, String>> finalTueDPlus1 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리\nReview of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
@@ -2163,7 +2164,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// D+2일까지 (목요일) 타임라인
-  static final List<Map<String, String>> finalTueDPuls2 = [
+  static final List<Map<String, String>> finalTueDPlus2 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리\nReview of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
@@ -2185,7 +2186,7 @@ class StudyTimelinesMidTermAllDays {
   ];
 
   /// D+3일까지 (금요일) 타임라인
-  static final List<Map<String, String>> finalTueDPuls3 = [
+  static final List<Map<String, String>> finalTueDPlus3 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭 (스트레칭으로 긴장감풀기 – 팝업)\nWake up + Light exercise/Stretching (Popup: Relieve tension)'},
     {'time': '06:30 ~ 07:30', 'task': '당일 시험과목 정리\nReview of today\'s exam subject'},
     {'time': '07:30 ~ 08:00', 'task': '아침식사 / 등교\nBreakfast / Going to school'},
