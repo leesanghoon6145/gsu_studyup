@@ -161,47 +161,50 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       defaultList = _selectedPomodoroKey != null ? _getPomodoroListByKey(_selectedPomodoroKey!) : [];
     } else if (_selectedTrack == 'EXAM_PREP_PERIOD') {
       final DateTime today = DateTime.now();
-      final DateTime cleanToday = DateTime(today.year, today.month, today.day);
-
-      if (_examStartDate != null) {
-        final DateTime cleanExamStart = DateTime(_examStartDate!.year, _examStartDate!.month, _examStartDate!.day);
-        final int diffDays = cleanExamStart.difference(cleanToday).inDays;
-
-        // D-3 ~ D+4 구간인 경우 당일/직전 타임라인 우선 연동
-        if (diffDays >= -3 && diffDays <= 4 && _selectedTrack == 'EXAM_PREP_PERIOD') {
-          defaultList = StudyTimelines.getTimelineForDate(
-            cleanToday,
-            cleanExamStart,
-            isExamPeriod: true,
-            isActualExamWeek: true,
-            isFinalExam: _isFinalExamMode,
-          );
-          cacheKey = 'EXAM_PREP_OVERLAP_${_isFinalExamMode ? "final" : "mid"}_diff_$diffDays';
-        } else {
-          int weekNum = 4;
-          if (diffDays > 28) {
-            weekNum = 4;
-          } else if (diffDays > 21) {
-            weekNum = 4;
-          } else if (diffDays > 14) {
-            weekNum = 3;
-          } else if (diffDays > 7) {
-            weekNum = 2;
-          } else {
-            weekNum = 1;
-          }
-
-          final String dayType = _calcExamPrepDayTypeForDate(cleanToday, weekNum);
-          cacheKey = 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w${weekNum}_$dayType';
-          defaultList = _getExamPrepList(weekNum, dayType, _isFinalExamMode);
-        }
+      if (_isAfterExamEnd()) {
+        final int wd = DateTime.now().weekday;
+        final String todayEn = _weekdayOptions[wd - 1]['en']!;
+        cacheKey = 'NORMAL_PERIOD_$todayEn';
+        defaultList = StudyTimelines.normalPeriod[todayEn] ?? [];
       } else {
-        cacheKey = 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w4_weekday';
-        defaultList = _getExamPrepList(4, 'weekday', _isFinalExamMode);
+        final DateTime cleanToday = DateTime(today.year, today.month, today.day);
+
+        if (_manualExamPrepWeek != null) {
+          final String dayType = _calcExamPrepDayTypeForDate(cleanToday, _manualExamPrepWeek!);
+          cacheKey = 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w${_manualExamPrepWeek}_$dayType';
+          defaultList = _getExamPrepList(_manualExamPrepWeek!, dayType, _isFinalExamMode);
+        } else if (_examStartDate != null) {
+          final DateTime cleanExamStart = DateTime(_examStartDate!.year, _examStartDate!.month, _examStartDate!.day);
+          final int diffDays = cleanExamStart.difference(cleanToday).inDays;
+
+          if (diffDays >= -3 && diffDays <= 4) {
+            defaultList = StudyTimelines.getTimelineForDate(
+              cleanToday,
+              cleanExamStart,
+              isExamPeriod: true,
+              isActualExamWeek: true,
+              isFinalExam: _isFinalExamMode,
+            );
+            cacheKey = 'EXAM_PREP_OVERLAP_${_isFinalExamMode ? "final" : "mid"}_diff_$diffDays';
+          } else {
+            int weekNum = _calcExamPrepWeekNum(diffDays);
+            final String dayType = _calcExamPrepDayTypeForDate(cleanToday, weekNum);
+            cacheKey = 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w${weekNum}_$dayType';
+            defaultList = _getExamPrepList(weekNum, dayType, _isFinalExamMode);
+          }
+        } else {
+          cacheKey = 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w4_weekday';
+          defaultList = _getExamPrepList(4, 'weekday', _isFinalExamMode);
+        }
       }
 
     } else if (_selectedTrack == 'EXAM_DAY_TRACK') {
       final DateTime today = DateTime.now();
+      if (_isAfterExamEnd()) {
+        final int wd = DateTime.now().weekday;
+        final String todayEn = _weekdayOptions[wd - 1]['en']!;
+        return StudyTimelines.normalPeriod[todayEn] ?? [];
+      }
       final DateTime cleanToday = DateTime(today.year, today.month, today.day);
       final DateTime cleanExamStart = _examStartDate != null
           ? DateTime(_examStartDate!.year, _examStartDate!.month, _examStartDate!.day)
@@ -381,6 +384,10 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   }
 
   Color _getTimelineBarColor(String track, String timeText, String taskText, int index) {
+    // [추가] 방학 스타일2의 마지막 항목은 키워드 규칙보다 우선하여 보라색 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro2' && index == 33) {
+      return Colors.purple;
+    }
     if (taskText.contains('기상') ||
         taskText.contains('체조') ||
         taskText.contains('아침식사') ||
@@ -394,7 +401,57 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     if (taskText.contains('취침')) {
       return darkGrey;
     }
+    if (taskText.contains('취침')) {
+      return darkGrey;
+    }
 
+    // [추가] 방학 스타일 1 전용 구간별 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro1') {
+      if (index >= 2 && index <= 7) return Colors.red;
+      if (index >= 8 && index <= 13) return Colors.blue;
+      if (index >= 14 && index <= 19) return Colors.amber; // 노랑
+      if (index >= 21 && index <= 26) return Colors.green;
+      if (index >= 27 && index <= 32) return Colors.orange;
+      if (index >= 34 && index <= 39) return Colors.indigo; // 남색
+      if (index >= 40 && index <= 45) return Colors.red;
+    }
+
+    // [추가] 방학 스타일 2 전용 구간별 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro2') {
+      if (index == 2 || index == 3) return Colors.red;
+      if (index == 4 || index == 5) return Colors.blue;
+      if (index == 6 || index == 7) return Colors.amber;
+      if (index == 8 || index == 9) return Colors.green;
+      if (index == 10 || index == 11) return Colors.orange;
+      if (index == 13 || index == 14) return Colors.green;
+      if (index == 15 || index == 16) return Colors.orange;
+      if (index == 17 || index == 18) return Colors.indigo;
+      if (index == 19 || index == 20) return Colors.red;
+      if (index == 21 || index == 22) return Colors.blue;
+      if (index == 23 || index == 24) return Colors.amber;
+      if (index == 26 || index == 27) return Colors.green;
+      if (index == 28 || index == 29) return Colors.orange;
+      if (index == 30 || index == 31) return Colors.indigo;
+      if (index == 32) return Colors.red;
+    }
+
+    // [추가] 방학 스타일 3 전용 구간별 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro3') {
+      if (index >= 2 && index <= 7) return Colors.red;
+      if (index >= 8 && index <= 13) return Colors.blue;
+      if (index >= 15 && index <= 20) return Colors.amber;
+      if (index >= 22 && index <= 27) return Colors.green;
+      if (index == 28 || index == 29) return Colors.indigo;
+    }
+
+    // [추가] 방학 스타일 4 전용 구간별 색상 지정
+    if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro4') {
+      if (index >= 2 && index <= 5) return Colors.red;
+      if (index >= 6 && index <= 9) return Colors.blue;
+      if (index >= 11 && index <= 14) return Colors.amber;
+      if (index >= 15 && index <= 18) return Colors.green;
+      if (index >= 20 && index <= 22) return Colors.indigo;
+    }
     if (track == 'NORMAL_PERIOD') {
       if (_selectedWeekdayEn == 'Saturday' || _selectedWeekdayEn == 'Sunday') {
         if (timeText.contains('07:00') && timeText.contains('08:00')) {
@@ -625,6 +682,20 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       setState(() {
         _customExamRecords.addAll(sessionRecords);
       });
+
+      // [추가] 등록된 시험 기록의 최소/최대 날짜로 시험 시작일·종료일 자동 연동
+      List<DateTime> allDates = _customExamRecords
+          .map((r) => _parseRecordDate(r['date'] ?? ''))
+          .whereType<DateTime>()
+          .toList();
+      if (allDates.isNotEmpty) {
+        allDates.sort();
+        setState(() {
+          _examStartDate = allDates.first;
+          _examEndDate = allDates.last;
+        });
+        await _saveExamSettings();
+      }
     }
   }
 
@@ -1337,7 +1408,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 Text('EXAM INFO / 시험 정보 설정', style: GoogleFonts.notoSerif(fontSize: 14, color: goldColor, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 12),
                 Text(
-                  '(${_isFinalExamMode ? "Final / 기말" : "Mid / 중간"})',
+                  '(${_isFinalExamMode ? "Final/기말" : "Mid/중간"})',
                   style: GoogleFonts.notoSerif(fontSize: 13, color: slate400),
                 ),
               ],
@@ -1373,35 +1444,151 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       }).toList(),
                     ),
                     const SizedBox(height: 10),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(side: BorderSide(color: slate800)),
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _examStartDate ?? DateTime.now(),
-                          firstDate: DateTime(2024),
-                          lastDate: DateTime(2035),
-                          builder: (context, child) {
-                            return Theme(
-                              data: ThemeData.dark().copyWith(
-                                colorScheme: ColorScheme.dark(primary: goldColor, onPrimary: const Color(0xFF020617), surface: const Color(0xFF0B0F19), onSurface: Colors.white),
-                                dialogBackgroundColor: const Color(0xFF0B0F19),
+                    Row(
+                      children: [4, 3, 2].map((w) {
+                        bool sel = _manualExamPrepWeek == w;
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: w != 2 ? 6 : 0),
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: sel ? goldColor : null,
+                                side: BorderSide(color: goldColor),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
                               ),
-                              child: child!,
-                            );
-                          },
+                              onPressed: () {
+                                setState(() {
+                                  _manualExamPrepWeek = sel ? null : w;
+                                });
+                              },
+                              child: Text(
+                                '시험$w주 전',
+                                style: GoogleFonts.notoSerif(
+                                  color: sel ? const Color(0xFF020617) : goldColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
                         );
-                        if (picked != null) {
-                          setState(() {
-                            _examStartDate = picked;
-                          });
-                          await _saveExamSettings();
-                        }
-                      },
-                      child: Text(
-                        examDateText,
-                        style: GoogleFonts.notoSerif(fontSize: 13, color: Colors.white),
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(top: 3, right: 4),
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(color: Colors.redAccent),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '선택 시 날짜와 무관하게 해당 주차 시간표를 미리 봅니다. 다시 누르면 해제(자동계산으로 복귀).',
+                            style: GoogleFonts.notoSerif(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_manualExamPrepWeek != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.redAccent),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.redAccent),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '지금 "시험$_manualExamPrepWeek주 전" 수동 미리보기 중입니다 (오늘 날짜 자동계산 아님)',
+                                style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(side: BorderSide(color: slate800)),
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: _examStartDate ?? DateTime.now(),
+                                firstDate: DateTime(2024),
+                                lastDate: DateTime(2035),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: ThemeData.dark().copyWith(
+                                      colorScheme: ColorScheme.dark(primary: goldColor, onPrimary: const Color(0xFF020617), surface: const Color(0xFF0B0F19), onSurface: Colors.white),
+                                      dialogBackgroundColor: const Color(0xFF0B0F19),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _examStartDate = picked;
+                                });
+                                await _saveExamSettings();
+                              }
+                            },
+                            child: Text(
+                              _examStartDate == null ? '시작일 선택' : '${_examStartDate!.year}.${_examStartDate!.month}.${_examStartDate!.day}',
+                              style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text('~', style: GoogleFonts.notoSerif(color: slate400)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(side: BorderSide(color: slate800)),
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: _examEndDate ?? (_examStartDate ?? DateTime.now()),
+                                firstDate: DateTime(2024),
+                                lastDate: DateTime(2035),
+                                builder: (context, child) {
+                                  return Theme(
+                                    data: ThemeData.dark().copyWith(
+                                      colorScheme: ColorScheme.dark(primary: goldColor, onPrimary: const Color(0xFF020617), surface: const Color(0xFF0B0F19), onSurface: Colors.white),
+                                      dialogBackgroundColor: const Color(0xFF0B0F19),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _examEndDate = picked;
+                                });
+                                await _saveExamSettings();
+                              }
+                            },
+                            child: Text(
+                              _examEndDate == null ? '종료일 선택' : '${_examEndDate!.year}.${_examEndDate!.month}.${_examEndDate!.day}',
+                              style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 14),
                     ElevatedButton.icon(
