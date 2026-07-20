@@ -22,6 +22,7 @@ class TimerScreen extends StatefulWidget {
   final bool needTimelineGen;
   final String targetUniversity;
   final bool isVipMember;
+  final bool isFinalExamMode; // [추가] 기말고사 여부 (기본값 false = 중간고사)
 
   const TimerScreen({
     Key? key,
@@ -35,6 +36,7 @@ class TimerScreen extends StatefulWidget {
     required this.selectedSoundFile,
     this.targetUniversity = "Seoul National University (서울대학교)",
     this.isVipMember = false,
+    this.isFinalExamMode = false, // [추가]
   }) : super(key: key);
   @override
   State<TimerScreen> createState() => _TimerScreenState();
@@ -52,6 +54,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   double progressPercent = 0.0;
 
   late AudioPlayer _timerAudioPlayer;
+  late AudioPlayer _cueAudioPlayer; // [추가] 시작/종료 알림음 전용 플레이어
 
   // 👑 10분 락 연동용 초정밀 타이밍 제어 변수 스펙
   int _animationCycleSeconds = 0;
@@ -80,6 +83,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     tz.initializeTimeZones();
     _timerAudioPlayer = AudioPlayer();
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
+    _cueAudioPlayer = AudioPlayer(); // [추가]
 
     // ⚡ [0초 정각 초강력 동기화 트리거]: 화면이 픽셀로 안착하자마자 기기 저장 데이터를 강제 복원
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -99,6 +103,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _activeTimeline = StudyTimelines.getTimelineForDate(
       _currentSelectedDate,
       widget.targetExamDate ?? DateTime.now(),
+      isFinalExam: widget.isFinalExamMode, // [수정] 기말고사 버그 수정
     );
   }
 
@@ -214,6 +219,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _timer?.cancel();
     _timerAudioPlayer.stop();
     _timerAudioPlayer.dispose();
+    _cueAudioPlayer.dispose(); // [추가]
     super.dispose();
   }
 
@@ -249,6 +255,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         _showPauseChoiceDialog();
       } else {
         setState(() => _isRunning = true);
+        // [추가] 학습 시작 알림음 (트랙 공통 1개)
+        if (_elapsedSeconds == 0) {
+          await _cueAudioPlayer.play(AssetSource('sounds/stars_bell.mp3'));
+          await Future.delayed(const Duration(milliseconds: 600)); // [추가] 시작음이 들릴 시간 확보 후 백색소음 재생
+        }
         if (widget.selectedSoundFile.isNotEmpty) {
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
         }
@@ -273,6 +284,8 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               _timer?.cancel();
               _isRunning = false;
               _timerAudioPlayer.stop();
+              // [추가] 학습 종료(목표 달성) 알림음 (트랙 공통 1개)
+              _cueAudioPlayer.play(AssetSource('sounds/end_bell.mp3'));
               _showCompletionDialog();
             }
           });
@@ -692,13 +705,16 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       await prefs.remove('dke_temp_subject');
                       await prefs.remove('dke_temp_elapsed');
 
-                      final String subjectKey = "dke_history_${widget.selectedSubject}";
+                      final String subjectKey = "dke_history_${widget
+                          .selectedSubject}";
 
                       final Map<String, dynamic> dkeFinalPacket = {
                         'subject': widget.selectedSubject,
                         'details': detailController.text.trim(),
                         'score': int.tryParse(scoreController.text.trim()) ?? 0,
-                        'incorrectNote': isIncorrectNoted == true ? '정리함' : '정리 안함',
+                        'incorrectNote': isIncorrectNoted == true
+                            ? '정리함'
+                            : '정리 안함',
                         'understanding': selectedUnderstanding,
                         'difficulty': selectedDifficulty,
                         'concentration': selectedFocus,
@@ -708,14 +724,23 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         'timestamp': DateTime.now().toUtc().toString(),
                       };
 
-                      List<String> subjectHistoryList = prefs.getStringList(subjectKey) ?? [];
+                      List<String> subjectHistoryList = prefs.getStringList(
+                          subjectKey) ?? [];
                       subjectHistoryList.add(jsonEncode(dkeFinalPacket));
                       await prefs.setStringList(subjectKey, subjectHistoryList);
 
+                      // [추가] 별 계산 및 누적 저장 (학습 시간만큼, 자동완주/조기종료 모두 동일하게 여기서 처리됨)
+                      final int earnedStars = _calcStarsFromSeconds(
+                          _elapsedSeconds);
+                      final int newAllTimeTotal = await _saveStarsAndGetTotal(
+                          earnedStars);
+
                       if (!mounted) return;
                       Navigator.of(context).pop();
-                      _showFinalSubjectSetupRedirectDialog();
+                      _showFinalSubjectSetupRedirectDialog(
+                          earnedStars, newAllTimeTotal);
                     },
+
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -734,7 +759,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     );
   }
 
-  void _showFinalSubjectSetupRedirectDialog() {
+  void _showFinalSubjectSetupRedirectDialog(int earnedStars, int allTimeTotalStars) {
     const Color brandGolden = Color(0xFFE5C158);
     showDialog(
       context: context,
@@ -744,6 +769,12 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Column(
           children: [
+            Icon(Icons.star, color: brandGolden, size: 32),
+            const SizedBox(height: 8),
+            Text('$earnedStars 개의 별을 획득했습니다.', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text('누적 $allTimeTotalStars 개', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12)),
+            const Divider(color: Colors.white24, height: 24),
             Text('Set your next learning subject and target time.\nPlanned learning is the beginning of steady growth.', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             Text('(다음 학습 과목과 목표 시간을 설정해 보세요\n계획적인 학습은 꾸준한 성장의 시작입니다.)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
@@ -754,7 +785,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pop();
+              Navigator.of(context).pop(allTimeTotalStars);
             },
             child: Text("OK (확인)", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
@@ -769,6 +800,35 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     String minStr = mins < 10 ? "0$mins" : "$mins";
     String secStr = secs < 10 ? "0$secs" : "$secs";
     return "00:$minStr:$secStr";
+  }
+// [추가] 학습 시간(초) → 별 개수 환산 (1분=1개, 30초 이상 남으면 1개 추가 반올림)
+  int _calcStarsFromSeconds(int seconds) {
+    int minutes = seconds ~/ 60;
+    int remainSeconds = seconds % 60;
+    if (remainSeconds >= 30) minutes += 1;
+    return minutes;
+  }
+
+  // [추가] 별 저장: 오늘 합계 + 전체 누적 합계 (SharedPreferences 기반, 추후 서버 연동 시 이 함수만 교체하면 됨)
+  Future<int> _saveStarsAndGetTotal(int earnedStars) async {
+    if (earnedStars <= 0) return 0;
+    final prefs = await SharedPreferences.getInstance();
+
+    final DateTime now = DateTime.now();
+    final String todayKey = 'stars_daily_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+    final int todayStars = (prefs.getInt(todayKey) ?? 0) + earnedStars;
+    await prefs.setInt(todayKey, todayStars);
+
+    final int allTimeStars = (prefs.getInt('stars_all_time_total') ?? 0) + earnedStars;
+    await prefs.setInt('stars_all_time_total', allTimeStars);
+
+    // [추가] 과목별 누적도 함께 기록 (개인성취도 화면에서 과목별 통계 필요시 사용)
+    final String subjectKey = 'stars_subject_${widget.selectedSubject}';
+    final int subjectStars = (prefs.getInt(subjectKey) ?? 0) + earnedStars;
+    await prefs.setInt(subjectKey, subjectStars);
+
+    return allTimeStars;
   }
 
   @override
