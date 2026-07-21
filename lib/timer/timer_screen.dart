@@ -258,7 +258,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         // [추가] 학습 시작 알림음 (트랙 공통 1개)
         if (_elapsedSeconds == 0) {
           await _cueAudioPlayer.play(AssetSource('sounds/stars_bell.mp3'));
-          await Future.delayed(const Duration(milliseconds: 600)); // [추가] 시작음이 들릴 시간 확보 후 백색소음 재생
+          await Future.delayed(const Duration(milliseconds: 600)); // [수정] 600ms→1500ms로 늘려 백색소음에 묻히지 않게 함
         }
         if (widget.selectedSoundFile.isNotEmpty) {
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));

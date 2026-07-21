@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-// [중요] 상대 경로로 안전하게 import 합니다.
 import '../../planner/widgets/study_timelines.dart';
+import '../../timer/timer_screen.dart';
 
 class AcademicTimelineScreen extends StatefulWidget {
   const AcademicTimelineScreen({super.key});
@@ -63,6 +62,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   final List<Map<String, String>> _customExamRecords = [];
 
   final Map<String, List<Map<String, String>>> _customSchedules = {};
+  int? _selectedScheduleIndex; // [추가] 사용자가 선택한 시간표 항목의 인덱스
 
   @override
   void initState() {
@@ -382,9 +382,96 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } catch (_) {}
     return false;
   }
+// [추가] "09:00 ~ 09:50" 형식에서 실제 분(分) 길이 계산 (자정 넘김 보정 포함)
+  int? _calcDurationMinutes(String timeStr) {
+    try {
+      final parts = timeStr.split(RegExp(r'[-~–]'));
+      if (parts.length < 2) return null;
+      final startParts = parts.first.trim().split(':');
+      final endParts = parts.last.trim().split(':');
+      if (startParts.length < 2 || endParts.length < 2) return null;
+      int startMin = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+      int endMin = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+      if (endMin <= startMin) endMin += 24 * 60;
+      return endMin - startMin;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // [추가] TIM 버튼 실행 로직: 사용자가 선택한 항목으로 TimerScreen 이동. 선택 없으면 안내
+  void _runTimerAction(List<Map<String, String>> schedule) {
+    if (schedule.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('실행할 시간표 항목이 없습니다.', style: GoogleFonts.notoSerif())),
+      );
+      return;
+    }
+    if (_selectedScheduleIndex == null || _selectedScheduleIndex! >= schedule.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('먼저 학습할 시간표 항목을 선택해주세요.', style: GoogleFonts.notoSerif())),
+      );
+      return;
+    }
+    final item = schedule[_selectedScheduleIndex!];
+    final String taskText = item['task'] ?? '학습';
+    final int? durationMinutes = _calcDurationMinutes(item['time'] ?? '');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TimerScreen(
+          selectedSubject: taskText,
+          selectedDurationMinutes: durationMinutes ?? 30,
+          dynamicTestTitle: _isFinalExamMode ? '기말고사' : '중간고사',
+          targetExamDate: _examStartDate,
+          targetExamEndDate: _examEndDate,
+          prepPeriodStr: _manualExamPrepWeek != null ? '${_manualExamPrepWeek}주 전' : '',
+          needTimelineGen: false,
+          selectedSoundFile: '',
+          isFinalExamMode: _isFinalExamMode,
+        ),
+      ),
+    );
+  }
+
+  // [추가] 입체감 있는 골드 "TIM" 실행 버튼
+  Widget _buildTimButton(List<Map<String, String>> Function() scheduleGetter) {
+    return GestureDetector(
+      onTap: () => _runTimerAction(scheduleGetter()),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [goldColor, const Color(0xFFB8860B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+          boxShadow: [
+            BoxShadow(color: goldColor.withValues(alpha: 0.5), blurRadius: 8, offset: const Offset(0, 3)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.play_arrow_rounded, color: Color(0xFF020617), size: 20),
+            const SizedBox(width: 3),
+            Text(
+              'TIM',
+              style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Color _getTimelineBarColor(String track, String timeText, String taskText, int index) {
     // [추가] 방학 스타일2의 마지막 항목은 키워드 규칙보다 우선하여 보라색 지정
+
     if (track == 'VACATION_SUMMER_WINTER' && _selectedPomodoroKey == 'vacationPomodoro2' && index == 33) {
       return Colors.purple;
     }
@@ -989,7 +1076,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         minimumSize: const Size(0, 44),
       ),
-      onPressed: () => setState(() => _selectedTrack = trackKey),
+      onPressed: () => setState(() {
+        _selectedTrack = trackKey;
+        _selectedScheduleIndex = null;
+      }),
+
       child: Text(
         label,
         textAlign: TextAlign.center,
@@ -1043,7 +1134,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('NORMAL PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('NORMAL PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            _buildTimButton(() => _getCurrentActiveSchedule()),
+          ],
+        ),
         Text('평상시 기본 타임라인 - 오늘 요일 자동 연동', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Container(
@@ -1157,7 +1254,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('VACATION SUMMER/WINTER', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('VACATION SUMMER/WINTER', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            _buildTimButton(() => _getCurrentActiveSchedule()),
+          ],
+        ),
         Text('방학 포모도로 타임라인 - 기간 및 스타일 설정', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         Container(
@@ -1637,9 +1740,17 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           ),
         ),
         const Divider(color: Color(0xFF1E293B), height: 30),
-        Text(
-          '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
-          style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
+                style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ),
+            _buildTimButton(() => _getCurrentActiveSchedule()),
+          ],
         ),
         const SizedBox(height: 12),
         _buildScheduleHeaderBar(),
@@ -1656,8 +1767,14 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('EXAM DAY TRACK', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
-        Text('시험 당일 D-day 타임라인 - 자동 계산됩니다',
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('EXAM DAY TRACK', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            _buildTimButton(() => _getCurrentActiveSchedule()),
+          ],
+        ),
+        Text('시험 당일 D-day 타임라인 - 자동 계산',
             style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         _buildExamSettingsCardForExamDay(),
@@ -1847,20 +1964,25 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
 
       String engText = _getEnglishTaskTranslation(taskText);
       String korText = taskText;
+      final bool isSelected = _selectedScheduleIndex == index;
 
       return GestureDetector(
-        onTap: () => _showEditItemDialog(
-          index: index,
-          initialTime: timeText,
-          initialTask: taskText,
-        ),
+        onTap: () {
+          setState(() {
+            _selectedScheduleIndex = isSelected ? null : index;
+          });
+        },
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: timePassed ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+            color: isSelected
+                ? goldColor.withValues(alpha: 0.18)
+                : (timePassed ? const Color(0xFF0F172A) : const Color(0xFF1E293B)),
             borderRadius: BorderRadius.circular(10),
-            border: timePassed ? Border.all(color: slate800.withValues(alpha: 0.5)) : null,
+            border: isSelected
+                ? Border.all(color: goldColor, width: 2)
+                : (timePassed ? Border.all(color: slate800.withValues(alpha: 0.5)) : null),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1870,7 +1992,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 child: Text(
                   timeText,
                   style: GoogleFonts.notoSerif(
-                    color: timeColor,
+                    color: isSelected ? goldColor : timeColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -1880,7 +2002,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               Container(
                 width: 3.0,
                 height: 32.0,
-                color: timePassed ? slate500 : barColor,
+                color: isSelected ? goldColor : (timePassed ? slate500 : barColor),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1899,18 +2021,33 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     Text(
                       korTest(korText),
                       style: GoogleFonts.notoSerif(
-                        color: taskColor,
+                        color: isSelected ? Colors.white : taskColor,
                         fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.edit,
-                size: 14,
-                color: timePassed ? slate500 : const Color(0xFF64748B),
-              ),
+              if (isSelected)
+                const Icon(Icons.check_circle, size: 20, color: Colors.amberAccent)
+              else
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque, // [추가] 투명 영역까지 탭 인식되도록
+                  onTap: () => _showEditItemDialog(
+                    index: index,
+                    initialTime: timeText,
+                    initialTask: taskText,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(10), // [추가] 탭 가능 영역을 눈에 보이는 것보다 넓게 확장
+                    child: Icon(
+                      Icons.edit,
+                      size: 14,
+                      color: timePassed ? slate500 : const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
