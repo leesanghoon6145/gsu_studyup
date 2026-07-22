@@ -435,36 +435,15 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     );
   }
 
-  // [추가] 입체감 있는 골드 "TIM" 실행 버튼
+// [수정] timer_play_btn.png 이미지로 교체된 TIM 실행 버튼
   Widget _buildTimButton(List<Map<String, String>> Function() scheduleGetter) {
     return GestureDetector(
       onTap: () => _runTimerAction(scheduleGetter()),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [goldColor, const Color(0xFFB8860B)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
-          boxShadow: [
-            BoxShadow(color: goldColor.withValues(alpha: 0.5), blurRadius: 8, offset: const Offset(0, 3)),
-            BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 4, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.play_arrow_rounded, color: Color(0xFF020617), size: 20),
-            const SizedBox(width: 3),
-            Text(
-              'TIM',
-              style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.2),
-            ),
-          ],
-        ),
+      child: Image.asset(
+        'assets/images/timer_play_btn.png',
+        width: 100,
+        height: 60,
+        fit: BoxFit.contain,
       ),
     );
   }
@@ -1135,13 +1114,22 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('NORMAL PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('NORMAL PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('평상시 기본 타임라인 - 오늘 요일 자동 연동', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
             _buildTimButton(() => _getCurrentActiveSchedule()),
           ],
         ),
-        Text('평상시 기본 타임라인 - 오늘 요일 자동 연동', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
@@ -1255,13 +1243,22 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('VACATION SUMMER/WINTER', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('VACATION SUMMER/WINTER', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('방학 포모도로 타임라인 - 기간 및 스타일 설정', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
             _buildTimButton(() => _getCurrentActiveSchedule()),
           ],
         ),
-        Text('방학 포모도로 타임라인 - 기간 및 스타일 설정', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(14),
@@ -1740,21 +1737,37 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           ),
         ),
         const Divider(color: Color(0xFF1E293B), height: 30),
+
+        // 그려주신 스케치 구조 반영: 좌측(타이틀 + 추가 버튼) vs 우측(TIM 실행 버튼) 배치
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // 왼쪽: 위에는 타이틀, 아래에는 '+Add/항목 추가' 버튼 (헤더 바)
             Expanded(
-              child: Text(
-                '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
-                style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
+                    style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+// +Add / 항목 추가 버튼이 포함된 헤더 바를 좌측 정렬로 배치
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildScheduleHeaderBar()),
+                    ],
+                  ),
+                ],
               ),
             ),
+            const SizedBox(width: 12),
+            // 오른쪽: TIM 실행 버튼 (하단 끝단 라인과 정돈되도록 배치)
             _buildTimButton(() => _getCurrentActiveSchedule()),
           ],
         ),
         const SizedBox(height: 12),
-        _buildScheduleHeaderBar(),
-        const SizedBox(height: 8),
         ..._buildScheduleList(schedule),
       ],
     );
@@ -1768,14 +1781,23 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('EXAM DAY TRACK', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('EXAM DAY TRACK', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('시험 당일 D-day 타임라인 - 자동 계산',
+                      style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
             _buildTimButton(() => _getCurrentActiveSchedule()),
           ],
         ),
-        Text('시험 당일 D-day 타임라인 - 자동 계산',
-            style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         _buildExamSettingsCardForExamDay(),
         const Divider(color: Color(0xFF1E293B), height: 30),

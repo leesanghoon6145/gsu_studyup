@@ -72,6 +72,7 @@ flutter:
     - assets/images/dark_blue_btn.png
     - assets/images/light_blue_btn.png
     - assets/images/gsu_logo.png
+    - assets/images/timer_play_btn.png
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
