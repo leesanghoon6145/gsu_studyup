@@ -1740,9 +1740,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
 
         // 그려주신 스케치 구조 반영: 좌측(타이틀 + 추가 버튼) vs 우측(TIM 실행 버튼) 배치
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 왼쪽: 위에는 타이틀, 아래에는 '+Add/항목 추가' 버튼 (헤더 바)
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1752,19 +1751,19 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-// +Add / 항목 추가 버튼이 포함된 헤더 바를 좌측 정렬로 배치
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(child: _buildScheduleHeaderBar()),
+                      _buildAddButton(), // [수정] 제목 바로 아래, 왼쪽 정렬로 세로 배치
+                      const SizedBox(width: 8),
+                      _buildScheduleHeaderBar(showAddButton: false), // Edited/Reset 표시 (있을 때만)
                     ],
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            // 오른쪽: TIM 실행 버튼 (하단 끝단 라인과 정돈되도록 배치)
-            _buildTimButton(() => _getCurrentActiveSchedule()),
+            _buildTimButton(() => _getCurrentActiveSchedule()), // [수정] 오른쪽에 독립 배치
           ],
         ),
         const SizedBox(height: 12),
@@ -1923,7 +1922,21 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     );
   }
 
-  Widget _buildScheduleHeaderBar() {
+// [추가] "+Add/항목 추가" 버튼만 별도로 분리 (시험준비 화면에서 재사용하기 위함)
+  Widget _buildAddButton() {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: slate800,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: Size.zero,
+      ),
+      onPressed: () => _showEditItemDialog(),
+      icon: const Icon(Icons.add, size: 14, color: Colors.white),
+      label: Text('Add / 항목 추가', style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 11)),
+    );
+  }
+
+  Widget _buildScheduleHeaderBar({bool showAddButton = true}) {
     bool isCustomized = _customSchedules.containsKey(_getCurrentCacheKey());
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -1947,21 +1960,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               ),
           ],
         ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: slate800,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            minimumSize: Size.zero,
-          ),
-          onPressed: () => _showEditItemDialog(),
-          icon: const Icon(Icons.add, size: 14, color: Colors.white),
-          label: Text('Add / 항목 추가', style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 11)),
-        ),
+        if (showAddButton) const SizedBox(width: 8),
+        if (showAddButton) _buildAddButton(),
       ],
     );
   }
-
   List<Widget> _buildScheduleList(List<Map<String, String>> schedule) {
     if (schedule.isEmpty) {
       return [
