@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 실제로 연결
 
 class MyPageScreen extends StatefulWidget {
   final bool isVipMember;
@@ -17,14 +18,16 @@ class MyPageScreen extends StatefulWidget {
 }
 
 class _MyPageScreenState extends State<MyPageScreen> {
-  // 🌐 [명칭: 글로벌 10개국 다국어 사전 탑재] - 요구사항 5번: 10개국 언어 지원 스펙 완벽 확장
+  // 🌐 [명칭: 글로벌 12개국 다국어 사전 탑재] - 요구사항: 12개국 언어 지원 스펙 완벽 확장
+  // 🆕 코드는 항상 대문자로 통일합니다 (global_lang.dart의 DkeLang.supportedLanguages와 동일 기준).
+  //    스페인어(ES), 태국어(TH) 2개 언어를 신규 추가했습니다.
   final List<Map<String, String>> _languages = const [
     {
-      'code': 'en',
+      'code': 'EN',
       'name': 'English',
       'flag': '🇺🇸',
       'title': 'My Page',
-      'target': 'Target', // 👈 요구사항 1번: 'School' 문구 완전 삭제
+      'target': 'Target',
       'hint': 'Enter target name',
       'save': 'Save Settings',
       'vip': 'VIP Premium Member',
@@ -44,11 +47,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Target',
     },
     {
-      'code': 'ko',
+      'code': 'KO',
       'name': '한국어',
       'flag': '🇰🇷',
       'title': '마이 페이지',
-      'target': '목표', // 👈 요구사항 1번: '학교' 문구 완전 삭제 완료!
+      'target': '목표',
       'hint': '목표명을 입력하세요',
       'save': '설정 저장',
       'vip': 'VIP 프리미엄 회원',
@@ -68,11 +71,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': '목표',
     },
     {
-      'code': 'ja',
+      'code': 'JA',
       'name': '日本語',
       'flag': '🇯🇵',
       'title': 'マイページ',
-      'target': '目標', // 👈 요구사항 1번: '学校' 문구 완전 삭제
+      'target': '目標',
       'hint': '目標名を入力してください',
       'save': '設定保存',
       'vip': 'VIPプレミアム会員',
@@ -92,11 +95,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': '目標',
     },
     {
-      'code': 'zh',
+      'code': 'ZH',
       'name': '简体中文',
       'flag': '🇨🇳',
       'title': '个人中心',
-      'target': '目标', // 👈 요구사항 1번: '学校' 문구 완전 삭제
+      'target': '目标',
       'hint': '请输入目标名称',
       'save': '保存设置',
       'vip': 'VIP高级会员',
@@ -116,7 +119,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': '目标',
     },
     {
-      'code': 'fr',
+      'code': 'FR',
       'name': 'Français',
       'flag': '🇫🇷',
       'title': 'Ma Page',
@@ -135,12 +138,12 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'vipDone': 'Membre Premium VIP Activé',
       'disabledHint': 'Disponible après approbation VIP',
       'saved': 'Les paramètres ont été enregistrés.',
-      'snackVip': 'L\'accès VIP a été approuvé. Vous pouvez définir votre cible.',
+      'snackVip': "L'accès VIP a été approuvé. Vous pouvez définir votre cible.",
       'defaultSchool': 'Université Nationale de Séoul',
       'targetWord': 'Cible',
     },
     {
-      'code': 'de',
+      'code': 'DE',
       'name': 'Deutsch',
       'flag': '🇩🇪',
       'title': 'Meine Seite',
@@ -164,7 +167,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Ziel',
     },
     {
-      'code': 'ru',
+      'code': 'RU',
       'name': 'Русский',
       'flag': '🇷🇺',
       'title': 'Моя страница',
@@ -188,7 +191,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Цель',
     },
     {
-      'code': 'ar',
+      'code': 'AR',
       'name': 'العربية',
       'flag': '🇸🇦',
       'title': 'صفحتي',
@@ -212,7 +215,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'الهدف',
     },
     {
-      'code': 'hi',
+      'code': 'HI',
       'name': 'हिन्दी',
       'flag': '🇮🇳',
       'title': 'मेरा पृष्ठ',
@@ -236,7 +239,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'लक्ष्य',
     },
     {
-      'code': 'vi',
+      'code': 'VI',
       'name': 'Tiếng Việt',
       'flag': '🇻🇳',
       'title': 'Trang của tôi',
@@ -258,7 +261,57 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'Đã phê duyệt thành viên VIP. Bạn có thể tự do đặt mục tiêu.',
       'defaultSchool': 'Đại học Quốc gia Seoul',
       'targetWord': 'Mục tiêu',
-    }
+    },
+    // 🆕 [신규 추가] 스페인어
+    {
+      'code': 'ES',
+      'name': 'Español',
+      'flag': '🇪🇸',
+      'title': 'Mi Página',
+      'target': 'Objetivo',
+      'hint': 'Ingresa el nombre del objetivo',
+      'save': 'Guardar configuración',
+      'vip': 'Miembro Premium VIP',
+      'normal': 'Miembro Regular',
+      'personal': 'Editar información personal',
+      'email': 'Correo electrónico',
+      'password': 'Actualizar contraseña',
+      'passwordHint': 'Ingresa la nueva contraseña',
+      'language': 'Idioma global',
+      'vipLocked': 'Bloqueado solo para miembros VIP',
+      'vipButton': 'Solicitar VIP y definir objetivo',
+      'vipDone': 'Miembro Premium VIP Activado',
+      'disabledHint': 'Disponible tras la aprobación VIP',
+      'saved': 'La configuración de Mi Página se ha guardado.',
+      'snackVip': 'Membresía VIP aprobada. Ahora puedes definir tu objetivo.',
+      'defaultSchool': 'Universidad Nacional de Seúl',
+      'targetWord': 'Objetivo',
+    },
+    // 🆕 [신규 추가] 태국어
+    {
+      'code': 'TH',
+      'name': 'ภาษาไทย',
+      'flag': '🇹🇭',
+      'title': 'หน้าของฉัน',
+      'target': 'เป้าหมาย',
+      'hint': 'กรอกชื่อเป้าหมาย',
+      'save': 'บันทึกการตั้งค่า',
+      'vip': 'สมาชิก VIP พรีเมียม',
+      'normal': 'สมาชิกทั่วไป',
+      'personal': 'แก้ไขข้อมูลส่วนตัว',
+      'email': 'อีเมล',
+      'password': 'เปลี่ยนรหัสผ่าน',
+      'passwordHint': 'กรอกรหัสผ่านใหม่',
+      'language': 'เลือกภาษา',
+      'vipLocked': 'ล็อกไว้สำหรับสมาชิก VIP เท่านั้น',
+      'vipButton': 'สมัคร VIP และตั้งเป้าหมาย',
+      'vipDone': 'เปิดใช้งานสมาชิก VIP พรีเมียมแล้ว',
+      'disabledHint': 'ใช้งานได้หลังจากได้รับการอนุมัติ VIP',
+      'saved': 'บันทึกการตั้งค่าหน้าของฉันแล้ว',
+      'snackVip': 'อนุมัติสมาชิก VIP แล้ว ตอนนี้คุณสามารถตั้งเป้าหมายได้',
+      'defaultSchool': 'มหาวิทยาลัยแห่งชาติโซล',
+      'targetWord': 'เป้าหมาย',
+    },
   ];
 
   static const Color _brandGolden = Color(0xFFE5C158);
@@ -273,7 +326,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   Map<String, String> get _lang => _languages[_currentLangIndex];
-  bool get _isRtl => _lang['code'] == 'ar';
+  bool get _isRtl => _lang['code'] == 'AR';
 
   @override
   void initState() {
@@ -283,16 +336,17 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   // 🕒 기기 저장소에서 영구 가입된 VIP 상태와 목표 데이터를 실시간 로드 및 복원
+  // 🆕 [12개국 연동] 언어는 더 이상 마이페이지 전용 키로 따로 저장하지 않고,
+  //    DkeLang(전역 스위치, 'user_country' 키)을 그대로 기준으로 삼습니다. (한 곳에서만 관리 -> 화면 간 불일치 방지)
   Future<void> _loadSavedSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUni = prefs.getString('saved_target_university') ?? '';
-    final savedLang = prefs.getString('saved_language_code') ?? 'ko';
 
     // 👑 🎯 핵심 반영: 기기에 저장된 VIP 가입 이력이 있으면 기본 위젯 상태를 제치고 무조건 복원 승격!
     final bool savedVipStatus = prefs.getBool('saved_vip_status') ?? widget.isVipMember;
 
-    int langIdx = _languages.indexWhere((lang) => lang['code'] == savedLang);
-    if (langIdx == -1) langIdx = 1;
+    int langIdx = _languages.indexWhere((lang) => lang['code'] == DkeLang.current);
+    if (langIdx == -1) langIdx = 1; // 못 찾으면 한국어(KO) 기본값
 
     if (!mounted) return;
 
@@ -303,7 +357,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
     });
   }
 
-  // 💾 [설정 저장] 버튼을 누를 때 대학 이름과 가입 승인 상태를 동시에 기기에 영구 고정
+  // 💾 [설정 저장] 버튼을 누를 때 대학 이름, 언어, 가입 승인 상태를 동시에 기기에 영구 고정
+  // 🆕 [12개국 연동] 언어 저장은 DkeLang.setLanguage()에게 위임합니다.
+  //    이 한 번의 호출로 (1) DkeLang.current가 즉시 바뀌고 (2) 'user_country' 키에 영구 저장까지 함께 처리됩니다.
   Future<void> _saveAndPop() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -312,11 +368,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       finalUni = _lang['defaultSchool'] ?? '서울대학교';
     }
 
-    final currentLangCode = _lang['code'] ?? 'ko';
+    final currentLangCode = _lang['code'] ?? 'KO';
 
     await prefs.setString('saved_target_university', finalUni);
-    await prefs.setString('saved_language_code', currentLangCode);
     await prefs.setBool('saved_vip_status', _isVip);
+    await DkeLang.setLanguage(currentLangCode); // 🆕 전역 언어 스위치 갱신 + 영구 저장
 
     // 👑 요구사항 2번 가이드 장치: 실시간 메모리 데이터 세션 동기화 호출단 연동 유지
     widget.onSave(_isVip, finalUni);
@@ -400,11 +456,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
           title: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 🖼️ [명칭: 마이페이지 최상단 GSU 로고 컴포넌트]
-              // 🎯 요구사항 4번 반영: 가로 크기를 기존 255에서 친구학습방 규격인 165로, 세로를 32로 축소 조정!
               SizedBox(
-                width: 165, // 👈 [역할: 로고 가로 크기 축소 동기화 완료]
-                height: 32, // 👈 [역할: 로고 세로 크기 축소 동기화 완료]
+                width: 165,
+                height: 32,
                 child: Image.asset(
                   'assets/images/gsu_logo.png',
                   fit: BoxFit.contain,
@@ -412,12 +466,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-// 🔤 [명칭: 마이페이지 상단 앱바 타이틀 자판]
               Text(
                 'MY PAGE GKE STUDYUP',
-                style: GoogleFonts.cinzel( // 👈 Cinzel 엔진 조준
-                  fontSize: 23,            // 파트너님 지정 크기 23
-                  fontWeight: FontWeight.bold, // 👈 진하게(Bold) 기본 내장형 매칭
+                style: GoogleFonts.cinzel(
+                  fontSize: 23,
+                  fontWeight: FontWeight.bold,
                   color: _brandGolden,
                   letterSpacing: 1.2,
                 ),
@@ -603,7 +656,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
               _buildSectionTitle('GLOBAL LANGUAGE (${_lang['language'] ?? '다국어 선택'})'),
               const SizedBox(height: 12),
-              // 🌐 다국어 선택 그리드 뷰 섹션
+              // 🌐 다국어 선택 그리드 뷰 섹션 (12개국)
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -613,7 +666,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                 ),
-                itemCount: _languages.length, // 👈 확장된 10개국 언어 팩 리스트 길이 연동
+                itemCount: _languages.length, // 👈 확장된 12개국 언어 팩 리스트 길이 연동
                 itemBuilder: (context, index) {
                   final isSelected = _currentLangIndex == index;
                   final item = _languages[index];
