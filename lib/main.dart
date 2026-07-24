@@ -4,12 +4,35 @@ import 'package:google_fonts/google_fonts.dart';
 import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
 import 'package:gsu_studyup/global_lang.dart';
+import 'services/timer2_services.dart';
+import 'timer/timer_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 👑 [DKE 글로벌 언어 사전 사전 엔진 발동]
   await DkeLang.initialize();
+
+  // 🔔 [알림 서비스 초기화]
+  await Timer2Service.initialize();
+
+  // 🔔 알림을 탭했을 때 타이머1(TimerScreen) 화면으로 바로 이동
+  Timer2Service.onNotificationStartTapped = (data) {
+    Timer2Service.navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => TimerScreen(
+          selectedSubject: data['task'] ?? '학습',
+          selectedDurationMinutes: (data['durationMinutes'] as num?)?.toInt() ?? 30,
+          dynamicTestTitle: data['examTitle'] ?? '',
+          targetExamDate: null,
+          targetExamEndDate: null,
+          prepPeriodStr: '',
+          needTimelineGen: false,
+          selectedSoundFile: '',
+          isFinalExamMode: data['examTitle'] == '기말고사',
+        ),
+      ),
+    );
+  };
 
   runApp(const GsuStudyUpApp());
 }
@@ -20,6 +43,7 @@ class GsuStudyUpApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: Timer2Service.navigatorKey, // ← 이 줄만 추가
       title: 'GSU StudyUp',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

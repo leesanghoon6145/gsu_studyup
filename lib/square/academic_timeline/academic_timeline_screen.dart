@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../planner/widgets/study_timelines.dart';
 import '../../timer/timer_screen.dart';
+import '../../services/timer2_services.dart';
 
 class AcademicTimelineScreen extends StatefulWidget {
   const AcademicTimelineScreen({super.key});
@@ -438,7 +439,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
 // [수정] timer_play_btn.png 이미지로 교체된 TIM 실행 버튼
   Widget _buildTimButton(List<Map<String, String>> Function() scheduleGetter) {
     return GestureDetector(
-      onTap: () => _runTimerAction(scheduleGetter()),
+      onTap: () => _showTimActionPopup(scheduleGetter),
       child: Image.asset(
         'assets/images/timer_play_btn.png',
         width: 100,
@@ -446,6 +447,209 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         fit: BoxFit.contain,
       ),
     );
+  }
+// [추가] TIM 버튼 팝업: 선택항목 실행 / 오늘 하루 전체 시작 / 닫기 (세로 배치)
+  void _showTimActionPopup(List<Map<String, String>> Function() scheduleGetter) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B0F19),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+          ),
+          title: Text(
+            'START TIMER / 타이머 시작',
+            style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            '어떤 방식으로 시작하시겠습니까?',
+            style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          actions: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: goldColor),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _runTimerAction(scheduleGetter());
+                  },
+                  child: Text('선택항목 실행', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: goldColor,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _startFullDaySchedule(scheduleGetter());
+                  },
+                  child: Text('오늘 하루 전체 시작', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('CLOSE / 닫기', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // [추가] 지금 시각이 시작~종료 사이인 "진행 중" 항목을 찾고, 남은 분을 계산
+  Map<String, dynamic>? _findCurrentActiveItem(List<Map<String, String>> schedule) {
+    final now = DateTime.now();
+    for (final item in schedule) {
+      final timeStr = item['time'] ?? '';
+      final taskText = item['task'] ?? '';
+
+      // [추가] 휴식/식사/취침 항목은 자동 시작 대상에서 제외
+      const restKeywords = ['기상', '체조', '아침식사', '점심', '저녁', '학교생활', '취침', '마무리', '휴식'];
+      if (restKeywords.any((k) => taskText.contains(k))) continue;
+
+      final parts = timeStr.split(RegExp(r'[-~–]'));
+      if (parts.length < 2) continue;
+      final startParts = parts.first.trim().split(':');
+      final endParts = parts.last.trim().split(':');
+      if (startParts.length < 2 || endParts.length < 2) continue;
+      try {
+        DateTime start = DateTime(now.year, now.month, now.day, int.parse(startParts[0]), int.parse(startParts[1]));
+        DateTime end = DateTime(now.year, now.month, now.day, int.parse(endParts[0]), int.parse(endParts[1]));
+        if (!end.isAfter(start)) end = end.add(const Duration(days: 1));
+        if (!now.isBefore(start) && now.isBefore(end)) {
+          final int remainMinutes = end.difference(now).inMinutes;
+          return {'item': item, 'remainMinutes': remainMinutes};
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  // [추가] 오늘 하루 전체 시작: 진행 중 항목은 남은 시간으로 즉시 타이머 시작, 나머지는 알림 예약
+  Future<void> _startFullDaySchedule(List<Map<String, String>> schedule) async {
+    if (schedule.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('예약할 시간표 항목이 없습니다.', style: GoogleFonts.notoSerif())),
+      );
+      return;
+    }
+
+    final currentActive = _findCurrentActiveItem(schedule);
+    // [추가] 예약 처리 중 강조된 대기 안내 팝업 (닫기 불가)
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B0F19),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+            side: BorderSide(color: goldColor, width: 1.5),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: goldColor),
+              const SizedBox(height: 16),
+              Text(
+                '⏳ 예약 처리 중입니다',
+                style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '화면을 벗어나지 마시고\n잠시만 기다려 주세요 (최대 10초)',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    final result = await Timer2Service.scheduleFullDaySchedule(
+      schedule: schedule,
+      examTitle: _isFinalExamMode ? '기말고사' : '중간고사',
+    );
+
+    if (!mounted) return;
+    Navigator.pop(context); // [추가] 대기 팝업 닫기
+
+    final int scheduled = result['scheduled'] ?? 0;
+    final int skippedRaw = result['skippedPast'] ?? 0;
+    // 진행 중인 항목은 지금 바로 시작되므로 "지나서 제외" 카운트에서 1개 빼줍니다.
+    final int trulySkipped = (currentActive != null && skippedRaw > 0) ? skippedRaw - 1 : skippedRaw;
+
+    String message = '오늘 하루 알림 $scheduled개가 예약되었습니다.';
+    if (currentActive != null) {
+      final currentItem = currentActive['item'] as Map<String, String>;
+      final int remainMinutes = currentActive['remainMinutes'] as int;
+      message += '\n지금 진행 중인 "${currentItem['task']}" 항목을 바로 시작합니다 (남은 $remainMinutes분).';
+    }
+    if (trulySkipped > 0) {
+      message += '\n(이미 지난 $trulySkipped개 항목은 제외되었습니다. 다음 학습 시 추가로 진행해주세요.)';
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B0F19),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+          ),
+          title: Text('SCHEDULED / 예약 완료', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Text(message, style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13)),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+              onPressed: () => Navigator.pop(context),
+              child: Text('확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    // [추가] "확인" 누른 뒤, 진행 중인 항목이 있었다면 남은 시간으로 타이머1(TimerScreen) 실행
+    if (currentActive != null) {
+      final currentItem = currentActive['item'] as Map<String, String>;
+      final int remainMinutes = currentActive['remainMinutes'] as int;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TimerScreen(
+            selectedSubject: currentItem['task'] ?? '학습',
+            selectedDurationMinutes: remainMinutes > 0 ? remainMinutes : 1,
+            dynamicTestTitle: _isFinalExamMode ? '기말고사' : '중간고사',
+            targetExamDate: _examStartDate,
+            targetExamEndDate: _examEndDate,
+            prepPeriodStr: _manualExamPrepWeek != null ? '${_manualExamPrepWeek}주 전' : '',
+            needTimelineGen: false,
+            selectedSoundFile: '',
+            isFinalExamMode: _isFinalExamMode,
+          ),
+        ),
+      );
+    }
   }
 
   Color _getTimelineBarColor(String track, String timeText, String taskText, int index) {
@@ -823,7 +1027,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 });
                 Navigator.pop(context);
               },
-              child: Text('DELETE / 삭제', style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text('DEL/삭제', style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
@@ -838,7 +1042,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 });
                 Navigator.pop(context);
               },
-              child: Text('SAVE / 저장', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text('SAVE/저장', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -889,13 +1093,14 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               ),
             ],
           ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
           actions: [
             Row(
               children: [
                 if (index != null)
                   Expanded(
                     child: TextButton(
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 2)),
                       onPressed: () {
                         setState(() {
                           String cacheKey = _getCurrentCacheKey();
@@ -905,18 +1110,28 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         });
                         Navigator.pop(context);
                       },
-                      child: Text('DELETE / 삭제', style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12)),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('DELETE/삭제', maxLines: 1, style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12)),
+                      ),
                     ),
                   ),
                 Expanded(
                   child: TextButton(
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 2)),
                     onPressed: () => Navigator.pop(context),
-                    child: Text('CLOSE / 닫기', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('CLOSE/닫기', maxLines: 1, style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+                    ),
                   ),
                 ),
                 Expanded(
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: goldColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                    ),
                     onPressed: () {
                       if (timeController.text.trim().isEmpty || taskController.text.trim().isEmpty) return;
                       setState(() {
@@ -931,7 +1146,10 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       });
                       Navigator.pop(context);
                     },
-                    child: Text('SAVE / 저장', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('SAVE/저장', maxLines: 1, style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                 ),
               ],
@@ -2106,9 +2324,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10), // [추가] 탭 가능 영역을 눈에 보이는 것보다 넓게 확장
                     child: Icon(
-                      Icons.edit,
-                      size: 14,
-                      color: timePassed ? slate500 : const Color(0xFF64748B),
+                      Icons.edit_note, // [수정] 자기주도플래너와 동일한 스타일 아이콘으로 교체
+                      size: 20,
+                      color: timePassed ? slate500 : goldColor.withValues(alpha: 0.85),
                     ),
                   ),
                 ),
