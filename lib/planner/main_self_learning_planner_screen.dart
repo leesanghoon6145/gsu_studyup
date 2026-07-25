@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'planning_screen.dart';
 import 'learning_screen.dart';
 import 'report_screen.dart';
+import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
 
 /// GKE StudyUp 글로벌 하이엔드 자기주도 학습 플래너 총괄 컨트롤 타워
 class MainSelfLearningPlannerScreen extends StatefulWidget {
@@ -25,10 +26,85 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
 
   final List<String> _todayMainSchedules = [];
 
+  // ============================================================================
+  // 🆕 [12개국 언어 시스템]
+  // 기본값(마이페이지에서 12개국 중 하나를 고르기 전, 즉 DkeLang.current == 'KO' 상태 포함)은
+  // 항상 "영문 + 한글"이 함께 보입니다 — 12개국에 없는 다른 나라 사용자도 영어로 볼 수 있게 하기 위함.
+  // 한국어/영어를 "제외한" 나머지 10개국 중 하나를 선택했을 때만 그 언어 단독으로 전환됩니다.
+  // ============================================================================
+  static const List<String> _foreignLanguages = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+  static bool get _isForeignSelected => _foreignLanguages.contains(DkeLang.current);
+
+  static const Map<String, Map<String, String>> _uiText = {
+    'plannerTitle': {'KO': '자기주도 플래너', 'EN': 'Self-Directed Planner', 'JA': '自己主導プランナー', 'ZH': '自主学习规划', 'FR': 'Planificateur autonome', 'DE': 'Selbstgesteuerter Planer', 'RU': 'Планировщик самообучения', 'AR': 'مخطط التعلم الذاتي', 'HI': 'स्व-निर्देशित प्लानर', 'VI': 'Kế hoạch tự học', 'ES': 'Planificador autónomo', 'TH': 'แผนการเรียนด้วยตนเอง'},
+    'tabPlanning': {'KO': '계획', 'EN': 'Planning', 'JA': '計画', 'ZH': '计划', 'FR': 'Planification', 'DE': 'Planung', 'RU': 'План', 'AR': 'التخطيط', 'HI': 'योजना', 'VI': 'Lập kế hoạch', 'ES': 'Planificación', 'TH': 'วางแผน'},
+    'tabLearning': {'KO': '실행', 'EN': 'Learning', 'JA': '実行', 'ZH': '执行', 'FR': 'Exécution', 'DE': 'Ausführung', 'RU': 'Выполнение', 'AR': 'التنفيذ', 'HI': 'निष्पादन', 'VI': 'Thực hiện', 'ES': 'Ejecución', 'TH': 'ลงมือทำ'},
+    'tabReport': {'KO': '리포트', 'EN': 'Report', 'JA': 'レポート', 'ZH': '报告', 'FR': 'Rapport', 'DE': 'Bericht', 'RU': 'Отчёт', 'AR': 'التقرير', 'HI': 'रिपोर्ट', 'VI': 'Báo cáo', 'ES': 'Informe', 'TH': 'รายงาน'},
+  };
+
+  static String _foreignOnly(String key) {
+    final map = _uiText[key]!;
+    return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? key;
+  }
+
+  // 🆕 제목형 위젯에서 사용: 기본값 = 영문(위) + 한글(아래) 2줄, 10개국 선택 시 = 단일 언어 1줄
+  static Widget _biTitle(
+      String key, {
+        required TextStyle enStyle,
+        required TextStyle koStyle,
+        TextStyle? foreignStyle,
+        TextAlign? textAlign,
+      }) {
+    if (_isForeignSelected) {
+      return Text(
+        _foreignOnly(key),
+        textAlign: textAlign,
+        overflow: TextOverflow.fade,
+        softWrap: false,
+        maxLines: 1,
+        style: foreignStyle ?? koStyle,
+      );
+    }
+    final map = _uiText[key]!;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(map['EN']!, textAlign: textAlign, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: enStyle),
+        Text(map['KO']!, textAlign: textAlign, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: koStyle),
+      ],
+    );
+  }
+
+  // 🆕 [12개국 요일 약어] 요일 인덱스(1=월요일 ~ 7=일요일) 기준 조회 — 나머지 10개국 선택 시 단독 표시용
+  static const Map<String, List<String>> _weekdayShortForeign = {
+    'JA': ['月', '火', '水', '木', '金', '土', '日'],
+    'ZH': ['一', '二', '三', '四', '五', '六', '日'],
+    'FR': ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+    'DE': ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+    'RU': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+    'AR': ['اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت', 'أحد'],
+    'HI': ['सोम', 'मंगल', 'बुध', 'गुरु', 'शुक्र', 'शनि', 'रवि'],
+    'VI': ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
+    'ES': ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+    'TH': ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'],
+  };
+  // 🆕 [12개국] 기본값(영+한)용 고정 배열 — 항상 월요일 시작
+  static const List<String> _weekdayShortEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  static const List<String> _weekdayShortKo = ['월', '화', '수', '목', '금', '토', '일'];
+
+  // 🆕 [12개국] 기본값 = "Mon / 월", 10개국 선택 시 = 단일 언어 요일 약어
+  static String _weekdayLabel(int weekdayIndex1to7) {
+    final idx = weekdayIndex1to7 - 1;
+    if (_isForeignSelected) {
+      final list = _weekdayShortForeign[DkeLang.current] ?? _weekdayShortEn;
+      return list[idx];
+    }
+    return '${_weekdayShortEn[idx]} / ${_weekdayShortKo[idx]}';
+  }
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _tabController = TabController(length: 3, vsync: this);
 
     // 현재 UTC/KST 기준 오늘 날짜 자동 할당 (지시사항 2, 3번)
@@ -52,8 +128,8 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
     const Color brandGolden = Color(0xFFE5C158);
 
     // [수정] build 시작 부분에 요일 매핑 배치 (에러 원천 차단)
-    const List<String> weekdays = ['월', '화', '수', '목', '금', '토', '일'];
-    String currentWeekdayStr = weekdays[_selectedDate.weekday - 1];
+    // 🆕 [12개국] 기본값 = "Mon / 월" 조합, 10개국 선택 시 = 단일 언어 요일 약어
+    String currentWeekdayStr = _weekdayLabel(_selectedDate.weekday);
 
     return Scaffold(
       backgroundColor: brandDarkBg,
@@ -70,7 +146,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
           onPressed: () => Navigator.pop(context),
         ), // end of leading
 
-        // 🎯 [정중앙 정렬 수칙] 영문/한글 타이틀 전체를 상단바 좌우 센터에 완벽 강제 배치
+        // 🎯 [정중앙 정렬 수칙] 타이틀 전체를 상단바 좌우 센터에 완벽 강제 배치
         centerTitle: true,
 
         title: Column(
@@ -78,9 +154,8 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
           crossAxisAlignment: CrossAxisAlignment.center, // 수직 정렬 축도 센터로 일치
           children: [
             // 🖼️ [로고 여백 대칭 수칙] 가로는 늘리되 세로 확대 절대 금지
-            // 영문 'S' 이전의 좌측 여백과 'R' 이후의 우측 여백을 평형 저울처럼 완벽 대칭 세공
             Container(
-              width: 210, // 📐 아래 영문 23크기 'SELF~PLANNER' 전체 폭과 정확히 일치화
+              width: 210, // 📐 아래 타이틀 전체 폭과 정확히 일치화
               padding: const EdgeInsets.symmetric(horizontal: 2), // ⚖️ 좌우 동일 여백 밸런스 단속
               child: Image.asset(
                 'assets/images/gsu_logo.png',
@@ -89,30 +164,20 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
               ), // end of Image.asset
             ), // end of Container
 
-            const SizedBox(height: 2), // 📏 로고와 영문 사이 0.1mm 단위 정밀 초밀착 압축 여백
+            const SizedBox(height: 4), // 📏 로고와 타이틀 사이 여백
 
-            // 🔤 [영문 수칙] "SELF LEARNING PLANNER" 크기 23 고정 + 황금색 컬러 체인지 완수
-            Text(
-              "SELF LEARNING PLANNER",
-              style: GoogleFonts.notoSerif(
-                color: brandGolden, // 🚨 선배님 지시: 영문 타이틀 황금색 강제 전환
-                fontSize: 21,       // 🚨 선배님 지시: 영문 글자 크기 23 유지
-                fontWeight: FontWeight.w400,
-                letterSpacing: -0.4, // 센터링 배열 시 자간 흐트러짐 미세 보정
-              ), // end of GoogleFonts.notoSerif
-            ), // end of Text
-
-            const SizedBox(height: 1), // 📏 영문과 한글 사이 0.1mm 단위 초밀착 여백
-
-            // 🇰🇷 [한글 수칙] 문구 변경 명세 수용 + 황금색 23크기 센터링 완전 이식
-            Text(
-              "자기주도 플래너", // 🚨 선배님 지시: "자기주도 학습 계획"으로 문구 최종 변경
-              style: GoogleFonts.notoSansKr(
-                color: brandGolden, // 🚨 선배님 지시: 한글 타이틀 황금색 유지
-                fontSize: 23,       // 🚨 규격 크기 23 칼준수
-                fontWeight: FontWeight.w900,
-              ), // end of GoogleFonts.notoSansKr
-            ), // end of Text
+            // 🆕 [12개국] 기본값 = 영문(위)+한글(아래) 2단, 10개국 선택 시 = 단일 언어
+            // 🚨 규격 크기 23 칼준수 유지 (한글 라인 기준)
+            SizedBox(
+              width: 210,
+              child: _biTitle(
+                'plannerTitle',
+                textAlign: TextAlign.center,
+                enStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 15, fontWeight: FontWeight.bold),
+                koStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 23, fontWeight: FontWeight.w900), // 🚨 선배님 지시: 글자 크기 23 유지
+                foreignStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 21, fontWeight: FontWeight.w900),
+              ),
+            ),
           ], // end of title children
         ), // end of Column
       ), // end of appBar
@@ -153,33 +218,31 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
           indicatorWeight: 3,
           labelColor: brandGolden,
           unselectedLabelColor: Colors.grey.shade500,
+          // 🆕 [12개국] 기본값 = 영문+한글 2단, 10개국 선택 시 = 단일 언어
           tabs: [
             Tab(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("PLANNING", style: GoogleFonts.notoSerif(fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text("계 획", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
-                ], // end of PLANNING tab children
-              ), // end of Column
+              child: _biTitle(
+                'tabPlanning',
+                enStyle: GoogleFonts.notoSans(fontSize: 9, fontWeight: FontWeight.bold),
+                koStyle: GoogleFonts.notoSans(fontSize: 12, fontWeight: FontWeight.bold),
+                foreignStyle: GoogleFonts.notoSans(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ), // end of PLANNING Tab
             Tab(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("LEARNING", style: GoogleFonts.notoSerif(fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text("실 행", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
-                ], // end of LEARNING tab children
-              ), // end of Column
+              child: _biTitle(
+                'tabLearning',
+                enStyle: GoogleFonts.notoSans(fontSize: 9, fontWeight: FontWeight.bold),
+                koStyle: GoogleFonts.notoSans(fontSize: 12, fontWeight: FontWeight.bold),
+                foreignStyle: GoogleFonts.notoSans(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ), // end of LEARNING Tab
             Tab(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text("REPORT", style: GoogleFonts.notoSerif(fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text("리포트", style: GoogleFonts.notoSansKr(fontSize: 11, fontWeight: FontWeight.w500)),
-                ], // end of REPORT tab children
-              ), // end of Column
+              child: _biTitle(
+                'tabReport',
+                enStyle: GoogleFonts.notoSans(fontSize: 9, fontWeight: FontWeight.bold),
+                koStyle: GoogleFonts.notoSans(fontSize: 12, fontWeight: FontWeight.bold),
+                foreignStyle: GoogleFonts.notoSans(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ), // end of REPORT Tab
           ], // end of TabBar tabs
         ), // end of TabBar

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
 
 /// ============================================================================
 /// [GKE StudyUp] 일간 뷰 전용 달력 제어 레일 및 날짜 선택 그리드 위젯
@@ -40,23 +41,65 @@ class PlannerCalendarView extends StatelessWidget {
     required this.onDaySelected,
   });
 
+  // ============================================================================
+  // 🆕 [12개국 언어 시스템]
+  // 기본값(마이페이지에서 12개국 중 하나를 고르기 전, 즉 DkeLang.current == 'KO' 상태 포함)은
+  // 항상 "영문 + 한글"이 함께 보입니다 — 12개국에 없는 다른 나라 사용자도 영어로 볼 수 있게 하기 위함.
+  // 한국어/영어를 "제외한" 나머지 10개국 중 하나를 선택했을 때만 그 언어 단독으로 전환됩니다.
+  // ============================================================================
+  static const List<String> _foreignLanguages = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+  static bool get _isForeignSelected => _foreignLanguages.contains(DkeLang.current);
+
+  static const Map<String, Map<String, String>> _uiText = {
+    'viewSelectedDateMemo': {
+      'KO': '선택 날짜 메모 보기', 'EN': 'View Notes for Selected Date',
+      'JA': '選択日のメモを見る', 'ZH': '查看所选日期备注', 'FR': 'Voir les notes de la date sélectionnée',
+      'DE': 'Notizen zum gewählten Datum ansehen', 'RU': 'Просмотр заметок за выбранную дату', 'AR': 'عرض ملاحظات التاريخ المحدد',
+      'HI': 'चयनित तिथि के नोट्स देखें', 'VI': 'Xem ghi chú ngày đã chọn', 'ES': 'Ver notas de la fecha seleccionada', 'TH': 'ดูบันทึกของวันที่เลือก',
+    },
+    'dateControlRail': {
+      'KO': '달력 제어 레일', 'EN': 'Date Control Rail',
+      'JA': 'カレンダー操作パネル', 'ZH': '日历控制面板', 'FR': 'Panneau de contrôle du calendrier',
+      'DE': 'Kalender-Steuerleiste', 'RU': 'Панель управления календарём', 'AR': 'شريط التحكم بالتقويم',
+      'HI': 'कैलेंडर नियंत्रण पैनल', 'VI': 'Bảng điều khiển lịch', 'ES': 'Panel de control del calendario', 'TH': 'แผงควบคุมปฏิทิน',
+    },
+  };
+
+  static String _foreignOnly(Map<String, String> map) {
+    return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '';
+  }
+
+  // 🆕 한 줄짜리 문자열에서 사용: 기본값 = "EN / KO" 한 줄, 10개국 선택 시 = 단일 언어
+  static String _biStr(String key) {
+    if (_isForeignSelected) return _foreignOnly(_uiText[key]!);
+    final map = _uiText[key]!;
+    return '${map['EN']} / ${map['KO']}';
+  }
+
+  // 🆕 [12개국 요일] 언어별(10개국) 일요일 시작 요일 약어 배열 — 선택된 언어 단독 표시용
+  static const Map<String, List<String>> _weekdaySunFirstForeign = {
+    'JA': ['日', '月', '火', '水', '木', '金', '土'],
+    'ZH': ['日', '一', '二', '三', '四', '五', '六'],
+    'FR': ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'],
+    'DE': ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'],
+    'RU': ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+    'AR': ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'],
+    'HI': ['रवि', 'सोम', 'मंगल', 'बुध', 'गुरु', 'शुक्र', 'शनि'],
+    'VI': ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
+    'ES': ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
+    'TH': ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'],
+  };
+  // 🆕 [12개국] 기본값(영+한)용 고정 배열 — 항상 일요일 시작
+  static const List<String> _weekdaySunFirstEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  static const List<String> _weekdaySunFirstKo = ['일', '월', '화', '수', '목', '금', '토'];
+
+  static List<String>? get _weekdaysForeignOrNull => _weekdaySunFirstForeign[DkeLang.current];
+
+  // 🆕 [12개국 어순 대응] 기본값(영+한)은 "2026 / 7" 형식, 10개국 선택 시엔 그대로 숫자만 사용
+  static String _yearMonthNumeric(int year, int month) => '$year / $month';
+
   @override
   Widget build(BuildContext context) {
-    final List<String> weekLabelList = ['일', '월', '화', '수', '목', '금', '토'];
-
-    // [주석] 매월 1일의 요일 및 그리드 칸수 자동 역산 알고리즘 구간
-    DateTime firstDayOfCurrentMonth = DateTime(selectedDayDate.year, selectedDayDate.month, 1);
-    int firstDayWeekdayIndex = firstDayOfCurrentMonth.weekday;
-
-    int emptyPrefixCellsCount = firstDayWeekdayIndex == 7 ? 0 : firstDayWeekdayIndex;
-    int totalDaysInMonth = DateTime(selectedDayDate.year, selectedDayDate.month + 1, 0).day;
-    int prevMonthTotalDays = DateTime(selectedDayDate.year, selectedDayDate.month, 0).day;
-
-    int totalCalendarGridItemsCount = emptyPrefixCellsCount + totalDaysInMonth;
-    if (totalCalendarGridItemsCount % 7 != 0) {
-      totalCalendarGridItemsCount += (7 - (totalCalendarGridItemsCount % 7));
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -100,10 +143,13 @@ class PlannerCalendarView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        // [주석] 👑 한글 글자 크기 12 (노토 산스 한글, 황금색 유지)
+                        // [주석] 👑 12개국 확장: 선택 날짜 메모 보기 안내 문구 (기본값 = 영+한 한 줄, 10개국 선택 시 단일 언어)
                         Text(
-                          '선택 날짜 메모 보기',
-                          style: GoogleFonts.notoSansKr(
+                          _biStr('viewSelectedDateMemo'),
+                          overflow: TextOverflow.fade,
+                          softWrap: false,
+                          maxLines: 1,
+                          style: GoogleFonts.notoSans(
                             fontSize: 12,
                             color: const Color(0xFFE5C158),
                           ),
@@ -135,25 +181,41 @@ class PlannerCalendarView extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('DATE CONTROL RAIL', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
-                Text('${selectedDayDate.year}년 ${selectedDayDate.month}월 달력 제어 레일', style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
+                // 🆕 [12개국] 기본값 = "2026 / 7 Date Control Rail" + "달력 제어 레일" 두 줄, 10개국 선택 시 = 단일 언어 한 줄
+                Text(
+                  '${_yearMonthNumeric(selectedDayDate.year, selectedDayDate.month)} ${_biStr('dateControlRail')}',
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  maxLines: 1,
+                  style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
 
-                // [주석] 요일 헤더 라인 (일~토)
+                // [주석] 요일 헤더 라인 (일~토) — 🆕 [12개국] 기본값 = 영문+한글 2줄, 10개국 선택 시 = 단일 언어
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: 7,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 2.2),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 1.3),
                   itemBuilder: (context, index) {
-                    return Center(
-                      child: Text(
-                        weekLabelList[index],
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 12,
-                          color: weekLabelList[index] == '일' ? examColor : (weekLabelList[index] == '토' ? schoolColor : slate400),
-                          fontWeight: FontWeight.bold,
+                    final Color dayColor = index == 0 ? examColor : (index == 6 ? schoolColor : slate400);
+                    if (_isForeignSelected) {
+                      final foreignList = _weekdaysForeignOrNull;
+                      final label = foreignList != null ? foreignList[index] : _weekdaySunFirstEn[index];
+                      return Center(
+                        child: Text(
+                          label,
+                          style: GoogleFonts.notoSans(fontSize: 12, color: dayColor, fontWeight: FontWeight.bold),
                         ),
+                      );
+                    }
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_weekdaySunFirstEn[index], style: GoogleFonts.notoSerif(fontSize: 10, color: dayColor, fontWeight: FontWeight.bold)),
+                          Text(_weekdaySunFirstKo[index], style: GoogleFonts.notoSansKr(fontSize: 12, color: dayColor, fontWeight: FontWeight.bold)),
+                        ],
                       ),
                     );
                   },
@@ -164,7 +226,7 @@ class PlannerCalendarView extends StatelessWidget {
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: totalCalendarGridItemsCount,
+                  itemCount: _totalCalendarGridItemsCount,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 7,
                     mainAxisSpacing: 4,
@@ -175,14 +237,14 @@ class PlannerCalendarView extends StatelessWidget {
                     int displayDayNum = 1;
                     bool isBlurred = false;
 
-                    if (index < emptyPrefixCellsCount) {
-                      displayDayNum = prevMonthTotalDays - (emptyPrefixCellsCount - index - 1);
+                    if (index < _emptyPrefixCellsCount) {
+                      displayDayNum = _prevMonthTotalDays - (_emptyPrefixCellsCount - index - 1);
                       isBlurred = true;
-                    } else if (index >= (emptyPrefixCellsCount + totalDaysInMonth)) {
-                      displayDayNum = index - (emptyPrefixCellsCount + totalDaysInMonth) + 1;
+                    } else if (index >= (_emptyPrefixCellsCount + _totalDaysInMonth)) {
+                      displayDayNum = index - (_emptyPrefixCellsCount + _totalDaysInMonth) + 1;
                       isBlurred = true;
                     } else {
-                      displayDayNum = index - emptyPrefixCellsCount + 1;
+                      displayDayNum = index - _emptyPrefixCellsCount + 1;
                     }
 
                     // [주석] 해당 날짜의 스케줄 도트 색상 판별 매핑 트랙
@@ -232,8 +294,9 @@ class PlannerCalendarView extends StatelessWidget {
                             else
                               const SizedBox(height: 3),
 
+                            // 🆕 [12개국] 숫자만 표시 (칸이 작아 언어 문구를 넣기 어려워 국제 공통 숫자만 사용)
                             if (!isBlurred && dayScheduleCount > 0)
-                              Text('$dayScheduleCount개', style: GoogleFonts.notoSansKr(fontSize: 10, color: goldColor, fontWeight: FontWeight.bold))
+                              Text('$dayScheduleCount', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSans(fontSize: 10, color: goldColor, fontWeight: FontWeight.bold))
                             else
                               const SizedBox(height: 6),
                           ],
@@ -248,5 +311,23 @@ class PlannerCalendarView extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  // [주석] 매월 1일의 요일 및 그리드 칸수 자동 역산 알고리즘 구간 (getter로 분리해 build() 가독성 확보)
+  int get _firstDayWeekdayIndex {
+    final firstDayOfCurrentMonth = DateTime(selectedDayDate.year, selectedDayDate.month, 1);
+    return firstDayOfCurrentMonth.weekday;
+  }
+
+  int get _emptyPrefixCellsCount => _firstDayWeekdayIndex == 7 ? 0 : _firstDayWeekdayIndex;
+  int get _totalDaysInMonth => DateTime(selectedDayDate.year, selectedDayDate.month + 1, 0).day;
+  int get _prevMonthTotalDays => DateTime(selectedDayDate.year, selectedDayDate.month, 0).day;
+
+  int get _totalCalendarGridItemsCount {
+    int count = _emptyPrefixCellsCount + _totalDaysInMonth;
+    if (count % 7 != 0) {
+      count += (7 - (count % 7));
+    }
+    return count;
   }
 }
