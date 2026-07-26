@@ -761,7 +761,7 @@ class StudyTimelinesExamPrepFinal {
     {'time': '20:00 ~ 20:20', 'task': '휴식'},
     {'time': '20:20 ~ 21:20', 'task': '수학 시험대비 개념1강40%/문제풀이 60%'},
     {'time': '21:20 ~ 21:40', 'task': '휴식'},
-    {'time': '21:40 ~ 22:40', 'task': '영어 시험대비 개념1강/문제풀y이 20%'},
+    {'time': '21:40 ~ 22:40', 'task': '영어 시험대비 개념1강/문제풀이 20%'},
     {'time': '22:40 ~ 23:00', 'task': '휴식'},
     {'time': '23:00 ~ 24:00', 'task': '기술.가정/한문 개념정리 및 암기'},
     {'time': '24:00 ~ 06:00', 'task': '취침'},
@@ -1074,20 +1074,54 @@ class StudyTimelinesMidTermAllDays {
   // ==========================================
   // 0. 공통 응원 및 팝업 지침 데이터 정의
   // ==========================================
-  static const Map<String, String> midPopups = {
-    'dDayEncourageMon': "오늘은 그동안의 노력이 빛을 발하는 날입니다. 수많은 시간 쌓아온 땀과 끈기는 결코 당신을 배신하지 않습니다. 한 문제, 한 문제 자신 있게. 당신은 이미 충분히 준비되었습니다. 최고의 하루를 만들어 보세요!",
-    'dDayEncourageTue': "오늘은 그동안의 노력이 빛을 발하는 날입니다. 수많은 시간 쌓아온 땀과 끈기는 결코 당신을 배신하지 않습니다. 한 문제, 한 문제 자신 있게. 당신은 이미 충분히 준비되었습니다. 최고의 하루를 만들어 보세요!",
-    'dDayEncourageWed': "오늘은 그동안의 노력이 빛을 발하는 날입니다. 수많은 시간 쌓아온 땀과 끈기는 결코 당신을 배신하지 않습니다. 한 문제, 한 문제 자신 있게. 당신은 이미 충분히 준비되었습니다. 최고의 하루를 만들어 보세요!",
-    'dDayEncourageThu': "오늘은 그동안의 노력이 빛을 발하는 날입니다. 수많은 시간 쌓아온 땀과 끈기는 결코 당신을 배신하지 않습니다. 한 문제, 한 문제 자신 있게. 당신은 이미 충분히 준비되었습니다. 최고의 하루를 만들어 보세요!",
-    'dDayEncourageFri': "오늘은 그동안의 노력이 빛을 발하는 날입니다. 수많은 시간 쌓아온 땀과 끈기는 결코 당신을 배신하지 않습니다. 한 문제, 한 문제 자신 있게. 당신은 이미 충분히 준비되었습니다. 최고의 하루를 만들어 보세요!",
-
-    'inProgressTue': "지금까지의 노력은 결코 배신하지 않습니다. 침착하게, 자신 있게, 한 문제씩 풀어나가세요. 오늘은 당신이 준비한 실력을 마음껏 보여줄 시간입니다.",
-    'inProgressWed': "완벽하려고 하지 말고, 끝까지 최선을 다하세요. 아는 문제는 정확하게, 어려운 문제는 침착하게. 당신의 꾸준함이 오늘 최고의 결과를 만들어 줄 것입니다.",
-    'inProgressThu': "오늘은 결과보다 자신의 실력을 믿는 날입니다. 긴장은 잠시, 자신감은 오래. 끝까지 포기하지 않는 사람이 가장 강합니다. 당신의 빛나는 도전을 진심으로 응원합니다!",
-
-    'reviewTips': "이거 한번 만 보아 주세요\n.아침 식사 가볍게 하기\n.요약 노트만 확인하기\n. 공식, 단어, 암기사항 만 확인한다.\n. 문제를 끝까지 읽는다.\n. 이런거 실수 조심하기: 조건 못 봄, 부호 실수, 단위 실수, “옳지 않은 것”\n. 쉬운 문제 먼저\n. 어려운 문제, 애매한 문제 별 표시 후 넘어가기\n. 마지막에 다시 도전\n. 3~5분 이상 막히면 별 표시 후 넘어간다.",
-    'coreSummaryNotice': "‘아는 것을 절대 안 틀리게 만들기’ 핵심 요약본을 3~5회 본다."
+  static const Map<String, String> examPopupPrimary = {
+    'dMinus1': "‘아는 것을 절대 안 틀리게 만들기’\n\n. 새로운 단원 시작하지 않기\n. 어려운 문제에 오래 매달지 않기\n. 지금까지 공부한 내용을 정리하는데 집중하기\n. 핵심 요약본을 3~5회 본다.",
+    'dDay': "오늘은 그동안의 노력이 빛을 발하는 날입니다.\n수많은 시간 쌓아온 땀과 끈기는 결코 당신을 배신하지 않습니다.\n한 문제, 한 문제 자신 있게.\n당신은 이미 충분히 준비되었습니다. 최고의 하루를 만들어 보세요!",
+    'dPlus1': "지금까지의 노력은 결코 배신하지 않습니다.\n침착하게, 자신 있게, 한 문제씩 풀어나가세요.\n오늘은 당신이 준비한 실력을 마음껏 보여줄 시간입니다.",
+    'dPlus2': "완벽하려고 하지 말고, 끝까지 최선을 다하세요.\n아는 문제는 정확하게, 어려운 문제는 침착하게.\n당신의 꾸준함이 오늘 최고의 결과를 만들어 줄 것입니다.",
+    'dPlus3': "오늘은 결과보다 자신의 실력을 믿는 날입니다.\n긴장은 잠시, 자신감은 오래.\n끝까지 포기하지 않는 사람이 가장 강합니다.\n당신의 빛나는 도전을 진심으로 응원합니다!",
+    'dPlus4': "시험 4일차 아침, 정말 고생 많았어요! ☀️\n\n끝이 보이지 않던 시험 기간도 어느덧 막바지를 향해 가고 있어요. 피곤함 속에서도 매일 최선을 다해 달려온 당신의 노력을 누구보다 응원합니다. 조금만 더 힘을 내서 오늘도 준비한 만큼 후회 없이 발휘하고 오세요! 스터디업이 당신의 단단한 결실을 온 마음으로 응원할게요.",
   };
+
+  // 🆕 [2단 팝업] 1번째(응원) 팝업을 닫으면 바로 이어서 뜨는 2번째(실전 팁) 팝업 문구.
+  // dMinus1(D-1)에는 적용하지 않음 — D-1 문구 자체가 이미 정리/암기 팁 성격이라 2단으로 나누지 않음.
+  static const String examPopupSecondaryTips =
+      "시험장 들어가기 전, 이것만 꼭 확인하세요! 📝\n\n"
+      "🥣 아침 마음가짐\n"
+      "• 아침 식사는 가볍게\n"
+      "• 요약 노트, 공식, 단어 핵심만 훑어보기\n\n"
+      "⚠️ 실전 실수 방지 (가장 중요!)\n"
+      "• 문제 끝까지 읽기 (조건 미확인, \"옳지 않은 것\" 실수 조심)\n"
+      "• 부호 및 단위 실수 주의\n\n"
+      "⏱️ 시간 관리 전략\n"
+      "• 쉬운 문제부터 빠르게 풀기\n"
+      "• 3~5분 이상 막히는 문제는 별(★) 표시 후 넘어가기\n"
+      "(나중에 돌아오면 의외로 쉽게 풀립니다!)";
+
+  // 🆕 [D-day 연결] differenceInDays(-1~4)를 넣으면 해당일 팝업 키를 반환. 범위 밖이면 null.
+  static String? getPopupKeyForOffset(int differenceInDays) {
+    switch (differenceInDays) {
+      case -1: return 'dMinus1';
+      case 0: return 'dDay';
+      case 1: return 'dPlus1';
+      case 2: return 'dPlus2';
+      case 3: return 'dPlus3';
+      case 4: return 'dPlus4';
+      default: return null;
+    }
+  }
+
+  // 🆕 [D-day 연결] 1번째(응원) 팝업 문구. 해당일이 아니면 null.
+  static String? getPrimaryPopupMessage(int differenceInDays) {
+    final key = getPopupKeyForOffset(differenceInDays);
+    if (key == null) return null;
+    return examPopupPrimary[key];
+  }
+
+  // 🆕 [D-day 연결] 2번째(실전 팁) 팝업이 필요한 날인지 여부 (D-1만 제외)
+  static bool hasSecondaryPopup(int differenceInDays) {
+    return getPopupKeyForOffset(differenceInDays) != null && differenceInDays != -1;
+  }
 
   // ==========================================
   // 1. EXAM_MON: 중간고사 D-Day가 월요일인 경우
@@ -1238,10 +1272,6 @@ class StudyTimelinesMidTermAllDays {
     {'time': '22:20 ~ 23:20', 'task': '내일시험과목3 정리'},
     {'time': '23:20 ~ 06:00', 'task': '취침'},
   ];
-
-// ==========================================
-  // 중간고사 D-Day 화요일, 수요일 맞춤형 데이터
-  // ==========================================
 
   // [화요일 D-Day] D-3 ~ D+3
   static final List<Map<String, String>> midTueD3 = [
@@ -1859,8 +1889,8 @@ class StudyTimelinesMidTermAllDays {
     {'time': '21:00 ~ 22:00', 'task': '시험과목2 정리'},
     {'time': '22:00 ~ 22:20', 'task': '휴식'},
     {'time': '22:20 ~ 23:20', 'task': '시험과목3 정리'},
-    {'time': '23:20 ~ 23:10', 'task': '휴식 및 취침준비'},
-    {'time': '23:10 ~ 06:00', 'task': '취침'}
+    {'time': '23:20 ~ 23:30', 'task': '휴식 및 취침준비'},
+    {'time': '23:30 ~ 06:00', 'task': '취침'}
   ];
 
   static final List<Map<String, String>> midFriDPlus4 = [
@@ -1882,10 +1912,6 @@ class StudyTimelinesMidTermAllDays {
     {'time': '22:20 ~ 23:20', 'task': '내일시험과목3 정리'},
     {'time': '23:20 ~ 07:00', 'task': '취침'}
   ];
-
-// ==========================================
-// 1. EXAM_MON: 기말고사 D-Day가 월요일인 경우
-// ==========================================
 
   /// D-3일까지 (금요일) 타임라인 원본 복원
   static final List<Map<String, String>> finalMonD3 = [
@@ -2041,9 +2067,6 @@ class StudyTimelinesMidTermAllDays {
     {'time': '22:20 ~ 23:20', 'task': '내일시험과목3 정리\nReview for tomorrow\'s subject 3'},
     {'time': '23:20 ~ 06:00', 'task': '취침\nBedtime'},
   ];
-// ==========================================
-// 1. EXAM_MON: 기말고사 D-Day가 화요일인 경우
-// ==========================================
 
   /// D-3일 (토요일) 타임라인
   static final List<Map<String, String>> finalTueD3 = [
@@ -2206,9 +2229,6 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:20 ~ 07:00', 'task': '취침\nBedtime'},
   ];
 
-// ==========================================
-// 1. EXAM_MON: 기말고사 D-Day가 수요일인 경우
-// ==========================================
   static final List<Map<String, String>> finalWedD3 = [
     {'time': '07:00 ~ 08:00', 'task': '기상+가벼운 운동/아침식사\nWake up + Light exercise/Breakfast'},
     {'time': '08:00 ~ 09:00', 'task': '사회 시험대비 총정리 및 오답정리\nSocial Studies total review and mistakes'},
@@ -2390,9 +2410,6 @@ class StudyTimelinesMidTermAllDays {
     {'time': '22:20 ~ 06:00', 'task': '취침\nBedtime'},
   ];
 
-// ==========================================
-// 1. EXAM_MON: 기말고사 D-Day가 목요일인 경우
-// ==========================================
   /// D-3일까지 (월요일) 타임라인
   static final List<Map<String, String>> finalThuD3 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭\nWake up + Light exercise/Stretching'},
@@ -2566,9 +2583,6 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:30 ~ 07:00', 'task': '취침\nBedtime'},
   ];
 
-// ==========================================
-// 1. EXAM_MON: 기말고사 D-Day가 금요일인 경우
-// ==========================================
   /// D-3일까지 (화요일) 타임라인
   static final List<Map<String, String>> finalFriD3 = [
     {'time': '06:00 ~ 06:30', 'task': '기상+가벼운 운동/스트레칭\nWake up + Light exercise/Stretching'},
@@ -2623,7 +2637,7 @@ class StudyTimelinesMidTermAllDays {
     {'time': '21:40 ~ 22:40', 'task': '영어 개념정리10%/오답+기출문제 90%, 익일과목 대체가능\nEnglish review 10% / Mistakes 90%, Substituted available'},
     {'time': '22:40 ~ 23:00', 'task': '휴식\nBreak time'},
     {'time': '23:00 ~ 24:00', 'task': '기술.가정/한문 총정리 및 암기\nTech & Home / Hanja total review & memory'},
-    {'time': '23:00 ~ 06:00', 'task': '취침\nBedtime'},
+    {'time': '24:00 ~ 06:00', 'task': '취침\nBedtime'},
   ];
 
   /// 기말고사 D-Day (금요일) 타임라인
@@ -2743,5 +2757,4 @@ class StudyTimelinesMidTermAllDays {
     {'time': '23:20 ~ 23:30', 'task': '휴식 및 취침준비\nBreak time & Prep for bed'},
     {'time': '23:30 ~ 06:00', 'task': '취침\nBedtime'},
   ];
-  }
-
+}

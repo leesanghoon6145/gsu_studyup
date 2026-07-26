@@ -11,8 +11,9 @@ import 'package:gsu_studyup/square/my_page_screen.dart';
 import 'planner/main_self_learning_planner_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gsu_studyup/square/academic_timeline/academic_timeline_screen.dart';
+import 'planner/widgets/study_timelines.dart'; // 🆕 [D-day 팝업 연동] 시험 D-day 응원/실전팁 팝업 데이터 참조
 // 14번 라인 주변을 이렇게 수정하세요
-   // ← 이 줄로 변경
+// ← 이 줄로 변경
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -66,6 +67,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     super.initState();
     _audioPlayer = AudioPlayer();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
+
+    // 🆕 [D-day 팝업 연동] 첫 화면 진입 시(아침 6~9시 사이) 시험 D-day 응원 팝업 체크
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowExamDayPopup();
+    });
   }
 
   @override
@@ -74,6 +80,141 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     _audioPlayer.stop();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  // ============================================================================
+  // 🆕 [D-day 팝업 연동] 시험 시작일(gke_exam_start_date) 기준으로 D-1/D-day/D+1~D+4
+  // 팝업을 판단하고, 아침 6~9시 & "오늘 하루 안 보기" 미선택 상태일 때만 팝업 체인을 띄움
+  // ============================================================================
+  Future<void> _checkAndShowExamDayPopup() async {
+    final DateTime now = DateTime.now();
+    if (now.hour < 6 || now.hour >= 9) return; // 아침 6~9시 사이만 노출
+
+    final prefs = await SharedPreferences.getInstance();
+
+    final String todayKey = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final String? hiddenForDate = prefs.getString('gke_exam_popup_hidden_date');
+    if (hiddenForDate == todayKey) return; // "오늘 하루 안 보기"를 이미 눌렀으면 스킵
+
+    final bool timelineEnabled = prefs.getBool('gke_exam_timeline_enabled') ?? false;
+    final String? startStr = prefs.getString('gke_exam_start_date');
+    if (!timelineEnabled || startStr == null) return; // 시험 일정이 기록되어 있지 않으면 팝업 없음
+
+    final DateTime examStartDate = DateTime.parse(startStr);
+    final DateTime examStartZero = DateTime(examStartDate.year, examStartDate.month, examStartDate.day);
+    final DateTime todayZero = DateTime(now.year, now.month, now.day);
+    final int differenceInDays = todayZero.difference(examStartZero).inDays; // -1: D-1, 0: D-day, 1~4: D+1~D+4
+
+    final String? primaryMessage = StudyTimelinesMidTermAllDays.getPrimaryPopupMessage(differenceInDays);
+    if (primaryMessage == null) return; // 팝업 대상 구간(D-1~D+4)이 아니면 종료
+
+    final List<String> popupMessages = [primaryMessage];
+    if (StudyTimelinesMidTermAllDays.hasSecondaryPopup(differenceInDays)) {
+      popupMessages.add(StudyTimelinesMidTermAllDays.examPopupSecondaryTips); // D-1은 2번째 팝업 없음
+    }
+
+    if (!mounted) return;
+    _showExamDayPopupChain(popupMessages, todayKey);
+  }
+
+  // 🆕 [D-day 팝업 연동] 팝업 1개(D-1) 또는 2개(D-day, D+1~D+4)를 순서대로 스윽 전환하며 보여주는 다이얼로그.
+  // [확인] 클릭 시 다음 팝업으로 전환(마지막이면 닫기), [오늘 하루 안 보기] 클릭 시 즉시 닫고 오늘 날짜를 저장.
+  void _showExamDayPopupChain(List<String> popupMessages, String todayKey) {
+    int currentIndex = 0;
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.55),
+      transitionDuration: const Duration(milliseconds: 320),
+      pageBuilder: (dialogContext, anim1, anim2) {
+        return StatefulBuilder(
+          builder: (statefulContext, setPopupState) {
+            Future<void> handleClose({required bool hideToday}) async {
+              if (hideToday) {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('gke_exam_popup_hidden_date', todayKey);
+                Navigator.of(dialogContext).pop();
+                return;
+              }
+              if (currentIndex < popupMessages.length - 1) {
+                setPopupState(() { currentIndex++; }); // 다음 팝업으로 스윽 전환
+              } else {
+                Navigator.of(dialogContext).pop();
+              }
+            }
+
+            return Dialog(
+              backgroundColor: const Color(0xFF0D1527),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE5C158), width: 1.2),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 280),
+                      transitionBuilder: (child, anim) {
+                        final slideAnim = Tween<Offset>(begin: const Offset(0.15, 0), end: Offset.zero).animate(anim);
+                        return SlideTransition(
+                          position: slideAnim,
+                          child: FadeTransition(opacity: anim, child: child),
+                        );
+                      },
+                      child: SingleChildScrollView(
+                        key: ValueKey(currentIndex),
+                        child: Text(
+                          popupMessages[currentIndex],
+                          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, height: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => handleClose(hideToday: true),
+                            child: Text(
+                              '오늘 하루 안 보기',
+                              style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => handleClose(hideToday: false),
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158)),
+                            child: Text(
+                              '확인',
+                              style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+      transitionBuilder: (context, anim, secondaryAnim, child) {
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutBack)),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   void _addNewSubject(String nameKo, String nameEn) {

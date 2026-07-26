@@ -389,6 +389,47 @@ class _MyPageScreenState extends State<MyPageScreen> {
     Navigator.pop(context);
   }
 
+  // ============================================================================
+  // 🆕 [버그 점검/수정] VIP 활성화 버튼 처리
+  // 기존 문제 1: SharedPreferences 호출이 실패해도 아무 에러 표시 없이 조용히 멈춰서
+  //           "버튼이 먹통"처럼 보였음 -> try/catch로 감싸서 실패 시 반드시 안내 문구 표시.
+  // 기존 문제 2: 버튼을 눌러도 [설정 저장]을 누르기 전까지는 부모 화면(홈 대시보드)에
+  //           VIP 상태가 반영되지 않아서, 화면을 나갔다 오면 목표 학교 입력이 다시 잠긴 것처럼
+  //           보일 수 있었음 -> 활성화 즉시 widget.onSave()도 함께 호출해서 바로 동기화.
+  // ============================================================================
+  Future<void> _activateVip() async {
+    try {
+      final localPrefs = await SharedPreferences.getInstance();
+      // 👑 요구사항 2번 구현 핵심 장치: 결제 승인과 동시에 로컬 캐시에 영구 플래그 보전 유도
+      await localPrefs.setBool('saved_vip_status', true);
+
+      if (!mounted) return;
+      setState(() {
+        _isVip = true;
+      });
+
+      // 🆕 활성화 즉시 부모 화면에도 바로 반영 (설정 저장 버튼을 누르기 전이라도 동기화됨)
+      widget.onSave(_isVip, _uniController.text.trim());
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🎉 ${_lang['snackVip'] ?? 'VIP 회원이 승인되었습니다.'}'),
+          backgroundColor: _brandGolden,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[MyPageScreen] VIP 활성화 실패: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('VIP 활성화에 실패했습니다. 앱을 완전히 재시작한 뒤 다시 시도해 주세요.\n($e)'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   TextStyle _localizedTextStyle({
     required double fontSize,
     FontWeight fontWeight = FontWeight.normal,
@@ -610,25 +651,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     backgroundColor: _isVip ? Colors.transparent : _brandGolden.withOpacity(0.05),
                   ),
-                  onPressed: _isVip
-                      ? null
-                      : () async {
-                    final localPrefs = await SharedPreferences.getInstance();
-                    // 👑 요구사항 2번 구현 핵심 장치: 결제 승인과 동시에 로컬 캐시에 영구 플래그 보전 유도
-                    await localPrefs.setBool('saved_vip_status', true);
-
-                    setState(() {
-                      _isVip = true;
-                    });
-
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('🎉 ${_lang['snackVip'] ?? 'VIP 회원이 승인되었습니다.'}'),
-                        backgroundColor: _brandGolden,
-                      ),
-                    );
-                  },
+                  onPressed: _isVip ? null : _activateVip,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

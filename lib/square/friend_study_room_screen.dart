@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert'; // 🆕 [데이터 연결] 방 목록/응원메시지 JSON 직렬화용
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [데이터 연결] 영구 저장소
 // 💡 [연동 가이드]: 홈 대시보드의 과목선택 및 타이머 진입로 세팅을 위한 순정 라우터 파일 결합
 import 'package:gsu_studyup/home_dashboard_screen.dart';
 
@@ -70,6 +72,10 @@ final List<Map<String, dynamic>> _globalRooms = [
   },
 ];
 
+// 🆕 [데이터 연결] 앱을 완전히 재시작해도 방 목록/응원메시지가 유지되도록 SharedPreferences 저장 여부 플래그.
+// 앱 실행 중 이미 한 번 불러왔다면(true) 다시 기본값으로 덮어쓰지 않기 위한 가드.
+bool _hasLoadedPersistedRoomData = false;
+
 class FriendStudyRoomScreen extends StatefulWidget {
   const FriendStudyRoomScreen({Key? key}) : super(key: key);
 
@@ -94,6 +100,69 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
     "Emma Jung (정엠마)": [],
   };
 
+  // 🆕 [데이터 연결] 저장/불러오기 진행 중 화면이 잠깐 비어보이지 않도록 로딩 플래그
+  bool _isRoomDataLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPersistedRoomData();
+  }
+
+  // ============================================================================
+  // 🆕 [데이터 연결] SharedPreferences에서 방 목록('gke_friend_study_rooms')과
+  // 응원메시지('gke_friend_emoji_inbox')를 불러와 화면에 그대로 복원.
+  // 저장된 데이터가 없으면(최초 실행) 기본 데모 데이터를 그대로 유지하고 저장까지 해둔다.
+  // ============================================================================
+  Future<void> _loadPersistedRoomData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      if (!_hasLoadedPersistedRoomData) {
+        final String? roomsJson = prefs.getString('gke_friend_study_rooms');
+        if (roomsJson != null && roomsJson.isNotEmpty) {
+          final List<dynamic> decoded = jsonDecode(roomsJson);
+          _globalRooms.clear();
+          _globalRooms.addAll(decoded.map((e) => Map<String, dynamic>.from(e as Map)));
+        }
+
+        final String? inboxJson = prefs.getString('gke_friend_emoji_inbox');
+        if (inboxJson != null && inboxJson.isNotEmpty) {
+          final Map<String, dynamic> decodedInbox = jsonDecode(inboxJson);
+          _emojiInbox.clear();
+          decodedInbox.forEach((name, list) {
+            _emojiInbox[name] = (list as List<dynamic>)
+                .map((item) => Map<String, String>.from(item as Map))
+                .toList();
+          });
+        }
+
+        _hasLoadedPersistedRoomData = true;
+        await _persistRoomData(); // 최초 실행 시 기본 데이터도 저장해 둠
+      }
+    } catch (e) {
+      debugPrint('[FriendStudyRoom] 데이터 불러오기 실패: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRoomDataLoading = false;
+        });
+      }
+    }
+  }
+
+  // 🆕 [데이터 연결] 방 목록과 응원메시지를 SharedPreferences에 그대로 저장.
+  // 방 생성/삭제/자동삭제/응원메시지 추가 등 데이터가 바뀌는 모든 지점에서 호출됨.
+  Future<void> _persistRoomData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('gke_friend_study_rooms', jsonEncode(_globalRooms));
+      await prefs.setString('gke_friend_emoji_inbox', jsonEncode(_emojiInbox));
+    } catch (e) {
+      debugPrint('[FriendStudyRoom] 데이터 저장 실패: $e');
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -112,6 +181,7 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
           _globalRooms.removeWhere((r) => r["title"] == roomTitle);
         });
         _inactiveTimers.remove(roomTitle);
+        _persistRoomData(); // 🆕 [데이터 연결] 자동 삭제된 방 목록도 즉시 저장
       }
     });
   }
@@ -172,7 +242,9 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
         ),
         centerTitle: true,
       ),
-      body: Padding(
+      body: _isRoomDataLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)))
+          : Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -300,6 +372,7 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
               setState(() {
                 _globalRooms.removeAt(index);
               });
+              _persistRoomData(); // 🆕 [데이터 연결] 삭제 즉시 저장
               Navigator.pop(ctx);
             },
             child: Text('Delete (삭제)', style: GoogleFonts.gowunBatang(color: Colors.redAccent, fontWeight: FontWeight.bold)),
@@ -478,6 +551,7 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                                                 _emojiInbox[targetStudent]?.add({"emoji": "👍", "from": "My Self (나 자신)"});
                                               });
                                               setRoomState(() {});
+                                              _persistRoomData(); // 🆕 [데이터 연결] 응원 추가 즉시 저장
                                             },
                                             child: Text('👍 Cheer (칭찬)', style: GoogleFonts.gowunBatang(fontSize: 12, fontWeight: FontWeight.bold)),
                                           ),
@@ -488,6 +562,7 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                                                 _emojiInbox[targetStudent]?.add({"emoji": "🔥", "from": "My Self (나 자신)"});
                                               });
                                               setRoomState(() {});
+                                              _persistRoomData(); // 🆕 [데이터 연결] 응원 추가 즉시 저장
                                             },
                                             child: Text('🔥 Motivate (응원)', style: GoogleFonts.gowunBatang(fontSize: 12, fontWeight: FontWeight.bold)),
                                           ),
@@ -624,6 +699,7 @@ class _FriendStudyRoomScreenState extends State<FriendStudyRoomScreen> {
                       "isCreator": true
                     });
                   });
+                  _persistRoomData(); // 🆕 [데이터 연결] 새 방 생성 즉시 저장
                   _startInactivityTimer(newTitle);
                 }
                 Navigator.pop(context);
