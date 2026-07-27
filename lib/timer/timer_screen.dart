@@ -70,7 +70,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _totalSeconds = widget.selectedDurationMinutes;
+    _totalSeconds = widget.selectedDurationMinutes * 60;
 
     // 초기값 셋팅
     _currentUniversity = widget.targetUniversity;
@@ -870,7 +870,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.star, color: Color(0xFFE5C158), size: 16),
                         const SizedBox(width: 6),
-                        Text("배속 실험 모드 가동 :  $_elapsedSeconds / ${widget.selectedDurationMinutes} Secs", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                        Text("${_elapsedSeconds ~/ 60}분 / ${widget.selectedDurationMinutes}분 진행중",)
                       ]),
                       const SizedBox(height: 1.0),
                       Text(_formatDisplayTime(_elapsedSeconds), style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9)),
@@ -882,7 +882,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         Row(children: [Expanded(child: Text("🔊 ${widget.selectedSubject}", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))]),
                         const SizedBox(height: 4),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                          Text("실시간 집중 모드 (실험)", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text("실시간 집중 모드", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
                           Text("목표 시간: ${widget.selectedDurationMinutes}분", textAlign: TextAlign.end, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
                         ]),
                         const SizedBox(height: 10),
@@ -957,7 +957,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                   child: FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Text(
-                                        "${currentInterval.toStringAsFixed(1)}초\n($currentPercentage%)",
+                                        "${currentInterval.toStringAsFixed(1)}분\n($currentPercentage%)",
                                         textAlign: TextAlign.center,
                                         style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.2)
                                     ),
