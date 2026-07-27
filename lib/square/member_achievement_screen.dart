@@ -387,9 +387,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   int _todayTotalStudyMinutes = 0;
   int _yesterdayTotalStudyMinutes = 0;
 
-  // 🆕 목표 달성도(%) = 오늘 학습분 / 일일 목표(200분) × 100. 100%를 넘으면 100으로 고정.
+  // 🆕 [요청] 고정 200분 목표는 개인차(예: 영어만 집중 4시간10분=250분)를 반영 못 해서 폐기.
+  // 대신 오늘 실제 학습분을 기준으로 50분 단위로 자동 상승하는 목표(100→150→200→250→300...)를 사용.
+  // 100분 밑으로는 목표를 낮추지 않고 항상 최소 100분을 기준으로 함(100분 밑은 "가위질"과 동일한 취급).
+  int get _dynamicDailyGoalMinutes {
+    if (_todayTotalStudyMinutes < 100) return 100;
+    return (_todayTotalStudyMinutes / 50.0).ceil() * 50;
+  }
+
+  // 🆕 목표 달성도(%) = 오늘 학습분 / 유동 목표(_dynamicDailyGoalMinutes) × 100. 100%를 넘으면 100으로 고정.
   int get _realGoalAttainmentPercent {
-    final int pct = ((_todayTotalStudyMinutes / _kDailyGoalMinutes) * 100).round();
+    final int pct = ((_todayTotalStudyMinutes / _dynamicDailyGoalMinutes) * 100).round();
     return pct.clamp(0, 100);
   }
 
@@ -402,6 +410,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   }
 
   // 🆕 [데이터 연결] 가장 많이 학습한 과목(전체 기간 누적 분 기준) - "가장 많이 학습한 과목" 표시용
+  // 🆕 [요청] 서버가 아직 없어서 비교 대상이 나 혼자뿐이므로, 지금은 항상 1위로 표시.
+  // 추후 서버(다른 유저 데이터베이스)가 연결되면 이 두 게터 안의 로직만 실제 순위 계산으로 교체하면
+  // 화면 쪽은 손댈 필요 없이 자동으로 실제 순위가 반영됨.
+  String get _realFriendRankDisplay {
+    // TODO(서버 연결 시): 친구 목록 중 학습 별/시간 기준 실제 순위 계산으로 교체
+    return "1위";
+  }
+
+  String get _realGlobalRankDisplay {
+    // TODO(서버 연결 시): 전체 유저 중 실제 퍼센타일 계산으로 교체
+    return "1위";
+  }
+
   String? get _realMostStudiedSubject => _realMostStudiedSubjectCache;
   String? _realMostStudiedSubjectCache;
 
@@ -1379,9 +1400,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                 style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold),
                                 children: [
                                   TextSpan(text: _t('friendRank'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: '${_t('dataCollectingMsg')}\n\n', style: const TextStyle(color: _ThemeColors.brandGolden)),
+                                  TextSpan(text: '$_realFriendRankDisplay\n\n', style: const TextStyle(color: _ThemeColors.brandGolden)),
                                   TextSpan(text: _t('globalRank'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: _t('dataCollectingMsg'), style: const TextStyle(color: _ThemeColors.brandGolden)),
+                                  TextSpan(text: _realGlobalRankDisplay, style: const TextStyle(color: _ThemeColors.brandGolden)),
                                 ],
                               ),
                             ),
@@ -2305,7 +2326,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [데이터 연결] 일일 목표 학습시간(분) — "목표 달성도"와 "어제 대비 오늘" 계산의 기준값.
   // 지금은 200분(약 3시간)으로 설정. 나중에 마이페이지 등에서 유저가 직접 설정하게 바꿀 수도 있음.
-  static const int _kDailyGoalMinutes = 200;
+  // (참고: 고정 200분 목표 상수는 유동 목표(_dynamicDailyGoalMinutes)로 대체되어 제거함)
 
   Widget _buildFixedEvaluationChart(String type) {
     List<_ExamRecord> evalRecords = _getFilteredRecords(type);
