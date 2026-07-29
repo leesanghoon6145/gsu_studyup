@@ -21,6 +21,11 @@ class Timer2Service {
   static const String _channelName = 'StudyUp 학습 타임라인 알림';
   static const String _channelDesc = '오늘 하루 전체 시작 시 각 시간표 항목의 시작/종료를 알려줍니다';
 
+  // 🆕 [버그 수정] 정확한 알람 권한이 실제로 허용됐는지 마지막으로 확인한 결과를 기억해둠.
+  // false면 scheduleFullDaySchedule()이 zonedSchedule을 시도조차 하지 않고 바로 결과를 반환해서
+  // "2~3분 동안 멈춘 것처럼 보이는" 현상을 막음.
+  static bool _exactAlarmPermissionGranted = false;
+
   static Future<void> initialize() async {
     tzdata.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Seoul')); // 한국 학생 대상 앱이므로 고정
@@ -36,8 +41,25 @@ class Timer2Service {
     );
 
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidImpl?.requestNotificationsPermission();
-    await androidImpl?.requestExactAlarmsPermission();
+
+    // 🆕 [버그 수정] 알림 권한 요청 자체가 예외를 던지는 기기/OS 버전이 있을 수 있어 try/catch로 감쌈
+    try {
+      await androidImpl?.requestNotificationsPermission();
+    } catch (e) {
+      debugPrint("[Timer2Service] 알림 권한 요청 실패: $e");
+    }
+
+    // 🆕 [버그 수정] Android 12+ "정확한 알람" 권한은 다이얼로그가 아니라 설정 화면으로 이동하는 방식이라
+    // 사용자가 실제로 켜줬는지 별도로 확인해서 _exactAlarmPermissionGranted에 저장해둠.
+    try {
+      await androidImpl?.requestExactAlarmsPermission();
+      final bool? granted = await androidImpl?.canScheduleExactNotifications();
+      _exactAlarmPermissionGranted = granted ?? false;
+    } catch (e) {
+      debugPrint("[Timer2Service] 정확한 알람 권한 확인 실패(구버전 OS이거나 미지원 기기일 수 있음): $e");
+      // 권한 확인 자체를 지원하지 않는 기기/OS는 일반 알람 모드로라도 시도할 수 있게 true로 간주
+      _exactAlarmPermissionGranted = true;
+    }
 
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       _channelId,
@@ -62,16 +84,42 @@ class Timer2Service {
 
   /// 오늘 하루 전체 스케줄에 대해 항목별 시작/종료 알림을 예약합니다.
   /// - 이미 지난 시각의 항목은 건너뜁니다.
-  /// - 반환값: {scheduled: 예약된 항목 수, skippedPast: 지나서 제외된 항목 수}
+  /// - 🆕 [버그 수정] 정확한 알람 권한이 없으면 처음부터 시도하지 않고 즉시 반환합니다
+  ///   (예전엔 권한 없이 zonedSchedule을 계속 호출하다가 예외로 멈춰서 화면이 "예약 처리 중"에서
+  ///   영원히 안 넘어가는 것처럼 보였습니다).
+  /// - 🆕 개별 항목 예약이 실패해도 나머지 항목은 계속 진행합니다 (한 개 실패로 전체가 멈추지 않음).
+  /// - 반환값: {scheduled: 예약된 항목 수, skippedPast: 지나서 제외된 항목 수,
+  ///           failed: 예약 시도했지만 실패한 항목 수, permissionDenied: 권한이 없어 아예 시도 못 했으면 1, 아니면 0}
   static Future<Map<String, int>> scheduleFullDaySchedule({
     required List<Map<String, String>> schedule,
     required String examTitle,
   }) async {
     int scheduledCount = 0;
     int skippedCount = 0;
+    int failedCount = 0;
     final DateTime now = DateTime.now();
 
-    await cancelAllTimelineNotifications(); // 재예약 전 기존 것 정리 (중복 방지)
+    // 🆕 [버그 수정] 권한이 없으면 아예 시도하지 않고 즉시 반환 -> "무한 대기"처럼 보이는 현상 방지
+    if (!_exactAlarmPermissionGranted) {
+      debugPrint("[Timer2Service] 정확한 알람 권한이 없어 예약을 진행하지 않습니다. 설정에서 권한을 켜주세요.");
+      return {
+        'scheduled': 0,
+        'skippedPast': 0,
+        'failed': 0,
+        'permissionDenied': 1,
+      };
+    }
+
+    try {
+      await cancelAllTimelineNotifications().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint("[Timer2Service] 기존 알림 취소가 10초 넘게 걸려서 건너뛰고 계속 진행합니다.");
+        },
+      );
+    } catch (e) {
+      debugPrint("[Timer2Service] 기존 알림 취소 중 오류(무시하고 계속 진행): $e");
+    }
 
     for (int i = 0; i < schedule.length; i++) {
       final item = schedule[i];
@@ -95,57 +143,68 @@ class Timer2Service {
       final int startId = _makeNotificationId(i, isEnd: false);
       final int endId = _makeNotificationId(i, isEnd: true);
 
-      await _plugin.zonedSchedule(
-        startId,
-        '📖 학습 시작 / $taskText',
-        '$timeStr · 지금 시작할 시간입니다',
-        tz.TZDateTime.from(startDt, tz.local),
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channelId,
-            _channelName,
-            channelDescription: _channelDesc,
-            importance: Importance.high,
-            priority: Priority.high,
+      // 🆕 [버그 수정] 항목 하나 예약 실패해도 catch로 잡아서 다음 항목으로 계속 진행
+      try {
+        await _plugin.zonedSchedule(
+          startId,
+          '📖 학습 시작 / $taskText',
+          '$timeStr · 지금 시작할 시간입니다',
+          tz.TZDateTime.from(startDt, tz.local),
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              _channelId,
+              _channelName,
+              channelDescription: _channelDesc,
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
           ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
-        payload: jsonEncode({
-          'type': 'start',
-          'task': taskText,
-          'time': timeStr,
-          'examTitle': examTitle,
-          'durationMinutes': endDt.difference(startDt).inMinutes,
-        }),
-      );
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+          payload: jsonEncode({
+            'type': 'start',
+            'task': taskText,
+            'time': timeStr,
+            'examTitle': examTitle,
+            'durationMinutes': endDt.difference(startDt).inMinutes,
+          }),
+        );
 
-      await _plugin.zonedSchedule(
-        endId,
-        '✅ 학습 종료 / $taskText',
-        '$timeStr 완료 · 다음 항목을 준비하세요',
-        tz.TZDateTime.from(endDt, tz.local),
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channelId,
-            _channelName,
-            channelDescription: _channelDesc,
-            importance: Importance.high,
-            priority: Priority.high,
+        await _plugin.zonedSchedule(
+          endId,
+          '✅ 학습 종료 / $taskText',
+          '$timeStr 완료 · 다음 항목을 준비하세요',
+          tz.TZDateTime.from(endDt, tz.local),
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              _channelId,
+              _channelName,
+              channelDescription: _channelDesc,
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
           ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
-        payload: jsonEncode({'type': 'end', 'task': taskText, 'time': timeStr}),
-      );
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+          payload: jsonEncode({'type': 'end', 'task': taskText, 'time': timeStr}),
+        );
 
-      scheduledCount++;
+        scheduledCount++;
+      } catch (e) {
+        debugPrint("[Timer2Service] '$taskText' 항목 예약 실패(건너뛰고 계속 진행): $e");
+        failedCount++;
+      }
     }
 
     _lastScheduledItemCount = schedule.length; // [추가] 다음 취소 시 사용할 범위 갱신
-    return {'scheduled': scheduledCount, 'skippedPast': skippedCount};
+    return {
+      'scheduled': scheduledCount,
+      'skippedPast': skippedCount,
+      'failed': failedCount,
+      'permissionDenied': 0,
+    };
   }
 
 // [추가] 마지막으로 예약했던 항목 개수를 기억해서, 다음 취소 시 그 범위만 처리 (속도 개선)

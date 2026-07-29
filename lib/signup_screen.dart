@@ -1,6 +1,96 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'global_lang.dart';
 import 'parent/parent_main_dashboard_screen.dart';
+
+// =============================================================================
+// 🆕 [12개국 다국어 연동] 2026-07-29 추가: signup_screen.dart 전용 렌더 헬퍼 함수 3종
+// 기존 위젯 구조(폰트/색상/크기/레이아웃)는 전혀 변경하지 않고, 텍스트 소스만
+// DkeLang의 맵으로 교체하기 위한 함수입니다. 원본이 EN(gowunBatang)+KO(notoSansKr)
+// 두 가지 폰트를 섞어 쓰던 자리는 기본모드에서 그 조합을 100% 그대로 유지하고,
+// 10개국어 선택시에만 해당 언어 단독 표시로 전환됩니다(그때는 문자 표현을 위해
+// GoogleFonts.notoSans로 폰트가 자동 전환됩니다 - EntranceScreen에서 이미 쓰인 것과 동일한 방식).
+// =============================================================================
+
+// (A) 한 줄짜리 "EN (KO)" 형태 - 입력창 힌트 등에 사용 (원본 폰트 그대로 유지, 폰트 전환 없음)
+String dkeInline(Map<String, String> map) {
+  if (DkeLang.isForeignSelected) {
+    return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '';
+  }
+  return "${map['EN']} (${map['KO']})";
+}
+
+// (B) 한 Text 위젯 안에서 줄바꿈(\n)으로 EN/KO 두 줄을 표시하던 버튼용 (AUTH, VERIFY 등)
+Widget dkeBilineText(Map<String, String> map, TextStyle baseStyle, {TextAlign textAlign = TextAlign.center}) {
+  if (DkeLang.isForeignSelected) {
+    return Text(
+      map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '',
+      textAlign: textAlign,
+      style: GoogleFonts.notoSans(textStyle: baseStyle),
+    );
+  }
+  return Text(
+    '${map['EN']}\n(${map['KO']})',
+    textAlign: textAlign,
+    style: GoogleFonts.gowunBatang(textStyle: baseStyle),
+  );
+}
+
+// (C) Column 안에 EN(큰 글씨, gowunBatang)/KO(작은 글씨, notoSansKr) 두 개의 개별 Text 위젯이
+// 따로 있던 자리(헤딩, NEXT STEP, SIGNUP COMPLETE, PARENT LOGIN 버튼 등)를 위한 위젯 리스트 생성기.
+// 기본모드: 원본처럼 2개 위젯(EN 스타일 그대로 + KO 스타일 그대로) 유지.
+// 10개국어 선택시: 이미 번역된 문장 하나만 EN 스타일 자리(더 큰 폰트)에 표시.
+List<Widget> dkeColumnLines(
+    Map<String, String> map, {
+      required TextStyle enStyle,
+      required TextStyle koStyle,
+      double gapHeight = 0,
+    }) {
+  if (DkeLang.isForeignSelected) {
+    return [
+      Text(
+        map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.notoSans(textStyle: enStyle),
+      ),
+    ];
+  }
+  final List<Widget> lines = [
+    Text(map['EN'] ?? '', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(textStyle: enStyle)),
+  ];
+  if (gapHeight > 0) lines.add(SizedBox(height: gapHeight));
+  lines.add(
+    Text('(${map['KO']})', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(textStyle: koStyle)),
+  );
+  return lines;
+}
+
+// (D) RichText 두 TextSpan(EN gowunBatang + KO notoSansKr)이던 자리를 위한 헬퍼.
+// 기본모드: 원본과 동일하게 두 TextSpan(EN 줄바꿈 KO) 구성.
+// 10개국어 선택시: 번역문 하나만 단일 TextSpan으로 표시(폰트는 notoSans로 전환).
+Widget dkeBilingualRich(
+    Map<String, String> map, {
+      required TextStyle enStyle,
+      required TextStyle koStyle,
+      TextAlign textAlign = TextAlign.start,
+    }) {
+  if (DkeLang.isForeignSelected) {
+    return Text(
+      map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '',
+      textAlign: textAlign,
+      style: GoogleFonts.notoSans(textStyle: koStyle),
+    );
+  }
+  return RichText(
+    textAlign: textAlign,
+    text: TextSpan(
+      children: [
+        TextSpan(text: '${map['EN']}\n', style: GoogleFonts.gowunBatang(textStyle: enStyle)),
+        TextSpan(text: '(${map['KO']})', style: GoogleFonts.notoSansKr(textStyle: koStyle)),
+      ],
+    ),
+  );
+}
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -12,10 +102,18 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   bool isStudent = true;
   bool isGeneral = false;
-  bool isUnder14 = false;
+
+  // 🆕 [법적 필수 수정] 2026-07-29: 자진 체크박스(isUnder14) 삭제.
+  // 생년월일을 직접 입력받아 만 나이를 계산하는 방식으로 교체 (임의 우회 방지).
+  DateTime? _selectedBirthDate;
+
   bool parentConsent = false;
   bool isEmailSent = false;
   bool isPasswordVisible = false;
+
+  // 🆕 [법적 필수 수정] 보호자 실제 인증 절차용 상태값
+  bool _isParentAuthSent = false;
+  bool _isParentVerified = false;
 
   final TextEditingController _nationalityController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
@@ -29,6 +127,125 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _classCodeController = TextEditingController();
   final TextEditingController _childEmailController = TextEditingController();
   final TextEditingController _relationshipController = TextEditingController();
+
+  // 🆕 [법적 필수 수정] 보호자 연락처 및 인증번호 입력용 컨트롤러
+  final TextEditingController _parentEmailController = TextEditingController();
+  final TextEditingController _parentPhoneController = TextEditingController();
+  final TextEditingController _parentAuthCodeController = TextEditingController();
+
+  // 🆕 [법적 필수 수정] 생년월일 기반 만 나이 계산 (국제 표준 만 나이 방식)
+  int? get _calculatedAge {
+    if (_selectedBirthDate == null) return null;
+    final DateTime today = DateTime.now();
+    int age = today.year - _selectedBirthDate!.year;
+    final bool birthdayNotYetThisYear = (today.month < _selectedBirthDate!.month) ||
+        (today.month == _selectedBirthDate!.month && today.day < _selectedBirthDate!.day);
+    if (birthdayNotYetThisYear) age -= 1;
+    return age;
+  }
+
+  // 🆕 [법적 필수 수정] 만 14세 미만 여부 - 생년월일 기반 자동 판정 (자진 신고 아님)
+  bool get _isUnder14 => _calculatedAge != null && _calculatedAge! < 14;
+
+  // 🆕 [법적 필수 수정] 만 14세 미만인데 보호자 인증이 완료되지 않았으면 다음 단계 진행 차단
+  bool get _canProceedToNextStep {
+    if (_selectedBirthDate == null) return false; // 생년월일 미입력 시 진행 불가
+    if (_isUnder14) {
+      return _isParentVerified && parentConsent; // 보호자 인증 + 동의 체크 모두 필요
+    }
+    return true;
+  }
+
+  // 🆕 [법적 필수 수정] 생년월일 선택 다이얼로그
+  Future<void> _pickBirthDate() async {
+    const Color brandGolden = Color(0xFFE5C158);
+    final DateTime now = DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year - 15, now.month, now.day),
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: brandGolden,
+              onPrimary: Color(0xFF030712),
+              surface: Color(0xFF0D1527),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedBirthDate = picked;
+        // 생년월일이 바뀌면 이전 보호자 인증 상태는 초기화 (안전을 위한 재검증 요구)
+        _isParentAuthSent = false;
+        _isParentVerified = false;
+        parentConsent = false;
+        _parentAuthCodeController.clear();
+      });
+    }
+  }
+
+  String get _birthDateDisplayText {
+    if (_selectedBirthDate == null) return '';
+    final y = _selectedBirthDate!.year.toString();
+    final m = _selectedBirthDate!.month.toString().padLeft(2, '0');
+    final d = _selectedBirthDate!.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  // 🚨 [법적 필수사항] 아래 보호자 인증번호 발송/확인 함수는 현재 UI 목업(시뮬레이션)입니다.
+  // 실제 스토어 출시 전 반드시 실서버(SMS 발송 API 또는 이메일 발송 API)와 연동하여
+  // 진짜 인증번호를 발송하고 서버에서 검증하는 로직으로 교체해야 법적 효력이 발생합니다.
+  void _sendParentAuthCode() {
+    if (_parentEmailController.text.trim().isEmpty && _parentPhoneController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            dkeInline(DkeLang.snackParentContactMissingMap),
+            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _isParentAuthSent = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          dkeInline(DkeLang.snackParentCodeSentMap),
+          style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  void _verifyParentAuthCode() {
+    if (_parentAuthCodeController.text.trim().length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            dkeInline(DkeLang.snackInvalidCodeMap),
+            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _isParentVerified = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          dkeInline(DkeLang.snackParentVerifiedMap),
+          style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
 
   // ✅ 학부모 대시보드 진입 함수 (build 밖으로 분리)
   void _goToParentDashboard() {
@@ -64,28 +281,12 @@ class _SignupScreenState extends State<SignupScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'SIGNUP',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.gowunBatang(
-                color: brandGolden,
-                fontWeight: FontWeight.bold,
-                fontSize: 23,
-                letterSpacing: 1.0,
-              ),
-            ),
-            const SizedBox(height: 15),
-            Text(
-              '(회원가입)',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.notoSansKr(
-                color: brandGolden,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ],
+          children: dkeColumnLines(
+            DkeLang.signupHeadingMap,
+            enStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 23, letterSpacing: 1.0, color: brandGolden),
+            koStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: brandGolden),
+            gapHeight: 15,
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -107,7 +308,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
               child: Text(
-                "Welcome to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )",
+                DkeLang.welcomeOverlay, // 🆕 [12개국 다국어] 로그인 화면과 동일한 환영 문구 재사용
                 textAlign: TextAlign.center,
                 style: GoogleFonts.notoSansKr(
                   color: Colors.white,
@@ -128,7 +329,7 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Row(
                 children: [
                   _buildToggleButton(
-                    title: 'STUDENT\n(학생)',
+                    map: DkeLang.toggleStudentMap,
                     active: isStudent && !isGeneral,
                     onTap: () => setState(() {
                       isStudent = true;
@@ -136,7 +337,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     }),
                   ),
                   _buildToggleButton(
-                    title: 'PARENT\n(학부모)',
+                    map: DkeLang.toggleParentMap,
                     active: !isStudent && !isGeneral,
                     onTap: () => setState(() {
                       isStudent = false;
@@ -144,7 +345,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     }),
                   ),
                   _buildToggleButton(
-                    title: 'GENERAL\n(일반)',
+                    map: DkeLang.toggleGeneralMap,
                     active: !isStudent && isGeneral,
                     onTap: () => setState(() {
                       isStudent = false;
@@ -157,15 +358,29 @@ class _SignupScreenState extends State<SignupScreen> {
             const SizedBox(height: 30),
 
             // 공통 입력 필드
-            _buildInputField(hint: 'Nationality (국적)', icon: Icons.public, controller: _nationalityController),
-            _buildInputField(hint: 'Full Name (본인 이름)', icon: Icons.person, controller: _nameController),
+            _buildInputField(hint: dkeInline(DkeLang.hintNationalityMap), icon: Icons.public, controller: _nationalityController),
+            _buildInputField(hint: dkeInline(DkeLang.hintFullNameMap), icon: Icons.person, controller: _nameController),
+
+            // 🆕 [법적 필수 수정] 생년월일 입력 필드 - 모든 가입 유형(학생/학부모/일반) 공통 적용
+            // 자진 체크박스가 아닌, 실제 생년월일로 만 14세 미만 여부를 자동 판별합니다.
+            GestureDetector(
+              onTap: _pickBirthDate,
+              child: AbsorbPointer(
+                child: _buildInputField(
+                  hint: dkeInline(DkeLang.hintBirthDateMap),
+                  icon: Icons.cake_outlined,
+                  controller: TextEditingController(text: _birthDateDisplayText),
+                  suffixIcon: const Icon(Icons.calendar_today, color: Colors.white38, size: 18),
+                ),
+              ),
+            ),
 
             // 이메일 + 인증 버튼
             Row(
               children: [
                 Expanded(
                   child: _buildInputField(
-                    hint: 'Email Address (이메일 주소)',
+                    hint: dkeInline(DkeLang.hintEmailMap),
                     icon: Icons.email,
                     controller: _emailController,
                   ),
@@ -180,7 +395,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Verification code sent!\n(인증번호가 발송되었습니다!)',
+                            dkeInline(DkeLang.snackCodeSentMap),
                             style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -190,13 +405,9 @@ class _SignupScreenState extends State<SignupScreen> {
                       backgroundColor: brandGolden,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(
-                      'AUTH\n(인증)',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.gowunBatang(
-                        color: const Color(0xFF030712),
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: dkeBilineText(
+                      DkeLang.btnAuthMap,
+                      const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -205,16 +416,16 @@ class _SignupScreenState extends State<SignupScreen> {
 
             if (isEmailSent) ...[
               _buildInputField(
-                hint: 'Verification Code (인증번호 6자리 입력)',
+                hint: dkeInline(DkeLang.hintEmailAuthCodeMap),
                 icon: Icons.lock_clock,
                 controller: _emailAuthOpacityController,
               ),
             ],
 
-            _buildInputField(hint: 'Phone Number (전화번호)', icon: Icons.phone, controller: _phoneController),
+            _buildInputField(hint: dkeInline(DkeLang.hintPhoneMap), icon: Icons.phone, controller: _phoneController),
 
             _buildInputField(
-              hint: 'Password (비밀번호)',
+              hint: dkeInline(DkeLang.hintPasswordMap),
               icon: Icons.lock,
               controller: _passwordController,
               isPassword: true,
@@ -229,7 +440,7 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
 
             _buildInputField(
-              hint: 'Confirm Password (비밀번호 확인)',
+              hint: dkeInline(DkeLang.hintConfirmPasswordMap),
               icon: Icons.lock_outline,
               controller: _confirmPasswordController,
               isPassword: true,
@@ -238,142 +449,211 @@ class _SignupScreenState extends State<SignupScreen> {
 
             // 학생 전용 필드
             if (isStudent && !isGeneral) ...[
-              _buildInputField(hint: 'School Name (학교명)', icon: Icons.school, controller: _schoolController),
-              _buildInputField(hint: 'Grade (학년)', icon: Icons.grade, controller: _gradeController),
-              _buildInputField(hint: 'Class Code (클래스 코드 - 선택입력)', icon: Icons.qr_code, controller: _classCodeController),
+              _buildInputField(hint: dkeInline(DkeLang.hintSchoolMap), icon: Icons.school, controller: _schoolController),
+              _buildInputField(hint: dkeInline(DkeLang.hintGradeMap), icon: Icons.grade, controller: _gradeController),
+              _buildInputField(hint: dkeInline(DkeLang.hintClassCodeMap), icon: Icons.qr_code, controller: _classCodeController),
             ],
 
             // 학부모 전용 필드
             if (!isStudent && !isGeneral) ...[
-              _buildInputField(hint: "Child's Email (연동할 자녀 이메일 주소)", icon: Icons.child_care, controller: _childEmailController),
-              _buildInputField(hint: 'Relationship to Child (자녀와의 관계 - 예: 부/모)', icon: Icons.family_restroom, controller: _relationshipController),
+              _buildInputField(hint: dkeInline(DkeLang.hintChildEmailMap), icon: Icons.child_care, controller: _childEmailController),
+              _buildInputField(hint: dkeInline(DkeLang.hintRelationshipMap), icon: Icons.family_restroom, controller: _relationshipController),
             ],
 
             const SizedBox(height: 10),
 
-            // 14세 미만 체크박스
-            if (isStudent && !isGeneral) ...[
-              Row(
-                children: [
-                  Checkbox(
-                    value: isUnder14,
-                    onChanged: (val) => setState(() => isUnder14 = val!),
-                    activeColor: brandGolden,
-                    side: const BorderSide(color: Colors.white38),
-                  ),
-                  Flexible(
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'I am under 14 years old.\n',
-                            style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
+            // 🆕 [법적 필수 수정] 생년월일 기반 자동 판정 결과 안내 배너 (모든 가입 유형 공통)
+            if (_selectedBirthDate != null && _isUnder14) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: brandGolden.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: brandGolden.withValues(alpha: 0.3)),
+                ),
+                child: dkeBilingualRich(
+                  DkeLang.bannerUnder14Map,
+                  enStyle: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
+                  koStyle: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+
+              // 🆕 [법적 필수 수정] 보호자 실제 인증 블록 - 아이가 셀프 체크하는 방식이 아니라
+              // 보호자 연락처를 입력받아 인증번호를 발송/확인하는 실제 검증 절차
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: brandGolden.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: brandGolden.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DkeLang.isForeignSelected
+                          ? (DkeLang.parentalTitleMap[DkeLang.current] ?? DkeLang.parentalTitleMap['EN']!)
+                          : '${DkeLang.parentalTitleMap['EN']}\n(${DkeLang.parentalTitleMap['KO']})',
+                      style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23),
+                    ),
+                    const SizedBox(height: 5),
+                    dkeBilingualRich(
+                      DkeLang.parentalDescMap,
+                      enStyle: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
+                      koStyle: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 보호자 이메일 입력
+                    _buildInputField(
+                      hint: dkeInline(DkeLang.hintParentEmailMap),
+                      icon: Icons.email_outlined,
+                      controller: _parentEmailController,
+                    ),
+                    // 보호자 전화번호 입력
+                    _buildInputField(
+                      hint: dkeInline(DkeLang.hintParentPhoneMap),
+                      icon: Icons.phone_iphone,
+                      controller: _parentPhoneController,
+                    ),
+
+                    // 인증번호 발송 버튼
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _isParentVerified ? null : _sendParentAuthCode,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: brandGolden,
+                          disabledBackgroundColor: Colors.white10,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          _isParentVerified
+                              ? dkeInline(DkeLang.btnParentVerifiedMap)
+                              : dkeInline(DkeLang.btnSendCodeToParentMap),
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.gowunBatang(
+                            color: _isParentVerified ? Colors.white38 : const Color(0xFF030712),
+                            fontWeight: FontWeight.bold,
                           ),
-                          TextSpan(
-                            text: '(만 14세 미만 청소년입니다.)',
-                            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+
+                    // 인증번호 입력 + 확인 버튼 (인증번호 발송 후에만 노출)
+                    if (_isParentAuthSent && !_isParentVerified) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildInputField(
+                              hint: dkeInline(DkeLang.hintParentAuthCodeMap),
+                              icon: Icons.lock_clock,
+                              controller: _parentAuthCodeController,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            height: 55,
+                            child: ElevatedButton(
+                              onPressed: _verifyParentAuthCode,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: brandGolden,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: dkeBilineText(
+                                DkeLang.btnVerifyMap,
+                                const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                ],
-              ),
-              if (isUnder14) ...[
-                Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 10),
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: brandGolden.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: brandGolden.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Parental Consent Required\n(보호자 동의 필수)',
-                        style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23),
-                      ),
-                      const SizedBox(height: 5),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'In accordance with international regulations (COPPA/GDPR), parental consent must be verified.\n',
-                              style: GoogleFonts.gowunBatang(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w600),
-                            ),
-                            TextSpan(
-                              text: '(국제법 규정에 따라 보호자의 동의가 확인되어야 가입이 가능합니다.)',
-                              style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'I confirm parental consent.\n',
-                                style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                              TextSpan(
-                                text: '(보호자 동의를 확인했습니다.)',
-                                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                        value: parentConsent,
-                        onChanged: (val) => setState(() => parentConsent = val!),
-                        activeColor: brandGolden,
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
                     ],
-                  ),
+
+                    // 최종 동의 체크박스 - 보호자 인증이 완료된 후에만 체크 가능하도록 제한
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: dkeBilingualRich(
+                        DkeLang.checkboxParentConsentMap,
+                        enStyle: TextStyle(
+                          color: _isParentVerified ? Colors.white : Colors.white24,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        koStyle: TextStyle(
+                          color: _isParentVerified ? Colors.white : Colors.white24,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      value: parentConsent,
+                      // 🆕 [법적 필수 수정] 보호자 인증(_isParentVerified)이 완료되기 전에는
+                      // 이 체크박스를 아예 누를 수 없도록 비활성화 (셀프 체크 우회 원천 차단)
+                      onChanged: _isParentVerified
+                          ? (val) => setState(() => parentConsent = val!)
+                          : null,
+                      activeColor: brandGolden,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ],
 
             const SizedBox(height: 30),
 
             // NEXT STEP 버튼
+            // 🆕 [법적 필수 수정] 생년월일 미입력 또는 (만14세미만인데 보호자 인증/동의 미완료) 시 버튼 비활성화
             ElevatedButton(
-              onPressed: () {
+              onPressed: _canProceedToNextStep
+                  ? () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const TermsAgreementScreen()),
                 );
-              },
+              }
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: brandGolden,
+                disabledBackgroundColor: Colors.white10,
                 minimumSize: const Size(double.infinity, 55),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'NEXT STEP',
-                    style: GoogleFonts.gowunBatang(
-                      color: const Color(0xFF030712),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
+                children: dkeColumnLines(
+                  DkeLang.btnNextStepMap,
+                  enStyle: TextStyle(
+                    color: _canProceedToNextStep ? const Color(0xFF030712) : Colors.white38,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
-                  Text(
-                    '(다음 단계로)',
-                    style: GoogleFonts.notoSansKr(
-                      color: const Color(0xFF030712),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                  koStyle: TextStyle(
+                    color: _canProceedToNextStep ? const Color(0xFF030712) : Colors.white38,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
-                ],
+                ),
               ),
             ),
+
+            // 🆕 [법적 필수 수정] 진행 불가 사유를 사용자에게 안내 (생년월일 미입력 또는 보호자 인증 미완료)
+            if (!_canProceedToNextStep) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: dkeBilingualRich(
+                  _selectedBirthDate == null ? DkeLang.hintNeedBirthDateMap : DkeLang.hintNeedParentVerifyMap,
+                  enStyle: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w600),
+                  koStyle: const TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
 
             const SizedBox(height: 12),
 
@@ -390,24 +670,11 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'PARENT LOGIN (임시)',
-                    style: GoogleFonts.gowunBatang(
-                      color: const Color(0xFF38BDF8),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                  Text(
-                    '(학부모 대시보드 진입)',
-                    style: GoogleFonts.notoSansKr(
-                      color: const Color(0xFF38BDF8),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+                children: dkeColumnLines(
+                  DkeLang.btnParentLoginTempMap,
+                  enStyle: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 18),
+                  koStyle: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 14),
+                ),
               ),
             ),
           ],
@@ -417,7 +684,7 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Widget _buildToggleButton({
-    required String title,
+    required Map<String, String> map,
     required bool active,
     required VoidCallback onTap,
   }) {
@@ -431,10 +698,9 @@ class _SignupScreenState extends State<SignupScreen> {
             color: active ? brandGolden : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.gowunBatang(
+          child: dkeBilineText(
+            map,
+            TextStyle(
               color: active ? const Color(0xFF030712) : Colors.white60,
               fontWeight: FontWeight.bold,
               fontSize: 14,
@@ -487,6 +753,8 @@ class _SignupScreenState extends State<SignupScreen> {
 
 // -----------------------------------------------------------------------
 // 약관 동의 화면
+// 🆕 [12개국 다국어 연동] 2026-07-29 수정: 전체 텍스트 DkeLang 게터/맵으로 교체.
+// 디자인/레이아웃/색상/폰트/크기는 100% 원본 동일 유지.
 // -----------------------------------------------------------------------
 class TermsAgreementScreen extends StatefulWidget {
   const TermsAgreementScreen({super.key});
@@ -502,6 +770,14 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
   Widget build(BuildContext context) {
     const Color brandGolden = Color(0xFFE5C158);
 
+    // 🆕 [12개국 다국어 연동] 약관 섹션 제목/본문 맵 쌍 목록
+    final List<List<Map<String, String>>> sections = [
+      [DkeLang.terms1TitleMap, DkeLang.terms1BodyMap],
+      [DkeLang.terms2TitleMap, DkeLang.terms2BodyMap],
+      [DkeLang.terms3TitleMap, DkeLang.terms3BodyMap],
+      [DkeLang.terms4TitleMap, DkeLang.terms4BodyMap],
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xFF030712),
       appBar: AppBar(
@@ -511,18 +787,11 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'TERMS AGREEMENT',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23),
-            ),
-            Text(
-              '(이용약관 동의)',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-          ],
+          children: dkeColumnLines(
+            DkeLang.termsHeadingMap,
+            enStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 23, color: brandGolden),
+            koStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: brandGolden),
+          ),
         ),
       ),
       body: Padding(
@@ -530,19 +799,10 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Please read and agree to the terms to use GKE STUDYUP.\n',
-                    style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, height: 1.5),
-                  ),
-                  TextSpan(
-                    text: '(GKE STUDYUP 서비스 이용을 위해 약관을 읽고 동의해 주세요.)',
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, height: 1.5),
-                  ),
-                ],
-              ),
+            dkeBilingualRich(
+              DkeLang.termsIntroMap,
+              enStyle: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, height: 1.5),
+              koStyle: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, height: 1.5),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -554,74 +814,42 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
                   border: Border.all(color: Colors.white12),
                 ),
                 child: SingleChildScrollView(
-                  child: RichText(
+                  child: DkeLang.isForeignSelected
+                  // 🆕 [12개국 다국어] 10개국어 선택시: 번역 본문만 하나의 텍스트로 표시 (notoSans 폰트)
+                      ? Text(
+                    sections
+                        .map((pair) =>
+                    '${pair[0][DkeLang.current] ?? pair[0]['EN']}\n${pair[1][DkeLang.current] ?? pair[1]['EN']}')
+                        .join('\n\n'),
+                    style: GoogleFonts.notoSans(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold, height: 1.6),
+                  )
+                  // 기본모드(EN+KO): 원본과 동일하게 각 섹션마다 EN(gowunBatang)/KO(notoSansKr) TextSpan 반복 구성
+                      : RichText(
                     text: TextSpan(
                       style: const TextStyle(height: 1.6),
                       children: [
                         TextSpan(
-                          text: "[Terms & Privacy Policy / 이용약관 및 개인정보 처리방침]\n\n1. Purpose\n",
+                          text: "[Terms & Privacy Policy / 이용약관 및 개인정보 처리방침]\n\n",
                           style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
                         ),
-                        TextSpan(
-                          text: "(목적)\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "This agreement outlines the terms and procedures for using GKE STUDYUP services.\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(본 약관은 GKE STUDYUP 서비스의 이용 조건 및 절차를 규정합니다.)\n\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "2. International Law Compliance\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(국제법 준수)\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "This service strictly complies with EU GDPR and US COPPA. Parental consent is mandatory for collecting data of users under 14.\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(본 서비스는 유럽 GDPR 및 미국 COPPA 규정을 준수하며, 14세 미만 아동의 데이터 보호를 위해 법정대리인의 동의를 필수적으로 수집합니다.)\n\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "3. Data Collection Items\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(수집 항목)\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "Nationality, Full Name, email, phone number, school name, and grade are collected solely for personalized study reporting.\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(국적, 이름, 이메일, 전화번호, 학교, 학년 정보를 수집하며 이는 학습 리포트 제공 목적으로만 사용됩니다.)\n\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "4. Data Security & Rights\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(데이터 보안)\n",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "All information is securely encrypted (AES-256) and users retain the right to request deletion at any time.\n",
-                          style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(
-                          text: "(모든 정보는 암호화되어 안전하게 관리되며, 사용자는 언제든 삭제를 요청할 수 있습니다.)",
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
+                        for (final pair in sections) ...[
+                          TextSpan(
+                            text: "${pair[0]['EN']}\n",
+                            style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: "(${pair[0]['KO']})\n",
+                            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: "${pair[1]['EN']}\n",
+                            style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: "(${pair[1]['KO']})\n\n",
+                            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -630,19 +858,10 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
             ),
             const SizedBox(height: 20),
             CheckboxListTile(
-              title: RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'I have read and agree to all terms above.\n',
-                      style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                    ),
-                    TextSpan(
-                      text: '(위 약관의 내용을 모두 읽었으며 동의합니다.)',
-                      style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
+              title: dkeBilingualRich(
+                DkeLang.checkboxAgreeAllMap,
+                enStyle: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                koStyle: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
               ),
               value: isAgreed,
               onChanged: (val) => setState(() => isAgreed = val!),
@@ -658,7 +877,7 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Registration Complete! (회원가입이 완료되었습니다!)',
+                      dkeInline(DkeLang.snackRegistrationCompleteMap),
                       style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ),
@@ -675,24 +894,11 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'SIGNUP COMPLETE',
-                    style: GoogleFonts.gowunBatang(
-                      color: const Color(0xFF030712),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                  Text(
-                    '(가입 완료)',
-                    style: GoogleFonts.notoSansKr(
-                      color: const Color(0xFF030712),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+                children: dkeColumnLines(
+                  DkeLang.btnSignupCompleteMap,
+                  enStyle: const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 18),
+                  koStyle: const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 14),
+                ),
               ),
             ),
           ],

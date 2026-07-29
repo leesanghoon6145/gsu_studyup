@@ -57,7 +57,12 @@ class GsuStudyUpApp extends StatelessWidget {
 }
 
 // -----------------------------------------
-// [1] 메인 입장 화면 (지구본 정중앙 18초 순차 줌인/아웃 애니메이션 결합판)
+// [1] 메인 입장 화면 (지구본 정중앙 순차 줌인/아웃 애니메이션 결합판)
+// 🆕 [12개국 다국어 연동] 2026-07-29 수정:
+//   - 브랜드명 "GKE StudyUp"은 조사 없이 모든 언어 공통으로 고정 표시 (번역 대상 아님)
+//   - 기본(언어 미선택 = EN+KO) 모드: GKE StudyUp → 응원 합니다(한글) → We're Cheering for You!(영문) 3단계 반복
+//   - 10개국어(JA/ZH/FR/DE/RU/AR/HI/VI/ES/TH) 중 하나 선택 시: GKE StudyUp → 해당 언어 응원 문구 2단계 반복
+//   - 각 단계의 줌인(1/3)-정지(1/3)-줌아웃(1/3) 3초씩 리듬은 원본과 완전히 동일하게 유지 (폰트크기/색상/레이아웃 불변)
 // -----------------------------------------
 class EntranceScreen extends StatefulWidget {
   const EntranceScreen({super.key});
@@ -70,52 +75,96 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
 
   // 👑 [명칭: 대문 지구본 응원 애니메이션 제어 엔진]
   late AnimationController _cheeringController;
-  late Animation<double> _firstWordScale;
-  late Animation<double> _firstWordOpacity;
-  late Animation<double> _secondWordScale;
-  late Animation<double> _secondWordOpacity;
+
+  // 🆕 [12개국 다국어 연동] 단계별(브랜드/응원문구) 텍스트·스타일·애니메이션을 가변 개수로 관리
+  late int _totalStages;
+  late List<String> _stageTexts;
+  late List<TextStyle> _stageStyles;
+  late List<Animation<double>> _stageScales;
+  late List<Animation<double>> _stageOpacities;
+
+  // 🆕 [12개국 다국어 연동] 10개국어 목록 (기존 study_timeline_section.dart 등과 동일한 코드 체계)
+  static const List<String> _foreignLanguages = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+  static bool get _isForeignSelected => _foreignLanguages.contains(DkeLang.current);
+
+  // 🆕 [12개국 다국어 연동] 브랜드명은 조사 없이 모든 언어 공통 고정
+  static const String _brandText = 'GKE StudyUp';
+
+  // 🆕 [12개국 다국어 연동] 응원 문구 - 기본(EN+KO) 모드용 한글/영문, 10개국어용 번역
+  static const String _cheerKo = '응원 합니다!';
+  static const String _cheerEn = "We're Cheering for You!";
+  static const Map<String, String> _cheerForeign = {
+    'JA': '応援しています！',
+    'ZH': '我们支持你！',
+    'FR': 'Nous vous encourageons !',
+    'DE': 'Wir drücken dir die Daumen!',
+    'RU': 'Мы болеем за тебя!',
+    'AR': 'نحن ندعمك!',
+    'HI': 'हम आपका समर्थन करते हैं!',
+    'VI': 'Chúng tôi cổ vũ cho bạn!',
+    'ES': '¡Te apoyamos!',
+    'TH': 'เราเป็นกำลังใจให้คุณ!',
+  };
 
   @override
   void initState() {
     super.initState();
 
-    // ⏳ [명칭: 18초 체인 타임라인 제어기] - 3초 단위 시퀀스 구동 설계
-    _cheeringController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 18),
+    const Color brandGolden = Color(0xFFE5C158);
+
+    final bool foreignMode = _isForeignSelected;
+    _totalStages = foreignMode ? 2 : 3;
+
+    _stageTexts = [];
+    _stageStyles = [];
+
+    // 1단계: 브랜드명 (모든 언어 공통, 원본의 두꺼운 5중 그림자 스타일 완전 동일 유지)
+    _stageTexts.add(_brandText);
+    _stageStyles.add(GoogleFonts.nanumMyeongjo(
+      color: brandGolden,
+      fontSize: 23,
+      fontWeight: FontWeight.w900,
+      shadows: [
+        Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(-1.5, -1.5)),
+        Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(1.5, -1.5)),
+        Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(1.5, 1.5)),
+        Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(-1.5, 1.5)),
+        Shadow(color: Colors.black87, blurRadius: 20, offset: const Offset(4, 4)),
+      ],
+    ));
+
+    // 나머지 단계: 응원 문구 (원본의 단일 그림자 스타일, 폰트크기 23, 굵게, 황금색 완전 동일 유지)
+    final TextStyle cheerBaseStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 23,
+      color: brandGolden,
+      shadows: const [Shadow(color: Colors.black87, blurRadius: 15, offset: Offset(2, 2))],
     );
 
-    // 🔤 [명칭: GKE StudyUp이 줌인/아웃 스케일 필터]
-    _firstWordScale = TweenSequence<double>([
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 16.6), // 0~3초: 줌인
-      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),                                                  // 3~6초: 멈춤
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: 16.6),  // 6~9초: 줌아웃
-      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.2),                                                  // 9~18초: 대기
-    ]).animate(_cheeringController);
+    if (foreignMode) {
+      final String cheerText = _cheerForeign[DkeLang.current] ?? _cheerEn;
+      _stageTexts.add(cheerText);
+      _stageStyles.add(GoogleFonts.notoSans(textStyle: cheerBaseStyle));
+    } else {
+      _stageTexts.add(_cheerKo);
+      _stageStyles.add(GoogleFonts.notoSansKr(textStyle: cheerBaseStyle));
+      _stageTexts.add(_cheerEn);
+      _stageStyles.add(GoogleFonts.notoSerif(textStyle: cheerBaseStyle));
+    }
 
-    // 🔤 [명칭: GKE StudyUp이 투명도 디졸브 필터]
-    _firstWordOpacity = TweenSequence<double>([
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 16.6), // 0~3초: 페이드인
-      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),          // 3~6초: 고정
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 16.6), // 6~9초: 페이드아웃
-      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.2),          // 9~18초: 소멸
-    ]).animate(_cheeringController);
+    // ⏳ [명칭: 단계별 체인 타임라인 제어기] - 단계 하나당 9초(3초 줌인+3초 정지+3초 줌아웃),
+    // 전체 길이는 (9초 × 단계 수)로 자동 확장/축소됨 (기존 2단계=18초 리듬은 완전히 그대로 유지)
+    _cheeringController = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 9 * _totalStages),
+    );
 
-    // 🇰🇷 [명칭: 응원 합니다 줌인/아웃 스케일 필터]
-    _secondWordScale = TweenSequence<double>([
-      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.0),                                                  // 0~9초: 대기
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 16.6), // 9~12초: 줌인
-      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),                                                  // 12~15초: 멈춤
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: 16.8),  // 15~18초: 줌아웃
-    ]).animate(_cheeringController);
-
-    // 🇰🇷 [명칭: 응원 합니다 투명도 디졸브 필터]
-    _secondWordOpacity = TweenSequence<double>([
-      TweenSequenceItem<double>(tween: ConstantTween<double>(0.0), weight: 50.0),          // 0~9초: 대기
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 16.6), // 9~12초: 페이드인
-      TweenSequenceItem<double>(tween: ConstantTween<double>(1.0), weight: 16.6),          // 12~15초: 고정
-      TweenSequenceItem<double>(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 16.8), // 15~18초: 페이드아웃
-    ]).animate(_cheeringController);
+    _stageScales = [];
+    _stageOpacities = [];
+    for (int i = 0; i < _totalStages; i++) {
+      _stageScales.add(_buildSlotScale(i, _totalStages));
+      _stageOpacities.add(_buildSlotOpacity(i, _totalStages));
+    }
 
     // ⚡ [명칭: 진입 정각 즉시 가동 스케줄러] - 폰 아이콘 누르자마자 0초 만에 시동 거는 트리거
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -126,6 +175,42 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
     });
   }
 
+  // 🆕 [12개국 다국어 연동] 전체 타임라인을 단계 수(totalSlots)만큼 균등 분할하고,
+  // 각 단계 구간 안에서 원본과 동일하게 줌인(1/3)-정지(1/3)-줌아웃(1/3) 패턴을 적용하는 스케일 애니메이션 생성기.
+  // 기존 2단계(18초, 9초씩) 구조와 완전히 동일한 리듬을 유지하면서 단계 수만 가변으로 늘릴 수 있도록 일반화함.
+  Animation<double> _buildSlotScale(int slotIndex, int totalSlots) {
+    final double slotWeight = 100.0 / totalSlots;
+    final double third = slotWeight / 3;
+    final double before = slotWeight * slotIndex;
+    final double after = 100.0 - before - slotWeight;
+
+    final List<TweenSequenceItem<double>> items = [];
+    if (before > 0.01) items.add(TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: before));
+    items.add(TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)), weight: third));
+    items.add(TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: third));
+    items.add(TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInCubic)), weight: third));
+    if (after > 0.01) items.add(TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: after));
+
+    return TweenSequence<double>(items).animate(_cheeringController);
+  }
+
+  // 🆕 [12개국 다국어 연동] 위와 동일한 구간 분할로 투명도(디졸브) 애니메이션 생성 (원본 로직과 동일한 페이드 형태)
+  Animation<double> _buildSlotOpacity(int slotIndex, int totalSlots) {
+    final double slotWeight = 100.0 / totalSlots;
+    final double third = slotWeight / 3;
+    final double before = slotWeight * slotIndex;
+    final double after = 100.0 - before - slotWeight;
+
+    final List<TweenSequenceItem<double>> items = [];
+    if (before > 0.01) items.add(TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: before));
+    items.add(TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 1.0), weight: third));
+    items.add(TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: third));
+    items.add(TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 0.0), weight: third));
+    if (after > 0.01) items.add(TweenSequenceItem(tween: ConstantTween<double>(0.0), weight: after));
+
+    return TweenSequence<double>(items).animate(_cheeringController);
+  }
+
   @override
   void dispose() {
     _cheeringController.dispose(); // 👑 [역할: 자원 해제] 백그라운드 스레드 유령 구동 완전 차단
@@ -134,8 +219,6 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    const Color brandGolden = Color(0xFFE5C158); // GKE STUDYUP 전역 황금 컬러 스펙 동기화
-
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
       body: Stack(
@@ -157,53 +240,20 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
                 alignment: Alignment.center,
                 child: Stack(
                   alignment: Alignment.center,
-                  children: [
-                    // 🔤 [명칭: 1단계 자막 - GKE StudyUp이 가동부]
-                    FadeTransition(
-                      opacity: _firstWordOpacity,
+                  // 🆕 [12개국 다국어 연동] 단계 수(_totalStages)만큼 자막을 동적으로 생성 (레이아웃/스타일 구조는 원본 그대로)
+                  children: List.generate(_totalStages, (i) {
+                    return FadeTransition(
+                      opacity: _stageOpacities[i],
                       child: ScaleTransition(
-                        scale: _firstWordScale,
+                        scale: _stageScales[i],
                         child: Text(
-                          'GKE StudyUp이',
+                          _stageTexts[i],
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.nanumMyeongjo(
-                            color: brandGolden,
-                            fontSize: 23,
-                            // 1. 글자 자체를 가장 두꺼운 등급(w900)으로 상승
-                            fontWeight: FontWeight.w900,
-                            shadows: [
-                              // 2. 글자 뒤편에 진한 외곽선을 겹쳐서 물리적으로 더 두껍게 확장
-                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(-1.5, -1.5)),
-                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(1.5, -1.5)),
-                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(1.5, 1.5)),
-                              Shadow(color: Colors.black, blurRadius: 2, offset: const Offset(-1.5, 1.5)),
-                              Shadow(color: Colors.black87, blurRadius: 20, offset: const Offset(4, 4)),
-                            ],
-                          ),
+                          style: _stageStyles[i],
                         ),
                       ),
-                    ),
-
-                    // 🇰🇷 [명칭: 2단계 자막 - 응원 합니다 가동부]
-                    FadeTransition(
-                      opacity: _secondWordOpacity,
-                      child: ScaleTransition(
-                        scale: _secondWordScale,
-                        child: Text(
-                          '응원 합니다',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.notoSansKr( // 규칙 8: 한글 서체 노토산스 단일화
-                            color: brandGolden,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 23, // 규칙 8: 강조 타이틀 크기 23 고정
-                            shadows: const [
-                              Shadow(color: Colors.black87, blurRadius: 15, offset: Offset(2, 2)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  }),
                 ),
               ),
             ),
@@ -240,6 +290,8 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
 
 // -----------------------------------------
 // [2] 회원가입 / 로그인 화면 (체크박스 상태 유지를 위해 StatefulWidget으로 완벽 세공 및 승격)
+// 🆕 [12개국 다국어 연동] 2026-07-29 수정: 태그라인/입력힌트/기억하기문구/버튼/환영오버레이
+//   총 6곳을 DkeLang 게터로 교체. 디자인/레이아웃/색상/폰트/크기는 100% 원본 동일 유지.
 // -----------------------------------------
 class LoginSignupScreen extends StatefulWidget {
   const LoginSignupScreen({super.key});
@@ -300,7 +352,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    '노력하는 너를 응원하는 별이 되어 줄게',
+                    DkeLang.loginTagline, // 🆕 [12개국 다국어] 원문: '노력하는 너를 응원하는 별이 되어 줄게'
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.gowunBatang(
                       fontSize: 16,
                       color: Colors.white.withOpacity(0.85),
@@ -360,12 +413,12 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   ),
                   const SizedBox(height: 45),
                   _buildCustomTextField(
-                    hintText: 'Email Address',
+                    hintText: DkeLang.emailHint, // 🆕 [12개국 다국어] 원문: 'Email Address'
                     icon: Icons.mail_outline_rounded,
                   ),
                   const SizedBox(height: 15),
                   _buildCustomTextField(
-                    hintText: 'Password',
+                    hintText: DkeLang.passwordHint, // 🆕 [12개국 다국어] 원문: 'Password'
                     icon: Icons.lock_outline,
                     isPassword: true,
                   ),
@@ -394,20 +447,26 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
 
                       const SizedBox(width: 4), // 네모 박스와 글자 사이 미세 여백 단속
 
-                      Text(
-                        "이메일 / 패스워드 기억하기",
-                        style: GoogleFonts.gowunBatang( // 프로젝트 시그니처 서체 '고운바탕' 완벽 일치화
-                          color: Colors.white.withOpacity(0.85),
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ), // end of GoogleFonts
-                      ), // end of Text
+                      // 🆕 [오버플로우 방지] 2026-07-29 수정: Expanded로 남은 폭만큼만 차지하도록 제한하고,
+                      // 넘치는 텍스트는 1줄 유지 + 말줄임표(...) 처리. 폰트/색상/크기는 원본과 100% 동일.
+                      Expanded(
+                        child: Text(
+                          DkeLang.rememberMe, // 🆕 [12개국 다국어] 원문: "이메일 / 패스워드 기억하기"
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.gowunBatang( // 프로젝트 시그니처 서체 '고운바탕' 완벽 일치화
+                            color: Colors.white.withOpacity(0.85),
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ), // end of GoogleFonts
+                        ), // end of Text
+                      ), // end of Expanded
                     ], // end of Row children
                   ), // end of Row
 
                   const SizedBox(height: 25), // 📐 네모 박스와 아래 'CREATE ACCOUNT' 버튼 사이의 최적 황금 마진 확보
                   _buildGradientButton(
-                    title: 'CREATE ACCOUNT (회원가입)',
+                    title: DkeLang.createAccountBtn, // 🆕 [12개국 다국어] 원문: 'CREATE ACCOUNT (회원가입)'
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -417,7 +476,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   ),
                   const SizedBox(height: 15),
                   _buildOutlineButton(
-                    title: 'SIGN IN (로그인)',
+                    title: DkeLang.signInBtn, // 🆕 [12개국 다국어] 원문: 'SIGN IN (로그인)'
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -583,7 +642,7 @@ class _SmoothWelcomeOverlayWidgetState extends State<_SmoothWelcomeOverlayWidget
                   child: SafeArea(
                     top: false,
                     child: Text(
-                      'Welcome to GKE STUDYUP! ( GKE STUDYUP에 들어 오신것을 환영합니다 )',
+                      DkeLang.welcomeOverlay, // 🆕 [12개국 다국어] 원문: 'Welcome to GKE STUDYUP! (...)'
                       textAlign: TextAlign.center,
                       style: GoogleFonts.notoSansKr(
                         color: Colors.white,

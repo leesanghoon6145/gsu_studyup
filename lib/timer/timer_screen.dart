@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // 👑 파일 트리 구조 분석에 따른 무결점 순정 상대 경로 임포트 고정 완료
 import '../square/my_page_screen.dart';
 import '../planner/widgets/study_timelines.dart'; // 타임라인 연동용 임포트
+import '../star_economy.dart'; // 🆕 [별 경제 시스템] 별 적립 속도/누적저장/레벨계산을 한 곳에서 관리
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -60,6 +61,12 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   int _animationCycleSeconds = 0;
   bool _showVipOverlay = false;
 
+  // 🆕 [별 경제 시스템] 실시간 자동 적립 카운터 - DkeStars.starAccrualInterval 마다 별 1개씩 즉시 저장.
+  // 30분 단위로 몰아서 저장하지 않고, 적립 주기 그대로 바로 SharedPreferences에 반영해서
+  // 앱이 중간에 꺼져도 이미 적립된 별은 안전하게 보존됨.
+  int _secondsSinceLastStarAccrual = 0;
+  int _starsEarnedThisSession = 0;
+
   late String _currentUniversity;
   String _currentLanguageCode = 'ko';
   bool _currentIsVip = false; // 👈 🎯 영구 동기화용 실시간 VIP 상태 필터 스펙 추가
@@ -70,7 +77,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _totalSeconds = widget.selectedDurationMinutes * 60;
+    _totalSeconds = widget.selectedDurationMinutes;
 
     // 초기값 셋팅
     _currentUniversity = widget.targetUniversity;
@@ -85,11 +92,35 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
     _cueAudioPlayer = AudioPlayer(); // [추가]
 
+    // 🆕 [버그 수정] 시험 일정을 SharedPreferences에 실제로 저장.
+    // 기존엔 targetExamDate/needTimelineGen 등이 이 화면의 파라미터로만 존재하고 저장이 안 되어서,
+    // planning_screen.dart의 학사 타임라인과 home_dashboard_screen.dart의 D-day 팝업이
+    // 둘 다 "시험 일정 없음" 상태로 판정되어 아예 동작하지 않았음.
+    _persistExamScheduleToPrefs();
+
     // ⚡ [0초 정각 초강력 동기화 트리거]: 화면이 픽셀로 안착하자마자 기기 저장 데이터를 강제 복원
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _forceSyncSavedDataOnStartup();
       _checkResumeInterceptionData();
     });
+  }
+
+  // 🆕 [버그 수정] planning_screen.dart / home_dashboard_screen.dart가 읽는 것과 동일한 키로 저장.
+  // 이 저장이 빠져있어서 D-day 팝업이 조건상 항상 "시험 일정 없음"으로 판정되고 있었음.
+  Future<void> _persistExamScheduleToPrefs() async {
+    if (widget.targetExamDate == null) return; // 시험 일정 없이 들어온 일반 학습 세션이면 저장하지 않음
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('gke_selected_exam_type', widget.dynamicTestTitle);
+      await prefs.setString('gke_exam_start_date', widget.targetExamDate!.toIso8601String());
+      if (widget.targetExamEndDate != null) {
+        await prefs.setString('gke_exam_end_date', widget.targetExamEndDate!.toIso8601String());
+      }
+      await prefs.setString('gke_exam_prep_period', widget.prepPeriodStr);
+      await prefs.setBool('gke_exam_timeline_enabled', widget.needTimelineGen);
+    } catch (e) {
+      debugPrint("[TimerScreen] 시험 일정 저장 실패: $e");
+    }
   }
 
   void _onDateChanged(DateTime newDate) {
@@ -245,6 +276,57 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     }
   }
 
+  // ============================================================================
+  // 🆕 [별 경제 시스템] 실시간 자동 별 적립 체크.
+  // Timer.periodic 1초 틱마다 호출되며, DkeStars.starAccrualInterval(지금 1초, 실사용 시 1분)에
+  // 도달할 때마다 별 1개를 즉시 DkeStars에 저장합니다. 30분 몰아서 저장하지 않고 그때그때 저장하므로
+  // 앱이 중간에 꺼져도 이미 적립된 별은 안전합니다.
+  // ============================================================================
+  void _checkAndAccrueStar() {
+    _secondsSinceLastStarAccrual++;
+    final int intervalSeconds = DkeStars.starAccrualInterval.inSeconds;
+    if (intervalSeconds <= 0) return;
+
+    if (_secondsSinceLastStarAccrual >= intervalSeconds) {
+      _secondsSinceLastStarAccrual = 0;
+      _starsEarnedThisSession += 1;
+      // 저장 자체는 비동기로 흘려보내되(화면 끊김 없게), 실패해도 다음 틱에서 계속 누적되므로 안전.
+      DkeStars.addStars(1, subject: widget.selectedSubject);
+    }
+  }
+
+  // ============================================================================
+  // 🆕 [알람 순서 보장] 학습 시작 알림음(start_bell.mp3, 13초)이 실제로 "재생 완료"될 때까지
+  // 이벤트 기반으로 기다린 뒤, 다음 단계(백색소음 재생)로 넘어가는 헬퍼.
+  // 기존엔 고정된 ms(600ms)만큼 기다렸다가 넘어가서, 벨소리 파일 실제 길이와 안 맞으면
+  // 백색소음이 벨소리를 덮어버리거나(너무 짧게 기다림) 어색한 정적이 생기는(너무 길게 기다림) 문제가 있었음.
+  // onPlayerComplete 이벤트를 직접 기다리므로 벨소리 파일 길이가 바뀌어도 항상 정확히 이어짐.
+  // 혹시 이벤트가 발생하지 않는 예외 상황을 대비해 최대 15초 안전장치(timeout)를 둠.
+  // ============================================================================
+  Future<void> _playStartBellAndWait() async {
+    try {
+      final Completer<void> completer = Completer<void>();
+      late final StreamSubscription<void> sub;
+      sub = _cueAudioPlayer.onPlayerComplete.listen((event) {
+        sub.cancel();
+        if (!completer.isCompleted) completer.complete();
+      });
+
+      await _cueAudioPlayer.play(AssetSource('sounds/start_bell.mp3'));
+
+      // 혹시 onPlayerComplete가 발생하지 않는 예외 상황 대비, 안전장치(timeout).
+      // start_bell.mp3가 13초이므로 그보다 넉넉한 15초로 설정 (너무 짧으면 정상 재생 중에도 잘릴 위험).
+      await completer.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          sub.cancel();
+        },
+      );
+    } catch (e) {
+      debugPrint("시작 알림음 재생 대기 오류: $e");
+    }
+  }
+
   void _toggleTimer() async {
     try {
       if (_isRunning) {
@@ -255,10 +337,9 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         _showPauseChoiceDialog();
       } else {
         setState(() => _isRunning = true);
-        // [추가] 학습 시작 알림음 (트랙 공통 1개)
+        // 🆕 [알람 순서 보장] 학습 시작 알림음이 실제로 끝날 때까지 기다린 뒤 백색소음 재생
         if (_elapsedSeconds == 0) {
-          await _cueAudioPlayer.play(AssetSource('sounds/stars_bell.mp3'));
-          await Future.delayed(const Duration(milliseconds: 600)); // [수정] 600ms→1500ms로 늘려 백색소음에 묻히지 않게 함
+          await _playStartBellAndWait();
         }
         if (widget.selectedSoundFile.isNotEmpty) {
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
@@ -280,11 +361,12 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               _elapsedSeconds++;
               progressPercent = _elapsedSeconds / _totalSeconds;
               _runVipStarStrictRotationEngine();
+              _checkAndAccrueStar(); // 🆕 [별 경제 시스템] 실시간 자동 적립 체크
             } else {
               _timer?.cancel();
               _isRunning = false;
               _timerAudioPlayer.stop();
-              // [추가] 학습 종료(목표 달성) 알림음 (트랙 공통 1개)
+              // [추가] 학습 종료(목표 달성) 알림음 (트랙 공통 1개) - 백색소음 정지 후 반드시 재생됨
               _cueAudioPlayer.play(AssetSource('sounds/end_bell.mp3'));
               _showCompletionDialog();
             }
@@ -434,6 +516,10 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     String? selectedFocus;
     String? selectedCondition;
     bool? isIncorrectNoted;
+    // 🆕 [기록 유형 구분] 개념강의만 들은 경우엔 점수가 없을 수 있으므로,
+    // "강의"와 "평가"를 먼저 구분해서 강의는 세부 유형만, 평가는 기존처럼 점수를 기록하도록 분기함.
+    String? selectedRecordType; // '강의' 또는 '평가'
+    String? selectedLectureSubType; // '개념강의' 또는 '단원정리 및 문제해설' (강의일 때만 사용)
 
     showDialog(
       context: context,
@@ -443,14 +529,23 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         child: StatefulBuilder(
           builder: (context, setDialogState) {
 
+            // 🆕 [기록 유형 구분] "평가"일 때만 점수(SCORE)를 필수로 요구.
+            // "강의"일 때는 세부 유형(개념강의/단원정리 및 문제해설) 선택을 필수로 요구.
+            // "오답노트 상태"는 평가이거나, 강의 중 "단원정리 및 문제해설"(문제를 실제로 풀어본 경우)일 때만 필요.
+            final bool needsIncorrectNoteField = selectedRecordType == '평가' ||
+                (selectedRecordType == '강의' && selectedLectureSubType == '단원정리 및 문제해설');
+
             bool isAllFilled = detailController.text.trim().isNotEmpty &&
-                scoreController.text.trim().isNotEmpty &&
                 nextGoalController.text.trim().isNotEmpty &&
                 selectedUnderstanding != null &&
                 selectedDifficulty != null &&
                 selectedFocus != null &&
                 selectedCondition != null &&
-                isIncorrectNoted != null;
+                selectedRecordType != null &&
+                (selectedRecordType == '평가'
+                    ? scoreController.text.trim().isNotEmpty
+                    : selectedLectureSubType != null) &&
+                (!needsIncorrectNoteField || isIncorrectNoted != null);
 
             void autoScrollNext(double offset) {
               Future.delayed(const Duration(milliseconds: 100), () {
@@ -490,6 +585,63 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
+                      // 🆕 [기록 유형 구분] 강의(개념강의/단원정리)만 들은 경우엔 점수가 없을 수 있으므로,
+                      // 먼저 "강의"인지 "평가"인지 선택하게 하고, 이에 따라 아래 항목이 달라짐.
+                      Text('RECORD TYPE (기록 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: ['강의', '평가'].map((type) {
+                          final bool isSel = selectedRecordType == type;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              label: Text(
+                                type == '강의' ? '강의 (Lecture)' : '평가 (Evaluation)',
+                                style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              selected: isSel,
+                              selectedColor: brandGolden,
+                              backgroundColor: const Color(0xFF050B14),
+                              onSelected: (_) {
+                                setDialogState(() {
+                                  selectedRecordType = type;
+                                  if (type == '평가') {
+                                    selectedLectureSubType = null; // 평가로 바꾸면 강의 세부유형 초기화
+                                  } else {
+                                    scoreController.clear(); // 강의로 바꾸면 점수 입력값 초기화
+                                  }
+                                });
+                                autoScrollNext(140.0);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                      // 🆕 [기록 유형 구분] "강의" 선택 시에만 세부 유형(개념강의/단원정리 및 문제해설) 선택 노출
+                      if (selectedRecordType == '강의') ...[
+                        const SizedBox(height: 12),
+                        Text('LECTURE TYPE (강의 세부 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6.0,
+                          children: ['개념강의', '단원정리 및 문제해설'].map((val) {
+                            final bool isSel = selectedLectureSubType == val;
+                            return ChoiceChip(
+                              label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                              selected: isSel,
+                              selectedColor: brandGolden,
+                              backgroundColor: const Color(0xFF050B14),
+                              onSelected: (_) {
+                                setDialogState(() => selectedLectureSubType = val);
+                                autoScrollNext(180.0);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
                       Text('DETAILS (상세 내용) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       TextField(
@@ -509,71 +661,77 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       ),
                       const SizedBox(height: 16),
 
-                      Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: scoreController,
-                        keyboardType: TextInputType.number,
-                        style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        onChanged: (_) => setDialogState(() {}),
-                        onSubmitted: (_) => autoScrollNext(180.0),
-                        decoration: InputDecoration(
-                          hintText: '100',
-                          hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
-                          suffixText: 'Points (점)',
-                          suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFF050B14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      // 🆕 [기록 유형 구분] "평가"일 때만 SCORE 필드 노출 (강의는 점수 없음)
+                      if (selectedRecordType == '평가') ...[
+                        Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: scoreController,
+                          keyboardType: TextInputType.number,
+                          style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          onChanged: (_) => setDialogState(() {}),
+                          onSubmitted: (_) => autoScrollNext(180.0),
+                          decoration: InputDecoration(
+                            hintText: '100',
+                            hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
+                            suffixText: 'Points (점)',
+                            suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
+                            filled: true,
+                            fillColor: const Color(0xFF050B14),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ],
 
-                      Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      Container(
-                        decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: InkWell(
-                                onTap: () {
-                                  setDialogState(() => isIncorrectNoted = true);
-                                  autoScrollNext(260.0);
-                                },
-                                child: Container(
-                                  alignment: Alignment.center,
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  decoration: BoxDecoration(
-                                      color: isIncorrectNoted == true ? brandGolden : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(8)
+                      // 🆕 [기록 유형 구분] 평가이거나, 강의 중 "단원정리 및 문제해설"(문제풀이 포함)일 때만 노출
+                      if (needsIncorrectNoteField) ...[
+                        Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Container(
+                          decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () {
+                                    setDialogState(() => isIncorrectNoted = true);
+                                    autoScrollNext(260.0);
+                                  },
+                                  child: Container(
+                                    alignment: Alignment.center,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                        color: isIncorrectNoted == true ? brandGolden : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8)
+                                    ),
+                                    child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                   ),
-                                  child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: InkWell(
-                                onTap: () {
-                                  setDialogState(() => isIncorrectNoted = false);
-                                  autoScrollNext(260.0);
-                                },
-                                child: Container(
-                                  alignment: Alignment.center,
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  decoration: BoxDecoration(
-                                      color: isIncorrectNoted == false ? brandGolden : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(8)
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () {
+                                    setDialogState(() => isIncorrectNoted = false);
+                                    autoScrollNext(260.0);
+                                  },
+                                  child: Container(
+                                    alignment: Alignment.center,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                        color: isIncorrectNoted == false ? brandGolden : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8)
+                                    ),
+                                    child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                   ),
-                                  child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ], // needsIncorrectNoteField 조건부 블록 닫힘
 
                       Text('UNDERSTANDING (이해도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
@@ -708,13 +866,20 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       final String subjectKey = "dke_history_${widget
                           .selectedSubject}";
 
+                      // 🆕 [기록 유형 구분] "강의"(특히 개념강의) 기록은 실제 점수가 없으므로
+                      // score/incorrectNote를 0이나 임의값으로 채우지 않고 null로 저장함.
+                      // (0을 저장하면 나중에 성취도 화면의 평균 점수 계산에 실제 0점처럼 섞여 통계가 왜곡됨)
                       final Map<String, dynamic> dkeFinalPacket = {
                         'subject': widget.selectedSubject,
+                        'recordType': selectedRecordType, // '강의' 또는 '평가'
+                        'lectureSubType': selectedLectureSubType, // '개념강의' / '단원정리 및 문제해설' (강의일 때만)
                         'details': detailController.text.trim(),
-                        'score': int.tryParse(scoreController.text.trim()) ?? 0,
-                        'incorrectNote': isIncorrectNoted == true
-                            ? '정리함'
-                            : '정리 안함',
+                        'score': selectedRecordType == '평가'
+                            ? (int.tryParse(scoreController.text.trim()) ?? 0)
+                            : null,
+                        'incorrectNote': needsIncorrectNoteField
+                            ? (isIncorrectNoted == true ? '정리함' : '정리 안함')
+                            : null,
                         'understanding': selectedUnderstanding,
                         'difficulty': selectedDifficulty,
                         'concentration': selectedFocus,
@@ -729,11 +894,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       subjectHistoryList.add(jsonEncode(dkeFinalPacket));
                       await prefs.setStringList(subjectKey, subjectHistoryList);
 
-                      // [추가] 별 계산 및 누적 저장 (학습 시간만큼, 자동완주/조기종료 모두 동일하게 여기서 처리됨)
-                      final int earnedStars = _calcStarsFromSeconds(
-                          _elapsedSeconds);
-                      final int newAllTimeTotal = await _saveStarsAndGetTotal(
-                          earnedStars);
+                      // 🆕 [별 경제 시스템] 별은 이미 학습 중 실시간으로 DkeStars에 적립/저장되어 있으므로
+                      // 여기서는 다시 계산해서 더하지 않고, 이번 세션에서 쌓인 값 + 현재 전체 누적치만 조회함.
+                      // (기존 _calcStarsFromSeconds/_saveStarsAndGetTotal은 이중 적립을 막기 위해 제거하고 DkeStars로 통합함)
+                      final int earnedStars = _starsEarnedThisSession;
+                      final int newAllTimeTotal = await DkeStars.getTotalStars();
 
                       if (!mounted) return;
                       Navigator.of(context).pop();
@@ -801,35 +966,6 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     String secStr = secs < 10 ? "0$secs" : "$secs";
     return "00:$minStr:$secStr";
   }
-// [추가] 학습 시간(초) → 별 개수 환산 (1분=1개, 30초 이상 남으면 1개 추가 반올림)
-  int _calcStarsFromSeconds(int seconds) {
-    int minutes = seconds ~/ 60;
-    int remainSeconds = seconds % 60;
-    if (remainSeconds >= 30) minutes += 1;
-    return minutes;
-  }
-
-  // [추가] 별 저장: 오늘 합계 + 전체 누적 합계 (SharedPreferences 기반, 추후 서버 연동 시 이 함수만 교체하면 됨)
-  Future<int> _saveStarsAndGetTotal(int earnedStars) async {
-    if (earnedStars <= 0) return 0;
-    final prefs = await SharedPreferences.getInstance();
-
-    final DateTime now = DateTime.now();
-    final String todayKey = 'stars_daily_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-
-    final int todayStars = (prefs.getInt(todayKey) ?? 0) + earnedStars;
-    await prefs.setInt(todayKey, todayStars);
-
-    final int allTimeStars = (prefs.getInt('stars_all_time_total') ?? 0) + earnedStars;
-    await prefs.setInt('stars_all_time_total', allTimeStars);
-
-    // [추가] 과목별 누적도 함께 기록 (개인성취도 화면에서 과목별 통계 필요시 사용)
-    final String subjectKey = 'stars_subject_${widget.selectedSubject}';
-    final int subjectStars = (prefs.getInt(subjectKey) ?? 0) + earnedStars;
-    await prefs.setInt(subjectKey, subjectStars);
-
-    return allTimeStars;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -870,7 +1006,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                         const Icon(Icons.star, color: Color(0xFFE5C158), size: 16),
                         const SizedBox(width: 6),
-                        Text("${_elapsedSeconds ~/ 60}분 / ${widget.selectedDurationMinutes}분 진행중",)
+                        Text("배속 실험 모드 가동 :  $_elapsedSeconds / ${widget.selectedDurationMinutes} Secs", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                       ]),
                       const SizedBox(height: 1.0),
                       Text(_formatDisplayTime(_elapsedSeconds), style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9)),
@@ -882,7 +1018,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         Row(children: [Expanded(child: Text("🔊 ${widget.selectedSubject}", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))]),
                         const SizedBox(height: 4),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                          Text("실시간 집중 모드", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text("실시간 집중 모드 (실험)", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
                           Text("목표 시간: ${widget.selectedDurationMinutes}분", textAlign: TextAlign.end, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
                         ]),
                         const SizedBox(height: 10),
@@ -957,7 +1093,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                   child: FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Text(
-                                        "${currentInterval.toStringAsFixed(1)}분\n($currentPercentage%)",
+                                        "${currentInterval.toStringAsFixed(1)}초\n($currentPercentage%)",
                                         textAlign: TextAlign.center,
                                         style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.2)
                                     ),

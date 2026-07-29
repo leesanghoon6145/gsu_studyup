@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:audioplayers/audioplayers.dart'; // 🆕 [백색소음 선택] 미리듣기 재생용
+import 'dart:async'; // 🆕 [백색소음 선택] 미리듣기 자동정지 Timer용
 import '../../planner/widgets/study_timelines.dart';
 import '../../timer/timer_screen.dart';
-import '../../services/timer2_services.dart';
 
 class AcademicTimelineScreen extends StatefulWidget {
   const AcademicTimelineScreen({super.key});
@@ -60,16 +61,45 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   DateTime? _examEndDate; // [추가] 시험 종료일
   int? _manualExamPrepWeek; // [추가] 4/3/2주 수동 선택 (null=날짜 자동계산)
   bool _isExamSettingExpanded = true;
+  bool _isExamDaySettingExpanded = true; // 🆕 [시험당일] EXAM INFO 접기/펴기 상태
   final List<Map<String, String>> _customExamRecords = [];
 
   final Map<String, List<Map<String, String>>> _customSchedules = {};
   int? _selectedScheduleIndex; // [추가] 사용자가 선택한 시간표 항목의 인덱스
+
+  // ============================================================
+  // 🆕 [백색소음 선택] "START TIMER" 팝업에서 선택하는 백색소음 목록.
+  // home_dashboard_screen.dart와 동일한 asset 파일 및 디자인을 사용.
+  // ============================================================
+  String _selectedSoundFile = '';
+  String _previewingSoundDisplayName = '';
+  late AudioPlayer _previewAudioPlayer;
+  Timer? _previewTimer;
+
+  final List<Map<String, String>> _whiteNoiseSounds = [
+    {'en': 'Crickets', 'ko': '귀뚜라미 소리', 'file': 'crickets.mp3'},
+    {'en': 'Spring Morning', 'ko': '봄 아침소리', 'file': 'spring_morning.mp3'},
+    {'en': 'Forest Birds', 'ko': '숲속의 새소리', 'file': 'forest_birds.mp3'},
+    {'en': 'Cool Rain', 'ko': '시원한 빗소리', 'file': 'cool_rain.mp3'},
+    {'en': 'Clear Stream', 'ko': '맑은 시냇물', 'file': 'clear_stream.mp3'},
+    {'en': 'Blue Waves', 'ko': '푸른 파도소리', 'file': 'blue_waves.mp3'},
+  ];
 
   @override
   void initState() {
     super.initState();
     _initAutoWeekday();
     _loadAllSettings();
+    _previewAudioPlayer = AudioPlayer(); // 🆕 [백색소음 선택] 미리듣기 전용 플레이어 초기화
+    _previewAudioPlayer.setReleaseMode(ReleaseMode.stop);
+  }
+
+  @override
+  void dispose() {
+    _previewTimer?.cancel();
+    _previewAudioPlayer.stop();
+    _previewAudioPlayer.dispose();
+    super.dispose();
   }
 
   void _initAutoWeekday() {
@@ -145,6 +175,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } else {
       await prefs.remove('gke_exam_end_date');
     }
+    // 🆕 [D-day 팝업 근본 수정] 이 함수가 시험 날짜를 저장하는 진짜 원천 지점인데,
+    // 여태까지 여기서 gke_exam_timeline_enabled를 저장하는 코드가 아예 없었음.
+    // 그래서 "시험준비/시험당일" 탭에서 날짜만 등록하고 타이머를 안 켠 경우,
+    // 이 값이 계속 false로 남아 D-day 팝업이 항상 꺼져 있었던 것으로 확인됨.
+    // 시작일이 있으면 true, 없으면(삭제되면) false로 자동 설정.
+    await prefs.setBool('gke_exam_timeline_enabled', _examStartDate != null);
   }
 
   // ============================================================
@@ -383,6 +419,19 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } catch (_) {}
     return false;
   }
+// [추가] "09:00 ~ 09:50" 형식에서 시작 시각만 분(分) 단위로 파싱 (항목 추가 시 시간순 삽입 위치 계산용)
+  int? _parseStartMinutes(String timeStr) {
+    try {
+      final parts = timeStr.split(RegExp(r'[-~–]'));
+      if (parts.isEmpty) return null;
+      final startParts = parts.first.trim().split(':');
+      if (startParts.length < 2) return null;
+      return int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+    } catch (_) {
+      return null;
+    }
+  }
+
 // [추가] "09:00 ~ 09:50" 형식에서 실제 분(分) 길이 계산 (자정 넘김 보정 포함)
   int? _calcDurationMinutes(String timeStr) {
     try {
@@ -398,6 +447,47 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } catch (_) {
       return null;
     }
+  }
+
+  // 🆕 [백색소음 선택] 팝업 안에서 10초간 미리듣기 재생/정지 토글
+  // (Future<void>로 선언해서 호출부에서 완료를 기다린 뒤 팝업을 다시 그리도록 함 -
+  //  기존엔 완료를 안 기다리고 팝업을 먼저 다시 그려서 탭이 한 번에 반영 안 되는 문제가 있었음)
+  Future<void> _handleSoundPreview(String displayName, String fileName) async {
+    try {
+      _previewTimer?.cancel();
+      await _previewAudioPlayer.stop();
+
+      if (_previewingSoundDisplayName == displayName) {
+        setState(() => _previewingSoundDisplayName = '');
+      } else {
+        setState(() => _previewingSoundDisplayName = displayName);
+        await _previewAudioPlayer.play(AssetSource('sounds/$fileName'));
+
+        _previewTimer = Timer(const Duration(seconds: 10), () async {
+          await _previewAudioPlayer.stop();
+          if (mounted) {
+            setState(() => _previewingSoundDisplayName = '');
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("오디오 미리듣기 재생 실패: $e");
+    }
+  }
+
+  // 🆕 [백색소음 선택] SELECT / UNSELECT 토글. 선택된 파일은 타이머 실행 시 그대로 전달됨.
+  // (Future<void>로 선언해서 호출부에서 완료를 기다린 뒤 팝업을 다시 그리도록 함)
+  Future<void> _handleSoundSelect(String fileName) async {
+    _previewTimer?.cancel();
+    await _previewAudioPlayer.stop();
+    setState(() {
+      _previewingSoundDisplayName = '';
+      if (_selectedSoundFile == fileName) {
+        _selectedSoundFile = '';
+      } else {
+        _selectedSoundFile = fileName;
+      }
+    });
   }
 
   // [추가] TIM 버튼 실행 로직: 사용자가 선택한 항목으로 TimerScreen 이동. 선택 없으면 안내
@@ -428,8 +518,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           targetExamDate: _examStartDate,
           targetExamEndDate: _examEndDate,
           prepPeriodStr: _manualExamPrepWeek != null ? '${_manualExamPrepWeek}주 전' : '',
-          needTimelineGen: false,
-          selectedSoundFile: '',
+          // 🆕 [D-day 팝업 버그 수정] 기존엔 이 값이 항상 false로 고정되어 있어서,
+          // 학사 타임라인에서 타이머를 실행할 때마다 gke_exam_timeline_enabled가 false로
+          // 덮어써지며 D-day 팝업이 통째로 꺼지는 문제가 있었음. 시험 시작일이 설정돼 있으면
+          // 자동으로 true가 되도록 수정.
+          needTimelineGen: _examStartDate != null,
+          selectedSoundFile: _selectedSoundFile, // 🆕 [백색소음 선택] 팝업에서 고른 소리를 그대로 전달
           isFinalExamMode: _isFinalExamMode,
         ),
       ),
@@ -448,208 +542,179 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       ),
     );
   }
-// [추가] TIM 버튼 팝업: 선택항목 실행 / 오늘 하루 전체 시작 / 닫기 (세로 배치)
+
+  // ============================================================
+  // 🆕 [수정] TIM 버튼 팝업: 백색소음 선택 목록 + 선택항목 실행 / 닫기
+  // ("오늘 하루 전체 시작" 기능은 실제 타이머와 연동되지 않는 문제로 인해 삭제하고,
+  //  대신 실제로 즉시 체감되는 백색소음 선택 기능을 그 자리에 추가함)
+  // ============================================================
   void _showTimActionPopup(List<Map<String, String>> Function() scheduleGetter) {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0B0F19),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.0),
-            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
-          ),
-          title: Text(
-            'START TIMER / 타이머 시작',
-            style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            '어떤 방식으로 시작하시겠습니까?',
-            style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13),
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          actions: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: goldColor),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+        return StatefulBuilder(
+          builder: (context, setPopupState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0B0F19),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.0),
+                side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+              ),
+              title: Text(
+                'START TIMER / 타이머 시작',
+                style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'White Noise Selection / 백색소음 선택',
+                        style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '학습 시작 시 시작 알림음 다음에 이어서 재생됩니다. (선택 안 해도 됩니다)',
+                        style: GoogleFonts.notoSerif(color: slate400, fontSize: 11),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._whiteNoiseSounds.map((snd) {
+                        final String displayName = '${snd['en']} (${snd['ko']})';
+                        final String fileName = snd['file']!;
+                        final bool isSelected = _selectedSoundFile == fileName;
+                        final bool isPreviewing = _previewingSoundDisplayName == displayName;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? goldColor : const Color(0xFF0D1527),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: isSelected ? goldColor : Colors.white12, width: 1.2),
+                          ),
+                          child: Row(
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  await _handleSoundPreview(displayName, fileName);
+                                  if (context.mounted) setPopupState(() {});
+                                },
+                                icon: Icon(
+                                  isPreviewing ? Icons.stop_circle_rounded : Icons.play_circle_fill_rounded,
+                                  size: 16,
+                                  color: isSelected ? const Color(0xFF020617) : goldColor,
+                                ),
+                                label: Text(
+                                  isPreviewing ? "STOP\n[정지]" : "LISTEN 10s\n[미리듣기]",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.notoSerif(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? const Color(0xFF020617) : Colors.white70,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isSelected ? Colors.black.withOpacity(0.15) : Colors.black45,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  minimumSize: const Size(0, 38), // 🆕 탭 영역 확대 (기존 Size.zero → 최소 높이 38 확보)
+                                  tapTargetSize: MaterialTapTargetSize.padded,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: RichText(
+                                  overflow: TextOverflow.ellipsis,
+                                  text: TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: "${snd['en']} ",
+                                        style: GoogleFonts.notoSerif(
+                                          color: isSelected ? const Color(0xFF020617) : Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: "(${snd['ko']})",
+                                        style: GoogleFonts.notoSerif(
+                                          color: isSelected ? const Color(0xFF020617) : goldColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  await _handleSoundSelect(fileName);
+                                  if (context.mounted) setPopupState(() {});
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isSelected ? const Color(0xFF020617) : Colors.black45,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  minimumSize: const Size(0, 38), // 🆕 탭 영역 확대 (기존 Size.zero → 최소 높이 38 확보)
+                                  tapTargetSize: MaterialTapTargetSize.padded,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    side: BorderSide(color: isSelected ? Colors.transparent : goldColor.withOpacity(0.5)),
+                                  ),
+                                ),
+                                child: Text(
+                                  isSelected ? "UNSELECT\n[해제]" : "SELECT\n[선택]",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.notoSerif(fontSize: 9, fontWeight: FontWeight.bold, color: goldColor),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ],
                   ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _runTimerAction(scheduleGetter());
-                  },
-                  child: Text('선택항목 실행', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: goldColor,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _startFullDaySchedule(scheduleGetter());
-                  },
-                  child: Text('오늘 하루 전체 시작', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('CLOSE / 닫기', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              actions: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: goldColor,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () {
+                        _previewTimer?.cancel();
+                        _previewAudioPlayer.stop();
+                        Navigator.pop(context);
+                        _runTimerAction(scheduleGetter());
+                      },
+                      child: Text('선택항목 실행', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () {
+                        _previewTimer?.cancel();
+                        _previewAudioPlayer.stop();
+                        Navigator.pop(context);
+                      },
+                      child: Text('CLOSE / 닫기', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
+            );
+          },
         );
       },
     );
-  }
-
-  // [추가] 지금 시각이 시작~종료 사이인 "진행 중" 항목을 찾고, 남은 분을 계산
-  Map<String, dynamic>? _findCurrentActiveItem(List<Map<String, String>> schedule) {
-    final now = DateTime.now();
-    for (final item in schedule) {
-      final timeStr = item['time'] ?? '';
-      final taskText = item['task'] ?? '';
-
-      // [추가] 휴식/식사/취침 항목은 자동 시작 대상에서 제외
-      const restKeywords = ['기상', '체조', '아침식사', '점심', '저녁', '학교생활', '취침', '마무리', '휴식'];
-      if (restKeywords.any((k) => taskText.contains(k))) continue;
-
-      final parts = timeStr.split(RegExp(r'[-~–]'));
-      if (parts.length < 2) continue;
-      final startParts = parts.first.trim().split(':');
-      final endParts = parts.last.trim().split(':');
-      if (startParts.length < 2 || endParts.length < 2) continue;
-      try {
-        DateTime start = DateTime(now.year, now.month, now.day, int.parse(startParts[0]), int.parse(startParts[1]));
-        DateTime end = DateTime(now.year, now.month, now.day, int.parse(endParts[0]), int.parse(endParts[1]));
-        if (!end.isAfter(start)) end = end.add(const Duration(days: 1));
-        if (!now.isBefore(start) && now.isBefore(end)) {
-          final int remainMinutes = end.difference(now).inMinutes;
-          return {'item': item, 'remainMinutes': remainMinutes};
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  // [추가] 오늘 하루 전체 시작: 진행 중 항목은 남은 시간으로 즉시 타이머 시작, 나머지는 알림 예약
-  Future<void> _startFullDaySchedule(List<Map<String, String>> schedule) async {
-    if (schedule.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('예약할 시간표 항목이 없습니다.', style: GoogleFonts.notoSerif())),
-      );
-      return;
-    }
-
-    final currentActive = _findCurrentActiveItem(schedule);
-    // [추가] 예약 처리 중 강조된 대기 안내 팝업 (닫기 불가)
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0B0F19),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.0),
-            side: BorderSide(color: goldColor, width: 1.5),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: goldColor),
-              const SizedBox(height: 16),
-              Text(
-                '⏳ 예약 처리 중입니다',
-                style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '화면을 벗어나지 마시고\n잠시만 기다려 주세요 (최대 10초)',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    final result = await Timer2Service.scheduleFullDaySchedule(
-      schedule: schedule,
-      examTitle: _isFinalExamMode ? '기말고사' : '중간고사',
-    );
-
-    if (!mounted) return;
-    Navigator.pop(context); // [추가] 대기 팝업 닫기
-
-    final int scheduled = result['scheduled'] ?? 0;
-    final int skippedRaw = result['skippedPast'] ?? 0;
-    // 진행 중인 항목은 지금 바로 시작되므로 "지나서 제외" 카운트에서 1개 빼줍니다.
-    final int trulySkipped = (currentActive != null && skippedRaw > 0) ? skippedRaw - 1 : skippedRaw;
-
-    String message = '오늘 하루 알림 $scheduled개가 예약되었습니다.';
-    if (currentActive != null) {
-      final currentItem = currentActive['item'] as Map<String, String>;
-      final int remainMinutes = currentActive['remainMinutes'] as int;
-      message += '\n지금 진행 중인 "${currentItem['task']}" 항목을 바로 시작합니다 (남은 $remainMinutes분).';
-    }
-    if (trulySkipped > 0) {
-      message += '\n(이미 지난 $trulySkipped개 항목은 제외되었습니다. 다음 학습 시 추가로 진행해주세요.)';
-    }
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0B0F19),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.0),
-            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
-          ),
-          title: Text('SCHEDULED / 예약 완료', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
-          content: Text(message, style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13)),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: goldColor),
-              onPressed: () => Navigator.pop(context),
-              child: Text('확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted) return;
-
-    // [추가] "확인" 누른 뒤, 진행 중인 항목이 있었다면 남은 시간으로 타이머1(TimerScreen) 실행
-    if (currentActive != null) {
-      final currentItem = currentActive['item'] as Map<String, String>;
-      final int remainMinutes = currentActive['remainMinutes'] as int;
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TimerScreen(
-            selectedSubject: currentItem['task'] ?? '학습',
-            selectedDurationMinutes: remainMinutes > 0 ? remainMinutes : 1,
-            dynamicTestTitle: _isFinalExamMode ? '기말고사' : '중간고사',
-            targetExamDate: _examStartDate,
-            targetExamEndDate: _examEndDate,
-            prepPeriodStr: _manualExamPrepWeek != null ? '${_manualExamPrepWeek}주 전' : '',
-            needTimelineGen: false,
-            selectedSoundFile: '',
-            isFinalExamMode: _isFinalExamMode,
-          ),
-        ),
-      );
-    }
   }
 
   Color _getTimelineBarColor(String track, String timeText, String taskText, int index) {
@@ -1138,7 +1203,21 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         String cacheKey = _getCurrentCacheKey();
                         List<Map<String, String>> currentList = List.from(_getCurrentActiveSchedule());
                         if (index == null) {
-                          currentList.add({'time': timeController.text.trim(), 'task': taskController.text.trim()});
+                          // 🆕 [시간순 자동 배치] 새 항목을 맨 끝에 붙이지 않고,
+                          // 시작 시각을 기준으로 기존 항목들 사이의 올바른 위치에 삽입함.
+                          // (예: 08:00~16:00 "즐거운 학교생활" 사이에 새 항목을 넣으면 그 시간대 순서에 맞게 배치됨)
+                          final newItem = {'time': timeController.text.trim(), 'task': taskController.text.trim()};
+                          final int? newStartMinutes = _parseStartMinutes(newItem['time']!);
+
+                          int insertAt = currentList.length; // 시각 파싱 실패 시 기본은 맨 끝
+                          if (newStartMinutes != null) {
+                            insertAt = currentList.indexWhere((existing) {
+                              final int? existingStart = _parseStartMinutes(existing['time'] ?? '');
+                              return existingStart != null && existingStart > newStartMinutes;
+                            });
+                            if (insertAt == -1) insertAt = currentList.length; // 가장 늦은 시각이면 맨 끝
+                          }
+                          currentList.insert(insertAt, newItem);
                         } else {
                           currentList[index] = {'time': timeController.text.trim(), 'task': taskController.text.trim()};
                         }
@@ -2045,71 +2124,93 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   Widget _buildExamSettingsCardForExamDay() {
     String examDateText = '시험 시작일(D-day) 선택';
     if (_examStartDate != null) {
-      examDateText = '시험 시작일: ${_examStartDate!.year}.${_examStartDate!.month}.${_examStartDate!.day}';
+      // 🆕 [0패딩] 월/일을 2자리로 고정 표기 (7 → 07)
+      final String mm = _examStartDate!.month.toString().padLeft(2, '0');
+      final String dd = _examStartDate!.day.toString().padLeft(2, '0');
+      examDateText = '시험 시작일: ${_examStartDate!.year}.$mm.$dd';
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-          color: slate800.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(10), border: Border.all(color: slate800)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        color: slate800.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: slate800),
+      ),
+      child: ExpansionTile(
+        // 🆕 [접기/펴기] EXAM INFO 섹션을 다른 화면(시험준비)과 동일하게 접었다 펼 수 있도록 전환
+        initiallyExpanded: _isExamDaySettingExpanded,
+        onExpansionChanged: (expanded) {
+          setState(() {
+            _isExamDaySettingExpanded = expanded;
+          });
+        },
+        collapsedTextColor: goldColor,
+        textColor: goldColor,
+        iconColor: goldColor,
+        collapsedIconColor: slate400,
+        title: Text('EXAM INFO / 시험 정보 입력', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
         children: [
-          Text('EXAM INFO / 시험 정보 입력', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Row(
-            children: ['중간고사', '기말고사'].map((type) {
-              return Padding(
-                padding: const EdgeInsets.only(right: 17.0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Radio<String>(
-                      value: type,
-                      groupValue: _isFinalExamMode ? '기말고사' : '중간고사',
-                      activeColor: goldColor,
-                      onChanged: (value) async {
-                        setState(() {
-                          _isFinalExamMode = (value == '기말고사');
-                        });
-                        await _saveExamSettings();
-                      },
-                    ),
-                    Text(type, style: GoogleFonts.notoSerif(fontSize: 13, color: Colors.white)),
-                  ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: ['중간고사', '기말고사'].map((type) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 17.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Radio<String>(
+                            value: type,
+                            groupValue: _isFinalExamMode ? '기말고사' : '중간고사',
+                            activeColor: goldColor,
+                            onChanged: (value) async {
+                              setState(() {
+                                _isFinalExamMode = (value == '기말고사');
+                              });
+                              await _saveExamSettings();
+                            },
+                          ),
+                          Text(type, style: GoogleFonts.notoSerif(fontSize: 13, color: Colors.white)),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(side: BorderSide(color: slate800)),
-            onPressed: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _examStartDate ?? DateTime.now(),
-                firstDate: DateTime(2024),
-                lastDate: DateTime(2035),
-                builder: (context, child) {
-                  return Theme(
-                    data: ThemeData.dark().copyWith(
-                      colorScheme: ColorScheme.dark(primary: goldColor, onPrimary: const Color(0xFF020617), surface: const Color(0xFF0B0F19), onSurface: Colors.white),
-                      dialogBackgroundColor: const Color(0xFF0B0F19),
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (picked != null) {
-                setState(() {
-                  _examStartDate = picked;
-                });
-                await _saveExamSettings();
-              }
-            },
-            child: Text(
-              examDateText,
-              style: GoogleFonts.notoSerif(fontSize: 15, color: Colors.white),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(side: BorderSide(color: slate800)),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _examStartDate ?? DateTime.now(),
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime(2035),
+                      builder: (context, child) {
+                        return Theme(
+                          data: ThemeData.dark().copyWith(
+                            colorScheme: ColorScheme.dark(primary: goldColor, onPrimary: const Color(0xFF020617), surface: const Color(0xFF0B0F19), onSurface: Colors.white),
+                            dialogBackgroundColor: const Color(0xFF0B0F19),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _examStartDate = picked;
+                      });
+                      await _saveExamSettings();
+                    }
+                  },
+                  child: Text(
+                    examDateText,
+                    style: GoogleFonts.notoSerif(fontSize: 15, color: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

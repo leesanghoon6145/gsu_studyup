@@ -23,7 +23,7 @@ class HomeDashboardScreen extends StatefulWidget {
   State<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
 }
 
-class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
+class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsBindingObserver {
   String _examBreakTimeSelection = '20분';
   String userName = '이규현';
   int currentStars = 75;
@@ -65,17 +65,30 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // 🆕 [버그 수정] 앱 재개(resume) 감지용
     _audioPlayer = AudioPlayer();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
 
-    // 🆕 [D-day 팝업 연동] 첫 화면 진입 시(아침 6~9시 사이) 시험 D-day 응원 팝업 체크
+    // 🆕 [D-day 팝업 연동] 첫 화면 진입 시(아침 6~10시 사이) 시험 D-day 응원 팝업 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndShowExamDayPopup();
     });
   }
 
+  // 🆕 [버그 수정] 기존엔 initState 때 딱 1번만 체크해서, 앱을 며칠째 안 끄고 계속 켜두면
+  // (화면만 껐다 켜거나 다른 앱 갔다 돌아오는 경우) 다음날 아침 6~10시가 되어도 재확인이 안 됐음.
+  // 앱이 포그라운드로 돌아올 때(resumed)마다 다시 체크하도록 보강.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _checkAndShowExamDayPopup();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // 🆕 옵저버 해제
     _previewTimer?.cancel();
     _audioPlayer.stop();
     _audioPlayer.dispose();
@@ -88,7 +101,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   // ============================================================================
   Future<void> _checkAndShowExamDayPopup() async {
     final DateTime now = DateTime.now();
-    if (now.hour < 6 || now.hour >= 9) return; // 아침 6~9시 사이만 노출
 
     final prefs = await SharedPreferences.getInstance();
 
