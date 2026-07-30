@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audioplayers/audioplayers.dart'; // 🆕 [백색소음 선택] 미리듣기 재생용
 import 'dart:async'; // 🆕 [백색소음 선택] 미리듣기 자동정지 Timer용
+import 'dart:convert'; // 🆕 [버그 수정 2026-07-29] 커스텀 시간표/시험기록 영구저장용
 import '../../planner/widgets/study_timelines.dart';
 import '../../timer/timer_screen.dart';
 
@@ -33,7 +34,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     Colors.purple,
   ];
 
-  String _selectedTrack = 'NORMAL_PERIOD';
+  String _selectedTrack = 'PERSONAL_TIMETABLE'; // 🆕 [2026-07-29] 학사 타이머 진입 시 기본으로 개인 시간표 탭 선택
 
   // 1. 평상시
   String _selectedWeekdayEn = 'Monday';
@@ -47,6 +48,16 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     {'en': 'Sunday', 'ko': '일요일', 'abbr': 'Sun'},
   ];
   bool _isNormalWeekdayExpanded = true;
+
+  // 🆕 [개인 시간표 2026-07-29] 평상시와 동일한 구조의 "나만의 시간표" 탭 전용 상태
+  String _selectedPersonalWeekdayEn = 'Monday';
+  bool _isPersonalWeekdayExpanded = true;
+
+  // 🆕 [개인 시간표 2026-07-29] 작성 형식을 보여주는 가이드용 샘플 2개 (실제 저장/실행 대상 아님)
+  static const List<Map<String, String>> _personalScheduleGuideSamples = [
+    {'time': '09:00 - 10:00', 'task': '수학 개념정리 (예시)'},
+    {'time': '10:10 - 11:00', 'task': '영어 단어암기 (예시)'},
+  ];
 
   // 2. 방학
   DateTime? _vacationStartDate;
@@ -90,6 +101,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     super.initState();
     _initAutoWeekday();
     _loadAllSettings();
+    _loadCustomSchedules(); // 🆕 [버그 수정 2026-07-29] 수정/삭제한 시간표 실제 복원
+    _loadCustomExamRecords(); // 🆕 [버그 수정 2026-07-29] 시험 과목/범위 기록 실제 복원
     _previewAudioPlayer = AudioPlayer(); // 🆕 [백색소음 선택] 미리듣기 전용 플레이어 초기화
     _previewAudioPlayer.setReleaseMode(ReleaseMode.stop);
   }
@@ -114,6 +127,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       7: 'Sunday',
     };
     _selectedWeekdayEn = weekdayMap[weekdayNum] ?? 'Monday';
+    _selectedPersonalWeekdayEn = weekdayMap[weekdayNum] ?? 'Monday'; // 🆕 [개인 시간표] 오늘 요일 자동 선택
   }
 
   // ============================================================
@@ -139,6 +153,68 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         _examStartDate = examStartStr != null ? DateTime.tryParse(examStartStr) : null;
         _examEndDate = examEndStr != null ? DateTime.tryParse(examEndStr) : null;
       });
+    }
+  }
+
+  // 🆕 [버그 수정 2026-07-29] 시간표 항목을 직접 추가/수정/삭제한 결과(_customSchedules)를
+  // 영구 저장. 기존엔 이 저장 코드가 아예 없어서 화면을 나갔다 오면 원본으로 초기화되던 버그.
+  Future<void> _saveCustomSchedules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('gke_custom_schedules', jsonEncode(_customSchedules));
+    } catch (e) {
+      debugPrint("[AcademicTimeline] 커스텀 시간표 저장 실패: $e");
+    }
+  }
+
+  Future<void> _loadCustomSchedules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString('gke_custom_schedules');
+      if (raw == null || raw.isEmpty) return;
+      final Map<String, dynamic> decoded = jsonDecode(raw);
+      final Map<String, List<Map<String, String>>> restored = {};
+      decoded.forEach((key, value) {
+        if (value is List) {
+          restored[key] = value.map((e) => Map<String, String>.from(e as Map)).toList();
+        }
+      });
+      if (!mounted) return;
+      setState(() {
+        _customSchedules.clear();
+        _customSchedules.addAll(restored);
+      });
+    } catch (e) {
+      debugPrint("[AcademicTimeline] 커스텀 시간표 불러오기 실패: $e");
+    }
+  }
+
+  // 🆕 [버그 수정 2026-07-29] 시험 과목/범위 기록(_customExamRecords)도 동일하게 저장 코드가
+  // 없었어서 화면을 나갔다 오면 사라지던 버그. 위와 같은 방식으로 영구 저장/복원.
+  Future<void> _saveCustomExamRecords() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('gke_custom_exam_records', jsonEncode(_customExamRecords));
+    } catch (e) {
+      debugPrint("[AcademicTimeline] 시험 과목/범위 기록 저장 실패: $e");
+    }
+  }
+
+  Future<void> _loadCustomExamRecords() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString('gke_custom_exam_records');
+      if (raw == null || raw.isEmpty) return;
+      final List<dynamic> decoded = jsonDecode(raw);
+      final List<Map<String, String>> restored =
+      decoded.map((e) => Map<String, String>.from(e as Map)).toList();
+      if (!mounted) return;
+      setState(() {
+        _customExamRecords.clear();
+        _customExamRecords.addAll(restored);
+      });
+    } catch (e) {
+      debugPrint("[AcademicTimeline] 시험 과목/범위 기록 불러오기 실패: $e");
     }
   }
 
@@ -269,6 +345,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       } else {
         defaultList = [];
       }
+    } else if (_selectedTrack == 'PERSONAL_TIMETABLE') {
+      // 🆕 [개인 시간표 2026-07-29] 평상시와 동일한 방식이지만, 기본 제공 데이터가 없는
+      // 완전히 빈 시간표 - 사용자가 처음부터 직접 작성해야 함.
+      cacheKey = 'PERSONAL_$_selectedPersonalWeekdayEn';
+      defaultList = [];
     }
 
     if (_customSchedules.containsKey(cacheKey)) {
@@ -296,6 +377,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         return 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w${weekNum}_$dayType';
       }
       return 'EXAM_PREP_${_isFinalExamMode ? "final" : "mid"}_w4_weekday';
+    } else if (_selectedTrack == 'PERSONAL_TIMETABLE') {
+      return 'PERSONAL_$_selectedPersonalWeekdayEn';
     } else {
       final DateTime today = DateTime.now();
       final DateTime cleanToday = DateTime(today.year, today.month, today.day);
@@ -525,6 +608,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           needTimelineGen: _examStartDate != null,
           selectedSoundFile: _selectedSoundFile, // 🆕 [백색소음 선택] 팝업에서 고른 소리를 그대로 전달
           isFinalExamMode: _isFinalExamMode,
+          // 🆕 [2026-07-29] 시험준비/시험당일 트랙에서 실행할 때만 시험명+D-day 표시,
+          // 평상시/방학/개인시간표에서 실행하면 "목표"만 표시됨
+          isExamTrackMode: _selectedTrack == 'EXAM_PREP_PERIOD' || _selectedTrack == 'EXAM_DAY_TRACK',
         ),
       ),
     );
@@ -1017,6 +1103,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       setState(() {
         _customExamRecords.addAll(sessionRecords);
       });
+      await _saveCustomExamRecords(); // 🆕 [버그 수정 2026-07-29] 시험 과목/범위 기록 실제 영구 저장
 
       // [추가] 등록된 시험 기록의 최소/최대 날짜로 시험 시작일·종료일 자동 연동
       List<DateTime> allDates = _customExamRecords
@@ -1086,17 +1173,18 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           actionsAlignment: MainAxisAlignment.spaceBetween,
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 setState(() {
                   _customExamRecords.removeAt(index);
                 });
-                Navigator.pop(context);
+                await _saveCustomExamRecords(); // 🆕 [버그 수정 2026-07-29] 실제 영구 저장
+                if (context.mounted) Navigator.pop(context);
               },
               child: Text('DEL/삭제', style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
-              onPressed: () {
+              onPressed: () async {
                 if (subjectController.text.trim().isEmpty) return;
                 setState(() {
                   _customExamRecords[index] = {
@@ -1105,7 +1193,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     'scope': scopeController.text.trim(),
                   };
                 });
-                Navigator.pop(context);
+                await _saveCustomExamRecords(); // 🆕 [버그 수정 2026-07-29] 실제 영구 저장
+                if (context.mounted) Navigator.pop(context);
               },
               child: Text('SAVE/저장', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
             ),
@@ -1166,14 +1255,15 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                   Expanded(
                     child: TextButton(
                       style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 2)),
-                      onPressed: () {
+                      onPressed: () async {
                         setState(() {
                           String cacheKey = _getCurrentCacheKey();
                           List<Map<String, String>> currentList = List.from(_getCurrentActiveSchedule());
                           currentList.removeAt(index);
                           _customSchedules[cacheKey] = currentList;
                         });
-                        Navigator.pop(context);
+                        await _saveCustomSchedules(); // 🆕 [버그 수정 2026-07-29] 실제 영구 저장
+                        if (context.mounted) Navigator.pop(context);
                       },
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
@@ -1197,7 +1287,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       backgroundColor: goldColor,
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                     ),
-                    onPressed: () {
+                    onPressed: () async {
                       if (timeController.text.trim().isEmpty || taskController.text.trim().isEmpty) return;
                       setState(() {
                         String cacheKey = _getCurrentCacheKey();
@@ -1223,7 +1313,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         }
                         _customSchedules[cacheKey] = currentList;
                       });
-                      Navigator.pop(context);
+                      await _saveCustomSchedules(); // 🆕 [버그 수정 2026-07-29] 실제 영구 저장
+                      if (context.mounted) Navigator.pop(context);
                     },
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
@@ -1259,12 +1350,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
-              onPressed: () {
+              onPressed: () async {
                 setState(() {
                   String cacheKey = _getCurrentCacheKey();
                   _customSchedules.remove(cacheKey);
                 });
-                Navigator.pop(context);
+                await _saveCustomSchedules(); // 🆕 [버그 수정 2026-07-29] 리셋 결과도 실제 영구 저장
+                if (context.mounted) Navigator.pop(context);
               },
               child: Text('Confirm / 리셋 확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
             ),
@@ -1330,21 +1422,35 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   Widget _buildTrackSelector() {
     return Container(
       padding: const EdgeInsets.all(12.0),
-      child: Row(
-        children: [
-          Expanded(child: _trackButton('Normal\n평상시', 'NORMAL_PERIOD')),
-          const SizedBox(width: 6),
-          Expanded(child: _trackButton('Vacation\n방학', 'VACATION_SUMMER_WINTER')),
-          const SizedBox(width: 6),
-          Expanded(child: _trackButton('Exam Prep\n시험준비', 'EXAM_PREP_PERIOD')),
-          const SizedBox(width: 6),
-          Expanded(child: _trackButton('Exam Day\n시험당일', 'EXAM_DAY_TRACK')),
-        ],
+      // 🆕 [개인 시간표 2026-07-29] 탭이 5개로 늘어나서 좌우 스크롤 가능하도록 변경
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            SizedBox(width: 82, child: _trackButton('Normal\n평상시', 'NORMAL_PERIOD')),
+            const SizedBox(width: 6),
+            SizedBox(width: 82, child: _trackButton('Vacation\n방학', 'VACATION_SUMMER_WINTER')),
+            const SizedBox(width: 6),
+            SizedBox(width: 82, child: _trackButton('Exam Prep\n시험준비', 'EXAM_PREP_PERIOD')),
+            const SizedBox(width: 6),
+            SizedBox(width: 82, child: _trackButton('Exam Day\n시험당일', 'EXAM_DAY_TRACK')),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 82,
+              child: _trackButton(
+                'Personal\n개인 시간표',
+                'PERSONAL_TIMETABLE',
+                onBeforeSelect: _showPersonalTimetableGuideDialog, // 🆕 탭 누를 때마다 안내 팝업
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _trackButton(String label, String trackKey) {
+  Widget _trackButton(String label, String trackKey, {VoidCallback? onBeforeSelect}) {
     bool isSelected = _selectedTrack == trackKey;
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
@@ -1352,21 +1458,34 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         minimumSize: const Size(0, 44),
       ),
-      onPressed: () => setState(() {
-        _selectedTrack = trackKey;
-        _selectedScheduleIndex = null;
-      }),
+      onPressed: () {
+        onBeforeSelect?.call(); // 🆕 [개인 시간표 2026-07-29] 지정된 경우, 탭 전환 전에 먼저 실행
+        setState(() {
+          _selectedTrack = trackKey;
+          _selectedScheduleIndex = null;
+        });
+      },
 
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: GoogleFonts.notoSerif(
+// 🆕 [오버플로우 방지 2026-07-29] 영문 1줄/한글 1줄로 고정, 넘치면 오른쪽이 흐릿하게 생략(fade)됨
+      child: Builder(builder: (context) {
+        final List<String> parts = label.split('\n');
+        final String enPart = parts.isNotEmpty ? parts[0] : label;
+        final String koPart = parts.length > 1 ? parts[1] : '';
+        final TextStyle baseStyle = GoogleFonts.notoSerif(
           color: isSelected ? const Color(0xFF020617) : Colors.white,
           fontSize: 13,
           fontWeight: FontWeight.bold,
           height: 1.2,
-        ),
-      ),
+        );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(enPart, textAlign: TextAlign.center, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: baseStyle),
+            if (koPart.isNotEmpty)
+              Text(koPart, textAlign: TextAlign.center, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: baseStyle),
+          ],
+        );
+      }),
     );
   }
 
@@ -1380,6 +1499,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         return _buildExamPrepBody();
       case 'EXAM_DAY_TRACK':
         return _buildExamDayBody();
+      case 'PERSONAL_TIMETABLE':
+        return _buildPersonalTimetableBody();
       default:
         return _buildNormalPeriodBody();
     }
@@ -1461,6 +1582,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         ),
                         child: Text(
                           '${day['abbr']} / ${day['ko']}',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade, // 🆕 [오버플로우 방지 2026-07-29]
                           style: GoogleFonts.notoSerif(
                             fontSize: 12,
                             color: isSel ? const Color(0xFF020617) : Colors.white,
@@ -1502,6 +1626,190 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             _buildScheduleHeaderBar(),
           ],
         ),
+        const SizedBox(height: 8),
+        ..._buildScheduleList(schedule),
+      ],
+    );
+  }
+
+  // 🆕 [개인 시간표 2026-07-29] 탭을 누를 때마다 뜨는 안내 팝업
+  void _showPersonalTimetableGuideDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B0F19),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+          ),
+          title: Text(
+            'Personal Timetable / 개인 시간표',
+            style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'This screen is where you record and save your own study times, subjects, and units to use.\n\n'
+                '(이 화면은 유저가 직접 학습할 시간과 과목 및 단원을 기록하여 저장한 뒤 사용할 곳입니다.)\n\n'
+                '위에 있는 예시 2개를 참고해서, 그 아래 빈 공간에 "+Add/항목 추가"로 원하는 시간표를 직접 작성해보세요.',
+            style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13, height: 1.5),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK / 확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 🆕 [개인 시간표 2026-07-29] 평상시(_buildNormalPeriodBody)와 100% 동일한 구조.
+  // 다른 점은 기본 제공 시간표가 없다는 것뿐이라, 대신 작성 형식을 보여주는 샘플 2개를
+  // "+Add/항목 추가" 버튼 아래에 고정 표시하고, 그 아래 실제 편집 가능한 빈 목록을 둠.
+  Widget _buildPersonalTimetableBody() {
+    List<Map<String, String>> schedule = _getCurrentActiveSchedule();
+
+    final currentSelectedObj = _weekdayOptions.firstWhere(
+          (d) => d['en'] == _selectedPersonalWeekdayEn,
+      orElse: () => _weekdayOptions[0],
+    );
+    final String dDayText = '${currentSelectedObj['abbr']} / ${currentSelectedObj['ko']}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('PERSONAL TIMETABLE', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('개인 시간표 - 나만의 시간표 직접 작성', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            _buildTimButton(() => _getCurrentActiveSchedule()),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: slate800.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: slate800),
+          ),
+          child: ExpansionTile(
+            initiallyExpanded: _isPersonalWeekdayExpanded,
+            onExpansionChanged: (expanded) {
+              setState(() {
+                _isPersonalWeekdayExpanded = expanded;
+              });
+            },
+            collapsedTextColor: goldColor,
+            textColor: goldColor,
+            iconColor: goldColor,
+            collapsedIconColor: slate400,
+            title: Text(
+              'Select Weekday/요일선택 (${currentSelectedObj['abbr']} / ${currentSelectedObj['ko']})',
+              style: GoogleFonts.notoSerif(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: 3.5,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  children: _weekdayOptions.map((day) {
+                    bool isSel = _selectedPersonalWeekdayEn == day['en'];
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedPersonalWeekdayEn = day['en']!;
+                          _selectedScheduleIndex = null;
+                        });
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isSel ? goldColor : slate800,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isSel ? goldColor : slate800),
+                        ),
+                        child: Text(
+                          '${day['abbr']} / ${day['ko']}',
+                          style: GoogleFonts.notoSerif(
+                            fontSize: 12,
+                            color: isSel ? const Color(0xFF020617) : Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: goldColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: goldColor.withValues(alpha: 0.5)),
+                ),
+                child: Text(
+                  dDayText,
+                  style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _buildScheduleHeaderBar(),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // 🆕 작성 형식을 보여주는 가이드용 샘플 2개 - 저장/실행 대상 아님, 참고용 표시만
+        Text('SAMPLE / 작성 예시 (참고용, 저장되지 않음)', style: GoogleFonts.notoSerif(color: slate400, fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        ..._personalScheduleGuideSamples.map((sample) => Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: slate800),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 92,
+                child: Text(sample['time']!, style: GoogleFonts.notoSerif(color: slate400, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(sample['task']!, style: GoogleFonts.notoSerif(color: slate400, fontSize: 13))),
+            ],
+          ),
+        )),
+        const SizedBox(height: 14),
+        Text('나만의 시간표 (아래에 직접 추가하세요)', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         ..._buildScheduleList(schedule),
       ],

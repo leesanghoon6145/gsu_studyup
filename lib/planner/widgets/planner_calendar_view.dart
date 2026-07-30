@@ -122,42 +122,50 @@ class PlannerCalendarView extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.calendar_month,
-                      color: Color(0xFFE5C158),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // [주석] 👑 "07/02" 월일 동적 표시 (명조체 글자크기 15, 황금색)
-                        Text(
-                          '${selectedDayDate.month.toString().padLeft(2, '0')}/${selectedDayDate.day.toString().padLeft(2, '0')}',
-                          style: GoogleFonts.notoSerif(
-                            fontSize: 15,
-                            color: const Color(0xFFE5C158),
-                            fontWeight: FontWeight.bold,
-                          ),
+                // 🆕 [오버플로우 방지 2026-07-29] Expanded로 감싸서 남은 폭 안에서만 표시되도록 제한.
+                // 이걸 안 하면 안쪽 Text의 overflow/maxLines 설정이 실제로 작동하지 않아서
+                // 긴 언어(독일어/러시아어 등)에서 화면 밖으로 글자가 넘치는 문제가 있었음.
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_month,
+                        color: Color(0xFFE5C158),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // [주석] 👑 "07/02" 월일 동적 표시 (명조체 글자크기 15, 황금색)
+                            Text(
+                              '${selectedDayDate.month.toString().padLeft(2, '0')}/${selectedDayDate.day.toString().padLeft(2, '0')}',
+                              style: GoogleFonts.notoSerif(
+                                fontSize: 15,
+                                color: const Color(0xFFE5C158),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            // [주석] 👑 12개국 확장: 선택 날짜 메모 보기 안내 문구 (기본값 = 영+한 한 줄, 10개국 선택 시 단일 언어)
+                            Text(
+                              _biStr('viewSelectedDateMemo'),
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                              maxLines: 1,
+                              style: GoogleFonts.notoSans(
+                                fontSize: 12,
+                                color: const Color(0xFFE5C158),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 2),
-                        // [주석] 👑 12개국 확장: 선택 날짜 메모 보기 안내 문구 (기본값 = 영+한 한 줄, 10개국 선택 시 단일 언어)
-                        Text(
-                          _biStr('viewSelectedDateMemo'),
-                          overflow: TextOverflow.fade,
-                          softWrap: false,
-                          maxLines: 1,
-                          style: GoogleFonts.notoSans(
-                            fontSize: 12,
-                            color: const Color(0xFFE5C158),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Icon(
                   isDayCalendarVisible ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                   color: const Color(0xFFE5C158),

@@ -24,6 +24,7 @@ class TimerScreen extends StatefulWidget {
   final String targetUniversity;
   final bool isVipMember;
   final bool isFinalExamMode; // [추가] 기말고사 여부 (기본값 false = 중간고사)
+  final bool isExamTrackMode; // 🆕 [2026-07-29] true=시험준비/시험당일에서 실행됨(D-day 표시), false=평상시/방학/개인시간표(목표만 표시)
 
   const TimerScreen({
     Key? key,
@@ -38,6 +39,7 @@ class TimerScreen extends StatefulWidget {
     this.targetUniversity = "Seoul National University (서울대학교)",
     this.isVipMember = false,
     this.isFinalExamMode = false, // [추가]
+    this.isExamTrackMode = true, // 🆕 [2026-07-29 수정] 기본값 true로 되돌림 - home_dashboard_screen.dart 등 기존 호출부는 안 건드리고 원래대로 작동. academic_timeline_screen.dart만 평상시/방학/개인시간표일 때 명시적으로 false를 넘겨서 "목표"만 표시함.
   }) : super(key: key);
   @override
   State<TimerScreen> createState() => _TimerScreenState();
@@ -982,7 +984,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                 child: Column(
                   children: [
                     const SizedBox(height: 163),
-                    Builder(builder: (context) {
+// 🆕 [2026-07-29] 시험준비/시험당일 트랙에서 실행된 경우에만 시험명+D-day 표시.
+                    // 평상시/방학/개인시간표에서 실행된 경우에는 마이페이지에서 설정한 실제 목표
+                    // (예: 서울대학교, 민족사관고등학교, 사법고시 등)를 그대로 표시하고 D-day는 제거.
+                    widget.isExamTrackMode
+                        ? Builder(builder: (context) {
                       final DateTime baseDate = widget.targetExamDate ?? DateTime.now();
                       final DateTime nowUtc = DateTime.now().toUtc();
                       final tz.Location targetLocation = tz.getLocation('Asia/Seoul');
@@ -1000,8 +1006,29 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         const SizedBox(height: 4),
                         Text(dDayString, style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 34, fontWeight: FontWeight.bold, height: 1.0, letterSpacing: 0.5)),
                       ]);
-                    }),
-                    const SizedBox(height: 240),
+                    })
+                        : Column(mainAxisSize: MainAxisSize.min, children: [
+                      Image.asset('assets/images/crown_wings.png', width: 100, fit: BoxFit.contain),
+                      const SizedBox(height: 2),
+                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Text("✧───  ", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text("목표", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
+                        const Text("  ───✧", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                      ]),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Text(
+                          _currentUniversity, // 🆕 마이페이지에서 실제 저장한 목표 (대학/고교/고시 등 무엇이든 그대로 표시)
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 24, fontWeight: FontWeight.bold, height: 1.0, letterSpacing: 0.5),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 260),
                     Column(mainAxisSize: MainAxisSize.min, children: [
                       // 🆕 [정리 2026-07-29] "배속 실험 모드 가동" 디버그 표시줄 삭제함
                       // (테스트용 임시 문구였고, 바로 아래 큰 타이머와 중복 표시였음)
@@ -1014,7 +1041,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         Row(children: [Expanded(child: Text("🔊 ${widget.selectedSubject}", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))]),
                         const SizedBox(height: 4),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                          Text("실시간 집중 모드 (실험)", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text("실시간 집중 모드", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
                           Text("목표 시간: ${widget.selectedDurationMinutes}분", textAlign: TextAlign.end, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
                         ]),
                         const SizedBox(height: 10),

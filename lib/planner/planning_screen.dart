@@ -631,7 +631,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_t('tabYear'), style: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold)),
+                      _biTitle(
+                        'tabYear',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                 ),
@@ -639,7 +644,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_t('tabMonth'), style: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold)),
+                      _biTitle(
+                        'tabMonth',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                 ),
@@ -647,7 +657,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_t('tabWeek'), style: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold)),
+                      _biTitle(
+                        'tabWeek',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                 ),
@@ -655,7 +670,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_t('tabDay'), style: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold)),
+                      _biTitle(
+                        'tabDay',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 14, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                 ),
@@ -1242,10 +1262,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _t('dateTimelineDetail'),
-                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                        style: GoogleFonts.notoSansKr(fontSize: 13, color: _isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                      _biTitle(
+                        'dateTimelineDetail',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 11, color: _isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: _isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: _isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1874,12 +1895,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: Text(
-            _t(textKey),
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            maxLines: 1,
-            style: GoogleFonts.notoSansKr(fontSize: 16, color: goldColor, fontWeight: FontWeight.bold),
+          // 🆕 [폰트/언어 수정 2026-07-29] 한글 단독 표시 버그 수정 - 영문(고운바탕)+한글(노토산스) 2줄 기본,
+          // 10개국어 선택 시 단일 언어로 자동 전환. 오버플로우도 _biTitle 내부에서 자동 방지됨.
+          child: _biTitle(
+            textKey,
+            enStyle: GoogleFonts.gowunBatang(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold),
+            koStyle: GoogleFonts.notoSansKr(fontSize: 16, color: goldColor, fontWeight: FontWeight.bold),
+            foreignStyle: GoogleFonts.notoSans(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
           ),
         ),
         const SizedBox(width: 8),
