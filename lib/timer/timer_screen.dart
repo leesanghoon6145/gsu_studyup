@@ -77,7 +77,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _totalSeconds = widget.selectedDurationMinutes;
+    _totalSeconds = widget.selectedDurationMinutes * 60; // 🆕 [버그 수정 2026-07-29] 1초=1분 테스트모드 폐기, 정상적으로 분→초 변환
 
     // 초기값 셋팅
     _currentUniversity = widget.targetUniversity;
@@ -1003,12 +1003,8 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                     }),
                     const SizedBox(height: 240),
                     Column(mainAxisSize: MainAxisSize.min, children: [
-                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.star, color: Color(0xFFE5C158), size: 16),
-                        const SizedBox(width: 6),
-                        Text("배속 실험 모드 가동 :  $_elapsedSeconds / ${widget.selectedDurationMinutes} Secs", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                      ]),
-                      const SizedBox(height: 1.0),
+                      // 🆕 [정리 2026-07-29] "배속 실험 모드 가동" 디버그 표시줄 삭제함
+                      // (테스트용 임시 문구였고, 바로 아래 큰 타이머와 중복 표시였음)
                       Text(_formatDisplayTime(_elapsedSeconds), style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9)),
                     ]),
                     const Spacer(),
@@ -1093,7 +1089,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                   child: FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Text(
-                                        "${currentInterval.toStringAsFixed(1)}초\n($currentPercentage%)",
+                                        "${currentInterval.toStringAsFixed(1)}분\n($currentPercentage%)",
                                         textAlign: TextAlign.center,
                                         style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.2)
                                     ),

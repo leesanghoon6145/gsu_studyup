@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'global_lang.dart';
 import 'parent/parent_main_dashboard_screen.dart';
+import 'services/user_profile_service.dart'; // 🆕 [실사용 전환 2026-07-29] 실제 가입자 이름/유형 저장용
 
 // =============================================================================
 // 🆕 [12개국 다국어 연동] 2026-07-29 추가: signup_screen.dart 전용 렌더 헬퍼 함수 3종
@@ -21,17 +22,23 @@ String dkeInline(Map<String, String> map) {
 }
 
 // (B) 한 Text 위젯 안에서 줄바꿈(\n)으로 EN/KO 두 줄을 표시하던 버튼용 (AUTH, VERIFY 등)
+// 🆕 [오버플로우 방지 2026-07-29] 독일어/러시아어 등 단어가 긴 언어에서 버튼 밖으로 글자가
+// 넘치지 않도록 maxLines + TextOverflow.ellipsis("...") 추가. 폰트/색상/크기는 변경 없음.
 Widget dkeBilineText(Map<String, String> map, TextStyle baseStyle, {TextAlign textAlign = TextAlign.center}) {
   if (DkeLang.isForeignSelected) {
     return Text(
       map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '',
       textAlign: textAlign,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: GoogleFonts.notoSans(textStyle: baseStyle),
     );
   }
   return Text(
     '${map['EN']}\n(${map['KO']})',
     textAlign: textAlign,
+    maxLines: 2,
+    overflow: TextOverflow.ellipsis,
     style: GoogleFonts.gowunBatang(textStyle: baseStyle),
   );
 }
@@ -51,16 +58,18 @@ List<Widget> dkeColumnLines(
       Text(
         map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '',
         textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: GoogleFonts.notoSans(textStyle: enStyle),
       ),
     ];
   }
   final List<Widget> lines = [
-    Text(map['EN'] ?? '', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(textStyle: enStyle)),
+    Text(map['EN'] ?? '', textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.gowunBatang(textStyle: enStyle)),
   ];
   if (gapHeight > 0) lines.add(SizedBox(height: gapHeight));
   lines.add(
-    Text('(${map['KO']})', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(textStyle: koStyle)),
+    Text('(${map['KO']})', textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(textStyle: koStyle)),
   );
   return lines;
 }
@@ -154,6 +163,14 @@ class _SignupScreenState extends State<SignupScreen> {
       return _isParentVerified && parentConsent; // 보호자 인증 + 동의 체크 모두 필요
     }
     return true;
+  }
+
+  // 🆕 [실사용 전환 2026-07-29] 3단 토글(학생/학부모/일반) 상태를 문자열로 변환.
+  // TermsAgreementScreen에 넘겨서 최종 가입 완료 시 DkeUserProfile에 그대로 저장함.
+  String get _userTypeLabel {
+    if (isStudent && !isGeneral) return '학생';
+    if (!isStudent && !isGeneral) return '학부모';
+    return '일반';
   }
 
   // 🆕 [법적 필수 수정] 생년월일 선택 다이얼로그
@@ -535,6 +552,8 @@ class _SignupScreenState extends State<SignupScreen> {
                               ? dkeInline(DkeLang.btnParentVerifiedMap)
                               : dkeInline(DkeLang.btnSendCodeToParentMap),
                           textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis, // 🆕 [오버플로우 방지 2026-07-29]
                           style: GoogleFonts.gowunBatang(
                             color: _isParentVerified ? Colors.white38 : const Color(0xFF030712),
                             fontWeight: FontWeight.bold,
@@ -614,7 +633,15 @@ class _SignupScreenState extends State<SignupScreen> {
                   ? () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const TermsAgreementScreen()),
+                  MaterialPageRoute(
+                    // 🆕 [실사용 전환 2026-07-29] 가입 완료 시점에 실제 저장할 정보를 그대로 전달
+                    builder: (context) => TermsAgreementScreen(
+                      realName: _nameController.text.trim(),
+                      userType: _userTypeLabel,
+                      childEmail: (!isStudent && !isGeneral) ? _childEmailController.text.trim() : null,
+                      parentEmail: _isUnder14 ? _parentEmailController.text.trim() : null,
+                    ),
+                  ),
                 );
               }
                   : null,
@@ -757,7 +784,19 @@ class _SignupScreenState extends State<SignupScreen> {
 // 디자인/레이아웃/색상/폰트/크기는 100% 원본 동일 유지.
 // -----------------------------------------------------------------------
 class TermsAgreementScreen extends StatefulWidget {
-  const TermsAgreementScreen({super.key});
+  // 🆕 [실사용 전환 2026-07-29] signup_screen.dart에서 실제 입력한 값을 그대로 전달받음
+  final String realName;
+  final String userType;
+  final String? childEmail;
+  final String? parentEmail;
+
+  const TermsAgreementScreen({
+    super.key,
+    required this.realName,
+    required this.userType,
+    this.childEmail,
+    this.parentEmail,
+  });
 
   @override
   State<TermsAgreementScreen> createState() => _TermsAgreementScreenState();
@@ -873,7 +912,17 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: isAgreed
-                  ? () {
+                  ? () async {
+                // 🆕 [실사용 전환 2026-07-29] 가상 데이터 아님 - 실제 입력한 이름/유형/연동 정보를
+                // user_profile_service.dart 창구를 통해 저장. 이후 성취도 화면 등에서 실제 이름 표시됨.
+                await DkeUserProfile.saveProfileOnSignup(
+                  realName: widget.realName,
+                  userType: widget.userType,
+                  childEmail: widget.childEmail,
+                  parentEmail: widget.parentEmail,
+                );
+
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(

@@ -91,7 +91,7 @@ class _EntranceScreenState extends State<EntranceScreen> with TickerProviderStat
   static const String _brandText = 'GKE StudyUp';
 
   // 🆕 [12개국 다국어 연동] 응원 문구 - 기본(EN+KO) 모드용 한글/영문, 10개국어용 번역
-  static const String _cheerKo = '응원 합니다!';
+  static const String _cheerKo = '응원 합니다';
   static const String _cheerEn = "We're Cheering for You!";
   static const Map<String, String> _cheerForeign = {
     'JA': '応援しています！',
@@ -551,6 +551,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
         ),
         child: Text(
           title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis, // 🆕 [오버플로우 방지 2026-07-29]
           style: const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
@@ -569,6 +571,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
         ),
         child: Text(
           title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis, // 🆕 [오버플로우 방지 2026-07-29]
           style: const TextStyle(color: Color(0xFFFCD34D), fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),

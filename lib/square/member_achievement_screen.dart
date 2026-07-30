@@ -5,6 +5,7 @@ import 'dart:convert'; // 🆕 [데이터 연결] 성적 기록 JSON 직렬화�
 import 'package:shared_preferences/shared_preferences.dart';
 import '../global_lang.dart'; // 👑 글로벌 사전 연결
 import '../star_economy.dart'; // 🆕 [별 경제 시스템] 실제 누적 별/레벨 조회용
+import '../services/user_profile_service.dart'; // 🆕 [실사용 전환] 실제 가입자 이름 조회용
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -78,18 +79,23 @@ class _ExamRecord {
     'mockRank': mockRank,
   };
 
+// 🆕 [버그 수정 2026-07-29] 필수 필드도 null-안전 처리로 변경.
+  // 기존엔 id/type/grade/semester/date/subject/unit/score 중 단 하나라도 null이거나 형식이 깨지면
+  // 이 레코드 하나 때문에 예외가 발생했고, 그 예외가 _loadExamRecords() 전체를 빈 목록으로 만들어서
+  // 저장된 성적 기록이 통째로 화면에서 사라지는 문제가 있었음. 아래처럼 각 필드에 안전한 기본값을 두면
+  // 손상된 레코드 하나는 기본값으로 채워져 표시되고, 나머지 정상 레코드는 영향받지 않음.
   factory _ExamRecord.fromJson(Map<String, dynamic> json) => _ExamRecord(
-    id: json['id'] as String,
-    type: json['type'] as String,
-    grade: json['grade'] as int,
-    semester: json['semester'] as int,
-    date: DateTime.parse(json['date'] as String),
-    subject: json['subject'] as String,
-    unit: json['unit'] as String,
-    score: (json['score'] as num).toDouble(),
+    id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    type: json['type'] as String? ?? "주평가",
+    grade: (json['grade'] as num?)?.toInt() ?? 1,
+    semester: (json['semester'] as num?)?.toInt() ?? 1,
+    date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
+    subject: json['subject'] as String? ?? "",
+    unit: json['unit'] as String? ?? "",
+    score: (json['score'] as num?)?.toDouble() ?? 0.0,
     durationText: json['durationText'] as String? ?? "45분",
     difficultyLevel: json['difficultyLevel'] as String? ?? "보통",
-    starSatisfaction: json['starSatisfaction'] as int? ?? 5,
+    starSatisfaction: (json['starSatisfaction'] as num?)?.toInt() ?? 5,
     errorCauses: (json['errorCauses'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const ["개념부족"],
     reviewRequired: json['reviewRequired'] as String? ?? "필요",
     mockMonth: json['mockMonth'] as String? ?? "",
@@ -498,9 +504,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [데이터 연결] 성적 기록을 불러오는 동안 잠깐 빈 화면이 보이지 않도록 하는 로딩 플래그
   bool _isRecordsLoading = true;
-
   // 🆕 [데이터 연결] 마이페이지에서 실제로 저장한 목표 대학을 그대로 반영 (기존엔 '서울대학교' 고정값이었음)
   String? _realTargetUniversity;
+  // 🆕 [데이터 연결] 마이페이지에서 실제로 저장한 목표 대학을 그대로 반영 (기존엔 '서울대학교' 고정값이었음)
+  String? _realUserName;
 
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _unitController = TextEditingController();
@@ -551,6 +558,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     _loadStarsAndLevel(); // 🆕 [데이터 연결] 가상 레벨/별 대신 star_economy.dart의 실제 누적치를 불러옴
     _loadRealSubjectStudyData(); // 🆕 [데이터 연결] 가상 8과목 그래프 대신 실제 학습기록을 집계해서 불러옴
     _loadDailyTotalHistory(); // 🆕 [데이터 연결] 일일 전체 학습시간(가로스크롤) 그래프용 데이터 로드
+    _loadRealUserName(); // 🆕 [데이터 연결 2026-07-29] 실제 가입자 이름 불러옴
   }
 
   // 🆕 [데이터 연결-버그 수정] 레벨/별 실제 연동
@@ -569,13 +577,25 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     }
   }
 
+  // 🆕 [데이터 연결 2026-07-29] 실제 가입자 이름 불러오기.
+  // 기존엔 '이규현'/'Lee Gyu-hyun', '이제임스'/'James Lee' 등이 화면에 고정 문자열로 박혀있었음.
+  // 이제 signup_screen.dart 가입 완료 시점에 저장된 실제 이름을 불러와서 표시.
+  Future<void> _loadRealUserName() async {
+    try {
+      final String? name = await DkeUserProfile.getRealName();
+      if (!mounted) return;
+      setState(() {
+        _realUserName = name;
+      });
+    } catch (e) {
+      debugPrint("[MemberAchievement] 가입자 이름 불러오기 실패: $e");
+    }
+  }
+
   // ============================================================================
-  // 🆕 [데이터 연결 - 버그 수정] 성적 기록 영구 저장/불러오기
-  // 기존 문제: _mockInitialExamRecords()가 앱을 켤 때마다 가상 데이터 3개로 덮어써서,
-  //           학생이 실제로 입력한 성적이 저장되지 않고 사라짐.
-  // 수정 내용: SharedPreferences('gke_exam_records')에 실제 기록을 저장/복원.
-  //           저장된 기록이 없는 최초 실행 시에는 빈 목록으로 시작 (가상 데이터 삭제).
-  // ============================================================================
+// 🆕 [버그 수정 2026-07-29] 레코드 목록 전체를 한 번에 변환하다가 하나라도 실패하면
+  // 전체가 빈 목록이 되어버리던 문제를 수정. 이제 레코드 하나씩 개별적으로 파싱해서,
+  // 손상된 레코드 하나만 건너뛰고 나머지 정상 레코드는 모두 정상적으로 불러옵니다.
   Future<void> _loadExamRecords() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -584,7 +604,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       List<_ExamRecord> loaded = [];
       if (recordsJson != null && recordsJson.isNotEmpty) {
         final List<dynamic> decoded = jsonDecode(recordsJson);
-        loaded = decoded.map((e) => _ExamRecord.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+        for (final e in decoded) {
+          try {
+            loaded.add(_ExamRecord.fromJson(Map<String, dynamic>.from(e as Map)));
+          } catch (itemError) {
+            // 개별 레코드 하나가 손상되어 있어도 나머지 레코드는 정상적으로 계속 불러옵니다.
+            debugPrint("[MemberAchievement] 손상된 성적 기록 1건 건너뜀: $itemError");
+          }
+        }
       }
 
       if (!mounted) return;
@@ -1286,7 +1313,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             ),
             const SizedBox(height: 2),
             Text(
-              DkeLang.current == 'KO' ? '이규현 ${_t("achievementWord")}' : "Lee Gyu-hyun - ${_t('achievementWord')}",
+              DkeLang.current == 'KO'
+                  ? '${_realUserName ?? "학습자"} ${_t("achievementWord")}'
+                  : "${_realUserName ?? "Learner"} - ${_t('achievementWord')}",
               textAlign: TextAlign.center,
               overflow: TextOverflow.fade,
               softWrap: false,
@@ -1321,7 +1350,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 child: Column(
                   children: [
                     Text(
-                      DkeLang.current == 'KO' ? '${_t("highSchoolGrade2")} 이제임스' : "${_t('highSchoolGrade2')}, James Lee",
+                      DkeLang.current == 'KO'
+                          ? '${_t("highSchoolGrade2")} ${_realUserName ?? "학습자"}'
+                          : "${_t('highSchoolGrade2')}, ${_realUserName ?? "Learner"}",
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.fade,
                       softWrap: false,
