@@ -12,8 +12,7 @@ import 'planner/main_self_learning_planner_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gsu_studyup/square/academic_timeline/academic_timeline_screen.dart';
 import 'planner/widgets/study_timelines.dart'; // 🆕 [D-day 팝업 연동] 시험 D-day 응원/실전팁 팝업 데이터 참조
-// 14번 라인 주변을 이렇게 수정하세요
-// ← 이 줄로 변경
+import 'package:gsu_studyup/square/my_growth_path_screen.dart'; // 나의 성장로 화면 연동
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -25,9 +24,6 @@ class HomeDashboardScreen extends StatefulWidget {
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsBindingObserver {
   String _examBreakTimeSelection = '20분';
-  String userName = '이규현';
-  int currentStars = 75;
-  final int maxTargetStars = 90;
 
   String selectedSubject = '';
   String selectedMode = 'Weekday (주중 학습)';
@@ -594,13 +590,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
         ),
       ),
     );
-
-    if (missionResult != null && missionResult is int) {
-      setState(() {
-        currentStars = missionResult;
-        if (currentStars > maxTargetStars) currentStars = maxTargetStars;
-      });
-    }
   }
 
   void _showAddSubjectDialog() {
@@ -754,7 +743,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                         ),
                         _buildMenuButton(
                           icon: Icons.fort_rounded, label: "나의 성장로", subLabel: "My Growth Path",
-                          onTap: () {},
+                          onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const MyGrowthPathScreen())); },
                         ),
                         _buildMenuButton(
                           icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling",

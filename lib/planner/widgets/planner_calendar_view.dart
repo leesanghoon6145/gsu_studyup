@@ -4,8 +4,10 @@ import '../../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위�
 
 /// ============================================================================
 /// [GKE StudyUp] 일간 뷰 전용 달력 제어 레일 및 날짜 선택 그리드 위젯
+/// 🆕 [2026-07-30] 이전달/다음달 이동 기능 추가: 선택된 날짜와 별개로 달력에 표시되는
+/// "달"을 독립적으로 넘겨볼 수 있도록 StatefulWidget으로 전환함.
 /// ============================================================================
-class PlannerCalendarView extends StatelessWidget {
+class PlannerCalendarView extends StatefulWidget {
   final DateTime selectedDayDate;
   final bool isDayCalendarVisible;
   final List<Map<String, dynamic>> globalSchedules;
@@ -40,6 +42,42 @@ class PlannerCalendarView extends StatelessWidget {
     required this.onToggleCalendar,
     required this.onDaySelected,
   });
+
+  @override
+  State<PlannerCalendarView> createState() => _PlannerCalendarViewState();
+}
+
+class _PlannerCalendarViewState extends State<PlannerCalendarView> {
+  // 🆕 [2026-07-30] 달력에 "표시 중인 달" — selectedDayDate와 독립적으로 이전/다음 이동 가능
+  late DateTime _displayedMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayedMonth = DateTime(widget.selectedDayDate.year, widget.selectedDayDate.month, 1);
+  }
+
+  @override
+  void didUpdateWidget(covariant PlannerCalendarView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // [주석] 외부(다른 화면 등)에서 selectedDayDate의 달이 바뀌면 달력도 그 달을 따라감
+    if (oldWidget.selectedDayDate.year != widget.selectedDayDate.year ||
+        oldWidget.selectedDayDate.month != widget.selectedDayDate.month) {
+      _displayedMonth = DateTime(widget.selectedDayDate.year, widget.selectedDayDate.month, 1);
+    }
+  }
+
+  void _goToPreviousMonth() {
+    setState(() {
+      _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month - 1, 1);
+    });
+  }
+
+  void _goToNextMonth() {
+    setState(() {
+      _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 1);
+    });
+  }
 
   // ============================================================================
   // 🆕 [12개국 언어 시스템]
@@ -108,7 +146,7 @@ class PlannerCalendarView extends StatelessWidget {
         GestureDetector(
           onTap: () {
             // [주석] 팝업 호출 코드를 삭제하고 오직 달력 열기/닫기 토글만 실행
-            onToggleCalendar();
+            widget.onToggleCalendar();
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -123,8 +161,6 @@ class PlannerCalendarView extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // 🆕 [오버플로우 방지 2026-07-29] Expanded로 감싸서 남은 폭 안에서만 표시되도록 제한.
-                // 이걸 안 하면 안쪽 Text의 overflow/maxLines 설정이 실제로 작동하지 않아서
-                // 긴 언어(독일어/러시아어 등)에서 화면 밖으로 글자가 넘치는 문제가 있었음.
                 Expanded(
                   child: Row(
                     children: [
@@ -140,7 +176,7 @@ class PlannerCalendarView extends StatelessWidget {
                           children: [
                             // [주석] 👑 "07/02" 월일 동적 표시 (명조체 글자크기 15, 황금색)
                             Text(
-                              '${selectedDayDate.month.toString().padLeft(2, '0')}/${selectedDayDate.day.toString().padLeft(2, '0')}',
+                              '${widget.selectedDayDate.month.toString().padLeft(2, '0')}/${widget.selectedDayDate.day.toString().padLeft(2, '0')}',
                               style: GoogleFonts.notoSerif(
                                 fontSize: 15,
                                 color: const Color(0xFFE5C158),
@@ -167,7 +203,7 @@ class PlannerCalendarView extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Icon(
-                  isDayCalendarVisible ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  widget.isDayCalendarVisible ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                   color: const Color(0xFFE5C158),
                   size: 20,
                 ),
@@ -177,25 +213,54 @@ class PlannerCalendarView extends StatelessWidget {
         ),
 
         // [주석] 펼침 상태일 때 달력 본판 그리드 출력 (오버플로 방지 패딩 및 비율 최적화)
-        if (isDayCalendarVisible) ...[
+        if (widget.isDayCalendarVisible) ...[
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: const Color(0xFF020617),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: slate800),
+              border: Border.all(color: widget.slate800),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 🆕 [12개국] 기본값 = "2026 / 7 Date Control Rail" + "달력 제어 레일" 두 줄, 10개국 선택 시 = 단일 언어 한 줄
-                Text(
-                  '${_yearMonthNumeric(selectedDayDate.year, selectedDayDate.month)} ${_biStr('dateControlRail')}',
-                  overflow: TextOverflow.fade,
-                  softWrap: false,
-                  maxLines: 1,
-                  style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold),
+                // 🆕 [2026-07-30] 이전달/다음달 이동 화살표 + 연/월 + "달력 제어 레일" 텍스트
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _goToPreviousMonth,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        child: Icon(Icons.chevron_left, color: widget.goldColor, size: 22),
+                      ),
+                    ),
+
+                    Expanded(
+                      child: Text(
+                        '${_yearMonthNumeric(_displayedMonth.year, _displayedMonth.month)} ${_biStr('dateControlRail')}',
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(fontSize: 13, color: widget.goldColor, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _goToNextMonth,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        child: Icon(Icons.chevron_right, color: widget.goldColor, size: 22),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
 
@@ -206,7 +271,7 @@ class PlannerCalendarView extends StatelessWidget {
                   itemCount: 7,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 1.3),
                   itemBuilder: (context, index) {
-                    final Color dayColor = index == 0 ? examColor : (index == 6 ? schoolColor : slate400);
+                    final Color dayColor = index == 0 ? widget.examColor : (index == 6 ? widget.schoolColor : widget.slate400);
                     if (_isForeignSelected) {
                       final foreignList = _weekdaysForeignOrNull;
                       final label = foreignList != null ? foreignList[index] : _weekdaySunFirstEn[index];
@@ -230,7 +295,7 @@ class PlannerCalendarView extends StatelessWidget {
                 ),
                 const Divider(color: Color(0xFF1E293B), height: 6),
 
-                // [주석] 날짜 숫자 그리드 빌더 (오버플로 차단 규격)
+                // [주석] 날짜 숫자 그리드 빌더 (오버플로 차단 규격) — 🆕 이제 _displayedMonth 기준으로 계산
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -255,48 +320,53 @@ class PlannerCalendarView extends StatelessWidget {
                       displayDayNum = index - _emptyPrefixCellsCount + 1;
                     }
 
-                    // [주석] 해당 날짜의 스케줄 도트 색상 판별 매핑 트랙
+                    // [주석] 해당 날짜의 스케줄 도트 색상 판별 매핑 트랙 (🆕 _displayedMonth 기준)
                     bool hasSchool = false; bool hasAcademy = false; bool hasExam = false; bool hasPersonal = false;
                     int dayScheduleCount = 0;
 
                     if (!isBlurred) {
-                      var daySchedules = globalSchedules.where((s) => s['year'] == selectedDayDate.year && s['month'] == selectedDayDate.month && s['day'] == displayDayNum);
+                      var daySchedules = widget.globalSchedules.where((s) =>
+                      s['year'] == _displayedMonth.year && s['month'] == _displayedMonth.month && s['day'] == displayDayNum);
                       dayScheduleCount = daySchedules.length;
                       for (var s in daySchedules) {
-                        if (s['color'] == schoolColor) hasSchool = true;
-                        if (s['color'] == academyColor) hasAcademy = true;
-                        if (s['color'] == examColor) hasExam = true;
-                        if (s['color'] == personalColor) hasPersonal = true;
+                        if (s['color'] == widget.schoolColor) hasSchool = true;
+                        if (s['color'] == widget.academyColor) hasAcademy = true;
+                        if (s['color'] == widget.examColor) hasExam = true;
+                        if (s['color'] == widget.personalColor) hasPersonal = true;
                       }
                     }
 
-                    bool isSelected = !isBlurred && selectedDayDate.day == displayDayNum;
+                    // 🆕 선택 상태 판별에 연/월까지 같이 비교 (이제 다른 달을 보고 있을 수 있으므로)
+                    bool isSelected = !isBlurred &&
+                        widget.selectedDayDate.year == _displayedMonth.year &&
+                        widget.selectedDayDate.month == _displayedMonth.month &&
+                        widget.selectedDayDate.day == displayDayNum;
 
                     return GestureDetector(
                       onTap: () {
                         if (isBlurred) return;
-                        onDaySelected(DateTime(selectedDayDate.year, selectedDayDate.month, displayDayNum));
+                        widget.onDaySelected(DateTime(_displayedMonth.year, _displayedMonth.month, displayDayNum));
                       },
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: isSelected ? goldColor.withValues(alpha: 0.15) : const Color(0xFF0F172A),
+                          color: isSelected ? widget.goldColor.withValues(alpha: 0.15) : const Color(0xFF0F172A),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: isSelected ? goldColor : slate800, width: isSelected ? 1.5 : 1),
+                          border: Border.all(color: isSelected ? widget.goldColor : widget.slate800, width: isSelected ? 1.5 : 1),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('$displayDayNum', style: GoogleFonts.notoSerif(fontSize: 12, color: isBlurred ? slate500 : (isSelected ? goldColor : Colors.white), fontWeight: FontWeight.bold)),
+                            Text('$displayDayNum', style: GoogleFonts.notoSerif(fontSize: 12, color: isBlurred ? widget.slate500 : (isSelected ? widget.goldColor : Colors.white), fontWeight: FontWeight.bold)),
                             if (!isBlurred)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  if (hasSchool) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: schoolColor),
-                                  if (hasAcademy) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: academyColor),
-                                  if (hasExam) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: examColor),
-                                  if (hasPersonal) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: personalColor),
+                                  if (hasSchool) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: widget.schoolColor),
+                                  if (hasAcademy) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: widget.academyColor),
+                                  if (hasExam) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: widget.examColor),
+                                  if (hasPersonal) Container(width: 3.5, height: 3.5, margin: const EdgeInsets.symmetric(horizontal: 0.5), color: widget.personalColor),
                                 ],
                               )
                             else
@@ -304,7 +374,7 @@ class PlannerCalendarView extends StatelessWidget {
 
                             // 🆕 [12개국] 숫자만 표시 (칸이 작아 언어 문구를 넣기 어려워 국제 공통 숫자만 사용)
                             if (!isBlurred && dayScheduleCount > 0)
-                              Text('$dayScheduleCount', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSans(fontSize: 10, color: goldColor, fontWeight: FontWeight.bold))
+                              Text('$dayScheduleCount', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSans(fontSize: 10, color: widget.goldColor, fontWeight: FontWeight.bold))
                             else
                               const SizedBox(height: 6),
                           ],
@@ -321,15 +391,15 @@ class PlannerCalendarView extends StatelessWidget {
     );
   }
 
-  // [주석] 매월 1일의 요일 및 그리드 칸수 자동 역산 알고리즘 구간 (getter로 분리해 build() 가독성 확보)
+  // [주석] 매월 1일의 요일 및 그리드 칸수 자동 역산 알고리즘 구간 (🆕 이제 _displayedMonth 기준)
   int get _firstDayWeekdayIndex {
-    final firstDayOfCurrentMonth = DateTime(selectedDayDate.year, selectedDayDate.month, 1);
+    final firstDayOfCurrentMonth = DateTime(_displayedMonth.year, _displayedMonth.month, 1);
     return firstDayOfCurrentMonth.weekday;
   }
 
   int get _emptyPrefixCellsCount => _firstDayWeekdayIndex == 7 ? 0 : _firstDayWeekdayIndex;
-  int get _totalDaysInMonth => DateTime(selectedDayDate.year, selectedDayDate.month + 1, 0).day;
-  int get _prevMonthTotalDays => DateTime(selectedDayDate.year, selectedDayDate.month, 0).day;
+  int get _totalDaysInMonth => DateTime(_displayedMonth.year, _displayedMonth.month + 1, 0).day;
+  int get _prevMonthTotalDays => DateTime(_displayedMonth.year, _displayedMonth.month, 0).day;
 
   int get _totalCalendarGridItemsCount {
     int count = _emptyPrefixCellsCount + _totalDaysInMonth;

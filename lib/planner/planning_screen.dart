@@ -40,10 +40,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
   // [주석] 카테고리별 테마 색상 (지시사항 엄격 준수)
   final Color schoolColor = const Color(0xFF3B82F6);  // 학교 일정 (파랑색)
-  final Color companyColor = const Color(0xFF8B5CF6); // 👑 회사 일정 (퍼플 색상 적용)
-  final Color academyColor = const Color(0xFF10B981);   // 학원 일정 (녹색) 복구 완료
+  final Color academyColor = const Color(0xFFFACC15);   // 🆕 학원 일정 (노랑색으로 변경)
   final Color examColor = const Color(0xFFEF4444);    // 시험 일정 (빨강색)
-  final Color personalColor = const Color(0xFFFFACC15); // 개인 일정 (노랑색)
+  final Color personalColor = const Color(0xFF8B5CF6); // 🆕 개인 일정 (보라색으로 변경)
   final Color goldColor = const Color(0xFFD4AF37);     // 공식 황금색
 
   // [주석] 테마 컬러 상수 정의
@@ -240,6 +239,45 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   static Map<String, String> _uiTextLookup(String key) => _uiText[key] ?? {'EN': key, 'KO': key};
+
+  // 🆕 [2026-07-30] 월/영문 축약 리스트 (가로 한 줄 EN/KO 표시용)
+  static const List<String> _monthAbbrEn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // 🆕 [2026-07-30] 동적 텍스트를 "EN / KO" 가로 한 줄로 합쳐 표시 (월 선택 칩용)
+  static Widget _biCompoundInline({
+    required String enText,
+    required String koText,
+    required TextStyle style,
+    String? foreignText,
+  }) {
+    if (_isForeignSelected) {
+      return Text(foreignText ?? koText, style: style, overflow: TextOverflow.fade, softWrap: false, maxLines: 1);
+    }
+    return Text('$enText / $koText', style: style, overflow: TextOverflow.fade, softWrap: false, maxLines: 1);
+  }
+
+  // 🆕 [2026-07-30] 동적 텍스트를 영문(위)/한글(아래) 2줄로 쌓아서 표시 (주 선택 칩, 토글 버튼용)
+  static Widget _biCompoundStack({
+    required String enText,
+    required String koText,
+    required TextStyle enStyle,
+    required TextStyle koStyle,
+    String? foreignText,
+    TextStyle? foreignStyle,
+    CrossAxisAlignment alignment = CrossAxisAlignment.start,
+  }) {
+    if (_isForeignSelected) {
+      return Text(foreignText ?? koText, style: foreignStyle ?? koStyle, overflow: TextOverflow.fade, softWrap: false, maxLines: 1);
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: alignment,
+      children: [
+        Text(enText, style: enStyle, overflow: TextOverflow.fade, softWrap: false, maxLines: 1),
+        Text(koText, style: koStyle, overflow: TextOverflow.fade, softWrap: false, maxLines: 1),
+      ],
+    );
+  }
 
   static String _yearNumText(String rawKoreanYear) {
     if (DkeLang.current == 'KO') return rawKoreanYear;
@@ -849,7 +887,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(_t('achievementGauge'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
+                  Text(_biStr('achievementGauge'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
                   Text('${(_monthlyProgressGauge * 100).toStringAsFixed(1)}%', style: GoogleFonts.notoSerif(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -888,7 +926,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Center(
-                    child: Text(_monthNumText(index + 1), style: GoogleFonts.notoSansKr(fontSize: 12, color: isSelected ? goldColor : slate300)),
+                    child: _biCompoundInline(
+                      enText: _monthAbbrEn[index],
+                      koText: '${index + 1}월',
+                      foreignText: _monthNumText(index + 1),
+                      style: GoogleFonts.notoSansKr(fontSize: 12, color: isSelected ? goldColor : slate300),
+                    ),
                   ),
                 ),
               );
@@ -913,10 +956,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${_monthNumText(targetMonth)} ${_t('monthTargetListWord')}',
-                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                        style: GoogleFonts.notoSansKr(fontSize: 13, color: _isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                      _biCompoundStack(
+                        enText: '${_monthAbbrEn[targetMonth - 1]} ${_uiTextLookup('monthTargetListWord')['EN']}',
+                        koText: '${targetMonth}월 ${_t('monthTargetListWord')}',
+                        foreignText: '${_monthNumText(targetMonth)} ${_t('monthTargetListWord')}',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: _isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: _isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: _isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -937,10 +983,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${_monthNumText(targetMonth)} ${_t('yearMainScheduleWord')}',
-                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                        style: GoogleFonts.notoSansKr(fontSize: 13, color: !_isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                      _biCompoundStack(
+                        enText: '${_monthAbbrEn[targetMonth - 1]} ${_uiTextLookup('yearMainScheduleWord')['EN']}',
+                        koText: '${targetMonth}월 ${_t('yearMainScheduleWord')}',
+                        foreignText: '${_monthNumText(targetMonth)} ${_t('yearMainScheduleWord')}',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: !_isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: !_isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: !_isMonthTargetSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1028,7 +1077,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         _buildDynamicSectionHeader('sectionWeeklyAnalytics', () { _showAddScheduleBottomSheet(context, '목표'); }),
         const SizedBox(height: 12),
         SizedBox(
-          height: 38,
+          height: 50,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _scrollableWeeks.length,
@@ -1041,14 +1090,21 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected ? goldColor : const Color(0xFF020617),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: isSelected ? goldColor : slate800),
                   ),
                   child: Center(
-                    child: Text(_weekNumText(index + 1), style: GoogleFonts.notoSansKr(fontSize: 12, color: isSelected ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold)),
+                    child: _biCompoundStack(
+                      enText: 'Week ${index + 1}',
+                      koText: '${index + 1}주차',
+                      foreignText: _weekNumText(index + 1),
+                      enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: isSelected ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold),
+                      koStyle: GoogleFonts.notoSansKr(fontSize: 12, color: isSelected ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold),
+                      alignment: CrossAxisAlignment.center,
+                    ),
                   ),
                 ),
               );
@@ -1073,10 +1129,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '$currentWeekLabelText ${_t('weekTimelineWord')}',
-                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                        style: GoogleFonts.notoSansKr(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                      _biCompoundStack(
+                        enText: 'Week ${_selectedWeekIndex + 1} ${_uiTextLookup('weekTimelineWord')['EN']}',
+                        koText: '$currentWeekLabelText ${_t('weekTimelineWord')}',
+                        foreignText: '$currentWeekLabelText ${_t('weekTimelineWord')}',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1097,10 +1156,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '$currentWeekLabelText ${_t('yearMainScheduleWord')}',
-                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                        style: GoogleFonts.notoSansKr(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                      _biCompoundStack(
+                        enText: 'Week ${_selectedWeekIndex + 1} ${_uiTextLookup('yearMainScheduleWord')['EN']}',
+                        koText: '$currentWeekLabelText ${_t('yearMainScheduleWord')}',
+                        foreignText: '$currentWeekLabelText ${_t('yearMainScheduleWord')}',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1230,18 +1292,22 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      _selectedDayDate.year == DateTime.now().year && _selectedDayDate.month == DateTime.now().month && _selectedDayDate.day == DateTime.now().day
-                          ? _t('selectedDateToday')
-                          : _t('selectedDateArchive'),
-                      overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                      style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    _biTitle(
+                      (_selectedDayDate.year == DateTime.now().year && _selectedDayDate.month == DateTime.now().month && _selectedDayDate.day == DateTime.now().day)
+                          ? 'selectedDateToday'
+                          : 'selectedDateArchive',
+                      enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: goldColor, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      koStyle: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      foreignStyle: GoogleFonts.notoSans(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '"${_weekdaysMonFirst()[_selectedDayDate.weekday - 1]}${DkeLang.current == 'KO' ? '요일' : ''}" ${_t('todayStatusLabel')}',
-                      overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                      style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600),
+                    _biCompoundStack(
+                      enText: '"${_weekdayMonFirst['EN']![_selectedDayDate.weekday - 1]}" ${_uiTextLookup('todayStatusLabel')['EN']}',
+                      koText: '"${_weekdaysMonFirst()[_selectedDayDate.weekday - 1]}요일" ${_t('todayStatusLabel')}',
+                      foreignText: '"${_weekdaysMonFirst()[_selectedDayDate.weekday - 1]}" ${_t('todayStatusLabel')}',
+                      enStyle: GoogleFonts.gowunBatang(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                      koStyle: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600),
+                      foreignStyle: GoogleFonts.notoSans(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -1282,10 +1348,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _t('todayMainSchedule'),
-                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                        style: GoogleFonts.notoSansKr(fontSize: 13, color: !_isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                      _biTitle(
+                        'todayMainSchedule',
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 11, color: !_isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: !_isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: !_isTimeViewSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1400,7 +1467,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       else
                         ...targetSchedules.map((item) {
                           String catStr = '[${_biStr('catSchool')}]';
-                          if (item['color'] == companyColor) catStr = '[${_biStr('catCompany')}]';
                           if (item['color'] == academyColor) { catStr = '[${_biStr('catAcademy')}]'; }
                           if (item['color'] == examColor) catStr = '[${_biStr('catExam')}]';
                           if (item['color'] == personalColor) catStr = '[${_biStr('catPersonal')}]';
@@ -1491,54 +1557,31 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       ),
                       Text(_biStr('labelCategorySelect'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 6,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          {'value': '학교', 'labelKey': 'catSchool'},
+                          {'value': '학원', 'labelKey': 'catAcademy'},
+                          {'value': '시험', 'labelKey': 'catExam'},
+                          {'value': '개인', 'labelKey': 'catPersonal'},
+                        ].map((cat) {
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              {'value': '학교', 'labelKey': 'catSchool'},
-                              {'value': '회사', 'labelKey': 'catCompany'},
-                              {'value': '학원', 'labelKey': 'catAcademy'},
-                            ].map((cat) {
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Radio<String>(
-                                    value: cat['value']!,
-                                    groupValue: tempCategory,
-                                    activeColor: goldColor,
-                                    onChanged: (value) { setPopState(() { tempCategory = value!; }); },
-                                  ),
-                                  Text(_biStr(cat['labelKey']!), style: GoogleFonts.notoSansKr(fontSize: 11, color: Colors.white)),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              {'value': '시험', 'labelKey': 'catExam'},
-                              {'value': '개인', 'labelKey': 'catPersonal'},
-                            ].map((cat) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 20.0),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Radio<String>(
-                                      value: cat['value']!,
-                                      groupValue: tempCategory,
-                                      activeColor: goldColor,
-                                      onChanged: (value) { setPopState(() { tempCategory = value!; }); },
-                                    ),
-                                    Text(_biStr(cat['labelKey']!), style: GoogleFonts.notoSansKr(fontSize: 11, color: Colors.white)),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
+                              Radio<String>(
+                                value: cat['value']!,
+                                groupValue: tempCategory,
+                                activeColor: goldColor,
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                                onChanged: (value) { setPopState(() { tempCategory = value!; }); },
+                              ),
+                              Container(width: 12, height: 12, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: _categoryColorFor(cat['value']!), borderRadius: BorderRadius.circular(2))),
+                              Text(_biStr(cat['labelKey']!), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: Colors.white)),
+                            ],
+                          );
+                        }).toList(),
                       ),
                       const SizedBox(height: 12),
                       Text(_biStr('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
@@ -1576,7 +1619,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         if (quickTitleController.text.trim().isEmpty) return;
                         Color choiceColor = schoolColor;
                         if (tempCategory == '개인') choiceColor = personalColor;
-                        if (tempCategory == '회사') choiceColor = companyColor;
                         if (tempCategory == '학원') choiceColor = academyColor;
                         if (tempCategory == '시험') choiceColor = examColor;
 
@@ -1701,6 +1743,22 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         );
       },
     );
+  }
+
+  // 🆕 [2026-07-30] 시간 미입력 시 사용할 현재 시각 문자열 (HH:mm)
+  String _currentTimeString() {
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  // 🆕 [2026-07-30] 카테고리 값(한국어 고정 키) → 실제 테마 색상 매핑 (색깔 정사각형 표시용)
+  Color _categoryColorFor(String catValue) {
+    switch (catValue) {
+      case '학원': return academyColor;
+      case '시험': return examColor;
+      case '개인': return personalColor;
+      default: return schoolColor;
+    }
   }
 
   // 🆕 [12개국] 내부 카테고리 값(한국어 고정 키)을 화면 표시용 번역 라벨로 변환
@@ -1977,6 +2035,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     final TextEditingController titleController = TextEditingController();
     final TextEditingController monthController = TextEditingController();
     final TextEditingController dayController = TextEditingController();
+    final TextEditingController timeController = TextEditingController();
     final TextEditingController memoController = TextEditingController();
 
     final List<Map<String, String>> entryTypeOptions = [
@@ -1985,7 +2044,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     ];
     final List<Map<String, String>> scheduleCategoryOptions = [
       {'value': '학교', 'labelKey': 'catSchool'},
-      {'value': '회사', 'labelKey': 'catCompany'},
       {'value': '학원', 'labelKey': 'catAcademy'},
       {'value': '시험', 'labelKey': 'catExam'},
       {'value': '개인', 'labelKey': 'catPersonal'},
@@ -2019,14 +2077,20 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       }).toList(),
                     ),
                     if (entryType == '일정') ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: scheduleCategoryOptions.map((cat) {
-                          return Row(mainAxisSize: MainAxisSize.min, children: [
-                            Radio<String>(value: cat['value']!, groupValue: selectedCategory, activeColor: goldColor, onChanged: (value) { setModalState(() { selectedCategory = value!; }); }),
-                            Text(_biStr(cat['labelKey']!), style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white)),
-                          ]);
-                        }).toList(),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: scheduleCategoryOptions.map((cat) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 14.0),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Radio<String>(value: cat['value']!, groupValue: selectedCategory, activeColor: goldColor, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact, onChanged: (value) { setModalState(() { selectedCategory = value!; }); }),
+                                Container(width: 12, height: 12, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: _categoryColorFor(cat['value']!), borderRadius: BorderRadius.circular(2))),
+                                Text(_biStr(cat['labelKey']!), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white)),
+                              ]),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 10),
@@ -2034,6 +2098,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       controller: titleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(hintText: entryType == '일정' ? _biStr('hintTitleGeneric') : _biStr('hintTargetGeneric'), filled: true, fillColor: const Color(0xFF0F172A), enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor))),
                     ),
+
                     if (entryType == '일정') ...[
                       const SizedBox(height: 10),
                       Row(
@@ -2042,6 +2107,20 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           const SizedBox(width: 10),
                           Expanded(child: TextField(controller: dayController, keyboardType: TextInputType.number, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12), decoration: InputDecoration(hintText: _biStr('hintDay'), filled: true, fillColor: const Color(0xFF0F172A), enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor))))),
                         ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: timeController,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: '${_biStr('hintTimeInput')} (${_currentTimeString()})',
+                          hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 11),
+                          filled: true, fillColor: const Color(0xFF0F172A),
+                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
+                          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 10),
@@ -2067,10 +2146,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                             if (selectedCategory == '개인') sColor = personalColor;
                             int inputMonth = int.tryParse(monthController.text.trim()) ?? 7;
                             int inputDay = int.tryParse(dayController.text.trim()) ?? 1;
+                            String finalTime = timeController.text.trim().isEmpty ? _currentTimeString() : timeController.text.trim();
 
                             setState(() {
                               _globalSchedules.add({
-                                'year': 2026, 'month': inputMonth, 'day': inputDay, 'time': '12:00',
+                                'year': 2026, 'month': inputMonth, 'day': inputDay, 'time': finalTime,
                                 'title': titleController.text.trim(), 'color': sColor, 'memo': memoController.text.trim(),
                               });
                               _sortGlobalSchedules();
