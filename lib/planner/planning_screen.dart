@@ -72,6 +72,21 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   int _selectedWeekIndex = 0;
   final List<String> _scrollableWeeks = ['1주차', '2주차', '3주차', '4주차', '5주차'];
 
+  // 🆕 [2026-08-02] 주간(Week) 탭 전용 - "실제 캘린더 주(일~토)" 시작일(일요일) 상태 변수
+  // 앱 진입(initState) 시 항상 오늘이 속한 실제 주의 일요일로 자동 설정됨. 이전 세션 상태를 복원하지
+  // 않고 매번 "오늘이 속한 주"를 기본값으로 보여주는 것이 사용자 요구사항이므로 SharedPreferences에는
+  // 저장/복원하지 않음 (탭 전환 중 KeepAlive로 인한 세션 내 유지만 허용됨).
+  late DateTime _weekViewRangeStart;
+
+  // 🆕 [2026-08-02] 주간 탭 - 칩 가로 스크롤 리스트 컨트롤러 및 "이번 주 최초 자동 중앙 정렬" 1회성 플래그
+  // 🆕 [2026-08-03] 이전의 postFrameCallback/Timer 재시도 방식은 "빌드가 끝난 뒤 나중에 스크롤을
+  // 밀어넣는" 방식이라 타이밍에 따라 실패하는 경우가 있었음. 이번에는 애초에 ScrollController를
+  // 생성하는 시점에 MediaQuery로 화면 폭을 읽어 "이번 주가 중앙에 오는 시작 위치"를 계산해서
+  // initialScrollOffset으로 바로 지정 — 화면이 그려지는 첫 프레임부터 정확한 위치에서 시작되므로
+  // 재시도/타이밍 문제 자체가 발생하지 않음. late final이라 첫 사용 시 딱 한 번만 생성됨.
+  late final ScrollController _weekChipScrollController;
+  bool _weekChipScrollControllerReady = false;
+
   // [주석] 일간 뷰 동적 날짜 선택 변수 (기본값: DateTime.now() 오늘 날짜로 자동 매핑 및 결합)
   late DateTime _selectedDayDate;
 
@@ -79,6 +94,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   // [GKE StudyUp] 글로벌 마스터 데이터 센터
   // ============================================================================
   late Map<String, List<Map<String, dynamic>>> _yearlyTargetsMap;
+  // 🆕 [2026-08-03] 월간 "학습 리스트" 체크리스트 - 연간 목표 리스트와 동일한 방식(체크박스+줄긋기)으로
+  // 동작하도록 함. 월(1~12) 번호를 키로 사용하며, 각 항목은 번역 카탈로그 키(labelKey)와 완료 여부(done)만
+  // 저장함 — 실제 표시 문구는 언어 설정에 따라 _t(labelKey)로 매번 새로 생성되므로 다국어가 항상 정확함.
+  late Map<int, List<Map<String, dynamic>>> _monthlyTargetsMap;
   late List<Map<String, dynamic>> _globalSchedules;
 
   // [주석] 5개 주차(0~4) × 7개 요일(1~7) 단위의 순환형 주간 고정 시간표 템플릿 마스터 (토/일 스펙 템플릿은 삭제됨)
@@ -192,7 +211,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     'registeredScheduleCount': {'KO': '등록 스케줄 건수', 'EN': 'Registered Schedules', 'JA': '登録スケジュール件数', 'ZH': '已登记日程数', 'FR': 'Programmes enregistrés', 'DE': 'Registrierte Termine', 'RU': 'Зарегистрировано расписаний', 'AR': 'عدد الجداول المسجلة', 'HI': 'पंजीकृत शेड्यूल संख्या', 'VI': 'Số lịch đã đăng ký', 'ES': 'Horarios registrados', 'TH': 'จำนวนตารางที่ลงทะเบียน'},
     'yearChecklistPopupTimeLabel': {'KO': '전반 마스터 리전', 'EN': 'Full-Year Master Region', 'JA': '通年マスターリージョン', 'ZH': '全年主控区域', 'FR': 'Région maîtresse annuelle', 'DE': 'Ganzjahres-Masterbereich', 'RU': 'Годовой мастер-регион', 'AR': 'المنطقة الرئيسية السنوية', 'HI': 'वार्षिक मास्टर क्षेत्र', 'VI': 'Khu vực chủ đạo cả năm', 'ES': 'Región maestra anual', 'TH': 'พื้นที่หลักตลอดปี'},
     'yearChecklistPopupMemo': {'KO': '국내 및 글로벌 상용화 목표 달성을 위한 연간 전개 스케줄 목표치입니다.', 'EN': 'An annual rollout target for domestic and global commercialization goals.', 'JA': '国内及びグローバル商用化目標達成のための年間展開スケジュール目標値です。', 'ZH': '为实现国内及全球商业化目标而制定的年度推进计划目标。', 'FR': 'Un objectif de déploiement annuel pour la commercialisation nationale et mondiale.', 'DE': 'Ein jährliches Rollout-Ziel für nationale und globale Kommerzialisierungsziele.', 'RU': 'Годовая цель развёртывания для внутренней и глобальной коммерциализации.', 'AR': 'هدف نشر سنوي لتحقيق أهداف التسويق التجاري المحلية والعالمية.', 'HI': 'घरेलू और वैश्विक व्यावसायीकरण लक्ष्यों हेतु वार्षिक विस्तार लक्ष्य।', 'VI': 'Mục tiêu triển khai hằng năm cho các mục tiêu thương mại hóa trong nước và toàn cầu.', 'ES': 'Un objetivo de implementación anual para metas de comercialización nacional y global.', 'TH': 'เป้าหมายการขยายผลรายปีเพื่อการค้าทั้งในและต่างประเทศ'},
+    'monthChecklistPopupMemo': {'KO': '이번 달 핵심 학습 마스터 팩 안에 포함된 세부 목표 항목입니다.', 'EN': 'A detailed target item included in this month\'s Core Study Master Pack.', 'JA': '今月のコア学習マスターパックに含まれる詳細目標項目です。', 'ZH': '本月核心学习方案包中包含的具体目标项。', 'FR': 'Un objectif détaillé inclus dans le pack maître d\'étude de ce mois-ci.', 'DE': 'Ein detailliertes Ziel im diesmonatigen Kernlern-Masterpaket.', 'RU': 'Подробная цель, входящая в основной учебный пакет этого месяца.', 'AR': 'عنصر هدف مفصل ضمن حزمة الدراسة الأساسية لهذا الشهر.', 'HI': 'इस महीने के मुख्य अध्ययन पैक में शामिल एक विस्तृत लक्ष्य आइटम।', 'VI': 'Mục tiêu chi tiết nằm trong gói học tập cốt lõi của tháng này.', 'ES': 'Un objetivo detallado incluido en el paquete maestro de estudio de este mes.', 'TH': 'รายการเป้าหมายโดยละเอียดในแพ็กเรียนหลักของเดือนนี้'},
     'academicTimelineEmptyState': {'KO': '해당 타임라인에 등록된 상세 일정 내역이 없습니다.', 'EN': 'No detailed schedule registered for this timeline.', 'JA': 'このタイムラインに登録された詳細日程がありません。', 'ZH': '该时间线暂无已登记的详细日程。', 'FR': 'Aucun programme détaillé enregistré pour cette chronologie.', 'DE': 'Kein detaillierter Termin für diese Zeitleiste registriert.', 'RU': 'Для этой хронологии не зарегистрировано подробное расписание.', 'AR': 'لا يوجد جدول تفصيلي مسجل لهذا الجدول الزمني.', 'HI': 'इस समयरेखा के लिए कोई विस्तृत शेड्यूल दर्ज नहीं है।', 'VI': 'Chưa có lịch chi tiết nào được đăng ký cho dòng thời gian này.', 'ES': 'No hay horario detallado registrado para esta cronología.', 'TH': 'ไม่มีตารางโดยละเอียดที่ลงทะเบียนไว้สำหรับไทม์ไลน์นี้'},
+
+    // 🆕 [2026-08-02] 주간(Week) 탭 - 실제 캘린더 주 전환에 따른 신규 문구
+    'weekGoToday': {'KO': '오늘로 이동', 'EN': 'Go to Today', 'JA': '今日に移動', 'ZH': '回到今天', 'FR': 'Aller à aujourd\'hui', 'DE': 'Zu heute springen', 'RU': 'Перейти к сегодня', 'AR': 'الانتقال لليوم', 'HI': 'आज पर जाएं', 'VI': 'Về hôm nay', 'ES': 'Ir a hoy', 'TH': 'ไปที่วันนี้'},
+    'weekEmptyMain': {'KO': '이번 주에 등록된 주요 일정이 없습니다.', 'EN': 'No main schedule registered for this week.', 'JA': '今週登録された主要日程がありません。', 'ZH': '本周暂无已登记的主要日程。', 'FR': 'Aucun programme principal cette semaine.', 'DE': 'Kein Hauptplan für diese Woche registriert.', 'RU': 'На эту неделю основное расписание не добавлено.', 'AR': 'لا يوجد جدول رئيسي مسجل لهذا الأسبوع.', 'HI': 'इस सप्ताह के लिए कोई मुख्य कार्यक्रम दर्ज नहीं है।', 'VI': 'Chưa có lịch chính nào được đăng ký cho tuần này.', 'ES': 'No hay horario principal registrado para esta semana.', 'TH': 'ไม่มีตารางหลักที่ลงทะเบียนไว้สำหรับสัปดาห์นี้'},
   };
 
   static String _t(String key) {
@@ -326,6 +350,60 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     }
   }
 
+  // 🆕 [2026-08-02] 주어진 날짜가 속한 "실제 캘린더 주"의 일요일(주 시작일)을 계산
+  // DateTime.weekday: 월=1 ... 일=7 이므로, 일요일까지 거슬러 올라갈 일수는 (weekday % 7)
+  DateTime _computeWeekStart(DateTime date) {
+    final DateTime dayOnly = DateTime(date.year, date.month, date.day);
+    return dayOnly.subtract(Duration(days: dayOnly.weekday % 7));
+  }
+
+  // 🆕 [2026-08-02] 두 날짜가 같은 실제 캘린더 주(일~토)에 속하는지 비교
+  bool _isSameRealWeek(DateTime a, DateTime b) {
+    return _computeWeekStart(a).isAtSameMomentAs(_computeWeekStart(b));
+  }
+
+  bool _isSameCalendarDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  // 🆕 [2026-08-02] 주간 탭 - 가로 스크롤 칩에 표시할 실제 주(일요일 시작일) 목록.
+  // 오늘이 속한 실제 주를 기준으로 이전 6주 ~ 이후 12주, 총 19개 주를 생성함 (기존 칩 UI와 동일한
+  // 가로 스크롤 방식으로 동작하되, 내용만 "1~5주차" 가상 라벨 대신 실제 날짜 범위로 표시됨).
+  List<DateTime> get _weekChipWindow {
+    final DateTime baseWeekStart = _computeWeekStart(DateTime.now());
+    return List.generate(19, (i) => baseWeekStart.add(Duration(days: 7 * (i - 6))));
+  }
+
+  // 🆕 [2026-08-03] "이번 주가 화면 중앙에 오는 시작 스크롤 위치"를 계산해서 ScrollController를
+  // 그 위치로 생성함. context가 있어야 MediaQuery로 실제 화면 폭을 읽을 수 있으므로, build 단계에서
+  // (State가 mounted된 이후) 딱 한 번만 호출됨. 이후 재호출되어도 _weekChipScrollControllerReady
+  // 플래그로 막혀 다시 생성되지 않음 — 즉 사용자가 이후에 직접 스크롤한 위치는 건드리지 않음.
+  void _ensureWeekChipScrollControllerReady() {
+    if (_weekChipScrollControllerReady) return;
+
+    final double screenWidth = MediaQuery.of(context).size.width;
+    // 주간 화면 바깥 ListView의 좌우 padding(16+16=32)을 뺀 값이 칩 리스트의 실제 가로 폭
+    final double viewportWidthApprox = (screenWidth - 32.0).clamp(0.0, double.infinity);
+
+    final List<DateTime> window = _weekChipWindow;
+    final int todayIndex = window.indexWhere((w) => _isSameRealWeek(w, DateTime.now()));
+
+    const double estimatedChipWidth = 108.0; // 패딩(32) + 텍스트(~66) + 우측 마진(10) 근사치
+    final double totalEstimatedWidth = window.length * estimatedChipWidth;
+
+    double initialOffset = 0.0;
+    if (todayIndex != -1) {
+      final double targetOffset = (todayIndex * estimatedChipWidth) - (viewportWidthApprox / 2) + (estimatedChipWidth / 2);
+      final double maxOffsetEstimate = (totalEstimatedWidth - viewportWidthApprox) < 0 ? 0.0 : (totalEstimatedWidth - viewportWidthApprox);
+      initialOffset = targetOffset.clamp(0.0, maxOffsetEstimate);
+    }
+
+    debugPrint('[GKE StudyUp] 주간 칩 시작 위치 계산: todayIndex=$todayIndex, screenWidth=$screenWidth, initialOffset=$initialOffset');
+
+    _weekChipScrollController = ScrollController(initialScrollOffset: initialOffset);
+    _weekChipScrollControllerReady = true;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -333,6 +411,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
     final DateTime today = DateTime.now();
     _selectedDayDate = DateTime(today.year, today.month, today.day);
+
+    // 🆕 [2026-08-02] 진입 시 항상 오늘이 속한 실제 캘린더 주(일~토)로 초기화
+    _weekViewRangeStart = _computeWeekStart(today);
 
     _scrollableYears = ['2026년', '2027년', '2028년', '2029년', '2030년'];
     _checkAndExpandYears(today.year);
@@ -378,6 +459,15 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       ],
       '2027년': [{'title': '2027 고등 전과목 심화 마스터', 'done': false}],
       '2028년': [], '2029년': [], '2030년': [],
+    };
+
+    _monthlyTargetsMap = {
+      for (int m = 1; m <= 12; m++)
+        m: [
+          {'labelKey': 'monthPrepScheduleItem', 'done': false},
+          {'labelKey': 'monthMockExamItem', 'done': false},
+          {'labelKey': 'monthStarCollectItem', 'done': false},
+        ],
     };
 
     _globalSchedules = [
@@ -573,6 +663,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('gke_yearly_targets_map', jsonEncode(_yearlyTargetsMap));
+      await prefs.setString('gke_monthly_targets_map', jsonEncode(_monthlyTargetsMap.map((key, value) => MapEntry(key.toString(), value))));
 
       final List<Map<String, dynamic>> serializableSchedules = _globalSchedules.map((item) {
         final Map<String, dynamic> copy = Map.from(item);
@@ -596,6 +687,17 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           _yearlyTargetsMap = decoded.map((key, value) {
             final List<dynamic> list = value as List<dynamic>;
             return MapEntry(key, list.map((item) => Map<String, dynamic>.from(item as Map)).toList());
+          });
+        });
+      }
+
+      final String? monthlyTargetsJson = prefs.getString('gke_monthly_targets_map');
+      if (monthlyTargetsJson != null) {
+        final Map<String, dynamic> decoded = jsonDecode(monthlyTargetsJson);
+        setState(() {
+          _monthlyTargetsMap = decoded.map((key, value) {
+            final List<dynamic> list = value as List<dynamic>;
+            return MapEntry(int.parse(key), list.map((item) => Map<String, dynamic>.from(item as Map)).toList());
           });
         });
       }
@@ -643,6 +745,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   @override
   void dispose() {
     _tabController.dispose();
+    if (_weekChipScrollControllerReady) { _weekChipScrollController.dispose(); }
     super.dispose();
   }
 
@@ -1008,9 +1111,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               children: [
                 Text('${_monthNumText(targetMonth)} ${_t('monthMasterPack')}', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
                 const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildReadOnlyStaticTargetItem('${_monthNumText(targetMonth)} ${_t('monthPrepScheduleItem')}'),
-                _buildReadOnlyStaticTargetItem('${_monthNumText(targetMonth)} ${_t('monthMockExamItem')}'),
-                _buildReadOnlyStaticTargetItem('${_monthNumText(targetMonth)} ${_t('monthStarCollectItem')}'),
+                ...(_monthlyTargetsMap[targetMonth] ?? []).asMap().entries.map((entry) {
+                  return _buildMonthChecklistItem(entry.value['labelKey'], entry.value['done'], entry.key, targetMonth);
+                }).toList(),
               ],
             ),
           ),
@@ -1040,6 +1143,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   )
                 else
                   ...filteredMonthSchedules.map((schedule) {
+                    final String dateTimeLabel = '${(schedule['month'] as int).toString().padLeft(2, '0')}/${(schedule['day'] as int).toString().padLeft(2, '0')}, ${schedule['time'] ?? ''}';
                     return GestureDetector(
                       onTap: () { _showUnifiedPopupTrack(schedule, typeKey: 'MONTH'); },
                       child: Container(
@@ -1047,13 +1151,26 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(6), border: Border.all(color: slate800)),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(width: 4, height: 20, color: schedule['color']),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text('[${schedule['day']}] ${schedule['title']}', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                            SizedBox(
+                              width: 76,
+                              child: Text(dateTimeLabel, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                             ),
-                            Icon(Icons.edit_note, color: goldColor, size: 18),
+                            Container(width: 3, height: 32, margin: const EdgeInsets.symmetric(horizontal: 10), color: schedule['color'] ?? goldColor),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(schedule['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                  if ((schedule['memo'] ?? '').toString().isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(schedule['memo'], style: GoogleFonts.notoSansKr(fontSize: 11, color: slate400), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            _buildEditActionIcon(size: 14),
                           ],
                         ),
                       ),
@@ -1067,43 +1184,77 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     );
   }
 
+  // ============================================================================
+  // 🆕 [2026-08-02] 주간(Week) 탭 전면 재설계
+  // - "1~5주차 순환 템플릿" 방식의 가상 주차 개념을 버리고, 실제 일~토 캘린더 주 기준으로 전환.
+  // - 진입 시 항상 오늘이 속한 실제 주가 기본 선택됨 (initState의 _weekViewRangeStart 참고).
+  // - ◀ ▶ 로 실제 주 단위 이동, "오늘로 이동" 버튼으로 즉시 복귀.
+  // - [학습 타임라인] 서브탭: 요일별 고정 템플릿(_weeklyTemplateMaster) 로직 자체는 그대로 유지하되,
+  //   이제 그 주의 "실제 날짜"에 맞춰 계산(_getContinuousWeekIndex(실제날짜))하여 표시 — 일간 탭과 동일한
+  //   계산식을 쓰므로 일간에서 보이는 고정 시간표와 항상 일치함.
+  // - [주요 일정] 서브탭: 더 이상 정적 문구가 아니라, 실제 _globalSchedules 중 이 주 범위(일~토)에 속하는
+  //   항목만 필터링해서 보여주고, 탭하면 기존 수정/삭제 팝업과 연결됨(typeKey: 'WEEK_MAIN').
+  // ============================================================================
   Widget _buildWeekView() {
+    _ensureWeekChipScrollControllerReady();
+    final DateTime weekStart = _weekViewRangeStart;
+    final List<DateTime> weekDates = List.generate(7, (i) => weekStart.add(Duration(days: i)));
+    final DateTime weekEndInclusive = weekDates.last;
     final List<String> weekdays = _weekdaysSunFirst();
-    String currentWeekLabelText = _weekNumText(_selectedWeekIndex + 1);
+
+    final String weekRangeLabel = '${weekStart.month}/${weekStart.day} ~ ${weekEndInclusive.month}/${weekEndInclusive.day}';
+
+    // 🆕 실제 주 범위(일~토)에 속하는 진짜 일정만 필터링
+    List<Map<String, dynamic>> weekMainSchedules = _globalSchedules.where((s) {
+      final DateTime d = DateTime(s['year'] as int, s['month'] as int, s['day'] as int);
+      return !d.isBefore(weekStart) && !d.isAfter(weekEndInclusive);
+    }).toList();
+    weekMainSchedules.sort((a, b) {
+      final DateTime da = DateTime(a['year'] as int, a['month'] as int, a['day'] as int);
+      final DateTime db = DateTime(b['year'] as int, b['month'] as int, b['day'] as int);
+      int c = da.compareTo(db);
+      if (c != 0) return c;
+      return (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString());
+    });
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
-        _buildDynamicSectionHeader('sectionWeeklyAnalytics', () { _showAddScheduleBottomSheet(context, '목표'); }),
+        _buildDynamicSectionHeader('sectionWeeklyAnalytics', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
+
+        // 🆕 [2026-08-02] 사용자 요청으로 이동 화살표 레일 대신 기존 가로 스크롤 칩 UI로 복원.
+        // 칩 라벨만 "1~5주차" 가상 명칭 대신 실제 날짜 범위(예: 7/27~8/2)로 바뀌었을 뿐, 높이(50)와
+        // 조작 방식(가로 스크롤 + 탭 선택)은 기존과 동일함. 오늘이 속한 실제 주는 골드 테두리로 표시됨.
         SizedBox(
           height: 50,
           child: ListView.builder(
+            controller: _weekChipScrollController,
             scrollDirection: Axis.horizontal,
-            itemCount: _scrollableWeeks.length,
+            itemCount: _weekChipWindow.length,
             itemBuilder: (context, index) {
-              bool isSelected = _selectedWeekIndex == index;
+              final DateTime chipWeekStart = _weekChipWindow[index];
+              final DateTime chipWeekEnd = chipWeekStart.add(const Duration(days: 6));
+              final bool isSelected = _isSameRealWeek(chipWeekStart, weekStart);
+              final bool isTodayChip = _isSameRealWeek(chipWeekStart, DateTime.now());
+              final String chipLabel = '${chipWeekStart.month}/${chipWeekStart.day}~${chipWeekEnd.month}/${chipWeekEnd.day}';
               return GestureDetector(
                 onTap: () {
-                  setState(() { _selectedWeekIndex = index; });
-                  _saveState();
+                  setState(() { _weekViewRangeStart = chipWeekStart; });
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected ? goldColor : const Color(0xFF020617),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isSelected ? goldColor : slate800),
+                    border: Border.all(color: isSelected ? goldColor : (isTodayChip ? goldColor.withValues(alpha: 0.6) : slate800), width: isTodayChip && !isSelected ? 1.4 : 1),
                   ),
                   child: Center(
-                    child: _biCompoundStack(
-                      enText: 'Week ${index + 1}',
-                      koText: '${index + 1}주차',
-                      foreignText: _weekNumText(index + 1),
-                      enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: isSelected ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold),
-                      koStyle: GoogleFonts.notoSansKr(fontSize: 12, color: isSelected ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold),
-                      alignment: CrossAxisAlignment.center,
+                    child: Text(
+                      chipLabel,
+                      overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                      style: GoogleFonts.notoSansKr(fontSize: 12, fontWeight: FontWeight.bold, color: isSelected ? const Color(0xFF020617) : (isTodayChip ? goldColor : slate300)),
                     ),
                   ),
                 ),
@@ -1111,6 +1262,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             },
           ),
         ),
+
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1130,9 +1282,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _biCompoundStack(
-                        enText: 'Week ${_selectedWeekIndex + 1} ${_uiTextLookup('weekTimelineWord')['EN']}',
-                        koText: '$currentWeekLabelText ${_t('weekTimelineWord')}',
-                        foreignText: '$currentWeekLabelText ${_t('weekTimelineWord')}',
+                        enText: '$weekRangeLabel ${_uiTextLookup('weekTimelineWord')['EN']}',
+                        koText: '$weekRangeLabel ${_t('weekTimelineWord')}',
+                        foreignText: '$weekRangeLabel ${_t('weekTimelineWord')}',
                         enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
@@ -1157,9 +1309,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _biCompoundStack(
-                        enText: 'Week ${_selectedWeekIndex + 1} ${_uiTextLookup('yearMainScheduleWord')['EN']}',
-                        koText: '$currentWeekLabelText ${_t('yearMainScheduleWord')}',
-                        foreignText: '$currentWeekLabelText ${_t('yearMainScheduleWord')}',
+                        enText: '$weekRangeLabel ${_uiTextLookup('yearMainScheduleWord')['EN']}',
+                        koText: '$weekRangeLabel ${_t('yearMainScheduleWord')}',
+                        foreignText: '$weekRangeLabel ${_t('yearMainScheduleWord')}',
                         enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
@@ -1173,18 +1325,23 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         ),
         const SizedBox(height: 16),
         if (_isWeekTimelineSelected) ...[
-          Text('$currentWeekLabelText ${_t('weekdayTemplateOverview')}', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
+          Text('$weekRangeLabel ${_t('weekdayTemplateOverview')}', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
           const SizedBox(height: 10),
-          ...weekdays.asMap().entries.map((entry) {
-            int i = entry.key;
-            String day = entry.value;
+          ...weekDates.asMap().entries.map((entry) {
+            int i = entry.key; // 0=일 ... 6=토
+            DateTime actualDate = entry.value;
+            String dayLabel = weekdays[i];
             bool isSunday = i == 0;
-            int dayIdx = i + 1;
-            var list = _weeklyTemplateMaster[_selectedWeekIndex]?[dayIdx] ?? [];
+            bool isToday = _isSameCalendarDate(actualDate, DateTime.now());
+
+            // 🆕 일간 탭과 완전히 동일한 계산식으로 그 실제 날짜의 고정 템플릿을 가져옴
+            int calculatedWeekIdx = _getContinuousWeekIndex(actualDate);
+            int weekdayIdx = actualDate.weekday;
+            var list = _weeklyTemplateMaster[calculatedWeekIdx]?[weekdayIdx] ?? [];
             String mainTaskTitle = list.isNotEmpty ? list[0]['title'] : _t('selfStudyDefaultTrack');
 
             Map<String, dynamic> weekSummary = {
-              'title': '$day: $mainTaskTitle',
+              'title': '${actualDate.month}/${actualDate.day}($dayLabel): $mainTaskTitle',
               'memo': _t('fixedTemplateRoutineMemo'),
               'time': _t('fixedTemplateLabel'),
               'color': goldColor
@@ -1193,13 +1350,17 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             return Container(
               margin: const EdgeInsets.symmetric(vertical: 4),
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
+              decoration: BoxDecoration(
+                color: const Color(0xFF020617),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isToday ? goldColor : slate800, width: isToday ? 1.5 : 1),
+              ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(color: isSunday ? examColor : goldColor.withValues(alpha: 0.2), shape: BoxShape.circle),
-                    child: Text(day, style: GoogleFonts.notoSansKr(fontSize: 12, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
+                    child: Text(dayLabel, style: GoogleFonts.notoSansKr(fontSize: 12, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
@@ -1217,22 +1378,50 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             );
           }).toList(),
         ] else ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 30.0),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('⚡ ${_t('weeklyFixedBriefing')}', style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  _buildReadOnlyStaticTargetItem(_t('weekendMockExamBinding')),
-                  _buildReadOnlyStaticTargetItem(_t('weekdayLectureCheck')),
-                ],
-              ),
-            ),
-          )
+          // 🆕 실제 데이터(_globalSchedules) 기반 "주요 일정" 목록 — 탭하면 수정/삭제 가능
+          if (weekMainSchedules.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 30.0),
+              child: Center(child: Text(_t('weekEmptyMain'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12))),
+            )
+          else
+            ...weekMainSchedules.map((schedule) {
+              final DateTime scheduleDate = DateTime(schedule['year'] as int, schedule['month'] as int, schedule['day'] as int);
+              final int weekdayArrIdx = scheduleDate.weekday % 7; // 0=일 ... 6=토 (weekdaysSunFirst 인덱스와 일치)
+              final String dateBadge = '${scheduleDate.month}/${scheduleDate.day}(${weekdays[weekdayArrIdx]})';
+
+              return GestureDetector(
+                onTap: () { _showUnifiedPopupTrack(schedule, typeKey: 'WEEK_MAIN'); },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 62,
+                        child: Text(dateBadge, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                      ),
+                      Container(width: 3, height: 32, margin: const EdgeInsets.symmetric(horizontal: 10), color: schedule['color'] ?? goldColor),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(schedule['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold)),
+                            if ((schedule['memo'] ?? '').toString().isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(schedule['memo'], style: GoogleFonts.notoSansKr(fontSize: 11, color: slate400)),
+                            ],
+                          ],
+                        ),
+                      ),
+                      _buildEditActionIcon(size: 14),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
         ],
       ],
     );
@@ -1414,7 +1603,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                             ],
                           ),
                         ),
-                        Icon(Icons.remove_red_eye, color: goldColor.withValues(alpha: 0.5), size: 14),
+                        _buildEditActionIcon(size: 14),
                       ],
                     ),
                   ),
@@ -1643,6 +1832,19 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           },
         );
       },
+    );
+  }
+
+  // 🆕 [2026-08-02] 일간/주간/월간/연간 리스트 항목 공통 "탭하여 수정" 표시 아이콘.
+  // 기존 눈(remove_red_eye) 아이콘 대신 3선(메뉴) + 연필 조합으로 통일 표시함.
+  Widget _buildEditActionIcon({double size = 14}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.menu, color: goldColor.withValues(alpha: 0.45), size: size),
+        SizedBox(width: size * 0.18),
+        Icon(Icons.edit, color: goldColor.withValues(alpha: 0.85), size: size),
+      ],
     );
   }
 
@@ -2005,7 +2207,47 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               ),
             ),
           ),
-          Icon(Icons.remove_red_eye, color: goldColor.withValues(alpha: 0.5), size: 14),
+          _buildEditActionIcon(size: 14),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [2026-08-03] 월간 "학습 리스트" 체크리스트 항목 - 연간 체크리스트와 완전히 동일한 스타일
+  // (체크박스 탭 → 완료 처리 + 줄긋기, 텍스트 탭 → 상세 팝업). labelKey는 번역 카탈로그 키이므로
+  // 표시 문구는 항상 현재 언어 설정에 맞게 다시 생성됨.
+  Widget _buildMonthChecklistItem(String labelKey, bool isChecked, int index, int monthKey) {
+    final String displayTitle = '${_monthNumText(monthKey)} ${_t(labelKey)}';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 8.0),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() { _monthlyTargetsMap[monthKey]![index]['done'] = !isChecked; });
+              _saveMasterData();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(4.0), color: Colors.transparent,
+              child: Icon(isChecked ? Icons.check_box : Icons.check_box_outline_blank, color: isChecked ? goldColor : slate500, size: 20),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                _showUnifiedPopupTrack({
+                  'time': '${_monthNumText(monthKey)} ${_t('monthMasterPack')}', 'title': displayTitle,
+                  'memo': _biStr('monthChecklistPopupMemo'), 'done': isChecked,
+                }, typeKey: 'MONTH_TARGET');
+              },
+              child: Container(
+                color: Colors.transparent, alignment: Alignment.centerLeft,
+                child: Text(displayTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+              ),
+            ),
+          ),
+          _buildEditActionIcon(size: 14),
         ],
       ),
     );
@@ -2022,7 +2264,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           children: [
             Text(timeLabel, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor)),
             Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14.0), child: Text(eventTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.right))),
-            Icon(Icons.remove_red_eye, color: goldColor.withValues(alpha: 0.5), size: 14),
+            _buildEditActionIcon(size: 14),
           ],
         ),
       ),
