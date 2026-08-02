@@ -87,6 +87,20 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   late final ScrollController _weekChipScrollController;
   bool _weekChipScrollControllerReady = false;
 
+  // 🆕 [2026-08-03] 연간 탭 - 연도 칩도 주간 칩과 동일한 방식으로 "실시간 현재 연도"가 화면에
+  // 바로 보이도록 초기 스크롤 위치를 계산해서 생성함.
+  late final ScrollController _yearChipScrollController;
+  bool _yearChipScrollControllerReady = false;
+
+  // 🆕 [2026-08-03] 월간 탭 - 월(月) 선택 칩도 주간/연간 칩과 동일한 방식으로 "실시간 현재 월"이
+  // 화면 중앙에 바로 보이도록 초기 스크롤 위치를 계산해서 생성함.
+  late final ScrollController _monthChipScrollController;
+  bool _monthChipScrollControllerReady = false;
+
+  // 🆕 [2026-08-03] 연간 탭 "주요 일정" 목록 접기/펼치기 상태 - 접혔을 때는 현재 월(月)만,
+  // 펼치면 선택된 연도 전체 일정이 보임 (기본값: 접힘)
+  bool _isYearScheduleExpanded = false;
+
   // [주석] 일간 뷰 동적 날짜 선택 변수 (기본값: DateTime.now() 오늘 날짜로 자동 매핑 및 결합)
   late DateTime _selectedDayDate;
 
@@ -98,6 +112,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   // 동작하도록 함. 월(1~12) 번호를 키로 사용하며, 각 항목은 번역 카탈로그 키(labelKey)와 완료 여부(done)만
   // 저장함 — 실제 표시 문구는 언어 설정에 따라 _t(labelKey)로 매번 새로 생성되므로 다국어가 항상 정확함.
   late Map<int, List<Map<String, dynamic>>> _monthlyTargetsMap;
+
+  // 🆕 [2026-08-03] 학사 타이머(academic_timeline_screen.dart)의 [개인] 시간표 연동.
+  // 그 화면과 정확히 같은 SharedPreferences 키('gke_custom_schedules')와 키 형식
+  // ('PERSONAL_$영문요일')을 그대로 공유하므로, 어느 화면에서 수정하든 서로 반영됨.
+  Map<String, List<Map<String, String>>> _personalTimetableCache = {};
+  bool _personalTimetableLoaded = false;
+  // index 0=일 ... 6=토 (weekdaysSunFirst와 순서 일치)
+  static const List<String> _weekdayEnKeysSunFirst = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   late List<Map<String, dynamic>> _globalSchedules;
 
   // [주석] 5개 주차(0~4) × 7개 요일(1~7) 단위의 순환형 주간 고정 시간표 템플릿 마스터 (토/일 스펙 템플릿은 삭제됨)
@@ -362,6 +384,18 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     return _computeWeekStart(a).isAtSameMomentAs(_computeWeekStart(b));
   }
 
+  // 🆕 [2026-08-03] 주어진 주 시작일(일요일)이 "그 달" 기준으로 몇 번째 주(Week N)인지 계산.
+  // 연중 통산 주차는 실용성이 없다는 피드백에 따라 월 기준으로 매달 리셋되도록 변경함.
+  // 기준 달은 그 주의 토요일(마지막 날)이 속한 달로 삼음 - 예) 7/26~8/1 주는 토요일(8/1)이
+  // 8월이므로 "8월 1주차"가 되고, 8/2~8/8 주는 "8월 2주차"가 됨.
+  int _computeWeekOfMonth(DateTime weekStart) {
+    final DateTime weekEnd = weekStart.add(const Duration(days: 6));
+    final DateTime firstOfRefMonth = DateTime(weekEnd.year, weekEnd.month, 1);
+    final DateTime firstWeekStartOfRefMonth = _computeWeekStart(firstOfRefMonth);
+    final int diffDays = weekStart.difference(firstWeekStartOfRefMonth).inDays;
+    return (diffDays / 7).round() + 1;
+  }
+
   bool _isSameCalendarDate(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -404,6 +438,47 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     _weekChipScrollControllerReady = true;
   }
 
+  // 🆕 [2026-08-03] 연간 탭 - "현재 연도 칩이 화면에 바로 보이는 시작 스크롤 위치"를 계산해서
+  // ScrollController를 그 위치로 생성함. 주간 칩과 완전히 동일한 원리.
+  void _ensureYearChipScrollControllerReady() {
+    if (_yearChipScrollControllerReady) return;
+
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double viewportWidthApprox = (screenWidth - 32.0).clamp(0.0, double.infinity);
+
+    const double estimatedYearChipWidth = 92.0; // 패딩(32) + 텍스트(~50) + 우측 마진(10) 근사치
+    final double totalEstimatedWidth = _scrollableYears.length * estimatedYearChipWidth;
+
+    double initialOffset = 0.0;
+    if (_selectedYearIndex >= 0) {
+      final double targetOffset = (_selectedYearIndex * estimatedYearChipWidth) - (viewportWidthApprox / 2) + (estimatedYearChipWidth / 2);
+      final double maxOffsetEstimate = (totalEstimatedWidth - viewportWidthApprox) < 0 ? 0.0 : (totalEstimatedWidth - viewportWidthApprox);
+      initialOffset = targetOffset.clamp(0.0, maxOffsetEstimate);
+    }
+
+    _yearChipScrollController = ScrollController(initialScrollOffset: initialOffset);
+    _yearChipScrollControllerReady = true;
+  }
+
+  // 🆕 [2026-08-03] 월간 탭 - "현재 월 칩이 화면 중앙에 바로 보이는 시작 스크롤 위치"를 계산.
+  // 주간/연간 칩과 완전히 동일한 원리.
+  void _ensureMonthChipScrollControllerReady() {
+    if (_monthChipScrollControllerReady) return;
+
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double viewportWidthApprox = (screenWidth - 32.0).clamp(0.0, double.infinity);
+
+    const double estimatedMonthChipWidth = 80.0; // 패딩(36) + 텍스트(~36) + 우측 마진(8) 근사치
+    final double totalEstimatedWidth = 12 * estimatedMonthChipWidth;
+
+    final double targetOffset = (_selectedMonthIndex * estimatedMonthChipWidth) - (viewportWidthApprox / 2) + (estimatedMonthChipWidth / 2);
+    final double maxOffsetEstimate = (totalEstimatedWidth - viewportWidthApprox) < 0 ? 0.0 : (totalEstimatedWidth - viewportWidthApprox);
+    final double initialOffset = targetOffset.clamp(0.0, maxOffsetEstimate);
+
+    _monthChipScrollController = ScrollController(initialScrollOffset: initialOffset);
+    _monthChipScrollControllerReady = true;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -429,6 +504,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         _saveState();
+        // 🆕 [2026-08-03] 주간 탭(인덱스 2) 진입 시마다 학사 타이머 [개인] 시간표 재조회 - 서로 다른
+        // 화면에서 수정한 내용이 최신 상태로 반영되도록 함
+        if (_tabController.index == 2) { _loadPersonalTimetableCache(); }
       }
     });
 
@@ -484,6 +562,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       _syncDailyTimelineForDate(_selectedDayDate);
       _calculateMonthlyProgress();
     });
+    _loadPersonalTimetableCache(); // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 최초 로드
   }
 
   int _getContinuousWeekIndex(DateTime date) {
@@ -618,6 +697,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       await prefs.setBool('gke_is_week_timeline_selected', _isWeekTimelineSelected);
       await prefs.setBool('gke_is_time_view_selected', _isTimeViewSelected);
       await prefs.setBool('gke_is_year_target_expanded', _isYearTargetExpanded);
+      await prefs.setBool('gke_is_year_schedule_expanded', _isYearScheduleExpanded);
       await prefs.setBool('gke_is_day_calendar_visible', _isDayCalendarVisible);
     } catch (e) {
       debugPrint('[GKE StudyUp] Error saving configuration state: $e');
@@ -628,7 +708,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     try {
       final prefs = await SharedPreferences.getInstance();
       final int? savedTabIndex = prefs.getInt('gke_tab_index');
-      final int? savedYearIndex = prefs.getInt('gke_selected_year_index');
       final int? savedMonthIndex = prefs.getInt('gke_selected_month_index');
       final int? savedWeekIndex = prefs.getInt('gke_selected_week_index');
 
@@ -637,11 +716,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       final bool? savedWeekTimelineSel = prefs.getBool('gke_is_week_timeline_selected');
       final bool? savedTimeViewSel = prefs.getBool('gke_is_time_view_selected');
       final bool? savedYearTargetExp = prefs.getBool('gke_is_year_target_expanded');
+      final bool? savedYearScheduleExp = prefs.getBool('gke_is_year_schedule_expanded');
       final bool? savedDayCalendarVis = prefs.getBool('gke_is_day_calendar_visible');
 
       setState(() {
         if (savedTabIndex != null) { _tabController.index = savedTabIndex; }
-        if (savedYearIndex != null && savedYearIndex < _scrollableYears.length) { _selectedYearIndex = savedYearIndex; }
+        // 🆕 [2026-08-03] 연도 선택은 저장된 이전 값으로 복원하지 않음 - 항상 실시간 현재 연도가
+        // 기본으로 표시되도록 함 (initState에서 이미 오늘 날짜 기준으로 계산됨, 주간 탭과 동일한 원칙)
         if (savedMonthIndex != null && savedMonthIndex < 12) { _selectedMonthIndex = savedMonthIndex; }
         if (savedWeekIndex != null && savedWeekIndex < _scrollableWeeks.length) { _selectedWeekIndex = savedWeekIndex; }
 
@@ -650,6 +731,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         if (savedWeekTimelineSel != null) _isWeekTimelineSelected = savedWeekTimelineSel;
         if (savedTimeViewSel != null) _isTimeViewSelected = savedTimeViewSel;
         if (savedYearTargetExp != null) _isYearTargetExpanded = savedYearTargetExp;
+        if (savedYearScheduleExp != null) _isYearScheduleExpanded = savedYearScheduleExp;
         if (savedDayCalendarVis != null) _isDayCalendarVisible = savedDayCalendarVis;
       });
 
@@ -657,6 +739,93 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     } catch (e) {
       debugPrint('[GKE StudyUp] Error loading configuration state: $e');
     }
+  }
+
+  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표를 gke_custom_schedules에서 읽어옴.
+  // 그 화면과 동일한 원본 데이터를 그대로 읽는 것이므로, 그쪽에서 수정한 내용이 여기에도 반영됨.
+  Future<void> _loadPersonalTimetableCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString('gke_custom_schedules');
+      final Map<String, List<Map<String, String>>> restored = {};
+      if (raw != null && raw.isNotEmpty) {
+        final Map<String, dynamic> decoded = jsonDecode(raw);
+        decoded.forEach((key, value) {
+          if (key.startsWith('PERSONAL_') && value is List) {
+            restored[key] = value.map((e) => Map<String, String>.from(e as Map)).toList();
+          }
+        });
+      }
+      if (mounted) {
+        setState(() {
+          _personalTimetableCache = restored;
+          _personalTimetableLoaded = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('[GKE StudyUp] 개인 시간표 로드 실패: $e');
+    }
+  }
+
+  // 🆕 [2026-08-03] 개인 시간표 수정분을 gke_custom_schedules에 저장. 학사 타이머 화면이 쓰는
+  // 다른 트랙(NORMAL_PERIOD_*, EXAM_PREP_* 등) 데이터를 덮어쓰지 않도록, 기존 전체 맵을 먼저
+  // 불러온 뒤 PERSONAL_ 로 시작하는 부분만 갱신해서 다시 저장함.
+  Future<void> _savePersonalTimetableCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString('gke_custom_schedules');
+      Map<String, dynamic> fullMap = {};
+      if (raw != null && raw.isNotEmpty) {
+        fullMap = jsonDecode(raw);
+      }
+      _personalTimetableCache.forEach((key, value) {
+        fullMap[key] = value;
+      });
+      await prefs.setString('gke_custom_schedules', jsonEncode(fullMap));
+    } catch (e) {
+      debugPrint('[GKE StudyUp] 개인 시간표 저장 실패: $e');
+    }
+  }
+
+  List<Map<String, String>> _getPersonalScheduleFor(String weekdayEnKey) {
+    return _personalTimetableCache['PERSONAL_$weekdayEnKey'] ?? [];
+  }
+
+  // 🆕 "09:00 - 10:00" 형식에서 시작 시각만 분(分) 단위로 파싱 (학사 타이머와 동일한 파싱 규칙)
+  int? _parsePersonalStartMinutes(String timeStr) {
+    try {
+      final parts = timeStr.split(RegExp(r'[-~–]'));
+      if (parts.isEmpty) return null;
+      final startParts = parts.first.trim().split(':');
+      if (startParts.length < 2) return null;
+      return int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // 🆕 [2026-08-03] 요일별로 보여줄 항목 1개를 선택하는 로직.
+  // - 이미 지나간 요일: 그 요일의 마지막(가장 늦은) 항목 = "마지막 학습"
+  // - 오늘 및 다가올 요일: 모두 "현재 시각" 기준으로 매칭되는 항목(진행 중이거나 가장 최근 시작된 항목)을
+  //   동일하게 보여줌 — 아직 하나도 시작 전이면 그 요일의 첫 항목으로 자연스럽게 대체됨.
+  Map<String, String>? _pickPersonalScheduleDisplayItem(List<Map<String, String>> items, {required bool isPastDay}) {
+    if (items.isEmpty) return null;
+    if (isPastDay) {
+      return items.last;
+    }
+    final DateTime now = DateTime.now();
+    final int nowMinutes = now.hour * 60 + now.minute;
+    Map<String, String>? candidate;
+    int? candidateStart;
+    for (final item in items) {
+      final int? start = _parsePersonalStartMinutes(item['time'] ?? '');
+      if (start == null) continue;
+      if (start <= nowMinutes && (candidateStart == null || start > candidateStart)) {
+        candidate = item;
+        candidateStart = start;
+      }
+    }
+    return candidate ?? items.first;
   }
 
   Future<void> _saveMasterData() async {
@@ -746,6 +915,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   void dispose() {
     _tabController.dispose();
     if (_weekChipScrollControllerReady) { _weekChipScrollController.dispose(); }
+    if (_yearChipScrollControllerReady) { _yearChipScrollController.dispose(); }
+    if (_monthChipScrollControllerReady) { _monthChipScrollController.dispose(); }
     super.dispose();
   }
 
@@ -838,10 +1009,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   Widget _buildYearView() {
+    _ensureYearChipScrollControllerReady();
     String currentYearKey = _scrollableYears[_selectedYearIndex];
     List<Map<String, dynamic>> currentTargets = _yearlyTargetsMap[currentYearKey] ?? [];
-    int numericYear = int.tryParse(currentYearKey.replaceAll('년', '')) ?? 2026;
-    List<Map<String, dynamic>> filteredYearSchedules = _globalSchedules.where((s) => (s['year'] ?? 2026) == numericYear).toList();
+    int numericYear = int.tryParse(currentYearKey.replaceAll('년', '')) ?? DateTime.now().year;
+    List<Map<String, dynamic>> filteredYearSchedules = _globalSchedules.where((s) => (s['year'] ?? DateTime.now().year) == numericYear).toList();
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
@@ -851,6 +1023,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         SizedBox(
           height: 38,
           child: ListView.builder(
+            controller: _yearChipScrollController,
             scrollDirection: Axis.horizontal,
             itemCount: _scrollableYears.length,
             itemBuilder: (context, index) {
@@ -958,21 +1131,67 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
           ),
         ] else ...[
-          if (filteredYearSchedules.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40.0),
-              child: Center(child: Text(_t('emptyYearSchedule'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12))),
-            )
-          else
-            ...filteredYearSchedules.asMap().entries.map((entry) {
-              return _buildScheduleTimelineItem(_monthDayText(entry.value['month'], entry.value['day']), entry.value['title'], entry.value['color'], _globalSchedules.indexOf(entry.value), entry.value['memo'] ?? '');
-            }).toList(),
+          Builder(builder: (context) {
+            final int currentRealMonth = DateTime.now().month;
+            final bool isViewingCurrentYear = numericYear == DateTime.now().year;
+            final List<Map<String, dynamic>> currentMonthSchedules = isViewingCurrentYear
+                ? filteredYearSchedules.where((s) => s['month'] == currentRealMonth).toList()
+                : <Map<String, dynamic>>[];
+            final List<Map<String, dynamic>> itemsToShow = _isYearScheduleExpanded ? filteredYearSchedules : currentMonthSchedules;
+            final String collapsedTitle = isViewingCurrentYear
+                ? '${_yearNumText(currentYearKey)} ${_monthNumText(currentRealMonth)} ${_t('yearMainScheduleWord')}'
+                : '${_yearNumText(currentYearKey)} ${_t('yearMainScheduleWord')}';
+            final String expandedTitle = '${_yearNumText(currentYearKey)} ${_biStr('yearMainScheduleWord')}';
+
+            return Card(
+              color: const Color(0xFF020617),
+              margin: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(side: BorderSide(color: slate800)),
+              child: ExpansionTile(
+                key: ValueKey('yearSchedule_$currentYearKey'),
+                initiallyExpanded: _isYearScheduleExpanded,
+                onExpansionChanged: (val) { setState(() { _isYearScheduleExpanded = val; }); _saveState(); },
+                iconColor: goldColor,
+                collapsedIconColor: slate400,
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _isYearScheduleExpanded ? expandedTitle : collapsedTitle,
+                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                        style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: goldColor, borderRadius: BorderRadius.circular(12)),
+                      child: Text('${itemsToShow.length}', style: GoogleFonts.notoSansKr(fontSize: 11, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                children: [
+                  if (itemsToShow.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20.0),
+                      child: Center(child: Text(_t('emptyYearSchedule'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12))),
+                    )
+                  else
+                    ...itemsToShow.map((item) {
+                      return _buildScheduleTimelineItem(_monthDayText(item['month'], item['day']), item['title'], item['color'], _globalSchedules.indexOf(item), item['memo'] ?? '');
+                    }).toList(),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            );
+          }),
         ],
       ],
     );
   }
 
   Widget _buildMonthView() {
+    _ensureMonthChipScrollControllerReady();
     int targetMonth = _selectedMonthIndex + 1;
     List<Map<String, dynamic>> filteredMonthSchedules = _globalSchedules.where((s) => s['month'] == targetMonth).toList();
 
@@ -1011,6 +1230,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         SizedBox(
           height: 38,
           child: ListView.builder(
+            controller: _monthChipScrollController,
             scrollDirection: Axis.horizontal,
             itemCount: 12,
             itemBuilder: (context, index) {
@@ -1223,11 +1443,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         _buildDynamicSectionHeader('sectionWeeklyAnalytics', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
 
-        // 🆕 [2026-08-02] 사용자 요청으로 이동 화살표 레일 대신 기존 가로 스크롤 칩 UI로 복원.
-        // 칩 라벨만 "1~5주차" 가상 명칭 대신 실제 날짜 범위(예: 7/27~8/2)로 바뀌었을 뿐, 높이(50)와
-        // 조작 방식(가로 스크롤 + 탭 선택)은 기존과 동일함. 오늘이 속한 실제 주는 골드 테두리로 표시됨.
+        // 🆕 [2026-08-03] 사용자 요청으로 별도 "Week / 주" 라벨 줄은 삭제하고, 대신 각 칩 안에
+        // "Week N"(연중 몇 번째 주인지)을 날짜범위 바로 위에 한 쌍으로 묶어서 표시함 - 선택 시
+        // 두 줄이 함께 골드 배경 안에 들어감. 2줄 표시를 위해 칩 높이를 50→56으로 소폭 확대함.
         SizedBox(
-          height: 50,
+          height: 56,
           child: ListView.builder(
             controller: _weekChipScrollController,
             scrollDirection: Axis.horizontal,
@@ -1238,6 +1458,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               final bool isSelected = _isSameRealWeek(chipWeekStart, weekStart);
               final bool isTodayChip = _isSameRealWeek(chipWeekStart, DateTime.now());
               final String chipLabel = '${chipWeekStart.month}/${chipWeekStart.day}~${chipWeekEnd.month}/${chipWeekEnd.day}';
+              final int weekOfMonth = _computeWeekOfMonth(chipWeekStart);
+              final Color chipTextColor = isSelected ? const Color(0xFF020617) : (isTodayChip ? goldColor : slate300);
               return GestureDetector(
                 onTap: () {
                   setState(() { _weekViewRangeStart = chipWeekStart; });
@@ -1251,10 +1473,20 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     border: Border.all(color: isSelected ? goldColor : (isTodayChip ? goldColor.withValues(alpha: 0.6) : slate800), width: isTodayChip && !isSelected ? 1.4 : 1),
                   ),
                   child: Center(
-                    child: Text(
-                      chipLabel,
-                      overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                      style: GoogleFonts.notoSansKr(fontSize: 12, fontWeight: FontWeight.bold, color: isSelected ? const Color(0xFF020617) : (isTodayChip ? goldColor : slate300)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Week $weekOfMonth',
+                          overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                          style: GoogleFonts.gowunBatang(fontSize: 10, fontWeight: FontWeight.bold, color: chipTextColor.withValues(alpha: 0.85)),
+                        ),
+                        Text(
+                          chipLabel,
+                          overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                          style: GoogleFonts.notoSansKr(fontSize: 12, fontWeight: FontWeight.bold, color: chipTextColor),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1282,10 +1514,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _biCompoundStack(
-                        enText: '$weekRangeLabel ${_uiTextLookup('weekTimelineWord')['EN']}',
-                        koText: '$weekRangeLabel ${_t('weekTimelineWord')}',
-                        foreignText: '$weekRangeLabel ${_t('weekTimelineWord')}',
-                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        enText: _uiTextLookup('weekTimelineWord')['EN'] ?? '',
+                        koText: _t('weekTimelineWord'),
+                        foreignText: _t('weekTimelineWord'),
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: _isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
@@ -1309,10 +1541,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _biCompoundStack(
-                        enText: '$weekRangeLabel ${_uiTextLookup('yearMainScheduleWord')['EN']}',
-                        koText: '$weekRangeLabel ${_t('yearMainScheduleWord')}',
-                        foreignText: '$weekRangeLabel ${_t('yearMainScheduleWord')}',
-                        enStyle: GoogleFonts.gowunBatang(fontSize: 10, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
+                        enText: _uiTextLookup('yearMainScheduleWord')['EN'] ?? '',
+                        koText: _t('yearMainScheduleWord'),
+                        foreignText: _t('yearMainScheduleWord'),
+                        enStyle: GoogleFonts.gowunBatang(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         koStyle: GoogleFonts.notoSansKr(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                         foreignStyle: GoogleFonts.notoSans(fontSize: 13, color: !_isWeekTimelineSelected ? goldColor : slate400, fontWeight: FontWeight.bold),
                       ),
@@ -1331,49 +1563,60 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             int i = entry.key; // 0=일 ... 6=토
             DateTime actualDate = entry.value;
             String dayLabel = weekdays[i];
+            String dayLabelEn = (_weekdaySunFirst['EN'] ?? const ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[i];
             bool isSunday = i == 0;
             bool isToday = _isSameCalendarDate(actualDate, DateTime.now());
+            bool isPastDay = DateTime(actualDate.year, actualDate.month, actualDate.day)
+                .isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
 
-            // 🆕 일간 탭과 완전히 동일한 계산식으로 그 실제 날짜의 고정 템플릿을 가져옴
-            int calculatedWeekIdx = _getContinuousWeekIndex(actualDate);
-            int weekdayIdx = actualDate.weekday;
-            var list = _weeklyTemplateMaster[calculatedWeekIdx]?[weekdayIdx] ?? [];
-            String mainTaskTitle = list.isNotEmpty ? list[0]['title'] : _t('selfStudyDefaultTrack');
+            // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표에서 이 요일의 실제 데이터를 가져옴
+            final String weekdayEnKey = _weekdayEnKeysSunFirst[i];
+            final List<Map<String, String>> personalItems = _getPersonalScheduleFor(weekdayEnKey);
+            final Map<String, String>? displayItem = _pickPersonalScheduleDisplayItem(personalItems, isPastDay: isPastDay);
 
-            Map<String, dynamic> weekSummary = {
-              'title': '${actualDate.month}/${actualDate.day}($dayLabel): $mainTaskTitle',
-              'memo': _t('fixedTemplateRoutineMemo'),
-              'time': _t('fixedTemplateLabel'),
-              'color': goldColor
-            };
+            final String mainTaskTitle = displayItem != null ? (displayItem['task'] ?? '') : _t('selfStudyDefaultTrack');
+            final String mainTaskSubLabel = displayItem != null ? (displayItem['time'] ?? '') : _t('academicTimelineEmptyState');
 
-            return Container(
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF020617),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isToday ? goldColor : slate800, width: isToday ? 1.5 : 1),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: isSunday ? examColor : goldColor.withValues(alpha: 0.2), shape: BoxShape.circle),
-                    child: Text(dayLabel, style: GoogleFonts.notoSansKr(fontSize: 12, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(weekSummary['title'], style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500)),
-                        Text(weekSummary['memo'], style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500), overflow: TextOverflow.ellipsis),
-                      ],
+            return GestureDetector(
+              onTap: () { _showPersonalDayScheduleSheet(actualDate, i, weekdayEnKey); },
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF020617),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isToday ? goldColor : slate800, width: isToday ? 1.5 : 1),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 58,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(color: isSunday ? examColor : goldColor.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(6)),
+                            child: Text('${actualDate.month}/${actualDate.day}($dayLabel)', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(dayLabelEn, style: GoogleFonts.gowunBatang(fontSize: 10, color: isSunday ? examColor : slate400, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
-                  ),
-                  Icon(Icons.lock_clock, color: slate500, size: 16),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(mainTaskTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                          Text(mainTaskSubLabel, style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500), overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    _buildEditActionIcon(size: 14),
+                  ],
+                ),
               ),
             );
           }).toList(),
@@ -1389,6 +1632,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               final DateTime scheduleDate = DateTime(schedule['year'] as int, schedule['month'] as int, schedule['day'] as int);
               final int weekdayArrIdx = scheduleDate.weekday % 7; // 0=일 ... 6=토 (weekdaysSunFirst 인덱스와 일치)
               final String dateBadge = '${scheduleDate.month}/${scheduleDate.day}(${weekdays[weekdayArrIdx]})';
+              final String dateBadgeEn = (_weekdaySunFirst['EN'] ?? const ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[weekdayArrIdx];
 
               return GestureDetector(
                 onTap: () { _showUnifiedPopupTrack(schedule, typeKey: 'WEEK_MAIN'); },
@@ -1401,7 +1645,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     children: [
                       SizedBox(
                         width: 62,
-                        child: Text(dateBadge, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(dateBadge, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                            Text(dateBadgeEn, style: GoogleFonts.gowunBatang(fontSize: 10, color: goldColor.withValues(alpha: 0.7), fontWeight: FontWeight.bold)),
+                            Text(schedule['time'] ?? '', style: GoogleFonts.notoSerif(fontSize: 10, color: slate400)),
+                          ],
+                        ),
                       ),
                       Container(width: 3, height: 32, margin: const EdgeInsets.symmetric(horizontal: 10), color: schedule['color'] ?? goldColor),
                       Expanded(
@@ -1707,6 +1958,254 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  // ============================================================================
+  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 - 주간 탭에서 요일 하나를 탭하면 열리는 팝업.
+  // 그 요일의 전체 일정을 스크롤로 모두 보여주고, 추가/수정/삭제가 가능하며, 저장은
+  // gke_custom_schedules(SharedPreferences)에 그대로 반영되어 학사 타이머 화면과 실시간 연동됨.
+  // ============================================================================
+  void _showPersonalDayScheduleSheet(DateTime date, int dayIdxSunFirst, String weekdayEnKey) {
+    // 팝업을 열 때마다 최신 데이터로 한 번 더 갱신 (다른 화면에서 방금 수정했을 수도 있으므로)
+    _loadPersonalTimetableCache();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF020617),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (BuildContext bc) {
+        return StatefulBuilder(
+          builder: (BuildContext modalContext, StateSetter setModalState) {
+            final List<Map<String, String>> items = _getPersonalScheduleFor(weekdayEnKey);
+            final String dayLabelKo = _weekdaysSunFirst()[dayIdxSunFirst];
+            final String dayLabelEn = (_weekdaySunFirst['EN'] ?? const ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[dayIdxSunFirst];
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.75,
+              minChildSize: 0.4,
+              maxChildSize: 0.92,
+              expand: false,
+              builder: (context, scrollController) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${date.month}/${date.day} ($dayLabelKo/$dayLabelEn) ${_t('weekTimelineWord')}',
+                              overflow: TextOverflow.ellipsis, maxLines: 1,
+                              style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              _showPersonalItemEditDialog(
+                                weekdayEnKey: weekdayEnKey,
+                                onSaved: () { setModalState(() {}); },
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5), color: goldColor.withValues(alpha: 0.08)),
+                              child: Icon(Icons.add, color: goldColor, size: 20),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Color(0xFF1E293B), height: 20),
+                      Expanded(
+                        child: items.isEmpty
+                            ? Center(child: Text(_t('academicTimelineEmptyState'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)))
+                            : ListView.builder(
+                          controller: scrollController,
+                          itemCount: items.length,
+                          itemBuilder: (context, idx) {
+                            final Map<String, String> item = items[idx];
+                            final bool isTimePassedNow = () {
+                              final int? start = _parsePersonalStartMinutes(item['time'] ?? '');
+                              if (start == null) return false;
+                              final now = DateTime.now();
+                              return start <= (now.hour * 60 + now.minute);
+                            }();
+                            return GestureDetector(
+                              onTap: () {
+                                _showPersonalItemEditDialog(
+                                  weekdayEnKey: weekdayEnKey,
+                                  index: idx,
+                                  initialTime: item['time'],
+                                  initialTask: item['task'],
+                                  onSaved: () { setModalState(() {}); },
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F172A),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: slate800),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 92,
+                                      child: Text(
+                                        item['time'] ?? '',
+                                        style: GoogleFonts.notoSerif(fontSize: 12, color: isTimePassedNow ? slate500 : goldColor, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    Container(width: 3, height: 28, margin: const EdgeInsets.symmetric(horizontal: 10), color: isTimePassedNow ? slate500 : goldColor),
+                                    Expanded(
+                                      child: Text(
+                                        item['task'] ?? '',
+                                        style: GoogleFonts.notoSansKr(fontSize: 13, color: isTimePassedNow ? slate400 : Colors.white, fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                    _buildEditActionIcon(size: 14),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 🆕 [2026-08-03] 개인 시간표 항목 1개 추가/수정/삭제 다이얼로그.
+  // 저장/삭제 즉시 gke_custom_schedules에 반영되어 학사 타이머 화면과 실시간 연동됨.
+  void _showPersonalItemEditDialog({
+    required String weekdayEnKey,
+    int? index,
+    String? initialTime,
+    String? initialTask,
+    required VoidCallback onSaved,
+  }) {
+    final TextEditingController timeController = TextEditingController(text: initialTime ?? '');
+    final TextEditingController taskController = TextEditingController(text: initialTask ?? '');
+    final String cacheKey = 'PERSONAL_$weekdayEnKey';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF020617),
+          shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
+          title: Text(
+            index == null ? _biStr('popupAddNewEntryTitle') : _biStr('popupEditModeTitle'),
+            style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: '09:00 - 10:00', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                    filled: true, fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(_biStr('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: taskController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: _biStr('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                    filled: true, fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (index != null)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
+                        list.removeAt(index);
+                        _personalTimetableCache[cacheKey] = list;
+                      });
+                      _savePersonalTimetableCache();
+                      onSaved();
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: Text(_biStr('btnDelete'), style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                  )
+                else
+                  const SizedBox.shrink(),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () { Navigator.of(dialogContext).pop(); },
+                      child: Text(_biStr('btnClose'), style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 4),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                      onPressed: () {
+                        final String newTime = timeController.text.trim();
+                        final String newTask = taskController.text.trim();
+                        if (newTime.isEmpty || newTask.isEmpty) return;
+
+                        setState(() {
+                          final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
+                          final Map<String, String> newItem = {'time': newTime, 'task': newTask};
+                          if (index == null) {
+                            // 🆕 시간순 자동 배치 - 시작 시각 기준으로 올바른 위치에 삽입
+                            final int? newStart = _parsePersonalStartMinutes(newTime);
+                            int insertAt = list.length;
+                            if (newStart != null) {
+                              insertAt = list.indexWhere((e) {
+                                final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
+                                return existingStart != null && existingStart > newStart;
+                              });
+                              if (insertAt == -1) insertAt = list.length;
+                            }
+                            list.insert(insertAt, newItem);
+                          } else {
+                            list[index] = newItem;
+                          }
+                          _personalTimetableCache[cacheKey] = list;
+                        });
+                        _savePersonalTimetableCache();
+                        onSaved();
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: Text(_biStr('btnSave'), style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         );
       },
     );
@@ -2391,12 +2890,15 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                             String finalTime = timeController.text.trim().isEmpty ? _currentTimeString() : timeController.text.trim();
 
                             setState(() {
+                              // 🆕 [2026-08-03] 버그 수정: 'year'가 2026으로 고정되어 있던 문제.
+                              // 연간 탭에서 선택 중인 연도(기본값=실제 오늘 연도)를 그대로 사용하도록 수정.
+                              final int resolvedYear = int.tryParse(_scrollableYears[_selectedYearIndex].replaceAll('년', '')) ?? DateTime.now().year;
                               _globalSchedules.add({
-                                'year': 2026, 'month': inputMonth, 'day': inputDay, 'time': finalTime,
+                                'year': resolvedYear, 'month': inputMonth, 'day': inputDay, 'time': finalTime,
                                 'title': titleController.text.trim(), 'color': sColor, 'memo': memoController.text.trim(),
                               });
                               _sortGlobalSchedules();
-                              _selectedDayDate = DateTime(2026, inputMonth, inputDay);
+                              _selectedDayDate = DateTime(resolvedYear, inputMonth, inputDay);
                             });
 
                             _syncDailyTimelineForDate(_selectedDayDate);
