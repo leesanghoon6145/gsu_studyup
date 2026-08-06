@@ -6,6 +6,7 @@ import 'dart:async'; // 🆕 [백색소음 선택] 미리듣기 자동정지 Tim
 import 'dart:convert'; // 🆕 [버그 수정 2026-07-29] 커스텀 시간표/시험기록 영구저장용
 import '../../planner/widgets/study_timelines.dart';
 import '../../timer/timer_screen.dart';
+import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
 
 class AcademicTimelineScreen extends StatefulWidget {
   const AcademicTimelineScreen({super.key});
@@ -95,6 +96,208 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     {'en': 'Clear Stream', 'ko': '맑은 시냇물', 'file': 'clear_stream.mp3'},
     {'en': 'Blue Waves', 'ko': '푸른 파도소리', 'file': 'blue_waves.mp3'},
   ];
+
+  // ============================================================================
+  // 🆕 [12개국 언어 시스템] - learning_screen.dart / planning_screen.dart와 동일한 패턴
+  // 기본값(KO/EN, 즉 10개국을 아직 선택 안 한 상태)은 항상 "영문 + 한글"이 함께 보입니다.
+  // 한국어/영어를 "제외한" 나머지 10개국 중 하나를 선택했을 때만 그 언어 단독으로 전환됩니다.
+  // ⚠️ 내부 데이터 키(_weekdayOptions의 'en' 값, SharedPreferences 캐시 키 등)는 절대 건드리지
+  //    않고, "화면에 보여주는 문구"만 이 카탈로그를 거쳐서 표시합니다.
+  // ============================================================================
+  static const List<String> _foreignLanguages = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+  static bool get _isForeignSelected => _foreignLanguages.contains(DkeLang.current);
+
+  static const Map<String, Map<String, String>> _uiText = {
+    'appBarTitle': {'KO': '학사 타이머', 'EN': 'ACADEMIC TIMER', 'JA': '学事タイマー', 'ZH': '学业计时器', 'FR': 'Minuteur académique', 'DE': 'Akademik-Timer', 'RU': 'Академический таймер', 'AR': 'المؤقت الأكاديمي', 'HI': 'एकेडमिक टाइमर', 'VI': 'Đồng hồ học tập', 'ES': 'Temporizador académico', 'TH': 'ตัวจับเวลาการเรียน'},
+
+    'weekdayMonday': {'KO': '월요일', 'EN': 'Monday', 'JA': '月曜日', 'ZH': '星期一', 'FR': 'Lundi', 'DE': 'Montag', 'RU': 'Понедельник', 'AR': 'الإثنين', 'HI': 'सोमवार', 'VI': 'Thứ Hai', 'ES': 'Lunes', 'TH': 'วันจันทร์'},
+    'weekdayTuesday': {'KO': '화요일', 'EN': 'Tuesday', 'JA': '火曜日', 'ZH': '星期二', 'FR': 'Mardi', 'DE': 'Dienstag', 'RU': 'Вторник', 'AR': 'الثلاثاء', 'HI': 'मंगलवार', 'VI': 'Thứ Ba', 'ES': 'Martes', 'TH': 'วันอังคาร'},
+    'weekdayWednesday': {'KO': '수요일', 'EN': 'Wednesday', 'JA': '水曜日', 'ZH': '星期三', 'FR': 'Mercredi', 'DE': 'Mittwoch', 'RU': 'Среда', 'AR': 'الأربعاء', 'HI': 'बुधवार', 'VI': 'Thứ Tư', 'ES': 'Miércoles', 'TH': 'วันพุธ'},
+    'weekdayThursday': {'KO': '목요일', 'EN': 'Thursday', 'JA': '木曜日', 'ZH': '星期四', 'FR': 'Jeudi', 'DE': 'Donnerstag', 'RU': 'Четверг', 'AR': 'الخميس', 'HI': 'गुरुवार', 'VI': 'Thứ Năm', 'ES': 'Jueves', 'TH': 'วันพฤหัสบดี'},
+    'weekdayFriday': {'KO': '금요일', 'EN': 'Friday', 'JA': '金曜日', 'ZH': '星期五', 'FR': 'Vendredi', 'DE': 'Freitag', 'RU': 'Пятница', 'AR': 'الجمعة', 'HI': 'शुक्रवार', 'VI': 'Thứ Sáu', 'ES': 'Viernes', 'TH': 'วันศุกร์'},
+    'weekdaySaturday': {'KO': '토요일', 'EN': 'Saturday', 'JA': '土曜日', 'ZH': '星期六', 'FR': 'Samedi', 'DE': 'Samstag', 'RU': 'Субота', 'AR': 'السبت', 'HI': 'शनिवार', 'VI': 'Thứ Bảy', 'ES': 'Sábado', 'TH': 'วันเสาร์'},
+    'weekdaySunday': {'KO': '일요일', 'EN': 'Sunday', 'JA': '日曜日', 'ZH': '星期日', 'FR': 'Dimanche', 'DE': 'Sonntag', 'RU': 'Воскресенье', 'AR': 'الأحد', 'HI': 'रविवार', 'VI': 'Chủ Nhật', 'ES': 'Domingo', 'TH': 'วันอาทิตย์'},
+
+    'tabNormal': {'KO': '평상시', 'EN': 'Normal', 'JA': '通常', 'ZH': '日常', 'FR': 'Normal', 'DE': 'Normal', 'RU': 'Обычный', 'AR': 'عادي', 'HI': 'सामान्य', 'VI': 'Bình thường', 'ES': 'Normal', 'TH': 'ปกติ'},
+    'tabVacation': {'KO': '방학', 'EN': 'Vacation', 'JA': '休暇', 'ZH': '假期', 'FR': 'Vacances', 'DE': 'Ferien', 'RU': 'Каникулы', 'AR': 'العطلة', 'HI': 'छुट्टी', 'VI': 'Kỳ nghỉ', 'ES': 'Vacaciones', 'TH': 'วันหยุด'},
+    'tabExamPrep': {'KO': '시험준비', 'EN': 'Exam Prep', 'JA': '試験準備', 'ZH': '备考', 'FR': 'Préparation Examen', 'DE': 'Prüfungsvorb.', 'RU': 'Подготовка к экз.', 'AR': 'التحضير للامتحان', 'HI': 'परीक्षा तैयारी', 'VI': 'Ôn thi', 'ES': 'Preparación Examen', 'TH': 'เตรียมสอบ'},
+    'tabExamDay': {'KO': '시험당일', 'EN': 'Exam Day', 'JA': '試験当日', 'ZH': '考试日', 'FR': "Jour d'examen", 'DE': 'Prüfungstag', 'RU': 'День экзамена', 'AR': 'يوم الامتحان', 'HI': 'परीक्षा दिवस', 'VI': 'Ngày thi', 'ES': 'Día de Examen', 'TH': 'วันสอบ'},
+    'tabPersonal': {'KO': '개인 시간표', 'EN': 'Personal', 'JA': '個人時間表', 'ZH': '个人时间表', 'FR': 'Emploi Personnel', 'DE': 'Persönl. Plan', 'RU': 'Личный график', 'AR': 'الجدول الشخصي', 'HI': 'व्यक्तिगत समय सारणी', 'VI': 'Thời gian biểu cá nhân', 'ES': 'Horario Personal', 'TH': 'ตารางส่วนตัว'},
+
+    'normalTitleEn': {'KO': 'NORMAL PERIOD', 'EN': 'NORMAL PERIOD', 'JA': '通常期間', 'ZH': '日常时段', 'FR': 'PÉRIODE NORMALE', 'DE': 'NORMALE PERIODE', 'RU': 'ОБЫЧНЫЙ ПЕРИОД', 'AR': 'الفترة العادية', 'HI': 'सामान्य अवधि', 'VI': 'GIAI ĐOẠN BÌNH THƯỜNG', 'ES': 'PERÍODO NORMAL', 'TH': 'ช่วงเวลาปกติ'},
+    'normalSubtitle': {'KO': '평상시 기본 타임라인 - 오늘 요일 자동', 'EN': "Normal default timeline - today's weekday auto-selected", 'JA': '通常の基本タイムライン - 今日の曜日を自動選択', 'ZH': '日常基础时间表 - 自动选择今天星期', 'FR': "Chronologie normale - jour actuel sélectionné automatiquement", 'DE': 'Normaler Standardzeitplan - heutiger Wochentag automatisch', 'RU': 'Обычное расписание - сегодняшний день недели авто', 'AR': 'الجدول الزمني الافتراضي - يتم تحديد يوم اليوم تلقائيًا', 'HI': 'सामान्य डिफ़ॉल्ट समयरेखा - आज का दिन स्वचालित रूप से चयनित', 'VI': 'Lịch trình mặc định - tự động chọn ngày hôm nay', 'ES': 'Cronología normal - día de hoy seleccionado automáticamente', 'TH': 'ไทม์ไลน์พื้นฐานปกติ - เลือกวันนี้อัตโนมัติ'},
+    'selectWeekdayLabel': {'KO': '요일선택', 'EN': 'Select Weekday', 'JA': '曜日選択', 'ZH': '选择星期', 'FR': 'Choisir le jour', 'DE': 'Wochentag wählen', 'RU': 'Выбор дня недели', 'AR': 'اختر اليوم', 'HI': 'दिन चुनें', 'VI': 'Chọn thứ', 'ES': 'Elegir día', 'TH': 'เลือกวัน'},
+
+    'personalTitleEn': {'KO': 'PERSONAL TIMETABLE', 'EN': 'PERSONAL TIMETABLE', 'JA': '個人時間表', 'ZH': '个人时间表', 'FR': 'EMPLOI DU TEMPS PERSONNEL', 'DE': 'PERSÖNLICHER STUNDENPLAN', 'RU': 'ЛИЧНОЕ РАСПИСАНИЕ', 'AR': 'الجدول الزمني الشخصي', 'HI': 'व्यक्तिगत समय सारणी', 'VI': 'THỜI GIAN BIỂU CÁ NHÂN', 'ES': 'HORARIO PERSONAL', 'TH': 'ตารางเวลาส่วนตัว'},
+    'personalSubtitle': {'KO': '개인 시간표 - 나만의 시간표 직접 작성', 'EN': 'Personal timetable - create your own schedule', 'JA': '個人時間表 - 自分だけの時間表を作成', 'ZH': '个人时间表 - 自行制定专属时间表', 'FR': 'Emploi personnel - créez votre propre horaire', 'DE': 'Persönlicher Plan - eigenen Zeitplan erstellen', 'RU': 'Личное расписание - создайте свой график', 'AR': 'الجدول الشخصي - أنشئ جدولك الخاص', 'HI': 'व्यक्तिगत समय सारणी - अपनी समय सारणी बनाएं', 'VI': 'Thời gian biểu cá nhân - tự tạo lịch của riêng bạn', 'ES': 'Horario personal - crea tu propio horario', 'TH': 'ตารางส่วนตัว - สร้างตารางเวลาของคุณเอง'},
+    'personalSampleLabel': {'KO': '작성 예시 (참고용, 저장되지 않음)', 'EN': 'SAMPLE (for reference only, not saved)', 'JA': '記入例（参考用、保存されません）', 'ZH': '填写示例（仅供参考，不会保存）', 'FR': "EXEMPLE (référence uniquement, non enregistré)", 'DE': 'BEISPIEL (nur zur Referenz, nicht gespeichert)', 'RU': 'ПРИМЕР (только для справки, не сохраняется)', 'AR': 'مثال (للمرجعية فقط، لا يتم الحفظ)', 'HI': 'उदाहरण (केवल संदर्भ के लिए, सहेजा नहीं गया)', 'VI': 'VÍ DỤ (chỉ để tham khảo, không lưu)', 'ES': 'EJEMPLO (solo referencia, no se guarda)', 'TH': 'ตัวอย่าง (สำหรับอ้างอิงเท่านั้น ไม่บันทึก)'},
+    'personalOwnScheduleLabel': {'KO': '나만의 시간표 (아래에 직접 추가하세요)', 'EN': 'My own timetable (add items below)', 'JA': '自分だけの時間表（下に直接追加してください）', 'ZH': '我的专属时间表（请在下方添加）', 'FR': 'Mon propre horaire (ajoutez ci-dessous)', 'DE': 'Mein eigener Zeitplan (unten hinzufügen)', 'RU': 'Мой личный график (добавьте ниже)', 'AR': 'جدولي الخاص (أضف أدناه)', 'HI': 'मेरी अपनी समय सारणी (नीचे जोड़ें)', 'VI': 'Thời gian biểu của tôi (thêm bên dưới)', 'ES': 'Mi propio horario (agregar abajo)', 'TH': 'ตารางเวลาของฉัน (เพิ่มด้านล่าง)'},
+    'personalGuideTitle': {'KO': '개인 시간표', 'EN': 'Personal Timetable', 'JA': '個人時間表', 'ZH': '个人时间表', 'FR': 'Emploi du temps personnel', 'DE': 'Persönlicher Stundenplan', 'RU': 'Личное расписание', 'AR': 'الجدول الزمني الشخصي', 'HI': 'व्यक्तिगत समय सारणी', 'VI': 'Thời gian biểu cá nhân', 'ES': 'Horario personal', 'TH': 'ตารางเวลาส่วนตัว'},
+    'personalGuideBody': {
+      'KO': '이 화면은 유저가 직접 학습할 시간과 과목 및 단원을 기록하여 저장한 뒤 사용할 곳입니다.\n\n위에 있는 예시 2개를 참고해서, 그 아래 빈 공간에 "+Add/항목 추가"로 원하는 시간표를 직접 작성해보세요.',
+      'EN': 'This screen is where you record and save your own study times, subjects, and units to use.\n\nRefer to the 2 samples above, then use "+Add" below to write your own schedule.',
+      'JA': 'この画面は、自分で学習する時間と科目・単元を記録して保存し、使用する場所です。\n\n上の2つの記入例を参考に、下の空欄に「+Add/項目追加」でご自身の時間表を作成してください。',
+      'ZH': '此界面用于记录并保存您自己要学习的时间、科目和单元。\n\n请参考上方的2个示例，在下方空白处点击"+Add/添加项目"来编写您的时间表。',
+      'FR': "Cet écran vous permet d'enregistrer vos propres horaires, matières et unités d'étude.\n\nConsultez les 2 exemples ci-dessus, puis utilisez « +Ajouter » ci-dessous pour créer votre horaire.",
+      'DE': 'In diesem Bildschirm können Sie Ihre eigenen Lernzeiten, Fächer und Einheiten speichern und nutzen.\n\nSchauen Sie sich die 2 Beispiele oben an und nutzen Sie unten „+Hinzufügen", um Ihren eigenen Plan zu erstellen.',
+      'RU': 'На этом экране вы можете записывать и сохранять собственное время учёбы, предметы и темы.\n\nПосмотрите 2 примера выше, затем используйте «+Добавить» ниже, чтобы составить свой график.',
+      'AR': 'هذه الشاشة هي المكان الذي تسجل فيه وتحفظ أوقات دراستك ومواضيعك ووحداتك الخاصة لاستخدامها.\n\nراجع المثالين أعلاه، ثم استخدم "+إضافة" أدناه لكتابة جدولك الخاص.',
+      'HI': 'यह स्क्रीन वह जगह है जहाँ आप अपने स्वयं के अध्ययन समय, विषय और इकाइयाँ दर्ज करके सहेजते हैं।\n\nऊपर दिए गए 2 उदाहरणों को देखें, फिर नीचे "+जोड़ें" का उपयोग करके अपनी समय सारणी लिखें।',
+      'VI': 'Đây là nơi bạn ghi lại và lưu thời gian học, môn học và đơn vị bài học của riêng bạn.\n\nHãy xem 2 ví dụ ở trên, sau đó dùng "+Thêm" bên dưới để viết lịch của riêng bạn.',
+      'ES': 'Esta pantalla es donde registras y guardas tus propios horarios de estudio, materias y unidades.\n\nConsulta los 2 ejemplos anteriores y usa "+Agregar" abajo para crear tu propio horario.',
+      'TH': 'หน้าจอนี้ใช้สำหรับบันทึกและเก็บเวลาเรียน วิชา และหน่วยเรียนของคุณเอง\n\nดูตัวอย่างทั้ง 2 ด้านบน แล้วใช้ "+เพิ่ม" ด้านล่างเพื่อสร้างตารางของคุณเอง',
+    },
+    'okConfirmLabel': {'KO': '확인', 'EN': 'OK', 'JA': '確認', 'ZH': '确认', 'FR': 'OK', 'DE': 'OK', 'RU': 'ОК', 'AR': 'موافق', 'HI': 'ठीक है', 'VI': 'Đồng ý', 'ES': 'OK', 'TH': 'ตกลง'},
+
+    'vacationTitleEn': {'KO': 'VACATION SUMMER/WINTER', 'EN': 'VACATION SUMMER/WINTER', 'JA': '休暇（夏・冬）', 'ZH': '假期（夏/冬）', 'FR': 'VACANCES ÉTÉ/HIVER', 'DE': 'FERIEN SOMMER/WINTER', 'RU': 'КАНИКУЛЫ ЛЕТО/ЗИМА', 'AR': 'عطلة الصيف/الشتاء', 'HI': 'छुट्टी गर्मी/सर्दी', 'VI': 'NGHỈ HÈ/ĐÔNG', 'ES': 'VACACIONES VERANO/INVIERNO', 'TH': 'วันหยุดฤดูร้อน/หนาว'},
+    'vacationSubtitle': {'KO': '방학 포모도로 타임라인 - 기간 및 스타일 설정', 'EN': 'Vacation Pomodoro timeline - set period and style', 'JA': '休暇ポモドーロタイムライン - 期間とスタイルを設定', 'ZH': '假期番茄钟时间表 - 设置期间和样式', 'FR': "Chronologie Pomodoro de vacances - définir période et style", 'DE': 'Ferien-Pomodoro-Zeitplan - Zeitraum und Stil einstellen', 'RU': 'Расписание Pomodoro на каникулах - настройка периода и стиля', 'AR': 'الجدول الزمني لبومودورو العطلة - تحديد الفترة والنمط', 'HI': 'छुट्टी पोमोडोरो समयरेखा - अवधि और स्टाइल सेट करें', 'VI': 'Lịch trình Pomodoro kỳ nghỉ - đặt thời gian và kiểu', 'ES': 'Cronología Pomodoro de vacaciones - configurar período y estilo', 'TH': 'ไทม์ไลน์โปโมโดโรวันหยุด - ตั้งค่าช่วงเวลาและสไตล์'},
+    'vacationPeriodLabel': {'KO': '방학 기간', 'EN': 'VACATION PERIOD', 'JA': '休暇期間', 'ZH': '假期时段', 'FR': 'PÉRIODE DE VACANCES', 'DE': 'FERIENZEITRAUM', 'RU': 'ПЕРИОД КАНИКУЛ', 'AR': 'فترة العطلة', 'HI': 'छुट्टी की अवधि', 'VI': 'THỜI GIAN NGHỈ', 'ES': 'PERÍODO DE VACACIONES', 'TH': 'ช่วงวันหยุด'},
+    'startDateSelect': {'KO': '시작일 선택', 'EN': 'Select Start Date', 'JA': '開始日を選択', 'ZH': '选择开始日期', 'FR': 'Choisir la date de début', 'DE': 'Startdatum wählen', 'RU': 'Выбрать дату начала', 'AR': 'اختر تاريخ البدء', 'HI': 'प्रारंभ तिथि चुनें', 'VI': 'Chọn ngày bắt đầu', 'ES': 'Seleccionar fecha de inicio', 'TH': 'เลือกวันเริ่มต้น'},
+    'endDateSelect': {'KO': '종료일 선택', 'EN': 'Select End Date', 'JA': '終了日を選択', 'ZH': '选择结束日期', 'FR': 'Choisir la date de fin', 'DE': 'Enddatum wählen', 'RU': 'Выбрать дату окончания', 'AR': 'اختر تاريخ الانتهاء', 'HI': 'समाप्ति तिथि चुनें', 'VI': 'Chọn ngày kết thúc', 'ES': 'Seleccionar fecha de fin', 'TH': 'เลือกวันสิ้นสุด'},
+    'pomodoroStyleTitleEn': {'KO': 'POMODORO STYLE', 'EN': 'POMODORO STYLE', 'JA': 'ポモドーロスタイル', 'ZH': '番茄钟样式', 'FR': 'STYLE POMODORO', 'DE': 'POMODORO-STIL', 'RU': 'СТИЛЬ POMODORO', 'AR': 'نمط بومودورو', 'HI': 'पोमोडोरो स्टाइल', 'VI': 'KIỂU POMODORO', 'ES': 'ESTILO POMODORO', 'TH': 'สไตล์โปโมโดโร'},
+    'pomodoroStyleSubtitle': {'KO': '포모도로 스타일 (직접 선택)', 'EN': 'Pomodoro style (choose manually)', 'JA': 'ポモドーロスタイル（直接選択）', 'ZH': '番茄钟样式（自行选择）', 'FR': 'Style Pomodoro (choix manuel)', 'DE': 'Pomodoro-Stil (manuell wählen)', 'RU': 'Стиль Pomodoro (выбор вручную)', 'AR': 'نمط بومودورو (اختيار يدوي)', 'HI': 'पोमोडोरो स्टाइल (मैन्युअल चयन)', 'VI': 'Kiểu Pomodoro (chọn thủ công)', 'ES': 'Estilo Pomodoro (elección manual)', 'TH': 'สไตล์โปโมโดโร (เลือกเอง)'},
+    'pomodoroHint': {'KO': '스타일마다 구성이 달라 자동 전환하지 않습니다. 원하는 스타일을 직접 골라주세요.', 'EN': 'Each style is structured differently, so it does not auto-switch. Please choose your preferred style.', 'JA': 'スタイルごとに構成が異なるため自動切替はしません。ご希望のスタイルを選んでください。', 'ZH': '每种样式结构不同，不会自动切换，请自行选择所需样式。', 'FR': "Chaque style est structuré différemment et ne change pas automatiquement. Choisissez votre style.", 'DE': 'Jeder Stil ist unterschiedlich aufgebaut und wechselt nicht automatisch. Bitte wählen Sie Ihren Stil.', 'RU': 'Каждый стиль устроен по-разному и не переключается автоматически. Пожалуйста, выберите стиль вручную.', 'AR': 'يختلف تكوين كل نمط، فلا يتم التبديل تلقائيًا. يرجى اختيار النمط المطلوب.', 'HI': 'हर स्टाइल की संरचना अलग होती है, इसलिए यह स्वचालित रूप से नहीं बदलता। कृपया अपनी पसंद की स्टाइल चुनें।', 'VI': 'Mỗi kiểu có cấu trúc khác nhau nên không tự động chuyển. Vui lòng chọn kiểu bạn muốn.', 'ES': 'Cada estilo tiene una estructura diferente, por lo que no cambia automáticamente. Elige tu estilo preferido.', 'TH': 'แต่ละสไตล์มีโครงสร้างต่างกัน จึงไม่สลับอัตโนมัติ กรุณาเลือกสไตล์ที่ต้องการเอง'},
+    'pomodoroFreeMode': {'KO': '평일에도 이 스타일 자유롭게 사용', 'EN': 'Use this style freely on weekdays too', 'JA': '平日でもこのスタイルを自由に使用', 'ZH': '平日也可自由使用此样式', 'FR': 'Utiliser ce style librement aussi en semaine', 'DE': 'Diesen Stil auch werktags frei nutzen', 'RU': 'Использовать этот стиль свободно и в будни', 'AR': 'استخدم هذا النمط بحرية أيضًا في أيام الأسبوع', 'HI': 'सप्ताह के दिनों में भी इस स्टाइल का स्वतंत्र रूप से उपयोग करें', 'VI': 'Sử dụng kiểu này tự do cả vào ngày thường', 'ES': 'Usar este estilo libremente también en días de semana', 'TH': 'ใช้สไตล์นี้ได้อย่างอิสระในวันธรรมดาด้วย'},
+    'pomodoroStyle1': {'KO': '스타일 1 (초집중 25분형)', 'EN': 'Style 1 (Ultra Focus 25m)', 'JA': 'スタイル1（超集中25分型）', 'ZH': '样式1（超集中25分钟型）', 'FR': 'Style 1 (Ultra Focus 25 min)', 'DE': 'Stil 1 (Ultrafokus 25 Min)', 'RU': 'Стиль 1 (Ультрафокус 25 мин)', 'AR': 'النمط 1 (تركيز فائق 25 دقيقة)', 'HI': 'स्टाइल 1 (अल्ट्रा फोकस 25 मिनट)', 'VI': 'Kiểu 1 (Siêu tập trung 25 phút)', 'ES': 'Estilo 1 (Enfoque ultra 25 min)', 'TH': 'สไตล์ 1 (โฟกัสสุดขีด 25 นาที)'},
+    'pomodoroStyle2': {'KO': '스타일 2 (집중 40분형)', 'EN': 'Style 2 (Focus 40m)', 'JA': 'スタイル2（集中40分型）', 'ZH': '样式2（集中40分钟型）', 'FR': 'Style 2 (Focus 40 min)', 'DE': 'Stil 2 (Fokus 40 Min)', 'RU': 'Стиль 2 (Фокус 40 мин)', 'AR': 'النمط 2 (تركيز 40 دقيقة)', 'HI': 'स्टाइल 2 (फोकस 40 मिनट)', 'VI': 'Kiểu 2 (Tập trung 40 phút)', 'ES': 'Estilo 2 (Enfoque 40 min)', 'TH': 'สไตล์ 2 (โฟกัส 40 นาที)'},
+    'pomodoroStyle3': {'KO': '스타일 3 (과목별 45분형)', 'EN': 'Style 3 (Subject 45m)', 'JA': 'スタイル3（科目別45分型）', 'ZH': '样式3（分科45分钟型）', 'FR': 'Style 3 (Matière 45 min)', 'DE': 'Stil 3 (Fach 45 Min)', 'RU': 'Стиль 3 (По предметам 45 мин)', 'AR': 'النمط 3 (حسب المادة 45 دقيقة)', 'HI': 'स्टाइल 3 (विषयवार 45 मिनट)', 'VI': 'Kiểu 3 (Theo môn 45 phút)', 'ES': 'Estilo 3 (Por materia 45 min)', 'TH': 'สไตล์ 3 (แยกวิชา 45 นาที)'},
+    'pomodoroStyle4': {'KO': '스타일 4 (집중 60분형)', 'EN': 'Style 4 (Focus 60m)', 'JA': 'スタイル4（集中60分型）', 'ZH': '样式4（集中60分钟型）', 'FR': 'Style 4 (Focus 60 min)', 'DE': 'Stil 4 (Fokus 60 Min)', 'RU': 'Стиль 4 (Фокус 60 мин)', 'AR': 'النمط 4 (تركيز 60 دقيقة)', 'HI': 'स्टाइल 4 (फोकस 60 मिनट)', 'VI': 'Kiểu 4 (Tập trung 60 phút)', 'ES': 'Estilo 4 (Enfoque 60 min)', 'TH': 'สไตล์ 4 (โฟกัส 60 นาที)'},
+    'pomodoroNotSelected': {'KO': '미선택', 'EN': 'Not Selected', 'JA': '未選択', 'ZH': '未选择', 'FR': 'Non sélectionné', 'DE': 'Nicht ausgewählt', 'RU': 'Не выбрано', 'AR': 'غير محدد', 'HI': 'अचयनित', 'VI': 'Chưa chọn', 'ES': 'No seleccionado', 'TH': 'ยังไม่เลือก'},
+    'noPomodoroSelected': {'KO': '선택된 포모도로 스타일이 없습니다. 위에서 스타일을 선택해주세요.', 'EN': 'No Pomodoro style selected. Please choose a style above.', 'JA': '選択されたポモドーロスタイルがありません。上でスタイルを選択してください。', 'ZH': '未选择番茄钟样式，请在上方选择样式。', 'FR': "Aucun style Pomodoro sélectionné. Choisissez un style ci-dessus.", 'DE': 'Kein Pomodoro-Stil ausgewählt. Bitte wählen Sie oben einen Stil.', 'RU': 'Стиль Pomodoro не выбран. Пожалуйста, выберите стиль выше.', 'AR': 'لم يتم اختيار نمط بومودورو. يرجى اختيار نمط أعلاه.', 'HI': 'कोई पोमोडोरो स्टाइल चयनित नहीं है। कृपया ऊपर एक स्टाइल चुनें।', 'VI': 'Chưa chọn kiểu Pomodoro. Vui lòng chọn kiểu ở trên.', 'ES': 'No se seleccionó ningún estilo Pomodoro. Elige un estilo arriba.', 'TH': 'ยังไม่ได้เลือกสไตล์โปโมโดโร กรุณาเลือกสไตล์ด้านบน'},
+
+    'examPrepTitleEn': {'KO': 'EXAM PREP PERIOD', 'EN': 'EXAM PREP PERIOD', 'JA': '試験準備期間', 'ZH': '备考期间', 'FR': "PÉRIODE DE PRÉPARATION À L'EXAMEN", 'DE': 'PRÜFUNGSVORBEREITUNGSZEIT', 'RU': 'ПЕРИОД ПОДГОТОВКИ К ЭКЗАМЕНУ', 'AR': 'فترة التحضير للامتحان', 'HI': 'परीक्षा तैयारी अवधि', 'VI': 'GIAI ĐOẠN ÔN THI', 'ES': 'PERÍODO DE PREPARACIÓN DEL EXAMEN', 'TH': 'ช่วงเตรียมสอบ'},
+    'examPrepSubtitle': {'KO': '시험 준비 타임라인 - 시험 정보 및 날짜별 자동 연동', 'EN': 'Exam prep timeline - auto-linked with exam info and date', 'JA': '試験準備タイムライン - 試験情報と日付に自動連動', 'ZH': '备考时间表 - 与考试信息及日期自动联动', 'FR': "Chronologie de préparation - liée automatiquement aux infos et à la date d'examen", 'DE': 'Prüfungsvorbereitungszeitplan - automatisch mit Prüfungsinfo und Datum verknüpft', 'RU': 'Расписание подготовки - авто-связь с информацией и датой экзамена', 'AR': 'الجدول الزمني للتحضير - مرتبط تلقائيًا بمعلومات الامتحان والتاريخ', 'HI': 'परीक्षा तैयारी समयरेखा - परीक्षा जानकारी व तिथि से स्वचालित रूप से जुड़ी', 'VI': 'Lịch trình ôn thi - tự động liên kết với thông tin và ngày thi', 'ES': 'Cronología de preparación - vinculada automáticamente con info y fecha del examen', 'TH': 'ไทม์ไลน์เตรียมสอบ - เชื่อมโยงอัตโนมัติกับข้อมูลและวันสอบ'},
+    'examInfoSettingTitle': {'KO': '시험 정보 설정', 'EN': 'EXAM INFO', 'JA': '試験情報設定', 'ZH': '考试信息设置', 'FR': "INFOS D'EXAMEN", 'DE': 'PRÜFUNGSINFO', 'RU': 'ИНФОРМАЦИЯ ОБ ЭКЗАМЕНЕ', 'AR': 'معلومات الامتحان', 'HI': 'परीक्षा जानकारी', 'VI': 'THÔNG TIN KỲ THI', 'ES': 'INFO DEL EXAMEN', 'TH': 'ข้อมูลการสอบ'},
+    'examInfoInputTitle': {'KO': '시험 정보 입력', 'EN': 'EXAM INFO', 'JA': '試験情報入力', 'ZH': '考试信息输入', 'FR': "SAISIR INFOS D'EXAMEN", 'DE': 'PRÜFUNGSINFO EINGEBEN', 'RU': 'ВВОД ИНФОРМАЦИИ ОБ ЭКЗАМЕНЕ', 'AR': 'إدخال معلومات الامتحان', 'HI': 'परीक्षा जानकारी दर्ज करें', 'VI': 'NHẬP THÔNG TIN KỲ THI', 'ES': 'INGRESAR INFO DEL EXAMEN', 'TH': 'กรอกข้อมูลการสอบ'},
+    'radioMidterm': {'KO': '중간고사', 'EN': 'Midterm Exam', 'JA': '中間試験', 'ZH': '期中考试', 'FR': "Examen de mi-parcours", 'DE': 'Zwischenprüfung', 'RU': 'Промежуточный экзамен', 'AR': 'امتحان نصف الفصل', 'HI': 'मध्यावधि परीक्षा', 'VI': 'Thi giữa kỳ', 'ES': 'Examen parcial', 'TH': 'สอบกลางภาค'},
+    'radioFinal': {'KO': '기말고사', 'EN': 'Final Exam', 'JA': '期末試験', 'ZH': '期末考试', 'FR': 'Examen final', 'DE': 'Abschlussprüfung', 'RU': 'Итоговый экзамен', 'AR': 'الامتحان النهائي', 'HI': 'अंतिम परीक्षा', 'VI': 'Thi cuối kỳ', 'ES': 'Examen final', 'TH': 'สอบปลายภาค'},
+    'weeksBeforeSuffix': {'KO': '주 전', 'EN': 'Weeks Before', 'JA': '週間前', 'ZH': '周前', 'FR': 'semaines avant', 'DE': 'Wochen vorher', 'RU': 'недели до', 'AR': 'أسابيع قبل', 'HI': 'सप्ताह पहले', 'VI': 'tuần trước', 'ES': 'semanas antes', 'TH': 'สัปดาห์ก่อน'},
+    'examPrepGuidance': {'KO': '선택 시 날짜와 무관하게 해당 주차 시간표를 미리 봅니다. 다시 누르면 해제(자동계산으로 복귀).', 'EN': "Selecting this previews that week's schedule regardless of date. Tap again to deselect (returns to auto-calculation).", 'JA': '選択すると日付にかかわらず該当週のスケジュールを事前確認できます。再度タップで解除（自動計算に戻る）。', 'ZH': '选择后无论日期都可预览该周的时间表。再次点击可取消（恢复自动计算）。', 'FR': "En sélectionnant, vous prévisualisez le planning de cette semaine, quelle que soit la date. Appuyez à nouveau pour désélectionner (retour au calcul automatique).", 'DE': 'Bei Auswahl wird der Zeitplan dieser Woche unabhängig vom Datum angezeigt. Erneut tippen zum Abwählen (zurück zur automatischen Berechnung).', 'RU': 'При выборе показывается расписание этой недели независимо от даты. Нажмите снова, чтобы снять выбор (вернуться к автоматическому расчёту).', 'AR': 'عند التحديد، تتم معاينة جدول هذا الأسبوع بغض النظر عن التاريخ. اضغط مرة أخرى لإلغاء التحديد (العودة إلى الحساب التلقائي).', 'HI': 'चयन करने पर तिथि की परवाह किए बिना उस सप्ताह की समय सारणी दिखेगी। फिर से टैप करने पर चयन रद्द होगा (स्वचालित गणना पर वापसी)।', 'VI': 'Khi chọn, lịch trình của tuần đó sẽ hiện ra bất kể ngày. Nhấn lại để bỏ chọn (quay lại tính tự động).', 'ES': 'Al seleccionar, se previsualiza el horario de esa semana sin importar la fecha. Toca de nuevo para deseleccionar (vuelve al cálculo automático).', 'TH': 'เมื่อเลือก จะแสดงตารางของสัปดาห์นั้นโดยไม่คำนึงถึงวันที่ แตะอีกครั้งเพื่อยกเลิก (กลับไปคำนวณอัตโนมัติ)'},
+    'examPrepManualWarning': {'KO': '수동 미리보기 중입니다 (오늘 날짜 자동계산 아님)', 'EN': 'Manual preview in progress (not auto-calculated from today)', 'JA': '手動プレビュー中です（本日の日付からの自動計算ではありません）', 'ZH': '正在手动预览（非今日日期自动计算）', 'FR': "Aperçu manuel en cours (non calculé automatiquement à partir d'aujourd'hui)", 'DE': 'Manuelle Vorschau aktiv (nicht automatisch aus heutigem Datum berechnet)', 'RU': 'Ручной предпросмотр активен (не рассчитывается автоматически от сегодняшней даты)', 'AR': 'المعاينة اليدوية قيد التشغيل (ليست محسوبة تلقائيًا من تاريخ اليوم)', 'HI': 'मैनुअल पूर्वावलोकन जारी है (आज की तिथि से स्वचालित गणना नहीं)', 'VI': 'Đang xem trước thủ công (không tự động tính từ ngày hôm nay)', 'ES': 'Vista previa manual en curso (no calculado automáticamente desde hoy)', 'TH': 'กำลังแสดงตัวอย่างแบบเลือกเอง (ไม่ได้คำนวณอัตโนมัติจากวันนี้)'},
+    'addExamRecordBtnEn': {'KO': '시험 과목 및 범위 기록 추가 (연속 입력)', 'EN': 'Add Exam Subject & Scope (Continuous Entry)', 'JA': '試験科目・範囲の記録を追加（連続入力）', 'ZH': '添加考试科目及范围记录（连续输入）', 'FR': "Ajouter matière/portée d'examen (saisie continue)", 'DE': 'Prüfungsfach & Umfang hinzufügen (fortlaufende Eingabe)', 'RU': 'Добавить предмет и объём экзамена (непрерывный ввод)', 'AR': 'إضافة مادة ونطاق الامتحان (إدخال متتابع)', 'HI': 'परीक्षा विषय एवं दायरा जोड़ें (निरंतर प्रविष्टि)', 'VI': 'Thêm môn thi & phạm vi (nhập liên tục)', 'ES': 'Agregar materia y alcance del examen (entrada continua)', 'TH': 'เพิ่มวิชาสอบและขอบเขต (กรอกต่อเนื่อง)'},
+    'registeredExamRecordsLabel': {'KO': '등록된 시험 과목 및 범위', 'EN': 'Registered exam subjects & scope', 'JA': '登録済みの試験科目・範囲', 'ZH': '已注册的考试科目及范围', 'FR': "Matières/portées d'examen enregistrées", 'DE': 'Registrierte Prüfungsfächer & Umfang', 'RU': 'Зарегистрированные предметы и объём экзамена', 'AR': 'مواد ونطاق الامتحان المسجلة', 'HI': 'दर्ज परीक्षा विषय और दायरा', 'VI': 'Môn thi & phạm vi đã đăng ký', 'ES': 'Materias y alcance registrados', 'TH': 'วิชาสอบและขอบเขตที่บันทึกไว้'},
+    'rangeLabel': {'KO': '범위', 'EN': 'Scope', 'JA': '範囲', 'ZH': '范围', 'FR': 'Portée', 'DE': 'Umfang', 'RU': 'Объём', 'AR': 'النطاق', 'HI': 'दायरा', 'VI': 'Phạm vi', 'ES': 'Alcance', 'TH': 'ขอบเขต'},
+
+    'examDayTitleEn': {'KO': 'EXAM DAY TRACK', 'EN': 'EXAM DAY TRACK', 'JA': '試験当日トラック', 'ZH': '考试日轨道', 'FR': "PARCOURS JOUR D'EXAMEN", 'DE': 'PRÜFUNGSTAG-ABLAUF', 'RU': 'ТРЕК ДНЯ ЭКЗАМЕНА', 'AR': 'مسار يوم الامتحان', 'HI': 'परीक्षा दिवस ट्रैक', 'VI': 'LỘ TRÌNH NGÀY THI', 'ES': 'PISTA DEL DÍA DE EXAMEN', 'TH': 'แทร็กวันสอบ'},
+    'examDaySubtitle': {'KO': '시험 당일 D-day 타임라인 - 자동 계산', 'EN': 'Exam day D-day timeline - auto-calculated', 'JA': '試験当日D-dayタイムライン - 自動計算', 'ZH': '考试当天D-day时间表 - 自动计算', 'FR': "Chronologie D-day du jour d'examen - calculée automatiquement", 'DE': 'Prüfungstag D-Day-Zeitplan - automatisch berechnet', 'RU': 'Расписание D-day дня экзамена - автоматический расчёт', 'AR': 'الجدول الزمني D-day ليوم الامتحان - محسوب تلقائيًا', 'HI': 'परीक्षा दिवस D-day समयरेखा - स्वचालित गणना', 'VI': 'Lịch trình D-day ngày thi - tính toán tự động', 'ES': 'Cronología D-day del día de examen - calculada automáticamente', 'TH': 'ไทม์ไลน์ D-day วันสอบ - คำนวณอัตโนมัติ'},
+    'examDayNoStartDate': {'KO': '시험 시작일을 입력하면 D-3 ~ D+4 구간의 정확한 트랙이 자동으로 표시됩니다.', 'EN': 'Once you enter the exam start date, the exact D-3 ~ D+4 track will be shown automatically.', 'JA': '試験開始日を入力すると、D-3〜D+4の正確なトラックが自動的に表示されます。', 'ZH': '输入考试开始日期后，将自动显示D-3至D+4区间的精确轨道。', 'FR': "Une fois la date de début saisie, le parcours exact D-3 à D+4 s'affichera automatiquement.", 'DE': 'Nach Eingabe des Prüfungsstartdatums wird der genaue D-3- bis D+4-Ablauf automatisch angezeigt.', 'RU': 'После указания даты начала экзамена автоматически появится точный трек D-3 ~ D+4.', 'AR': 'بعد إدخال تاريخ بدء الامتحان، سيتم عرض المسار الدقيق من D-3 إلى D+4 تلقائيًا.', 'HI': 'परीक्षा प्रारंभ तिथि दर्ज करने पर D-3 से D+4 तक का सटीक ट्रैक स्वचालित रूप से दिखाई देगा।', 'VI': 'Khi nhập ngày bắt đầu thi, lộ trình chính xác D-3 ~ D+4 sẽ tự động hiển thị.', 'ES': 'Al ingresar la fecha de inicio del examen, se mostrará automáticamente la pista exacta D-3 a D+4.', 'TH': 'เมื่อกรอกวันเริ่มสอบ ระบบจะแสดงแทร็กช่วง D-3 ถึง D+4 ที่ถูกต้องโดยอัตโนมัติ'},
+    'examDayOutOfRangePrefix': {'KO': '오늘은 시험 당일 트랙 구간(D-3 ~ D+4)이 아닙니다. 현재 기준', 'EN': "Today is outside the exam day track range (D-3 ~ D+4). Currently", 'JA': '本日は試験当日トラック区間（D-3〜D+4）ではありません。現在', 'ZH': '今天不在考试当天轨道区间（D-3~D+4）内。当前为', 'FR': "Aujourd'hui n'est pas dans la plage du parcours (D-3 ~ D+4). Actuellement", 'DE': 'Heute liegt nicht im Prüfungstag-Ablaufbereich (D-3 ~ D+4). Aktuell', 'RU': 'Сегодня выходит за диапазон трека дня экзамена (D-3 ~ D+4). Сейчас', 'AR': 'اليوم ليس ضمن نطاق مسار يوم الامتحان (D-3 ~ D+4). حاليًا', 'HI': 'आज परीक्षा दिवस ट्रैक की सीमा (D-3 ~ D+4) में नहीं है। वर्तमान में', 'VI': 'Hôm nay không thuộc phạm vi lộ trình ngày thi (D-3 ~ D+4). Hiện tại', 'ES': 'Hoy está fuera del rango de la pista del día de examen (D-3 ~ D+4). Actualmente', 'TH': 'วันนี้ไม่อยู่ในช่วงแทร็กวันสอบ (D-3 ~ D+4) ขณะนี้'},
+    'examDayIsSuffix': {'KO': '입니다.', 'EN': '.', 'JA': 'です。', 'ZH': '。', 'FR': '.', 'DE': '.', 'RU': '.', 'AR': '.', 'HI': 'है।', 'VI': '.', 'ES': '.', 'TH': ''},
+    'prepTimelineSuffix': {'KO': '준비 타임라인', 'EN': 'Prep Timeline', 'JA': '準備タイムライン', 'ZH': '备考时间表', 'FR': 'chronologie de préparation', 'DE': 'Vorbereitungszeitplan', 'RU': 'расписание подготовки', 'AR': 'الجدول الزمني للتحضير', 'HI': 'तैयारी समयरेखा', 'VI': 'lịch trình ôn thi', 'ES': 'cronología de preparación', 'TH': 'ไทม์ไลน์เตรียมสอบ'},
+    'examEndedNormalEn': {'KO': '평상시 시간표 (시험 종료)', 'EN': 'Normal Period (Exam Ended)', 'JA': '通常時間表（試験終了）', 'ZH': '日常时间表（考试结束）', 'FR': 'Période normale (examen terminé)', 'DE': 'Normale Periode (Prüfung beendet)', 'RU': 'Обычный период (экзамен завершён)', 'AR': 'الفترة العادية (انتهى الامتحان)', 'HI': 'सामान्य अवधि (परीक्षा समाप्त)', 'VI': 'Giai đoạn bình thường (đã hết kỳ thi)', 'ES': 'Período normal (examen finalizado)', 'TH': 'ช่วงเวลาปกติ (สอบเสร็จแล้ว)'},
+
+    'examDayNoStartDate2': {'KO': '시험 시작일(D-day) 선택', 'EN': 'Select Exam Start Date (D-day)', 'JA': '試験開始日（D-day）を選択', 'ZH': '选择考试开始日期（D-day）', 'FR': "Sélectionner la date de début (D-day)", 'DE': 'Prüfungsstartdatum wählen (D-Day)', 'RU': 'Выбрать дату начала экзамена (D-day)', 'AR': 'اختر تاريخ بدء الامتحان (D-day)', 'HI': 'परीक्षा प्रारंभ तिथि चुनें (D-day)', 'VI': 'Chọn ngày bắt đầu thi (D-day)', 'ES': 'Seleccionar fecha de inicio (D-day)', 'TH': 'เลือกวันเริ่มสอบ (D-day)'},
+    'examDayStartDatePrefix': {'KO': '시험 시작일', 'EN': 'Exam Start Date', 'JA': '試験開始日', 'ZH': '考试开始日期', 'FR': "Date de début d'examen", 'DE': 'Prüfungsstartdatum', 'RU': 'Дата начала экзамена', 'AR': 'تاريخ بدء الامتحان', 'HI': 'परीक्षा प्रारंभ तिथि', 'VI': 'Ngày bắt đầu thi', 'ES': 'Fecha de inicio del examen', 'TH': 'วันเริ่มสอบ'},
+    'dayTrackSuffix': {'KO': '시험 당일 트랙', 'EN': 'Exam Day Track', 'JA': '試験当日トラック', 'ZH': '考试日轨道', 'FR': "parcours du jour d'examen", 'DE': 'Prüfungstag-Ablauf', 'RU': 'трек дня экзамена', 'AR': 'مسار يوم الامتحان', 'HI': 'परीक्षा दिवस ट्रैक', 'VI': 'lộ trình ngày thi', 'ES': 'pista del día de examen', 'TH': 'แทร็กวันสอบ'},
+    'addBtnLabel': {'KO': '항목 추가', 'EN': 'Add', 'JA': '項目追加', 'ZH': '添加项目', 'FR': 'Ajouter', 'DE': 'Hinzufügen', 'RU': 'Добавить', 'AR': 'إضافة', 'HI': 'जोड़ें', 'VI': 'Thêm', 'ES': 'Agregar', 'TH': 'เพิ่ม'},
+    'editedBadge': {'KO': '편집됨', 'EN': 'Edited', 'JA': '編集済み', 'ZH': '已编辑', 'FR': 'Modifié', 'DE': 'Bearbeitet', 'RU': 'Изменено', 'AR': 'تم التعديل', 'HI': 'संपादित', 'VI': 'Đã sửa', 'ES': 'Editado', 'TH': 'แก้ไขแล้ว'},
+    'resetBtn': {'KO': '리셋', 'EN': 'Reset', 'JA': 'リセット', 'ZH': '重置', 'FR': 'Réinit.', 'DE': 'Zurücksetzen', 'RU': 'Сброс', 'AR': 'إعادة تعيين', 'HI': 'रीसेट', 'VI': 'Đặt lại', 'ES': 'Restablecer', 'TH': 'รีเซ็ต'},
+    'noDataAvailable': {'KO': '표시할 데이터가 없습니다.', 'EN': 'No data available.', 'JA': '表示するデータがありません。', 'ZH': '没有可显示的数据。', 'FR': 'Aucune donnée disponible.', 'DE': 'Keine Daten verfügbar.', 'RU': 'Нет данных для отображения.', 'AR': 'لا توجد بيانات متاحة.', 'HI': 'दिखाने के लिए कोई डेटा नहीं है।', 'VI': 'Không có dữ liệu để hiển thị.', 'ES': 'No hay datos disponibles.', 'TH': 'ไม่มีข้อมูลที่จะแสดง'},
+
+    'resetDialogTitleEn': {'KO': '원본 리셋', 'EN': 'Reset', 'JA': 'リセット', 'ZH': '重置', 'FR': 'Réinitialiser', 'DE': 'Zurücksetzen', 'RU': 'Сброс', 'AR': 'إعادة تعيين', 'HI': 'रीसेट', 'VI': 'Đặt lại', 'ES': 'Restablecer', 'TH': 'รีเซ็ต'},
+    'resetDialogBody': {'KO': '현재 화면의 타임라인을 원본 기본 데이터로 초기화하시겠습니까?', 'EN': "Reset this screen's timeline to the original default data?", 'JA': '現在の画面のタイムラインを元の基本データにリセットしますか？', 'ZH': '要将当前屏幕的时间表重置为原始默认数据吗？', 'FR': "Réinitialiser la chronologie de cet écran aux données par défaut ?", 'DE': 'Zeitplan dieses Bildschirms auf die ursprünglichen Standarddaten zurücksetzen?', 'RU': 'Сбросить расписание этого экрана к исходным данным по умолчанию?', 'AR': 'هل تريد إعادة تعيين الجدول الزمني لهذه الشاشة إلى البيانات الافتراضية الأصلية؟', 'HI': 'क्या इस स्क्रीन की समयरेखा को मूल डिफ़ॉल्ट डेटा पर रीसेट करना चाहते हैं?', 'VI': 'Đặt lại lịch trình của màn hình này về dữ liệu mặc định gốc?', 'ES': '¿Restablecer la cronología de esta pantalla a los datos originales predeterminados?', 'TH': 'ต้องการรีเซ็ตไทม์ไลน์ของหน้านี้กลับไปเป็นข้อมูลเริ่มต้นหรือไม่?'},
+    'cancelBtn': {'KO': '취소', 'EN': 'Cancel', 'JA': 'キャンセル', 'ZH': '取消', 'FR': 'Annuler', 'DE': 'Abbrechen', 'RU': 'Отмена', 'AR': 'إلغاء', 'HI': 'रद्द करें', 'VI': 'Hủy', 'ES': 'Cancelar', 'TH': 'ยกเลิก'},
+    'confirmResetBtn': {'KO': '리셋 확인', 'EN': 'Confirm Reset', 'JA': 'リセット確認', 'ZH': '确认重置', 'FR': 'Confirmer', 'DE': 'Bestätigen', 'RU': 'Подтвердить', 'AR': 'تأكيد', 'HI': 'पुष्टि करें', 'VI': 'Xác nhận', 'ES': 'Confirmar', 'TH': 'ยืนยันรีเซ็ต'},
+
+    'startTimerTitleEn': {'KO': '타이머 시작', 'EN': 'START TIMER', 'JA': 'タイマー開始', 'ZH': '开始计时器', 'FR': 'DÉMARRER LE MINUTEUR', 'DE': 'TIMER STARTEN', 'RU': 'ЗАПУСК ТАЙМЕРА', 'AR': 'بدء المؤقت', 'HI': 'टाइमर शुरू करें', 'VI': 'BẮT ĐẦU HẸN GIỜ', 'ES': 'INICIAR TEMPORIZADOR', 'TH': 'เริ่มตัวจับเวลา'},
+    'whiteNoiseTitleEn': {'KO': '백색소음 선택', 'EN': 'White Noise Selection', 'JA': 'ホワイトノイズ選択', 'ZH': '白噪音选择', 'FR': 'Sélection de bruit blanc', 'DE': 'Weißes-Rauschen-Auswahl', 'RU': 'Выбор белого шума', 'AR': 'اختيار الضجيج الأبيض', 'HI': 'व्हाइट नॉइज़ चयन', 'VI': 'Chọn tiếng ồn trắng', 'ES': 'Selección de ruido blanco', 'TH': 'เลือกเสียงไวท์นอยส์'},
+    'whiteNoiseHint': {'KO': '학습 시작 시 시작 알림음 다음에 이어서 재생됩니다. (선택 안 해도 됩니다)', 'EN': 'Plays right after the start chime when studying begins. (Optional)', 'JA': '学習開始時、開始通知音の後に続けて再生されます。（選択不要）', 'ZH': '学习开始时会在开始提示音之后接续播放。（可不选择）', 'FR': "Se joue juste après le carillon de début d'étude. (Facultatif)", 'DE': 'Wird direkt nach dem Start-Signalton beim Lernbeginn abgespielt. (Optional)', 'RU': 'Воспроизводится сразу после стартового сигнала при начале учёбы. (Необязательно)', 'AR': 'يتم تشغيله مباشرة بعد نغمة البدء عند بدء الدراسة. (اختياري)', 'HI': 'अध्ययन शुरू होने पर स्टार्ट अलर्ट के बाद बजेगा। (वैकल्पिक)', 'VI': 'Sẽ phát ngay sau âm báo bắt đầu khi bắt đầu học. (Không bắt buộc)', 'ES': 'Se reproduce justo después del sonido de inicio al comenzar a estudiar. (Opcional)', 'TH': 'จะเล่นต่อจากเสียงแจ้งเตือนเริ่มต้นเมื่อเริ่มเรียน (ไม่บังคับเลือก)'},
+    'listenLabel': {'KO': '미리듣기', 'EN': 'LISTEN 10s', 'JA': '試聴', 'ZH': '试听', 'FR': 'ÉCOUTER 10s', 'DE': 'ANHÖREN 10s', 'RU': 'ПРОСЛУШАТЬ 10с', 'AR': 'استماع 10 ث', 'HI': 'सुनें 10s', 'VI': 'NGHE 10s', 'ES': 'ESCUCHAR 10s', 'TH': 'ฟัง 10 วิ'},
+    'stopLabel': {'KO': '정지', 'EN': 'STOP', 'JA': '停止', 'ZH': '停止', 'FR': 'ARRÊTER', 'DE': 'STOPP', 'RU': 'СТОП', 'AR': 'إيقاف', 'HI': 'रोकें', 'VI': 'DỪNG', 'ES': 'PARAR', 'TH': 'หยุด'},
+    'selectLabel': {'KO': '선택', 'EN': 'SELECT', 'JA': '選択', 'ZH': '选择', 'FR': 'CHOISIR', 'DE': 'AUSWÄHLEN', 'RU': 'ВЫБРАТЬ', 'AR': 'اختيار', 'HI': 'चुनें', 'VI': 'CHỌN', 'ES': 'ELEGIR', 'TH': 'เลือก'},
+    'unselectLabel': {'KO': '해제', 'EN': 'UNSELECT', 'JA': '解除', 'ZH': '取消选择', 'FR': 'DÉSÉLECTIONNER', 'DE': 'ABWÄHLEN', 'RU': 'ОТМЕНИТЬ', 'AR': 'إلغاء التحديد', 'HI': 'अचयनित करें', 'VI': 'BỎ CHỌN', 'ES': 'DESELECCIONAR', 'TH': 'ยกเลิกเลือก'},
+    'runSelectedLabel': {'KO': '선택항목 실행', 'EN': 'Run Selected', 'JA': '選択項目を実行', 'ZH': '运行所选项目', 'FR': 'Exécuter la sélection', 'DE': 'Auswahl ausführen', 'RU': 'Запустить выбранное', 'AR': 'تشغيل المحدد', 'HI': 'चयनित चलाएं', 'VI': 'Chạy mục đã chọn', 'ES': 'Ejecutar seleccionado', 'TH': 'เริ่มรายการที่เลือก'},
+    'closeLabel': {'KO': '닫기', 'EN': 'CLOSE', 'JA': '閉じる', 'ZH': '关闭', 'FR': 'FERMER', 'DE': 'SCHLIESSEN', 'RU': 'ЗАКРЫТЬ', 'AR': 'إغلاق', 'HI': 'बंद करें', 'VI': 'ĐÓNG', 'ES': 'CERRAR', 'TH': 'ปิด'},
+
+    'missionDetailsTitleEn': {'KO': '학습 계획 상세 조회', 'EN': 'MISSION DETAILS', 'JA': '学習計画詳細', 'ZH': '学习计划详情', 'FR': "DÉTAILS DE LA MISSION", 'DE': 'MISSIONSDETAILS', 'RU': 'ДЕТАЛИ ЗАДАЧИ', 'AR': 'تفاصيل المهمة', 'HI': 'मिशन विवरण', 'VI': 'CHI TIẾT NHIỆM VỤ', 'ES': 'DETALLES DE LA MISIÓN', 'TH': 'รายละเอียดภารกิจ'},
+    'subjectLabelEn': {'KO': '시험 과목', 'EN': 'SUBJECT', 'JA': '試験科目', 'ZH': '考试科目', 'FR': 'MATIÈRE', 'DE': 'FACH', 'RU': 'ПРЕДМЕТ', 'AR': 'المادة', 'HI': 'विषय', 'VI': 'MÔN THI', 'ES': 'MATERIA', 'TH': 'วิชาสอบ'},
+    'subjectHint': {'KO': '예: 수학 (함수 ~ 미적분)', 'EN': 'e.g. Math (Functions ~ Calculus)', 'JA': '例：数学（関数〜微積分）', 'ZH': '例：数学（函数～微积分）', 'FR': 'ex. Maths (Fonctions ~ Calcul)', 'DE': 'z. B. Mathe (Funktionen ~ Analysis)', 'RU': 'напр. Математика (Функции ~ Анализ)', 'AR': 'مثال: رياضيات (الدوال ~ التفاضل والتكامل)', 'HI': 'उदा. गणित (फ़ंक्शन ~ कैलकुलस)', 'VI': 'VD: Toán (Hàm số ~ Giải tích)', 'ES': 'ej. Matemáticas (Funciones ~ Cálculo)', 'TH': 'เช่น คณิตศาสตร์ (ฟังก์ชัน ~ แคลคูลัส)'},
+    'scopeLabelEn': {'KO': '시험 범위', 'EN': 'SCOPE', 'JA': '試験範囲', 'ZH': '考试范围', 'FR': 'PORTÉE', 'DE': 'UMFANG', 'RU': 'ОБЪЁМ', 'AR': 'النطاق', 'HI': 'दायरा', 'VI': 'PHẠM VI', 'ES': 'ALCANCE', 'TH': 'ขอบเขต'},
+    'scopeHint': {'KO': '예: 교과서 p.12 ~ p.45', 'EN': 'e.g. Textbook p.12 ~ p.45', 'JA': '例：教科書p.12〜p.45', 'ZH': '例：教材第12～45页', 'FR': 'ex. Manuel p.12 ~ p.45', 'DE': 'z. B. Lehrbuch S.12 ~ S.45', 'RU': 'напр. Учебник стр.12 ~ стр.45', 'AR': 'مثال: الكتاب ص12 ~ ص45', 'HI': 'उदा. पाठ्यपुस्तक पृ.12 ~ पृ.45', 'VI': 'VD: SGK trang 12 ~ 45', 'ES': 'ej. Libro pág.12 ~ pág.45', 'TH': 'เช่น หนังสือ หน้า 12 ~ 45'},
+    'nextBtn': {'KO': '다음', 'EN': 'NEXT', 'JA': '次へ', 'ZH': '下一步', 'FR': 'SUIVANT', 'DE': 'WEITER', 'RU': 'ДАЛЕЕ', 'AR': 'التالي', 'HI': 'आगे', 'VI': 'TIẾP', 'ES': 'SIGUIENTE', 'TH': 'ถัดไป'},
+    'saveBtn': {'KO': '저장', 'EN': 'SAVE', 'JA': '保存', 'ZH': '保存', 'FR': 'ENREGISTRER', 'DE': 'SPEICHERN', 'RU': 'СОХРАНИТЬ', 'AR': 'حفظ', 'HI': 'सहेजें', 'VI': 'LƯU', 'ES': 'GUARDAR', 'TH': 'บันทึก'},
+    'saveExamScheduleTitleEn': {'KO': '시험 일정 저장', 'EN': 'Save Exam Schedule', 'JA': '試験日程を保存', 'ZH': '保存考试日程', 'FR': "Enregistrer le calendrier d'examen", 'DE': 'Prüfungstermin speichern', 'RU': 'Сохранить расписание экзамена', 'AR': 'حفظ جدول الامتحان', 'HI': 'परीक्षा अनुसूची सहेजें', 'VI': 'Lưu lịch thi', 'ES': 'Guardar horario de examen', 'TH': 'บันทึกกำหนดการสอบ'},
+    'saveExamScheduleBody': {'KO': '시험 일정과 과목이 적용됩니다. 저장하시겠습니까?', 'EN': 'The exam schedule and subjects will be applied. Save?', 'JA': '試験日程と科目が適用されます。保存しますか？', 'ZH': '将应用考试日程与科目，是否保存？', 'FR': "Le calendrier et les matières seront appliqués. Enregistrer ?", 'DE': 'Prüfungstermin und Fächer werden übernommen. Speichern?', 'RU': 'Будут применены расписание и предметы экзамена. Сохранить?', 'AR': 'سيتم تطبيق جدول الامتحان والمواد. هل تريد الحفظ؟', 'HI': 'परीक्षा अनुसूची और विषय लागू होंगे। सहेजें?', 'VI': 'Lịch thi và các môn sẽ được áp dụng. Lưu không?', 'ES': 'Se aplicarán el horario y las materias del examen. ¿Guardar?', 'TH': 'จะใช้กำหนดการสอบและวิชาที่กรอก ต้องการบันทึกหรือไม่?'},
+    'confirmBtn': {'KO': '확인', 'EN': 'Confirm', 'JA': '確認', 'ZH': '确认', 'FR': 'Confirmer', 'DE': 'Bestätigen', 'RU': 'Подтвердить', 'AR': 'تأكيد', 'HI': 'पुष्टि करें', 'VI': 'Xác nhận', 'ES': 'Confirmar', 'TH': 'ยืนยัน'},
+    'editModeTitleEn': {'KO': '수정 및 삭제', 'EN': 'EDIT MODE', 'JA': '編集・削除', 'ZH': '编辑与删除', 'FR': 'MODIFIER / SUPPRIMER', 'DE': 'BEARBEITEN / LÖSCHEN', 'RU': 'РЕДАКТИРОВАТЬ / УДАЛИТЬ', 'AR': 'تعديل / حذف', 'HI': 'संपादित/हटाएं', 'VI': 'SỬA / XÓA', 'ES': 'EDITAR / ELIMINAR', 'TH': 'แก้ไข/ลบ'},
+    'subjectOrTitleLabel': {'KO': '시험 과목', 'EN': 'SUBJECT OR TITLE', 'JA': '試験科目', 'ZH': '考试科目', 'FR': 'MATIÈRE', 'DE': 'FACH', 'RU': 'ПРЕДМЕТ', 'AR': 'المادة', 'HI': 'विषय', 'VI': 'MÔN THI', 'ES': 'MATERIA', 'TH': 'วิชาสอบ'},
+    'memoDetailsLabel': {'KO': '시험 범위', 'EN': 'MEMO / DETAILS', 'JA': '試験範囲', 'ZH': '考试范围', 'FR': 'PORTÉE', 'DE': 'UMFANG', 'RU': 'ОБЪЁМ', 'AR': 'النطاق', 'HI': 'दायरा', 'VI': 'PHẠM VI', 'ES': 'ALCANCE', 'TH': 'ขอบเขต'},
+    'delBtn': {'KO': '삭제', 'EN': 'DEL', 'JA': '削除', 'ZH': '删除', 'FR': 'SUPPR.', 'DE': 'LÖSCHEN', 'RU': 'УДАЛИТЬ', 'AR': 'حذف', 'HI': 'हटाएं', 'VI': 'XÓA', 'ES': 'ELIM.', 'TH': 'ลบ'},
+
+    'addScheduleTitleEn': {'KO': '타임라인 항목 추가', 'EN': 'ADD SCHEDULE', 'JA': 'タイムライン項目追加', 'ZH': '添加时间表项目', 'FR': "AJOUTER À L'HORAIRE", 'DE': 'ZEITPLAN HINZUFÜGEN', 'RU': 'ДОБАВИТЬ В РАСПИСАНИЕ', 'AR': 'إضافة إلى الجدول', 'HI': 'शेड्यूल जोड़ें', 'VI': 'THÊM LỊCH TRÌNH', 'ES': 'AGREGAR AL HORARIO', 'TH': 'เพิ่มรายการในตาราง'},
+    'timeFieldLabel': {'KO': '시간 (예: 09:00 - 10:00)', 'EN': 'TIME (e.g. 09:00 - 10:00)', 'JA': '時間（例：09:00〜10:00）', 'ZH': '时间（例：09:00～10:00）', 'FR': 'HEURE (ex. 09:00 - 10:00)', 'DE': 'ZEIT (z. B. 09:00 - 10:00)', 'RU': 'ВРЕМЯ (напр. 09:00 - 10:00)', 'AR': 'الوقت (مثال: 09:00 - 10:00)', 'HI': 'समय (उदा. 09:00 - 10:00)', 'VI': 'THỜI GIAN (VD: 09:00 - 10:00)', 'ES': 'HORA (ej. 09:00 - 10:00)', 'TH': 'เวลา (เช่น 09:00 - 10:00)'},
+    'contentFieldLabel': {'KO': '내용', 'EN': 'CONTENT', 'JA': '内容', 'ZH': '内容', 'FR': 'CONTENU', 'DE': 'INHALT', 'RU': 'СОДЕРЖАНИЕ', 'AR': 'المحتوى', 'HI': 'सामग्री', 'VI': 'NỘI DUNG', 'ES': 'CONTENIDO', 'TH': 'เนื้อหา'},
+    'deleteBtnSlash': {'KO': '삭제', 'EN': 'DELETE', 'JA': '削除', 'ZH': '删除', 'FR': 'SUPPRIMER', 'DE': 'LÖSCHEN', 'RU': 'УДАЛИТЬ', 'AR': 'حذف', 'HI': 'हटाएं', 'VI': 'XÓA', 'ES': 'ELIMINAR', 'TH': 'ลบ'},
+
+    'noScheduleItemToRun': {'KO': '실행할 시간표 항목이 없습니다.', 'EN': 'There is no schedule item to run.', 'JA': '実行するタイムライン項目がありません。', 'ZH': '没有可运行的时间表项目。', 'FR': "Aucun élément d'horaire à exécuter.", 'DE': 'Kein Zeitplaneintrag zum Ausführen vorhanden.', 'RU': 'Нет пунктов расписания для запуска.', 'AR': 'لا يوجد عنصر جدول لتشغيله.', 'HI': 'चलाने के लिए कोई शेड्यूल आइटम नहीं है।', 'VI': 'Không có mục lịch trình để chạy.', 'ES': 'No hay un elemento del horario para ejecutar.', 'TH': 'ไม่มีรายการในตารางที่จะเริ่ม'},
+    'selectScheduleItemFirst': {'KO': '먼저 학습할 시간표 항목을 선택해주세요.', 'EN': 'Please select a schedule item to study first.', 'JA': 'まず学習するタイムライン項目を選択してください。', 'ZH': '请先选择要学习的时间表项目。', 'FR': "Veuillez d'abord sélectionner un élément de l'horaire.", 'DE': 'Bitte wählen Sie zuerst einen Zeitplaneintrag zum Lernen aus.', 'RU': 'Пожалуйста, сначала выберите пункт расписания для изучения.', 'AR': 'يرجى اختيار عنصر الجدول للدراسة أولاً.', 'HI': 'कृपया पहले अध्ययन के लिए शेड्यूल आइटम चुनें।', 'VI': 'Vui lòng chọn mục lịch trình để học trước.', 'ES': 'Selecciona primero un elemento del horario para estudiar.', 'TH': 'กรุณาเลือกรายการในตารางที่จะเรียนก่อน'},
+  };
+
+  static String _foreignOnly(Map<String, String> map) {
+    return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '';
+  }
+
+  // 🆕 문자열 하나만 필요한 곳(버튼 라벨, 스낵바 등)에서 사용: 기본값은 "EN (KO)" 형태,
+  // 10개국 선택 시 그 언어 단독 텍스트를 반환합니다.
+  static String _biStr(String key, {String joiner = ' / '}) {
+    final map = _uiText[key]!;
+    if (_isForeignSelected) return _foreignOnly(map);
+    return "${map['EN']}$joiner${map['KO']}";
+  }
+
+  // 🆕 기존에 영문 단독(ALL CAPS 헤더 등)으로만 표시되던 자리: 기본모드(KO/EN)는 그대로 영문만,
+  // 10개국 선택 시에는 해당 언어로 전환됩니다.
+  static String _enOrForeign(String key) {
+    final map = _uiText[key]!;
+    return _isForeignSelected ? _foreignOnly(map) : (map['EN'] ?? map['KO'] ?? '');
+  }
+
+  // 🆕 기존에 한글 단독으로만 표시되던 자리: 기본모드(KO/EN)는 그대로 한글만,
+  // 10개국 선택 시에는 해당 언어로 전환됩니다.
+  static String _koOrForeign(String key) {
+    final map = _uiText[key]!;
+    return _isForeignSelected ? _foreignOnly(map) : (map['KO'] ?? map['EN'] ?? '');
+  }
+
+  // 🆕 두 줄(영문 위 / 한글 아래)이 필요한 제목·본문형 위젯에서 사용
+  Widget _biTitle(
+      String key, {
+        required TextStyle enStyle,
+        TextStyle? koStyle,
+        TextStyle? foreignStyle,
+        TextAlign textAlign = TextAlign.start,
+      }) {
+    final TextStyle koFinal = koStyle ?? enStyle;
+    if (_isForeignSelected) {
+      return Text(
+        _foreignOnly(_uiText[key]!),
+        style: foreignStyle ?? koFinal,
+        textAlign: textAlign,
+        overflow: TextOverflow.fade,
+        softWrap: false,
+        maxLines: 1,
+      );
+    }
+    final map = _uiText[key]!;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: textAlign == TextAlign.start ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Text(map['EN']!, style: enStyle, textAlign: textAlign, overflow: TextOverflow.fade, softWrap: false, maxLines: 1),
+        Text(map['KO']!, style: koFinal, textAlign: textAlign, overflow: TextOverflow.fade, softWrap: false, maxLines: 1),
+      ],
+    );
+  }
+
+  // 🆕 요일 표시 전용: 내부 캐시 키(en)는 절대 바꾸지 않고, 화면 표시 문구만 언어별로 변환.
+  //    기본(KO/EN) 상태에서는 기존 "Mon / 월요일" 형태(축약형+한글)를 그대로 유지합니다.
+  String _weekdayDisplay(Map<String, String> dayOption) {
+    if (_isForeignSelected) {
+      final String weekdayKey = 'weekday${dayOption['en']}';
+      return _foreignOnly(_uiText[weekdayKey] ?? _uiText['weekdayMonday']!);
+    }
+    return '${dayOption['abbr']} / ${dayOption['ko']}';
+  }
 
   @override
   void initState() {
@@ -314,36 +517,41 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } else if (_selectedTrack == 'EXAM_DAY_TRACK') {
       final DateTime today = DateTime.now();
       if (_isAfterExamEnd()) {
+        // 🆕 [버그 수정] 기존엔 여기서 바로 return 해버려서 아래 공통 커스텀 편집(_customSchedules)
+        // 확인 로직을 건너뛰었음. EXAM_PREP_PERIOD와 동일하게 cacheKey/defaultList를 설정해서
+        // 시험 종료 후에도 사용자가 편집한 내용이 정상적으로 반영되도록 수정.
         final int wd = DateTime.now().weekday;
         final String todayEn = _weekdayOptions[wd - 1]['en']!;
-        return StudyTimelines.normalPeriod[todayEn] ?? [];
-      }
-      final DateTime cleanToday = DateTime(today.year, today.month, today.day);
-      final DateTime cleanExamStart = _examStartDate != null
-          ? DateTime(_examStartDate!.year, _examStartDate!.month, _examStartDate!.day)
-          : cleanToday;
-      final int diff = cleanToday.difference(cleanExamStart).inDays;
-      cacheKey = 'EXAM_DAY_${_isFinalExamMode ? "final" : "mid"}_diff_$diff';
-
-      // 7월 20일 시험일 지정 시 D-3(Diff = -3)부터 정확히 타임라인이 표출되도록 방어 로직 적용
-      if (_examStartDate != null && diff >= -3 && diff <= 4) {
-        defaultList = StudyTimelines.getTimelineForDate(
-          cleanToday,
-          cleanExamStart,
-          isExamPeriod: true,
-          isActualExamWeek: true,
-          isFinalExam: _isFinalExamMode,
-        );
-      } else if (_examStartDate != null) {
-        defaultList = StudyTimelines.getTimelineForDate(
-          cleanToday,
-          cleanExamStart,
-          isExamPeriod: true,
-          isActualExamWeek: diff >= -3 && diff <= 4,
-          isFinalExam: _isFinalExamMode,
-        );
+        cacheKey = 'NORMAL_PERIOD_$todayEn';
+        defaultList = StudyTimelines.normalPeriod[todayEn] ?? [];
       } else {
-        defaultList = [];
+        final DateTime cleanToday = DateTime(today.year, today.month, today.day);
+        final DateTime cleanExamStart = _examStartDate != null
+            ? DateTime(_examStartDate!.year, _examStartDate!.month, _examStartDate!.day)
+            : cleanToday;
+        final int diff = cleanToday.difference(cleanExamStart).inDays;
+        cacheKey = 'EXAM_DAY_${_isFinalExamMode ? "final" : "mid"}_diff_$diff';
+
+        // 7월 20일 시험일 지정 시 D-3(Diff = -3)부터 정확히 타임라인이 표출되도록 방어 로직 적용
+        if (_examStartDate != null && diff >= -3 && diff <= 4) {
+          defaultList = StudyTimelines.getTimelineForDate(
+            cleanToday,
+            cleanExamStart,
+            isExamPeriod: true,
+            isActualExamWeek: true,
+            isFinalExam: _isFinalExamMode,
+          );
+        } else if (_examStartDate != null) {
+          defaultList = StudyTimelines.getTimelineForDate(
+            cleanToday,
+            cleanExamStart,
+            isExamPeriod: true,
+            isActualExamWeek: diff >= -3 && diff <= 4,
+            isFinalExam: _isFinalExamMode,
+          );
+        } else {
+          defaultList = [];
+        }
       }
     } else if (_selectedTrack == 'PERSONAL_TIMETABLE') {
       // 🆕 [개인 시간표 2026-07-29] 평상시와 동일한 방식이지만, 기본 제공 데이터가 없는
@@ -364,6 +572,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } else if (_selectedTrack == 'VACATION_SUMMER_WINTER') {
       return 'VACATION_${_selectedPomodoroKey ?? 'none'}';
     } else if (_selectedTrack == 'EXAM_PREP_PERIOD') {
+      // 🆕 [버그 수정] _getCurrentActiveSchedule()과 동일하게 시험 종료 후에는
+      // 'NORMAL_PERIOD_요일' 키를 써야 편집/저장이 실제 표시 내용과 일치합니다.
+      if (_isAfterExamEnd()) {
+        final int wd = DateTime.now().weekday;
+        final String todayEn = _weekdayOptions[wd - 1]['en']!;
+        return 'NORMAL_PERIOD_$todayEn';
+      }
       final DateTime today = DateTime.now();
       final DateTime cleanToday = DateTime(today.year, today.month, today.day);
       if (_examStartDate != null) {
@@ -380,6 +595,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     } else if (_selectedTrack == 'PERSONAL_TIMETABLE') {
       return 'PERSONAL_$_selectedPersonalWeekdayEn';
     } else {
+      // 🆕 [버그 수정] EXAM_DAY_TRACK도 시험 종료 후에는 동일한 'NORMAL_PERIOD_요일' 키를 사용.
+      if (_isAfterExamEnd()) {
+        final int wd = DateTime.now().weekday;
+        final String todayEn = _weekdayOptions[wd - 1]['en']!;
+        return 'NORMAL_PERIOD_$todayEn';
+      }
       final DateTime today = DateTime.now();
       final DateTime cleanToday = DateTime(today.year, today.month, today.day);
       final DateTime cleanExamStart = _examStartDate != null
@@ -438,19 +659,17 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     }
   }
 
+  // 🆕 [12개국 연동] key(예: 'pomodoroStyle1')를 그대로 카탈로그 조회에 사용
+  static const Map<String, String> _pomodoroKeyMap = {
+    'vacationPomodoro1': 'pomodoroStyle1',
+    'vacationPomodoro2': 'pomodoroStyle2',
+    'vacationPomodoro3': 'pomodoroStyle3',
+    'vacationPomodoro4': 'pomodoroStyle4',
+  };
+
   String _getPomodoroDisplayName(String key) {
-    switch (key) {
-      case 'vacationPomodoro1':
-        return 'Style 1 (Ultra Focus 25m) / 스타일 1 (초집중 25분형)';
-      case 'vacationPomodoro2':
-        return 'Style 2 (Focus 40m) / 스타일 2 (집중 40분형)';
-      case 'vacationPomodoro3':
-        return 'Style 3 (Subject 45m) / 스타일 3 (과목별 45분형)';
-      case 'vacationPomodoro4':
-        return 'Style 4 (Focus 60m) / 스타일 4 (집중 60분형)';
-      default:
-        return 'Not Selected / 미선택';
-    }
+    final String uiKey = _pomodoroKeyMap[key] ?? 'pomodoroNotSelected';
+    return _biStr(uiKey);
   }
 
   List<Map<String, String>> _getExamPrepList(int weekNum, String dayType, bool isFinal) {
@@ -577,13 +796,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   void _runTimerAction(List<Map<String, String>> schedule) {
     if (schedule.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('실행할 시간표 항목이 없습니다.', style: GoogleFonts.notoSerif())),
+        SnackBar(content: Text(_koOrForeign('noScheduleItemToRun'), style: GoogleFonts.notoSerif())),
       );
       return;
     }
     if (_selectedScheduleIndex == null || _selectedScheduleIndex! >= schedule.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('먼저 학습할 시간표 항목을 선택해주세요.', style: GoogleFonts.notoSerif())),
+        SnackBar(content: Text(_koOrForeign('selectScheduleItemFirst'), style: GoogleFonts.notoSerif())),
       );
       return;
     }
@@ -647,7 +866,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
               ),
               title: Text(
-                'START TIMER / 타이머 시작',
+                _biStr('startTimerTitleEn'),
                 style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
@@ -658,12 +877,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'White Noise Selection / 백색소음 선택',
+                        _biStr('whiteNoiseTitleEn'),
                         style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '학습 시작 시 시작 알림음 다음에 이어서 재생됩니다. (선택 안 해도 됩니다)',
+                        _koOrForeign('whiteNoiseHint'),
                         style: GoogleFonts.notoSerif(color: slate400, fontSize: 11),
                       ),
                       const SizedBox(height: 12),
@@ -694,7 +913,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                   color: isSelected ? const Color(0xFF020617) : goldColor,
                                 ),
                                 label: Text(
-                                  isPreviewing ? "STOP\n[정지]" : "LISTEN 10s\n[미리듣기]",
+                                  _isForeignSelected
+                                      ? _foreignOnly(_uiText[isPreviewing ? 'stopLabel' : 'listenLabel']!)
+                                      : (isPreviewing
+                                          ? "${_uiText['stopLabel']!['EN']}\n[${_uiText['stopLabel']!['KO']}]"
+                                          : "${_uiText['listenLabel']!['EN']}\n[${_uiText['listenLabel']!['KO']}]"),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.notoSerif(
                                     fontSize: 9,
@@ -752,7 +975,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  isSelected ? "UNSELECT\n[해제]" : "SELECT\n[선택]",
+                                  _isForeignSelected
+                                      ? _foreignOnly(_uiText[isSelected ? 'unselectLabel' : 'selectLabel']!)
+                                      : (isSelected
+                                          ? "${_uiText['unselectLabel']!['EN']}\n[${_uiText['unselectLabel']!['KO']}]"
+                                          : "${_uiText['selectLabel']!['EN']}\n[${_uiText['selectLabel']!['KO']}]"),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.notoSerif(fontSize: 9, fontWeight: FontWeight.bold, color: goldColor),
                                 ),
@@ -782,7 +1009,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         Navigator.pop(context);
                         _runTimerAction(scheduleGetter());
                       },
-                      child: Text('선택항목 실행', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold)),
+                      child: Text(_koOrForeign('runSelectedLabel'), style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
@@ -791,7 +1018,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                         _previewAudioPlayer.stop();
                         Navigator.pop(context);
                       },
-                      child: Text('CLOSE / 닫기', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+                      child: Text(_biStr('closeLabel'), style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
                     ),
                   ],
                 ),
@@ -818,9 +1045,6 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         taskText.contains('취침 준비') ||
         taskText.contains('마무리')) {
       return Colors.purple;
-    }
-    if (taskText.contains('취침')) {
-      return darkGrey;
     }
     if (taskText.contains('취침')) {
       return darkGrey;
@@ -954,12 +1178,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'MISSION DETAILS',
+                  _enOrForeign('missionDetailsTitleEn'),
                   style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '[$formattedDate] 학습 계획 상세 조회',
+                  '[$formattedDate] ${_koOrForeign('missionDetailsTitleEn')}',
                   style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 const Padding(
@@ -973,13 +1197,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('⏰ SUBJECT / 시험 과목', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text('⏰ ${_biStr('subjectLabelEn')}', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   TextField(
                     controller: subjectController,
                     style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: '예: 수학 (함수 ~ 미적분)',
+                      hintText: _koOrForeign('subjectHint'),
                       hintStyle: GoogleFonts.notoSerif(color: slate500, fontSize: 12),
                       filled: true,
                       fillColor: const Color(0xFF1E293B).withValues(alpha: 0.5),
@@ -988,13 +1212,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('📚 SCOPE / 시험 범위', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text('📚 ${_biStr('scopeLabelEn')}', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   TextField(
                     controller: scopeController,
                     style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: '예: 교과서 p.12 ~ p.45',
+                      hintText: _koOrForeign('scopeHint'),
                       hintStyle: GoogleFonts.notoSerif(color: slate500, fontSize: 12),
                       filled: true,
                       fillColor: const Color(0xFF1E293B).withValues(alpha: 0.5),
@@ -1009,7 +1233,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, 'cancel'),
-                child: Text('CLOSE', style: GoogleFonts.notoSerif(color: slate400, fontSize: 11, fontWeight: FontWeight.bold)),
+                child: Text(_enOrForeign('closeLabel'), style: GoogleFonts.notoSerif(color: slate400, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
               Wrap(
                 spacing: 6,
@@ -1021,26 +1245,28 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       side: BorderSide(color: goldColor),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
+                      minimumSize: const Size(0, 38), // 🆕 [탭 영역 확대] 기존 Size.zero → 최소 높이 38 확보
+                      tapTargetSize: MaterialTapTargetSize.padded,
                     ),
                     onPressed: () {
                       if (subjectController.text.trim().isEmpty) return;
                       Navigator.pop(context, 'next');
                     },
-                    child: Text('NEXT', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                    child: Text(_enOrForeign('nextBtn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: goldColor,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
+                      minimumSize: const Size(0, 38), // 🆕 [탭 영역 확대] 기존 Size.zero → 최소 높이 38 확보
+                      tapTargetSize: MaterialTapTargetSize.padded,
                     ),
                     onPressed: () {
                       if (subjectController.text.trim().isEmpty) return;
                       Navigator.pop(context, 'save');
                     },
-                    child: Text('SAVE', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 11, fontWeight: FontWeight.bold)),
+                    child: Text(_enOrForeign('saveBtn'), style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -1076,23 +1302,23 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
           ),
           title: Text(
-            'Save Exam Schedule / 시험 일정 저장',
+            _biStr('saveExamScheduleTitleEn'),
             style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
           ),
           content: Text(
-            '시험 일정과 과목이 적용됩니다. 저장하시겠습니까?',
+            _koOrForeign('saveExamScheduleBody'),
             style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13),
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text('Cancel / 취소', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+              child: Text(_biStr('cancelBtn'), style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
               onPressed: () => Navigator.pop(context, true),
-              child: Text('Confirm / 확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text(_biStr('confirmBtn'), style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -1141,7 +1367,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
           ),
           title: Text(
-            '[${record['date']}] EDIT MODE RUN / 수정 및 삭제',
+            '[${record['date']}] ${_biStr('editModeTitleEn')}',
             style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
           ),
           content: Column(
@@ -1151,7 +1377,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 controller: subjectController,
                 style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
-                  labelText: 'SUBJECT OR TITLE / 시험 과목',
+                  labelText: _biStr('subjectOrTitleLabel'),
                   labelStyle: GoogleFonts.notoSerif(color: slate400, fontSize: 12),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: slate800)),
                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: goldColor)),
@@ -1162,7 +1388,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 controller: scopeController,
                 style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
-                  labelText: 'MEMO / DETAILS / 시험 범위',
+                  labelText: _biStr('memoDetailsLabel'),
                   labelStyle: GoogleFonts.notoSerif(color: slate400, fontSize: 12),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: slate800)),
                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: goldColor)),
@@ -1180,7 +1406,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 await _saveCustomExamRecords(); // 🆕 [버그 수정 2026-07-29] 실제 영구 저장
                 if (context.mounted) Navigator.pop(context);
               },
-              child: Text('DEL/삭제', style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text(_biStr('delBtn'), style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
@@ -1196,7 +1422,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 await _saveCustomExamRecords(); // 🆕 [버그 수정 2026-07-29] 실제 영구 저장
                 if (context.mounted) Navigator.pop(context);
               },
-              child: Text('SAVE/저장', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text(_biStr('saveBtn'), style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -1218,7 +1444,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
           ),
           title: Text(
-            index == null ? 'ADD SCHEDULE / 타임라인 항목 추가' : 'EDIT MODE RUN / 수정 및 삭제',
+            index == null ? _biStr('addScheduleTitleEn') : _biStr('editModeTitleEn'),
             style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
           ),
           content: Column(
@@ -1228,7 +1454,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 controller: timeController,
                 style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
-                  labelText: 'TIME / 시간 (예: 09:00 - 10:00)',
+                  labelText: _biStr('timeFieldLabel'),
                   labelStyle: GoogleFonts.notoSerif(color: slate400, fontSize: 12),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: slate800)),
                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: goldColor)),
@@ -1239,7 +1465,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 controller: taskController,
                 style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
-                  labelText: 'CONTENT / 내용',
+                  labelText: _biStr('contentFieldLabel'),
                   labelStyle: GoogleFonts.notoSerif(color: slate400, fontSize: 12),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: slate800)),
                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: goldColor)),
@@ -1267,7 +1493,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       },
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: Text('DELETE/삭제', maxLines: 1, style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12)),
+                        child: Text(_biStr('deleteBtnSlash'), maxLines: 1, style: GoogleFonts.notoSerif(color: Colors.redAccent, fontSize: 12)),
                       ),
                     ),
                   ),
@@ -1277,7 +1503,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     onPressed: () => Navigator.pop(context),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text('CLOSE/닫기', maxLines: 1, style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+                      child: Text(_biStr('closeLabel', joiner: '/'), maxLines: 1, style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
                     ),
                   ),
                 ),
@@ -1318,7 +1544,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     },
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text('SAVE/저장', maxLines: 1, style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+                      child: Text(_biStr('saveBtn', joiner: '/'), maxLines: 1, style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),
@@ -1340,13 +1566,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             borderRadius: BorderRadius.circular(16.0),
             side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
           ),
-          title: Text('Reset / 원본 리셋', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
-          content: Text('Reset to default schedule?\n현재 화면의 타임라인을 원본 기본 데이터로 초기화하시겠습니까?', style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14)),
+          title: Text(_biStr('resetDialogTitleEn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Text(_koOrForeign('resetDialogBody'), style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 14)),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel / 취소', style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
+              child: Text(_biStr('cancelBtn'), style: GoogleFonts.notoSerif(color: slate400, fontSize: 12)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
@@ -1358,7 +1584,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 await _saveCustomSchedules(); // 🆕 [버그 수정 2026-07-29] 리셋 결과도 실제 영구 저장
                 if (context.mounted) Navigator.pop(context);
               },
-              child: Text('Confirm / 리셋 확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text(_biStr('confirmResetBtn'), style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -1384,21 +1610,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 height: 28,
               ),
               const SizedBox(height: 0.5),
-              Text(
-                'ACADEMIC TIMER',
-                style: GoogleFonts.notoSerif(
-                  color: goldColor,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '학사 타이머',
-                style: GoogleFonts.notoSerif(
-                  color: goldColor,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
+              _biTitle(
+                'appBarTitle',
+                textAlign: TextAlign.center,
+                enStyle: GoogleFonts.notoSerif(color: goldColor, fontSize: 20, fontWeight: FontWeight.bold),
+                koStyle: GoogleFonts.notoSerif(color: goldColor, fontSize: 17, fontWeight: FontWeight.bold),
+                foreignStyle: GoogleFonts.notoSerif(color: goldColor, fontSize: 19, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -1428,18 +1645,18 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         physics: const BouncingScrollPhysics(),
         child: Row(
           children: [
-            SizedBox(width: 82, child: _trackButton('Normal\n평상시', 'NORMAL_PERIOD')),
+            SizedBox(width: 82, child: _trackButton('tabNormal', 'NORMAL_PERIOD')),
             const SizedBox(width: 6),
-            SizedBox(width: 82, child: _trackButton('Vacation\n방학', 'VACATION_SUMMER_WINTER')),
+            SizedBox(width: 82, child: _trackButton('tabVacation', 'VACATION_SUMMER_WINTER')),
             const SizedBox(width: 6),
-            SizedBox(width: 82, child: _trackButton('Exam Prep\n시험준비', 'EXAM_PREP_PERIOD')),
+            SizedBox(width: 82, child: _trackButton('tabExamPrep', 'EXAM_PREP_PERIOD')),
             const SizedBox(width: 6),
-            SizedBox(width: 82, child: _trackButton('Exam Day\n시험당일', 'EXAM_DAY_TRACK')),
+            SizedBox(width: 82, child: _trackButton('tabExamDay', 'EXAM_DAY_TRACK')),
             const SizedBox(width: 6),
             SizedBox(
               width: 82,
               child: _trackButton(
-                'Personal\n개인 시간표',
+                'tabPersonal',
                 'PERSONAL_TIMETABLE',
                 onBeforeSelect: _showPersonalTimetableGuideDialog, // 🆕 탭 누를 때마다 안내 팝업
               ),
@@ -1450,7 +1667,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     );
   }
 
-  Widget _trackButton(String label, String trackKey, {VoidCallback? onBeforeSelect}) {
+  Widget _trackButton(String uiKey, String trackKey, {VoidCallback? onBeforeSelect}) {
     bool isSelected = _selectedTrack == trackKey;
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
@@ -1466,26 +1683,17 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         });
       },
 
-// 🆕 [오버플로우 방지 2026-07-29] 영문 1줄/한글 1줄로 고정, 넘치면 오른쪽이 흐릿하게 생략(fade)됨
-      child: Builder(builder: (context) {
-        final List<String> parts = label.split('\n');
-        final String enPart = parts.isNotEmpty ? parts[0] : label;
-        final String koPart = parts.length > 1 ? parts[1] : '';
-        final TextStyle baseStyle = GoogleFonts.notoSerif(
+      // 🆕 [12개국 연동] 기본값(KO/EN) = 영문 1줄+한글 1줄, 10개국 선택 시 = 해당 언어 1줄
+      child: _biTitle(
+        uiKey,
+        textAlign: TextAlign.center,
+        enStyle: GoogleFonts.notoSerif(
           color: isSelected ? const Color(0xFF020617) : Colors.white,
           fontSize: 13,
           fontWeight: FontWeight.bold,
           height: 1.2,
-        );
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(enPart, textAlign: TextAlign.center, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: baseStyle),
-            if (koPart.isNotEmpty)
-              Text(koPart, textAlign: TextAlign.center, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: baseStyle),
-          ],
-        );
-      }),
+        ),
+      ),
     );
   }
 
@@ -1511,7 +1719,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
 
     final currentSelectedObj = _weekdayOptions.firstWhere((d) => d['en'] == _selectedWeekdayEn, orElse: () => _weekdayOptions[0]);
     // [수정] 평상시 화면에서는 D-day 대신 현재 선택된 요일을 표시 (요일 펼침메뉴가 접혀있어도 바로 확인 가능)
-    final String dDayText = '${currentSelectedObj['abbr']} / ${currentSelectedObj['ko']}';
+    final String dDayText = _weekdayDisplay(currentSelectedObj);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1523,9 +1731,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('NORMAL PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(_enOrForeign('normalTitleEn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('평상시 기본 타임라인 - 오늘 요일 자동', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
+                  Text(_koOrForeign('normalSubtitle'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -1552,7 +1760,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             iconColor: goldColor,
             collapsedIconColor: slate400,
             title: Text(
-              'Select Weekday/요일선택 (${currentSelectedObj['abbr']} / ${currentSelectedObj['ko']})',
+              '${_koOrForeign('selectWeekdayLabel')} ($dDayText)',
               style: GoogleFonts.notoSerif(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             children: [
@@ -1581,7 +1789,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                           border: Border.all(color: isSel ? goldColor : slate800),
                         ),
                         child: Text(
-                          '${day['abbr']} / ${day['ko']}',
+                          _weekdayDisplay(day),
                           maxLines: 1,
                           softWrap: false,
                           overflow: TextOverflow.fade, // 🆕 [오버플로우 방지 2026-07-29]
@@ -1644,13 +1852,13 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
           ),
           title: Text(
-            'Personal Timetable / 개인 시간표',
+            _biStr('personalGuideTitle'),
             style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
           ),
           content: Text(
-            'This screen is where you record and save your own study times, subjects, and units to use.\n\n'
-                '(이 화면은 유저가 직접 학습할 시간과 과목 및 단원을 기록하여 저장한 뒤 사용할 곳입니다.)\n\n'
-                '위에 있는 예시 2개를 참고해서, 그 아래 빈 공간에 "+Add/항목 추가"로 원하는 시간표를 직접 작성해보세요.',
+            _isForeignSelected
+                ? _foreignOnly(_uiText['personalGuideBody']!)
+                : "${_uiText['personalGuideBody']!['EN']}\n\n(${_uiText['personalGuideBody']!['KO']})",
             style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13, height: 1.5),
           ),
           actionsAlignment: MainAxisAlignment.center,
@@ -1658,7 +1866,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: goldColor),
               onPressed: () => Navigator.pop(context),
-              child: Text('OK / 확인', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+              child: Text(_biStr('okConfirmLabel'), style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -1676,7 +1884,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           (d) => d['en'] == _selectedPersonalWeekdayEn,
       orElse: () => _weekdayOptions[0],
     );
-    final String dDayText = '${currentSelectedObj['abbr']} / ${currentSelectedObj['ko']}';
+    final String dDayText = _weekdayDisplay(currentSelectedObj);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1688,9 +1896,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('PERSONAL TIMETABLE', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(_enOrForeign('personalTitleEn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('개인 시간표 - 나만의 시간표 직접 작성', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
+                  Text(_koOrForeign('personalSubtitle'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -1717,7 +1925,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             iconColor: goldColor,
             collapsedIconColor: slate400,
             title: Text(
-              'Select Weekday/요일선택 (${currentSelectedObj['abbr']} / ${currentSelectedObj['ko']})',
+              '${_koOrForeign('selectWeekdayLabel')} (${_weekdayDisplay(currentSelectedObj)})',
               style: GoogleFonts.notoSerif(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             children: [
@@ -1747,7 +1955,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                           border: Border.all(color: isSel ? goldColor : slate800),
                         ),
                         child: Text(
-                          '${day['abbr']} / ${day['ko']}',
+                          _weekdayDisplay(day),
                           style: GoogleFonts.notoSerif(
                             fontSize: 12,
                             color: isSel ? const Color(0xFF020617) : Colors.white,
@@ -1788,7 +1996,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         const SizedBox(height: 12),
 
         // 🆕 작성 형식을 보여주는 가이드용 샘플 2개 - 저장/실행 대상 아님, 참고용 표시만
-        Text('SAMPLE / 작성 예시 (참고용, 저장되지 않음)', style: GoogleFonts.notoSerif(color: slate400, fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(_biStr('personalSampleLabel'), style: GoogleFonts.notoSerif(color: slate400, fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         ..._personalScheduleGuideSamples.map((sample) => Container(
           margin: const EdgeInsets.only(bottom: 6),
@@ -1809,7 +2017,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           ),
         )),
         const SizedBox(height: 14),
-        Text('나만의 시간표 (아래에 직접 추가하세요)', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
+        Text(_koOrForeign('personalOwnScheduleLabel'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         ..._buildScheduleList(schedule),
       ],
@@ -1839,9 +2047,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('VACATION SUMMER/WINTER', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(_enOrForeign('vacationTitleEn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('방학 포모도로 타임라인 - 기간 및 스타일 설정', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                  Text(_koOrForeign('vacationSubtitle'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -1857,7 +2065,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('VACATION PERIOD / 방학 기간', style: GoogleFonts.notoSerif(fontSize: 16, color: goldColor, fontWeight: FontWeight.bold)),
+              Text(_biStr('vacationPeriodLabel'), style: GoogleFonts.notoSerif(fontSize: 16, color: goldColor, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -1889,7 +2097,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       },
                       child: Text(
                         _vacationStartDate == null
-                            ? '시작일 선택'
+                            ? _koOrForeign('startDateSelect')
                             : '${_vacationStartDate!.year}.${_vacationStartDate!.month}.${_vacationStartDate!.day}',
                         style: GoogleFonts.notoSerif(fontSize: 14, color: Colors.white),
                         overflow: TextOverflow.ellipsis,
@@ -1927,7 +2135,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       },
                       child: Text(
                         _vacationEndDate == null
-                            ? '종료일 선택'
+                            ? _koOrForeign('endDateSelect')
                             : '${_vacationEndDate!.year}.${_vacationEndDate!.month}.${_vacationEndDate!.day}',
                         style: GoogleFonts.notoSerif(fontSize: 14, color: Colors.white),
                         overflow: TextOverflow.ellipsis,
@@ -1962,11 +2170,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'POMODORO STYLE',
+                  _enOrForeign('pomodoroStyleTitleEn'),
                   style: GoogleFonts.notoSerif(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '포모도로 스타일 (직접 선택)',
+                  _koOrForeign('pomodoroStyleSubtitle'),
                   style: GoogleFonts.notoSerif(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -1978,7 +2186,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('스타일마다 구성이 달라 자동 전환하지 않습니다. 원하는 스타일을 직접 골라주세요.',
+                    Text(_koOrForeign('pomodoroHint'),
                         style: GoogleFonts.notoSerif(fontSize: 12, color: slate500)),
                     const SizedBox(height: 10),
                     Wrap(
@@ -2009,7 +2217,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text('평일에도 이 스타일 자유롭게 사용',
+                          child: Text(_koOrForeign('pomodoroFreeMode'),
                               style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white)),
                         ),
                         Switch(
@@ -2034,36 +2242,22 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         if (_selectedPomodoroKey == null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20.0),
-            child: Text('선택된 포모도로 스타일이 없습니다. 위에서 스타일을 선택해주세요.',
+            child: Text(_koOrForeign('noPomodoroSelected'),
                 style: GoogleFonts.notoSerif(color: slate500, fontSize: 12)),
           )
         else ...[
           Builder(builder: (context) {
-            // [추가] "Style 2 (Focus 40m) / 스타일 2 (집중 40분형)" 형식을 영문/한글 두 줄로 분리
-            final String fullName = _getPomodoroDisplayName(_selectedPomodoroKey!);
-            final List<String> parts = fullName.split(' / ');
-            final String enPart = parts.isNotEmpty ? parts[0] : fullName;
-            final String koPart = parts.length > 1 ? parts[1] : '';
+            // 🆕 [12개국 연동] 기본값(KO/EN)은 영문/한글 두 줄, 10개국 선택 시 해당 언어 한 줄
+            final String uiKey = _pomodoroKeyMap[_selectedPomodoroKey!] ?? 'pomodoroNotSelected';
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        enPart,
-                        style: GoogleFonts.notoSerif(color: goldColor.withValues(alpha: 0.8), fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
-                      if (koPart.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          koPart,
-                          style: GoogleFonts.notoSerif(color: goldColor.withValues(alpha: 0.7), fontSize: 13),
-                        ),
-                      ],
-                    ],
+                  child: _biTitle(
+                    uiKey,
+                    enStyle: GoogleFonts.notoSerif(color: goldColor.withValues(alpha: 0.8), fontSize: 15, fontWeight: FontWeight.bold),
+                    koStyle: GoogleFonts.notoSerif(color: goldColor.withValues(alpha: 0.7), fontSize: 13),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2086,10 +2280,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   Widget _buildExamPrepBody() {
     List<Map<String, String>> schedule = _getCurrentActiveSchedule();
 
+    // 🆕 [버그 수정] 시험이 끝난(종료일 23시 이후) 상태인지 미리 확인.
+    // 이 값이 true면 아래 타이틀도 "준비 타임라인/D-day" 문구 대신 평상시로 복귀했음을 보여줍니다.
+    final bool afterExamEnd = _isAfterExamEnd();
+
     String dDayDisplay = '';
-    String examDateText = '시험 시작일(D-day) 설정';
     if (_examStartDate != null) {
-      examDateText = '시험 시작일: ${_examStartDate!.year}.${_examStartDate!.month}.${_examStartDate!.day}';
       final DateTime today = DateTime.now();
       final DateTime cleanToday = DateTime(today.year, today.month, today.day);
       final DateTime cleanExamStart = DateTime(_examStartDate!.year, _examStartDate!.month, _examStartDate!.day);
@@ -2106,8 +2302,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('EXAM PREP PERIOD', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 17, fontWeight: FontWeight.bold)),
-        Text('시험 준비 타임라인 - 시험 정보 및 날짜별 자동 연동',
+        Text(_enOrForeign('examPrepTitleEn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 17, fontWeight: FontWeight.bold)),
+        Text(_koOrForeign('examPrepSubtitle'),
             style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         Container(
@@ -2129,7 +2325,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
             collapsedIconColor: slate400,
             title: Row(
               children: [
-                Text('EXAM INFO / 시험 정보 설정', style: GoogleFonts.notoSerif(fontSize: 14, color: goldColor, fontWeight: FontWeight.bold)),
+                Text(_biStr('examInfoSettingTitle'), style: GoogleFonts.notoSerif(fontSize: 14, color: goldColor, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 12),
                 Text(
                   '(${_isFinalExamMode ? "Final/기말" : "Mid/중간"})',
@@ -2144,7 +2340,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: ['중간고사', '기말고사'].map((type) {
+                      children: [
+                        {'ko': '중간고사', 'uiKey': 'radioMidterm'},
+                        {'ko': '기말고사', 'uiKey': 'radioFinal'},
+                      ].map((typeMap) {
+                        final String type = typeMap['ko']!;
                         return Padding(
                           padding: const EdgeInsets.only(right: 17.0),
                           child: Row(
@@ -2161,7 +2361,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                   await _saveExamSettings();
                                 },
                               ),
-                              Text(type, style: GoogleFonts.notoSerif(fontSize: 13, color: Colors.white)),
+                              // 🆕 [12개국 연동] 기본값(KO/EN)=영문+한글 두 줄, 10개국 선택 시=해당 언어 한 줄
+                              _biTitle(
+                                typeMap['uiKey']!,
+                                enStyle: GoogleFonts.notoSerif(fontSize: 13, color: Colors.white),
+                              ),
                             ],
                           ),
                         );
@@ -2171,6 +2375,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     Row(
                       children: [4, 3, 2].map((w) {
                         bool sel = _manualExamPrepWeek == w;
+                        final Color txtColor = sel ? const Color(0xFF020617) : goldColor;
                         return Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(right: w != 2 ? 6 : 0),
@@ -2185,14 +2390,37 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                   _manualExamPrepWeek = sel ? null : w;
                                 });
                               },
-                              child: Text(
-                                '시험$w주 전',
-                                style: GoogleFonts.notoSerif(
-                                  color: sel ? const Color(0xFF020617) : goldColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              // 🆕 [12개국 연동] 기본값(KO/EN)=영문+한글 두 줄, 10개국 선택 시=해당 언어 한 줄
+                              child: _isForeignSelected
+                                  ? Text(
+                                      '$w ${_foreignOnly(_uiText['weeksBeforeSuffix']!)}',
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.fade,
+                                      style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '$w ${_uiText['weeksBeforeSuffix']!['EN']}',
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          overflow: TextOverflow.fade,
+                                          style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                        Text(
+                                          '시험$w${_uiText['weeksBeforeSuffix']!['KO']}',
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          overflow: TextOverflow.fade,
+                                          style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
                             ),
                           ),
                         );
@@ -2208,10 +2436,11 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                           height: 8,
                           decoration: const BoxDecoration(color: Colors.redAccent),
                         ),
+                        // 🆕 [12개국 연동] 기본값(KO/EN)=영문+한글 두 줄, 10개국 선택 시=해당 언어 한 줄
                         Expanded(
-                          child: Text(
-                            '선택 시 날짜와 무관하게 해당 주차 시간표를 미리 봅니다. 다시 누르면 해제(자동계산으로 복귀).',
-                            style: GoogleFonts.notoSerif(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                          child: _biTitle(
+                            'examPrepGuidance',
+                            enStyle: GoogleFonts.notoSerif(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -2232,7 +2461,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                '지금 "시험$_manualExamPrepWeek주 전" 수동 미리보기 중입니다 (오늘 날짜 자동계산 아님)',
+                                '시험$_manualExamPrepWeek${_uiText['weeksBeforeSuffix']!['KO']} - ${_koOrForeign('examPrepManualWarning')}',
                                 style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
                               ),
                             ),
@@ -2270,7 +2499,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                               }
                             },
                             child: Text(
-                              _examStartDate == null ? '시작일 선택' : '${_examStartDate!.year}.${_examStartDate!.month}.${_examStartDate!.day}',
+                              _examStartDate == null ? _koOrForeign('startDateSelect') : '${_examStartDate!.year}.${_examStartDate!.month}.${_examStartDate!.day}',
                               style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2306,7 +2535,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                               }
                             },
                             child: Text(
-                              _examEndDate == null ? '종료일 선택' : '${_examEndDate!.year}.${_examEndDate!.month}.${_examEndDate!.day}',
+                              _examEndDate == null ? _koOrForeign('endDateSelect') : '${_examEndDate!.year}.${_examEndDate!.month}.${_examEndDate!.day}',
                               style: GoogleFonts.notoSerif(fontSize: 12, color: Colors.white),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2319,11 +2548,16 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                       style: ElevatedButton.styleFrom(backgroundColor: goldColor),
                       onPressed: _handleExamRecordFlow,
                       icon: const Icon(Icons.calendar_today, size: 14, color: Color(0xFF020617)),
-                      label: Text('시험 과목 및 범위 기록 추가 (연속 입력)', style: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold)),
+                      // 🆕 [12개국 연동] 기본값(KO/EN)=영문+한글 두 줄, 10개국 선택 시=해당 언어 한 줄
+                      label: _biTitle(
+                        'addExamRecordBtnEn',
+                        textAlign: TextAlign.center,
+                        enStyle: GoogleFonts.notoSerif(color: const Color(0xFF020617), fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ),
                     const SizedBox(height: 14),
                     if (_customExamRecords.isNotEmpty) ...[
-                      Text('등록된 시험 과목 및 범위 (${_customExamRecords.length}개)', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                      Text('${_koOrForeign('registeredExamRecordsLabel')} (${_customExamRecords.length})', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       ..._customExamRecords.asMap().entries.map((entry) {
                         int idx = entry.key;
@@ -2343,7 +2577,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                 Text('${record['subject']} : ', style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                                 Expanded(
                                   child: Text(
-                                    '범위: ${record['scope']}',
+                                    '${_koOrForeign('rangeLabel')}: ${record['scope']}',
                                     style: GoogleFonts.notoSerif(color: slate400, fontSize: 12),
                                   ),
                                 ),
@@ -2370,8 +2604,14 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 🆕 [버그 수정] 시험이 끝났으면(afterExamEnd) "준비 타임라인/D-day" 문구 대신
+                  // 평상시로 복귀했음을 정확히 표시. (기존엔 시험이 끝나도 계속 D-day 문구가 남아있었음)
                   Text(
-                    '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
+                    afterExamEnd
+                        ? _koOrForeign('examEndedNormalEn')
+                        : _isForeignSelected
+                            ? '${_foreignOnly(_uiText[_isFinalExamMode ? "radioFinal" : "radioMidterm"]!)} ${_foreignOnly(_uiText['prepTimelineSuffix']!)}$dDayDisplay'
+                            : '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
                     style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
@@ -2387,7 +2627,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            _buildTimButton(() => _getCurrentActiveSchedule()), // [수정] 오른쪽에 독립 배치
+            _buildTimButton(() => _getCurrentActiveSchedule()),
           ],
         ),
         const SizedBox(height: 12),
@@ -2410,9 +2650,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('EXAM DAY TRACK', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(_enOrForeign('examDayTitleEn'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('시험 당일 D-day 타임라인 - 자동 계산',
+                  Text(_koOrForeign('examDaySubtitle'),
                       style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -2430,12 +2670,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   }
 
   Widget _buildExamSettingsCardForExamDay() {
-    String examDateText = '시험 시작일(D-day) 선택';
+    String examDateText = _koOrForeign('examDayNoStartDate2');
     if (_examStartDate != null) {
       // 🆕 [0패딩] 월/일을 2자리로 고정 표기 (7 → 07)
       final String mm = _examStartDate!.month.toString().padLeft(2, '0');
       final String dd = _examStartDate!.day.toString().padLeft(2, '0');
-      examDateText = '시험 시작일: ${_examStartDate!.year}.$mm.$dd';
+      examDateText = '${_koOrForeign('examDayStartDatePrefix')}: ${_examStartDate!.year}.$mm.$dd';
     }
 
     return Container(
@@ -2456,7 +2696,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
         textColor: goldColor,
         iconColor: goldColor,
         collapsedIconColor: slate400,
-        title: Text('EXAM INFO / 시험 정보 입력', style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
+        title: Text(_biStr('examInfoInputTitle'), style: GoogleFonts.notoSerif(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold)),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -2530,8 +2770,38 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     if (_examStartDate == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20.0),
-        child: Text('시험 시작일을 입력하면 D-3 ~ D+4 구간의 정확한 트랙이 자동으로 표시됩니다.',
+        child: Text(_koOrForeign('examDayNoStartDate'),
             style: GoogleFonts.notoSerif(color: slate500, fontSize: 13)),
+      );
+    }
+
+    // 🆕 [버그 수정] 시험이 끝난(종료일 23시 이후) 상태면, 실제 표시되는 시간표 내용은
+    // (_getCurrentActiveSchedule에서) 이미 평상시로 복귀했는데도 이 위젯은 그 사실을 몰라서
+    // D-day 범위(diff)만 보고 계속 "Exam Day Track (D+n)" 제목을 보여주던 문제를 수정.
+    if (_isAfterExamEnd()) {
+      List<Map<String, String>> normalSchedule = _getCurrentActiveSchedule();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _biTitle(
+                  'examEndedNormalEn',
+                  enStyle: GoogleFonts.notoSerif(color: goldColor, fontSize: 14, fontWeight: FontWeight.bold),
+                  koStyle: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildAddButton(),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildScheduleHeaderBar(showAddButton: false),
+          const SizedBox(height: 8),
+          ..._buildScheduleList(normalSchedule),
+        ],
       );
     }
 
@@ -2544,7 +2814,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20.0),
         child: Text(
-          '오늘은 시험 당일 트랙 구간(D-3 ~ D+4)이 아닙니다. 현재 기준 ${diff > 0 ? "D+$diff" : "D$diff"} 입니다.',
+          '${_koOrForeign('examDayOutOfRangePrefix')} ${diff > 0 ? "D+$diff" : "D$diff"}${_koOrForeign('examDayIsSuffix')}',
           style: GoogleFonts.notoSerif(color: slate500, fontSize: 12),
         ),
       );
@@ -2564,15 +2834,18 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_isFinalExamMode ? "Final" : "Mid-term"} Exam Day Track ($dDayLabel)',
+                    _isForeignSelected
+                        ? '${_foreignOnly(_uiText[_isFinalExamMode ? "radioFinal" : "radioMidterm"]!)} ${_foreignOnly(_uiText['dayTrackSuffix']!)} ($dDayLabel)'
+                        : '${_isFinalExamMode ? "Final" : "Mid-term"} Exam Day Track ($dDayLabel)',
                     style: GoogleFonts.notoSerif(color: goldColor, fontSize: 14, fontWeight: FontWeight.bold),
                     maxLines: 1, // [추가] 한 줄로 제한
                     overflow: TextOverflow.ellipsis, // [추가] 넘치면 "..." 표시
                   ),
-                  Text(
-                    '${_isFinalExamMode ? "기말고사" : "중간고사"} 시험 당일 트랙 ($dDayLabel)',
-                    style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
+                  if (!_isForeignSelected)
+                    Text(
+                      '${_isFinalExamMode ? "기말고사" : "중간고사"} 시험 당일 트랙 ($dDayLabel)',
+                      style: GoogleFonts.notoSerif(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
                 ],
               ),
             ),
@@ -2594,11 +2867,12 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       style: ElevatedButton.styleFrom(
         backgroundColor: slate800,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        minimumSize: Size.zero,
+        minimumSize: const Size(0, 38), // 🆕 [탭 영역 확대] 기존 Size.zero → 최소 높이 38 확보
+        tapTargetSize: MaterialTapTargetSize.padded,
       ),
       onPressed: () => _showEditItemDialog(),
       icon: const Icon(Icons.add, size: 14, color: Colors.white),
-      label: Text('Add / 항목 추가', style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 11)),
+      label: Text(_biStr('addBtnLabel'), style: GoogleFonts.notoSerif(color: Colors.white, fontSize: 11)),
     );
   }
 
@@ -2615,14 +2889,14 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                 margin: const EdgeInsets.only(right: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: goldColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-                child: Text('Edited / 편집됨', style: GoogleFonts.notoSerif(color: goldColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(_biStr('editedBadge'), style: GoogleFonts.notoSerif(color: goldColor, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             if (isCustomized)
               TextButton.icon(
                 style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 30)),
                 onPressed: _resetToDefaultSchedule,
                 icon: const Icon(Icons.refresh, size: 14, color: Colors.amberAccent),
-                label: Text('Reset', style: GoogleFonts.notoSerif(color: Colors.amberAccent, fontSize: 11)),
+                label: Text(_enOrForeign('resetBtn'), style: GoogleFonts.notoSerif(color: Colors.amberAccent, fontSize: 11)),
               ),
           ],
         ),
@@ -2636,7 +2910,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
       return [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 20.0),
-          child: Text('No data available / 표시할 데이터가 없습니다.', style: GoogleFonts.notoSerif(color: slate500, fontSize: 14)),
+          child: Text(_biStr('noDataAvailable'), style: GoogleFonts.notoSerif(color: slate500, fontSize: 14)),
         )
       ];
     }
