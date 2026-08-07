@@ -6,7 +6,7 @@ import 'dart:async'; // 🆕 [백색소음 선택] 미리듣기 자동정지 Tim
 import 'dart:convert'; // 🆕 [버그 수정 2026-07-29] 커스텀 시간표/시험기록 영구저장용
 import '../../planner/widgets/study_timelines.dart';
 import '../../timer/timer_screen.dart';
-import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
+import '../../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
 
 class AcademicTimelineScreen extends StatefulWidget {
   const AcademicTimelineScreen({super.key});
@@ -916,8 +916,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                   _isForeignSelected
                                       ? _foreignOnly(_uiText[isPreviewing ? 'stopLabel' : 'listenLabel']!)
                                       : (isPreviewing
-                                          ? "${_uiText['stopLabel']!['EN']}\n[${_uiText['stopLabel']!['KO']}]"
-                                          : "${_uiText['listenLabel']!['EN']}\n[${_uiText['listenLabel']!['KO']}]"),
+                                      ? "${_uiText['stopLabel']!['EN']}\n[${_uiText['stopLabel']!['KO']}]"
+                                      : "${_uiText['listenLabel']!['EN']}\n[${_uiText['listenLabel']!['KO']}]"),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.notoSerif(
                                     fontSize: 9,
@@ -978,8 +978,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                                   _isForeignSelected
                                       ? _foreignOnly(_uiText[isSelected ? 'unselectLabel' : 'selectLabel']!)
                                       : (isSelected
-                                          ? "${_uiText['unselectLabel']!['EN']}\n[${_uiText['unselectLabel']!['KO']}]"
-                                          : "${_uiText['selectLabel']!['EN']}\n[${_uiText['selectLabel']!['KO']}]"),
+                                      ? "${_uiText['unselectLabel']!['EN']}\n[${_uiText['unselectLabel']!['KO']}]"
+                                      : "${_uiText['selectLabel']!['EN']}\n[${_uiText['selectLabel']!['KO']}]"),
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.notoSerif(fontSize: 9, fontWeight: FontWeight.bold, color: goldColor),
                                 ),
@@ -2030,13 +2030,6 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
   Widget _buildVacationBody() {
     List<Map<String, String>> schedule = _getCurrentActiveSchedule();
 
-    String vacationPeriodDisplay = '방학 기간 미설정';
-    if (_vacationStartDate != null && _vacationEndDate != null) {
-      vacationPeriodDisplay = '방학 기간: ${_vacationStartDate!.year}.${_vacationStartDate!.month}.${_vacationStartDate!.day} ~ ${_vacationEndDate!.year}.${_vacationEndDate!.month}.${_vacationEndDate!.day}';
-    } else if (_vacationStartDate != null) {
-      vacationPeriodDisplay = '방학 시작일: ${_vacationStartDate!.year}.${_vacationStartDate!.month}.${_vacationStartDate!.day} ~ (종료일 미설정)';
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2393,34 +2386,34 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                               // 🆕 [12개국 연동] 기본값(KO/EN)=영문+한글 두 줄, 10개국 선택 시=해당 언어 한 줄
                               child: _isForeignSelected
                                   ? Text(
-                                      '$w ${_foreignOnly(_uiText['weeksBeforeSuffix']!)}',
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.fade,
-                                      style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
-                                    )
+                                '$w ${_foreignOnly(_uiText['weeksBeforeSuffix']!)}',
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.fade,
+                                style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
+                              )
                                   : Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          '$w ${_uiText['weeksBeforeSuffix']!['EN']}',
-                                          textAlign: TextAlign.center,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                          overflow: TextOverflow.fade,
-                                          style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
-                                        ),
-                                        Text(
-                                          '시험$w${_uiText['weeksBeforeSuffix']!['KO']}',
-                                          textAlign: TextAlign.center,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                          overflow: TextOverflow.fade,
-                                          style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
-                                        ),
-                                      ],
-                                    ),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '$w ${_uiText['weeksBeforeSuffix']!['EN']}',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.fade,
+                                    style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    '시험$w${_uiText['weeksBeforeSuffix']!['KO']}',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.fade,
+                                    style: GoogleFonts.notoSerif(color: txtColor, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         );
@@ -2610,8 +2603,8 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
                     afterExamEnd
                         ? _koOrForeign('examEndedNormalEn')
                         : _isForeignSelected
-                            ? '${_foreignOnly(_uiText[_isFinalExamMode ? "radioFinal" : "radioMidterm"]!)} ${_foreignOnly(_uiText['prepTimelineSuffix']!)}$dDayDisplay'
-                            : '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
+                        ? '${_foreignOnly(_uiText[_isFinalExamMode ? "radioFinal" : "radioMidterm"]!)} ${_foreignOnly(_uiText['prepTimelineSuffix']!)}$dDayDisplay'
+                        : '${_isFinalExamMode ? "기말고사" : "중간고사"} 준비 타임라인$dDayDisplay',
                     style: GoogleFonts.notoSerif(color: goldColor, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),

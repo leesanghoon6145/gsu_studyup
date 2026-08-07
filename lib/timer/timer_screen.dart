@@ -1263,13 +1263,42 @@ class _DkeBigStarTargetAnimationModuleState extends State<DkeBigStarTargetAnimat
     }
   }
 
+  // 🆕 [수정: 2026-08-07] 12개국어 완전 지원으로 교체.
+  // 기존엔 'ko'/'ja'/'zh'/'en' 4개만 처리하고 나머지 8개 언어(FR/DE/RU/AR/HI/VI/ES/TH)는
+  // 전부 영어로 표시되던 문제를 수정함. 또한 main.dart의 DkeLang 언어코드 표기(대문자: JA, ZH...)와
+  // 이 화면이 SharedPreferences에서 불러오는 saved_language_code 값의 대소문자가 어긋나 있을 가능성에
+  // 대비해, 비교 시 대소문자를 구분하지 않도록(toUpperCase) 안전장치를 추가함.
+  // 디자인/폰트/색상/레이아웃은 100% 원본 그대로이며, 오직 이 함수의 번역 매핑만 확장함.
   String _getTranslatedTarget() {
-    switch (widget.currentLanguageCode) {
-      case 'ko': return '목표';
-      case 'ja': return '目標';
-      case 'zh': return '目标';
-      case 'en': return 'Target';
-      default: return 'Target';
+    final String code = widget.currentLanguageCode.toUpperCase();
+    switch (code) {
+      case 'KO':
+        return '목표';
+      case 'EN':
+        return 'Target';
+      case 'JA':
+        return '目標';
+      case 'ZH':
+        return '目标';
+      case 'FR':
+        return 'Objectif';
+      case 'DE':
+        return 'Ziel';
+      case 'RU':
+        return 'Цель';
+      case 'AR':
+        return 'الهدف';
+      case 'HI':
+        return 'लक्ष्य';
+      case 'VI':
+        return 'Mục tiêu';
+      case 'ES':
+        return 'Objetivo';
+      case 'TH':
+        return 'เป้าหมาย';
+      default:
+      // 알 수 없는 코드가 들어와도 앱이 멈추지 않도록 기본(한글) 표시로 안전하게 처리
+        return '목표';
     }
   }
 

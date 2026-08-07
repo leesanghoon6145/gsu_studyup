@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:gsu_studyup/square/member_achievement_screen.dart';
 import 'dart:async';
+import 'dart:convert'; // 🆕 [저장 연동] jsonEncode/jsonDecode용
 import 'package:gsu_studyup/timer/timer_screen.dart';
 import 'square/friend_study_room_screen.dart';
 import 'package:gsu_studyup/square/live_active_users_screen.dart';
@@ -39,6 +40,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
   bool _isVipMember = false;
   String _targetUniversity = "Seoul National University (서울대학교)";
 
+  // 🆕 [저장 연동] 사용자가 추가/삭제한 과목·시험종류를 앱 재시작 후에도 유지
+  static const String _kSubjectsKey = 'gke_saved_subjects_v1';
+  static const String _kExamTypesKey = 'gke_saved_exam_types_v1';
+
   // 🆕 목표 시험 종류 마스터 패킷 리스트
   List<String> _examTypes = ['중간고사', '기말고사', '학기중 학습', '공무원 시험', 'TOEIC', '2027 대학수능'];
 
@@ -65,10 +70,74 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     _audioPlayer = AudioPlayer();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
 
+    _loadSavedSubjectsAndExamTypes(); // 🆕 [저장 연동] 과목/시험종류 저장값 복원
+
     // 🆕 [D-day 팝업 연동] 첫 화면 진입 시(아침 6~10시 사이) 시험 D-day 응원 팝업 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndShowExamDayPopup();
     });
+  }
+
+  // 🆕 [저장 연동] 과목/시험종류 저장값 복원
+  Future<void> _loadSavedSubjectsAndExamTypes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 🆕 [버그 수정] 앱을 재시작할 때마다 VIP 상태와 목표 학교가 false/기본값으로
+      // 리셋되던 문제 수정. 마이페이지가 저장하는 것과 동일한 키(saved_vip_status,
+      // saved_target_university)를 홈 화면 시작 시에도 반드시 복원해야, 타이머 화면의
+      // VIP 애니메이션이 재시작 후에도 계속 정상 작동함.
+      final bool savedVipStatus = prefs.getBool('saved_vip_status') ?? false;
+      final String savedUniv = prefs.getString('saved_target_university') ?? _targetUniversity;
+      if (mounted) {
+        setState(() {
+          _isVipMember = savedVipStatus;
+          _targetUniversity = savedUniv;
+        });
+      }
+
+      final String? savedSubjectsJson = prefs.getString(_kSubjectsKey);
+      if (savedSubjectsJson != null && savedSubjectsJson.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(savedSubjectsJson);
+        final List<Map<String, String>> restored = decoded
+            .map((e) => Map<String, String>.from(e as Map))
+            .toList();
+        if (restored.isNotEmpty && mounted) {
+          setState(() {
+            subjects = restored;
+          });
+        }
+      }
+
+      final List<String>? savedExamTypes = prefs.getStringList(_kExamTypesKey);
+      if (savedExamTypes != null && savedExamTypes.isNotEmpty && mounted) {
+        setState(() {
+          _examTypes = savedExamTypes;
+        });
+      }
+    } catch (e) {
+      debugPrint("과목/시험종류 저장값 복원 실패: $e");
+    }
+  }
+
+  // 🆕 [저장 연동] 과목 리스트 저장
+  Future<void> _persistSubjects() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kSubjectsKey, jsonEncode(subjects));
+    } catch (e) {
+      debugPrint("과목 저장 실패: $e");
+    }
+  }
+
+  // 🆕 [저장 연동] 시험종류 리스트 저장
+  Future<void> _persistExamTypes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_kExamTypesKey, _examTypes);
+    } catch (e) {
+      debugPrint("시험종류 저장 실패: $e");
+    }
   }
 
   // 🆕 [버그 수정] 기존엔 initState 때 딱 1번만 체크해서, 앱을 며칠째 안 끄고 계속 켜두면
@@ -230,6 +299,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
       final finalEn = nameEn.isEmpty ? '' : '$nameEn ';
       subjects.add({'en': finalEn, 'ko': nameKo});
     });
+    _persistSubjects(); // 🆕 [저장 연동]
   }
 
   void _deleteSubject(Map<String, String> targetSub, String displayName) {
@@ -239,6 +309,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
         selectedSubject = '';
       }
     });
+    _persistSubjects(); // 🆕 [저장 연동]
   }
 
   void _handleSoundPreview(String displayName, String fileName) async {
@@ -346,6 +417,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                                     _examTypes.remove(exam);
                                     if (temporarySelectedExam == exam) temporarySelectedExam = '';
                                   });
+                                  _persistExamTypes(); // 🆕 [저장 연동]
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.all(3),
@@ -383,6 +455,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                                 temporarySelectedExam = text;
                                 customExamController.clear();
                               });
+                              _persistExamTypes(); // 🆕 [저장 연동]
                             },
                             child: Text("생성", style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
@@ -703,7 +776,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                       children: [
                         _buildMenuButton(
                           icon: Icons.calendar_month_rounded, label: "자기주도 플래너", subLabel: "Self Learning Planner",
-                          // [확인된 위치] 564번 줄부터 572번 줄까지의 기존 onTap 영역
                           onTap: () {
                             Navigator.push(
                               context,

@@ -27,7 +27,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'name': 'English',
       'flag': '🇺🇸',
       'title': 'My Page',
-      'target': 'Target',
+      'target': 'Target School Setting',
       'hint': 'Enter target name',
       'save': 'Save Settings',
       'vip': 'VIP Premium Member',
@@ -45,13 +45,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'VIP membership approved. You can now set your target.',
       'defaultSchool': 'Seoul National University',
       'targetWord': 'Target',
+      'savePersonalInfo': 'Save Personal Info',
+      'savedPersonalInfo': 'Personal info has been saved.',
     },
     {
       'code': 'KO',
       'name': '한국어',
       'flag': '🇰🇷',
       'title': '마이 페이지',
-      'target': '목표',
+      'target': '목표 학교 설정',
       'hint': '목표명을 입력하세요',
       'save': '설정 저장',
       'vip': 'VIP 프리미엄 회원',
@@ -62,20 +64,22 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'passwordHint': '새 비밀번호를 입력하세요',
       'language': '다국어 선택',
       'vipLocked': 'VIP 결제 전용 잠김',
-      'vipButton': '회원결제(VIP) 신청하고 목표 설정하기',
+      'vipButton': '회원결제(VIP) 신청하고 목표 학교 설정하기',
       'vipDone': 'VIP 프리미엄 회원 활성화 완료',
       'disabledHint': '아래 [회원결제(VIP)] 승인 후 활성화됩니다.',
       'saved': '마이페이지 설정이 저장되었습니다.',
       'snackVip': 'VIP 회원 결제가 승인되었습니다! 이제 목표를 자유롭게 직접 설정할 수 있습니다.',
       'defaultSchool': '서울대학교',
       'targetWord': '목표',
+      'savePersonalInfo': '개인정보 저장',
+      'savedPersonalInfo': '개인정보가 저장되었습니다.',
     },
     {
       'code': 'JA',
       'name': '日本語',
       'flag': '🇯🇵',
       'title': 'マイページ',
-      'target': '目標',
+      'target': '目標校設定',
       'hint': '目標名を入力してください',
       'save': '設定保存',
       'vip': 'VIPプレミアム会員',
@@ -93,13 +97,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'VIP会員登録が承認されました。目標を設定できます。',
       'defaultSchool': 'ソウル大学校',
       'targetWord': '目標',
+      'savePersonalInfo': '個人情報を保存',
+      'savedPersonalInfo': '個人情報が保存されました。',
     },
     {
       'code': 'ZH',
       'name': '简体中文',
       'flag': '🇨🇳',
       'title': '个人中心',
-      'target': '目标',
+      'target': '目标学校设置',
       'hint': '请输入目标名称',
       'save': '保存设置',
       'vip': 'VIP高级会员',
@@ -117,13 +123,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'VIP会员已批准，现在可以自由设置目标。',
       'defaultSchool': '首尔大学',
       'targetWord': '目标',
+      'savePersonalInfo': '保存个人信息',
+      'savedPersonalInfo': '个人信息已保存。',
     },
     {
       'code': 'FR',
       'name': 'Français',
       'flag': '🇫🇷',
       'title': 'Ma Page',
-      'target': 'Cible',
+      'target': "Réglage de l'école cible",
       'hint': 'Entrez le nom de la cible',
       'save': 'Enregistrer',
       'vip': 'Membre Premium VIP',
@@ -141,13 +149,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': "L'accès VIP a été approuvé. Vous pouvez définir votre cible.",
       'defaultSchool': 'Université Nationale de Séoul',
       'targetWord': 'Cible',
+      'savePersonalInfo': 'Enregistrer les infos',
+      'savedPersonalInfo': 'Les informations personnelles ont été enregistrées.',
     },
     {
       'code': 'DE',
       'name': 'Deutsch',
       'flag': '🇩🇪',
       'title': 'Meine Seite',
-      'target': 'Ziel',
+      'target': 'Zielschule einstellen',
       'hint': 'Zielnamen eingeben',
       'save': 'Einstellungen speichern',
       'vip': 'VIP-Premium-Mitglied',
@@ -165,13 +175,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'VIP-Mitgliedschaft genehmigt. Sie können nun Ihr Ziel festlegen.',
       'defaultSchool': 'Nationaluniversität Seoul',
       'targetWord': 'Ziel',
+      'savePersonalInfo': 'Persönliche Daten speichern',
+      'savedPersonalInfo': 'Persönliche Daten wurden gespeichert.',
     },
     {
       'code': 'RU',
       'name': 'Русский',
       'flag': '🇷🇺',
       'title': 'Моя страница',
-      'target': 'Цель',
+      'target': 'Настройка целевой школы',
       'hint': 'Введите название цели',
       'save': 'Сохранить настройки',
       'vip': 'VIP Премиум Участник',
@@ -189,13 +201,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'VIP-членство одобрено. Теперь вы можете установить цель.',
       'defaultSchool': 'Сеульский национальный университет',
       'targetWord': 'Цель',
+      'savePersonalInfo': 'Сохранить личные данные',
+      'savedPersonalInfo': 'Личные данные сохранены.',
     },
     {
       'code': 'AR',
       'name': 'العربية',
       'flag': '🇸🇦',
       'title': 'صفحتي',
-      'target': 'الهدف',
+      'target': 'إعداد المدرسة المستهدفة',
       'hint': 'أدخل اسم الهدف',
       'save': 'حفظ الإعدادات',
       'vip': 'عضو VIP ممتاز',
@@ -213,13 +227,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'تمت الموافقة على عضوية VIP. يمكنك الآن تحديد هدفك.',
       'defaultSchool': 'جامعة سيول الوطنية',
       'targetWord': 'الهدف',
+      'savePersonalInfo': 'حفظ البيانات الشخصية',
+      'savedPersonalInfo': 'تم حفظ البيانات الشخصية.',
     },
     {
       'code': 'HI',
       'name': 'हिन्दी',
       'flag': '🇮🇳',
       'title': 'मेरा पृष्ठ',
-      'target': 'लक्ष्य',
+      'target': 'लक्ष्य विद्यालय सेटिंग',
       'hint': 'लक्ष्य का नाम दर्ज करें',
       'save': 'सेटिंग्स सहेजें',
       'vip': 'वीआईपी प्रीमियम सदस्य',
@@ -237,13 +253,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'वीआईपी सदस्यता स्वीकृत। अब आप अपना लक्ष्य सेट कर सकते हैं।',
       'defaultSchool': 'सियोल नेशनल यूनिवर्सिटी',
       'targetWord': 'लक्ष्य',
+      'savePersonalInfo': 'व्यक्तिगत जानकारी सहेजें',
+      'savedPersonalInfo': 'व्यक्तिगत जानकारी सहेज ली गई है।',
     },
     {
       'code': 'VI',
       'name': 'Tiếng Việt',
       'flag': '🇻🇳',
       'title': 'Trang của tôi',
-      'target': 'Mục tiêu',
+      'target': 'Cài đặt trường mục tiêu',
       'hint': 'Nhập tên mục tiêu',
       'save': 'Lưu cài đặt',
       'vip': 'Thành viên Premium VIP',
@@ -261,6 +279,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'Đã phê duyệt thành viên VIP. Bạn có thể tự do đặt mục tiêu.',
       'defaultSchool': 'Đại học Quốc gia Seoul',
       'targetWord': 'Mục tiêu',
+      'savePersonalInfo': 'Lưu thông tin cá nhân',
+      'savedPersonalInfo': 'Đã lưu thông tin cá nhân.',
     },
     // 🆕 [신규 추가] 스페인어
     {
@@ -268,7 +288,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'name': 'Español',
       'flag': '🇪🇸',
       'title': 'Mi Página',
-      'target': 'Objetivo',
+      'target': 'Configuración de escuela objetivo',
       'hint': 'Ingresa el nombre del objetivo',
       'save': 'Guardar configuración',
       'vip': 'Miembro Premium VIP',
@@ -286,6 +306,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'Membresía VIP aprobada. Ahora puedes definir tu objetivo.',
       'defaultSchool': 'Universidad Nacional de Seúl',
       'targetWord': 'Objetivo',
+      'savePersonalInfo': 'Guardar información personal',
+      'savedPersonalInfo': 'La información personal se ha guardado.',
     },
     // 🆕 [신규 추가] 태국어
     {
@@ -293,7 +315,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'name': 'ภาษาไทย',
       'flag': '🇹🇭',
       'title': 'หน้าของฉัน',
-      'target': 'เป้าหมาย',
+      'target': 'ตั้งค่าโรงเรียนเป้าหมาย',
       'hint': 'กรอกชื่อเป้าหมาย',
       'save': 'บันทึกการตั้งค่า',
       'vip': 'สมาชิก VIP พรีเมียม',
@@ -311,6 +333,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'snackVip': 'อนุมัติสมาชิก VIP แล้ว ตอนนี้คุณสามารถตั้งเป้าหมายได้',
       'defaultSchool': 'มหาวิทยาลัยแห่งชาติโซล',
       'targetWord': 'เป้าหมาย',
+      'savePersonalInfo': 'บันทึกข้อมูลส่วนตัว',
+      'savedPersonalInfo': 'บันทึกข้อมูลส่วนตัวแล้ว',
     },
   ];
 
@@ -430,6 +454,48 @@ class _MyPageScreenState extends State<MyPageScreen> {
     }
   }
 
+  // ============================================================================
+  // 🆕 [2026-08-04] 개인정보(이메일/비밀번호) 저장 버튼 처리
+  // 기존 문제: 이메일/비밀번호 입력창은 있었지만 저장하는 로직이 전혀 없어서,
+  //           입력해도 화면을 나가면 그대로 사라지는 문제가 있었음.
+  // ⚠️ 참고: 아직 서버(계정 인증 백엔드)가 없어서 SharedPreferences(로컬)에만 저장합니다.
+  //         서버 연동 시 이 함수 내부만 실제 계정 API 호출로 교체하면 됩니다.
+  // ============================================================================
+  Future<void> _savePersonalInfo() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final String email = _emailController.text.trim();
+      if (email.isNotEmpty) {
+        await prefs.setString('saved_user_email', email);
+      }
+
+      // 비밀번호는 입력했을 때만 저장하고, 저장 후에는 화면에 남기지 않도록 입력창을 비웁니다.
+      final String password = _passwordController.text.trim();
+      if (password.isNotEmpty) {
+        await prefs.setString('saved_user_password', password);
+        _passwordController.clear();
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_lang['savedPersonalInfo'] ?? '개인정보가 저장되었습니다.'),
+          backgroundColor: _containerBg,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[MyPageScreen] 개인정보 저장 실패: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('개인정보 저장에 실패했습니다. 다시 시도해 주세요.\n($e)'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   TextStyle _localizedTextStyle({
     required double fontSize,
     FontWeight fontWeight = FontWeight.normal,
@@ -448,7 +514,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
     return Text(
       text,
       style: _localizedTextStyle(
-        fontSize: 14,
+        fontSize: 17,
         fontWeight: FontWeight.bold,
         color: _brandGolden,
       ),
@@ -509,11 +575,20 @@ class _MyPageScreenState extends State<MyPageScreen> {
               const SizedBox(height: 4),
               Text(
                 'MY PAGE GKE STUDYUP',
-                style: GoogleFonts.cinzel(
+                style: GoogleFonts.gowunBatang(
                   fontSize: 23,
                   fontWeight: FontWeight.bold,
                   color: _brandGolden,
                   letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '마이페이지',
+                style: GoogleFonts.notoSansKr(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: _brandGolden,
                 ),
               ),
             ],
@@ -524,16 +599,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _lang['title'] ?? 'My Page',
-                style: _localizedTextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 24),
-
               _buildSectionTitle('PERSONAL INFO EDIT (${_lang['personal'] ?? '개인정보 수정'})'),
               const SizedBox(height: 12),
               Container(
@@ -567,6 +632,23 @@ class _MyPageScreenState extends State<MyPageScreen> {
                         icon: Icons.lock_reset_rounded,
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: _brandGolden, width: 1.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          backgroundColor: _brandGolden.withOpacity(0.05),
+                        ),
+                        onPressed: _savePersonalInfo,
+                        child: Text(
+                          _lang['savePersonalInfo'] ?? '개인정보 저장',
+                          style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -580,7 +662,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                     child: Text(
                       _lang['target'] ?? 'Target',
                       style: _localizedTextStyle(
-                        fontSize: 16,
+                        fontSize: 17,
                         fontWeight: FontWeight.bold,
                         color: _brandGolden,
                       ),
