@@ -119,7 +119,6 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
           type: 'life',
           title: titleController.text.trim(),
           category: categoryController.text.trim().isEmpty ? '일반' : categoryController.text.trim(),
-          periodKey: existing.periodKey,
           isAchieved: isAchieved,
           createdAt: existing.createdAt,
         );

@@ -1,18 +1,21 @@
 // ============================================================================
-// 🆕 [일반 플래너 - 고급 팝업 + 병기 적용] PeriodGoalScreen (공용 구현)
+// 🆕 [일반 플래너 - 전체 연동 재설계] PeriodGoalScreen (공용 구현)
 // 연간/월간/주간/오늘 목표는 화면 구조가 동일하므로, 이 파일 하나에 실제
 // 구현을 두고 yearly/monthly/weekly/today_goal_screen.dart는 이 위젯을
-// 얇게 감싸서 사용합니다 (goalType만 다르게 넘김).
+// 얇게 감싸서 사용합니다.
 //
-// 🆕 [설계 변경] 기존에 팝업메뉴(⋮)로 따로 있던 "성취 완료"를 수정 팝업 안의
-// "달성함" 스위치로 통합했습니다. 이렇게 하면 하단 삭제/취소/저장 3버튼
-// 패턴을 그대로 유지할 수 있어 다른 화면들과 일관성이 생깁니다.
-// 목표 카드의 가로 3선(빨/노/파) 연필 아이콘을 누르면 수정 팝업이 열립니다.
+// 🆕 [핵심 변경] 더 이상 목표마다 따로 할 일을 만들어서 체크하지 않습니다.
+// 목표를 만들면 그 목표의 기간(오늘/이번주/이번달/올해)이 자동으로 정해지고,
+// 그 기간에 캘린더+타임라인에서 실제로 완료한 것을 기준으로 진행률이
+// 자동 계산됩니다 (ReportDataService.summarize 재사용 - 리포트 화면과
+// 완전히 같은 계산 로직/같은 데이터). "달성함" 스위치는 여전히 수동으로
+// 켜고 끌 수 있습니다.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
+import 'report_data_service.dart';
 import 'bilingual_text.dart';
 
 class PeriodGoalScreen extends StatefulWidget {
@@ -32,7 +35,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
   static const Color _containerBg = Color(0xFF0D1527);
 
   List<GoalItem> _goals = [];
-  Map<String, double> _progressCache = {};
+  Map<String, ReportSummary> _summaryCache = {};
   bool _isLoading = true;
 
   @override
@@ -44,32 +47,47 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
   Future<void> _loadGoals() async {
     setState(() => _isLoading = true);
     final goals = await GoalDataService.loadGoalsByType(widget.goalType);
-    final Map<String, double> progressMap = {};
+    final Map<String, ReportSummary> summaryMap = {};
     for (final g in goals) {
-      progressMap[g.id] = await GoalDataService.calcGoalProgress(g.id);
+      final start = DateTime.tryParse(g.periodStart) ?? DateTime.now();
+      final end = DateTime.tryParse(g.periodEnd) ?? DateTime.now();
+      summaryMap[g.id] = await ReportDataService.summarize(start, end);
     }
     if (!mounted) return;
     setState(() {
       _goals = goals;
-      _progressCache = progressMap;
+      _summaryCache = summaryMap;
       _isLoading = false;
     });
   }
 
-  String get _currentPeriodKey {
+  // 🆕 [핵심] 목표 유형에 따라 "지금" 기준 기간의 시작/끝 날짜를 계산.
+  // 이 범위가 캘린더+타임라인 완료율을 조회하는 데 그대로 쓰입니다.
+  (DateTime, DateTime) _currentPeriodRange() {
     final now = DateTime.now();
+    final todayZero = DateTime(now.year, now.month, now.day);
     switch (widget.goalType) {
-      case 'yearly':
-        return '${now.year}';
-      case 'monthly':
-        return '${now.year}-${now.month.toString().padLeft(2, '0')}';
-      case 'weekly':
-        return '${now.year}-W${((now.day + now.weekday) / 7).ceil()}';
       case 'today':
-        return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        return (todayZero, todayZero);
+      case 'weekly':
+        final start = todayZero.subtract(Duration(days: now.weekday - 1)); // 이번 주 월요일
+        final end = start.add(const Duration(days: 6)); // 이번 주 일요일
+        return (start, end);
+      case 'monthly':
+        return (DateTime(now.year, now.month, 1), DateTime(now.year, now.month + 1, 0));
+      case 'yearly':
+        return (DateTime(now.year, 1, 1), DateTime(now.year, 12, 31));
       default:
-        return '';
+        return (todayZero, todayZero);
     }
+  }
+
+  String _periodLabel(DateTime start, DateTime end) {
+    String fmt(DateTime d) => '${d.month}/${d.day}';
+    if (start == end || (start.year == end.year && start.month == end.month && start.day == end.day)) {
+      return fmt(start);
+    }
+    return '${fmt(start)} ~ ${fmt(end)}';
   }
 
   Future<void> _showGoalDialog({GoalItem? existing}) async {
@@ -77,6 +95,12 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
     final titleController = TextEditingController(text: existing?.title ?? '');
     final categoryController = TextEditingController(text: existing?.category ?? '');
     bool isAchieved = existing?.isAchieved ?? false;
+
+    final (currentStart, currentEnd) = _currentPeriodRange();
+    final String periodLabel = _periodLabel(
+      isEdit ? (DateTime.tryParse(existing!.periodStart) ?? currentStart) : currentStart,
+      isEdit ? (DateTime.tryParse(existing!.periodEnd) ?? currentEnd) : currentEnd,
+    );
 
     final String? action = await showDialog<String>(
       context: context,
@@ -94,12 +118,24 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                   children: [
                     luxuryDialogHeader(icon: isEdit ? Icons.edit_note_rounded : Icons.flag_rounded, en: isEdit ? 'EDIT GOAL' : 'ADD GOAL', ko: isEdit ? '목표 수정' : '목표 추가'),
 
-                    _buildField(icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 매일 30분 독서'),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(color: _brandGolden.withOpacity(0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.date_range, color: _brandGolden, size: 14),
+                          const SizedBox(width: 6),
+                          BiInline(en: 'Period: $periodLabel', ko: '기간: $periodLabel', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
+                        ],
+                      ),
+                    ),
+
+                    _buildField(icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 일정 90% 달성하기'),
                     const SizedBox(height: 12),
                     _buildField(icon: Icons.category_outlined, controller: categoryController, hintEn: 'Category', hintKo: '건강/자기계발/재정, 비워도 됨'),
                     const SizedBox(height: 14),
 
-                    // 🆕 [설계 변경] 달성 여부를 스위치로 통합
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
@@ -145,132 +181,34 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
           type: existing.type,
           title: titleController.text.trim(),
           category: categoryController.text.trim().isEmpty ? '일반' : categoryController.text.trim(),
-          periodKey: existing.periodKey,
+          periodStart: existing.periodStart, // 🆕 기간은 수정 시 바뀌지 않음(생성 시 고정)
+          periodEnd: existing.periodEnd,
           isAchieved: isAchieved,
           createdAt: existing.createdAt,
         );
         if (isAchieved && !wasAchieved) {
-          await GoalDataService.markGoalAchieved(updated); // 새로 달성 처리된 경우 성취 기록도 생성
+          await GoalDataService.markGoalAchieved(updated);
         } else {
           await GoalDataService.updateGoal(updated);
         }
       } else {
+        final (start, end) = _currentPeriodRange();
+        final dateStr = (DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
         final newGoal = GoalItem(
           id: DateTime.now().microsecondsSinceEpoch.toString(),
           type: widget.goalType,
           title: titleController.text.trim(),
           category: categoryController.text.trim().isEmpty ? '일반' : categoryController.text.trim(),
-          periodKey: _currentPeriodKey,
+          periodStart: dateStr(start),
+          periodEnd: dateStr(end),
           isAchieved: isAchieved,
           createdAt: DateTime.now().toIso8601String(),
         );
-        if (isAchieved) {
-          await GoalDataService.addGoal(newGoal);
-          await GoalDataService.markGoalAchieved(newGoal);
-        } else {
-          await GoalDataService.addGoal(newGoal);
-        }
+        await GoalDataService.addGoal(newGoal);
+        if (isAchieved) await GoalDataService.markGoalAchieved(newGoal);
       }
       await _loadGoals();
     }
-  }
-
-  Future<void> _showAddTodoDialog(GoalItem goal) async {
-    final controller = TextEditingController();
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.65),
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-        child: LuxuryDialogFrame(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              luxuryDialogHeader(icon: Icons.playlist_add_rounded, en: 'ADD TASK', ko: '할 일 추가'),
-              _buildField(icon: Icons.check_box_outlined, controller: controller, hintEn: 'Task', hintKo: 'e.g. 책 1챕터 읽기'),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white70, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                      onPressed: () {
-                        if (controller.text.trim().isEmpty) return;
-                        Navigator.of(context).pop(true);
-                      },
-                      child: const BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (confirmed == true && controller.text.trim().isNotEmpty) {
-      final now = DateTime.now();
-      final todo = TodoItem(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        goalId: goal.id,
-        title: controller.text.trim(),
-        date: '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
-      );
-      await GoalDataService.addTodo(todo);
-      await _loadGoals();
-    }
-  }
-
-  Future<void> _showGoalTodos(GoalItem goal) async {
-    final todos = await GoalDataService.loadTodosForGoal(goal.id);
-    if (!mounted) return;
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: _containerBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                BiInline(en: goal.title, ko: 'Tasks (할 일)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
-                const SizedBox(height: 12),
-                if (todos.isEmpty)
-                  const BiInline(en: 'No tasks yet', ko: '연결된 할 일이 없습니다', color: Colors.white38, fontSize: 13)
-                else
-                  ...todos.map((t) => CheckboxListTile(
-                    value: t.isCompleted,
-                    onChanged: (val) async {
-                      t.isCompleted = val ?? false;
-                      await GoalDataService.updateTodo(t);
-                      setSheetState(() {});
-                      await _loadGoals();
-                    },
-                    title: Text(t.title, style: TextStyle(color: t.isCompleted ? Colors.white38 : Colors.white, decoration: t.isCompleted ? TextDecoration.lineThrough : null)),
-                    activeColor: _brandGolden,
-                    checkColor: _pageBg,
-                    controlAffinity: ListTileControlAffinity.leading,
-                  )),
-              ],
-            ),
-          );
-        },
-      ),
-    );
   }
 
   Widget _buildField({required IconData icon, required TextEditingController controller, required String hintEn, required String hintKo}) {
@@ -304,7 +242,18 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _goals.isEmpty
-          ? Center(child: BiInline(en: 'No goals yet. Tap + to add one.', ko: '등록된 목표가 없습니다. + 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center))
+          ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: BiInline(
+            en: 'No goals yet. Tap + to add one.\nProgress is automatically calculated from\nyour calendar & timeline records.',
+            ko: '등록된 목표가 없습니다. + 버튼으로 추가해 보세요.\n진행률은 캘린더/타임라인 기록을 기준으로\n자동으로 계산됩니다.',
+            color: Colors.white38,
+            fontSize: 13,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      )
           : ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _goals.length,
@@ -319,8 +268,12 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
   }
 
   Widget _buildGoalCard(GoalItem goal) {
-    final double progress = _progressCache[goal.id] ?? 0.0;
-    final int percent = (progress * 100).round();
+    final summary = _summaryCache[goal.id];
+    final double progress = summary?.completionRate ?? 0.0;
+    final int percent = summary?.completionPercent ?? 0;
+    final start = DateTime.tryParse(goal.periodStart);
+    final end = DateTime.tryParse(goal.periodEnd);
+    final String periodLabel = (start != null && end != null) ? _periodLabel(start, end) : '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -343,36 +296,40 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
               ),
             ],
           ),
-          Text('(${goal.category})', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11)),
+          Row(
+            children: [
+              Text('(${goal.category})', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11)),
+              if (periodLabel.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text('· $periodLabel', style: const TextStyle(color: Colors.white24, fontSize: 11)),
+              ],
+            ],
+          ),
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(value: progress, minHeight: 10, backgroundColor: Colors.white12, valueColor: const AlwaysStoppedAnimation<Color>(_brandGolden)),
           ),
           const SizedBox(height: 6),
-          BiInline(en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
-          const SizedBox(height: 10),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: _brandGolden)),
-                  onPressed: () => _showGoalTodos(goal),
-                  icon: const Icon(Icons.checklist, color: _brandGolden, size: 16),
-                  label: const BiInline(en: 'View Tasks', ko: '할 일 보기', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white38)),
-                  onPressed: () => _showAddTodoDialog(goal),
-                  icon: const Icon(Icons.add, color: Colors.white70, size: 16),
-                  label: const BiInline(en: 'Add Task', ko: '할 일 추가', color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ),
+              BiInline(en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+              if (summary != null)
+                Text('${summary.completedCount} / ${summary.totalCount}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
             ],
           ),
+          // 🆕 [연동 안내] 데이터가 캘린더/타임라인에서 자동으로 온다는 것을 알려주는 작은 힌트
+          if (summary != null && !summary.hasData)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: BiInline(
+                en: 'No calendar/timeline records for this period yet.',
+                ko: '이 기간에 캘린더/타임라인 기록이 아직 없습니다.',
+                color: Colors.white24,
+                fontSize: 10.5,
+              ),
+            ),
         ],
       ),
     );

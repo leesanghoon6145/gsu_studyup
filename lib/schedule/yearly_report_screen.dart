@@ -1,13 +1,14 @@
 // ============================================================================
-// 🆕 [일반 플래너 4단계] YearlyReportScreen
-// 올해의 목표 달성률, 총 일정 완료 수, 가장 생산적인 달, 가장 활동적인 요일을
-// 보여줍니다. 아직 사용 기간이 짧아 1년치 데이터가 없더라도, 지금까지 쌓인
-// 실제 데이터만으로 정직하게 계산합니다 (데이터 없으면 "데이터 없음").
+// 🆕 [일반 플래너 - 병기+연동 정리] YearlyReportScreen
+// 올해의 목표 달성률, 총 일정 완료 수, 가장 생산적인 달, 가장 활동적인
+// 요일, 올해 달성한 목표 개수를 보여줍니다. 실제 쌓인 데이터만으로
+// 정직하게 계산합니다 (데이터 없으면 "데이터 없음").
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'report_data_service.dart';
+import 'bilingual_text.dart';
 
 class YearlyReportScreen extends StatefulWidget {
   const YearlyReportScreen({super.key});
@@ -24,6 +25,8 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
   ReportSummary? _summary;
   int? _mostProductiveMonth;
   String? _mostActiveWeekday;
+  int _achievedGoalCount = 0;
+  int _completedProjectCount = 0; // 🆕 [프로젝트 연동]
   late DateTime _yearStart;
   late DateTime _yearEnd;
   bool _isLoading = true;
@@ -42,12 +45,16 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
     final summary = await ReportDataService.summarize(_yearStart, _yearEnd);
     final month = await ReportDataService.findMostProductiveMonth(_yearStart.year);
     final weekday = await ReportDataService.findMostActiveWeekdayOverall(_yearStart, _yearEnd);
+    final projectCount = await ReportDataService.countProjectsCompletedInRange(_yearStart, _yearEnd);
+    final achievedCount = await ReportDataService.countAchievementsInRange(_yearStart, _yearEnd);
 
     if (!mounted) return;
     setState(() {
       _summary = summary;
       _mostProductiveMonth = month;
       _mostActiveWeekday = weekday;
+      _achievedGoalCount = achievedCount;
+      _completedProjectCount = projectCount;
       _isLoading = false;
     });
   }
@@ -60,31 +67,23 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('YEARLY REPORT', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('연간 리포트', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
+        title: const BiTitle(en: 'YEARLY REPORT', ko: '연간 리포트', enSize: 16, koSize: 13),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : (_summary == null || !_summary!.hasData)
-          ? Center(
-        child: Text('올해 등록된 기록이 없습니다.',
-            textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 14)),
-      )
+          ? Center(child: BiInline(en: 'No records for this year yet.', ko: '올해 등록된 기록이 없습니다.', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('${_yearStart.year}년', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('${_yearStart.year}', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           _buildCompletionCard(),
+          const SizedBox(height: 16),
+          _buildGoalAchievedCard(),
+          const SizedBox(height: 16),
+          _buildProjectCompletedCard(),
           const SizedBox(height: 16),
           _buildInsightCard(),
         ],
@@ -97,14 +96,47 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('올해 목표 달성률', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          const BiInline(en: "This Year's Completion", ko: '올해 목표 달성률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
           const SizedBox(height: 8),
           Text('${s.completionPercent}%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          Text('총 일정 ${s.totalCount}개 · 완료 ${s.completedCount}개', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12)),
+          BiInline(en: 'Total ${s.totalCount} · Completed ${s.completedCount}', ko: '총 일정 ${s.totalCount}개 · 완료 ${s.completedCount}개', color: Colors.white38, fontSize: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoalAchievedCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Row(
+        children: [
+          const Icon(Icons.emoji_events, color: _brandGolden, size: 22),
+          const SizedBox(width: 12),
+          const Expanded(child: BiInline(en: 'Goals Achieved This Year', ko: '올해 달성한 목표', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text('$_achievedGoalCount', style: const TextStyle(color: _brandGolden, fontSize: 20, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [프로젝트 연동] 올해 완료된 프로젝트 개수
+  Widget _buildProjectCompletedCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Row(
+        children: [
+          const Icon(Icons.rocket_launch_rounded, color: _brandGolden, size: 22),
+          const SizedBox(width: 12),
+          const Expanded(child: BiInline(en: 'Projects Completed This Year', ko: '올해 완료된 프로젝트', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text('$_completedProjectCount', style: const TextStyle(color: _brandGolden, fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -114,23 +146,23 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildRow('가장 생산적인 달', _mostProductiveMonth != null ? '${_mostProductiveMonth}월' : '데이터 없음'),
+          _buildRow('Most Productive Month', '가장 생산적인 달', _mostProductiveMonth != null ? '${_mostProductiveMonth}월' : '데이터 없음'),
           const SizedBox(height: 10),
-          _buildRow('가장 많이 활동한 요일', _mostActiveWeekday != null ? '$_mostActiveWeekday요일' : '데이터 없음'),
+          _buildRow('Most Active Weekday', '가장 많이 활동한 요일', _mostActiveWeekday != null ? '$_mostActiveWeekday요일' : '데이터 없음'),
         ],
       ),
     );
   }
 
-  Widget _buildRow(String label, String value) {
+  Widget _buildRow(String en, String ko, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
+        Expanded(child: BiInline(en: en, ko: ko, color: Colors.white70, fontSize: 13)),
         Text(value, style: const TextStyle(color: _brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
       ],
     );

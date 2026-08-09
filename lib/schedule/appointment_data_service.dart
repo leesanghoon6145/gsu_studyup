@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'notification_service.dart'; // 🆕 [실제 알림 연동] 약속 시간에 실제 알림이 울리도록 연결
 
 class AppointmentItem {
   final String id;
@@ -76,6 +77,14 @@ class AppointmentDataService {
     final all = await loadAll();
     all.add(item);
     await _saveAll(all);
+    // 🆕 [실제 알림 연동] 시간이 설정된 약속이면 그 시각에 실제 알림 예약
+    await NotificationService.scheduleAt(
+      id: item.id,
+      title: '약속: ${item.title}',
+      body: item.withPerson.isNotEmpty ? '${item.withPerson}님과의 약속입니다.' : '약속 시간입니다.',
+      date: item.date,
+      time: item.time,
+    );
   }
 
   static Future<void> update(AppointmentItem updated) async {
@@ -85,12 +94,21 @@ class AppointmentDataService {
       all[idx] = updated;
       await _saveAll(all);
     }
+    // 🆕 [실제 알림 연동] 수정 시 예약을 새 시간으로 다시 걸어줌
+    await NotificationService.scheduleAt(
+      id: updated.id,
+      title: '약속: ${updated.title}',
+      body: updated.withPerson.isNotEmpty ? '${updated.withPerson}님과의 약속입니다.' : '약속 시간입니다.',
+      date: updated.date,
+      time: updated.time,
+    );
   }
 
   static Future<void> delete(String id) async {
     final all = await loadAll();
     all.removeWhere((e) => e.id == id);
     await _saveAll(all);
+    await NotificationService.cancel(id); // 🆕 [실제 알림 연동] 삭제 시 예약된 알림도 취소
   }
 
   static Future<void> _saveAll(List<AppointmentItem> items) async {

@@ -234,16 +234,24 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
     if (action == 'save' && titleCtrl.text.trim().isNotEmpty) {
       final deadlineStr = deadline != null ? '${deadline!.year}-${deadline!.month.toString().padLeft(2, '0')}-${deadline!.day.toString().padLeft(2, '0')}' : '';
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       if (isEdit) {
+        // 🆕 [리포트 연동] 상태가 이번에 처음으로 '완료'로 바뀌는 경우에만 완료일을 오늘로 기록.
+        // 이미 완료 상태였다면 원래 완료일을 그대로 유지 (수정할 때마다 날짜가 갱신되지 않도록).
+        final bool justCompleted = selectedStatus == '완료' && existing!.status != '완료';
+        final String completedDate = selectedStatus == '완료' ? (justCompleted ? todayStr : existing.completedDate) : '';
+
         final updated = ProjectItem(
-          id: existing!.id,
+          id: existing.id,
           title: titleCtrl.text.trim(),
           category: categoryCtrl.text.trim().isEmpty ? '일반' : categoryCtrl.text.trim(),
           deadline: deadlineStr,
           status: selectedStatus,
           description: descCtrl.text.trim(),
           createdAt: existing.createdAt,
+          completedDate: completedDate,
         );
         await ProjectDataService.update(updated);
       } else {
@@ -255,6 +263,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
           status: selectedStatus,
           description: descCtrl.text.trim(),
           createdAt: DateTime.now().toIso8601String(),
+          completedDate: selectedStatus == '완료' ? todayStr : '', // 🆕 [리포트 연동] 생성 즉시 완료로 등록하는 경우도 처리
         );
         await ProjectDataService.add(newItem);
       }
@@ -280,78 +289,155 @@ class _ProjectScreenState extends State<ProjectScreen> {
     );
   }
 
+  // 🆕 [스크롤 지원 + 수정 기능 추가] 하위 작업이 많아져도(6개 이상) 오버플로우
+  // 없이 스크롤되도록 전체를 SingleChildScrollView로 감쌌습니다. 각 작업에
+  // 가로로 반듯한 3선(빨/노/파) 연필 아이콘을 추가해서 이름 수정/삭제도 가능해졌습니다.
   Future<void> _showTasksSheet(ProjectItem project) async {
-    final tasks = await ProjectDataService.loadTasksForProject(project.id);
+    List<ProjectTask> tasks = await ProjectDataService.loadTasksForProject(project.id);
     if (!mounted) return;
     await showModalBottomSheet(
       context: context,
       backgroundColor: _containerBg,
+      isScrollControlled: true, // 🆕 [스크롤 수정] 내용이 길어져도 화면 높이를 넘겨서 스크롤 가능하게 함
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                BiInline(en: project.title, ko: '하위 작업', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
-                const SizedBox(height: 12),
-                if (tasks.isEmpty)
-                  BiInline(en: 'No tasks yet', ko: '등록된 작업이 없습니다', color: Colors.white38, fontSize: 13)
-                else
-                  ...tasks.map((t) => CheckboxListTile(
-                    value: t.isCompleted,
-                    onChanged: (val) async {
-                      t.isCompleted = val ?? false;
-                      await ProjectDataService.updateTask(t);
-                      setSheetState(() {});
-                      await _load();
-                    },
-                    title: Text(t.title, style: TextStyle(color: t.isCompleted ? Colors.white38 : Colors.white, decoration: t.isCompleted ? TextDecoration.lineThrough : null)),
-                    activeColor: _brandGolden,
-                    checkColor: _pageBg,
-                    controlAffinity: ListTileControlAffinity.leading,
-                  )),
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () async {
-                    final controller = TextEditingController();
-                    final added = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: _pageBg,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        title: const BiTitle(en: 'ADD TASK', ko: '작업 추가', enSize: 15, koSize: 12),
-                        content: TextField(
+          Future<void> refreshTasks() async {
+            tasks = await ProjectDataService.loadTasksForProject(project.id);
+            setSheetState(() {});
+            await _load();
+          }
+
+          Future<void> showEditTaskDialog(ProjectTask task) async {
+            final controller = TextEditingController(text: task.title);
+            final String? action = await showDialog<String>(
+              context: context,
+              barrierColor: Colors.black.withOpacity(0.65),
+              builder: (context) => Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+                child: LuxuryDialogFrame(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      luxuryDialogHeader(icon: Icons.edit_note_rounded, en: 'EDIT TASK', ko: '작업 수정'),
+                      Container(
+                        decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                        child: TextField(
                           controller: controller,
                           style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(hintText: biHint('Task', '작업 내용'), hintStyle: const TextStyle(color: Colors.white38), border: InputBorder.none),
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white54)),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
-                            onPressed: () {
-                              if (controller.text.trim().isEmpty) return;
-                              Navigator.pop(context, true);
-                            },
-                            child: const BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold),
+                          decoration: InputDecoration(
+                            prefixIcon: Icon(Icons.check_box_outlined, color: _brandGolden.withOpacity(0.85), size: 19),
+                            hintText: biHint('Task', '작업 내용'),
+                            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                        ],
+                        ),
                       ),
-                    );
-                    if (added == true && controller.text.trim().isNotEmpty) {
-                      await ProjectDataService.addTask(ProjectTask(id: DateTime.now().microsecondsSinceEpoch.toString(), projectId: project.id, title: controller.text.trim()));
-                      setSheetState(() {});
-                      Navigator.pop(context);
-                      await _load();
-                    }
-                  },
-                  icon: const Icon(Icons.add, color: _brandGolden, size: 18),
-                  label: const BiInline(en: 'Add Task', ko: '작업 추가', color: _brandGolden, fontWeight: FontWeight.bold),
+                      const SizedBox(height: 20),
+                      luxuryBottomActions(
+                        isEdit: true,
+                        onDelete: () => Navigator.of(context).pop('delete'),
+                        onCancel: () => Navigator.of(context).pop(null),
+                        onSave: () {
+                          if (controller.text.trim().isEmpty) return;
+                          Navigator.of(context).pop('save');
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
+            );
+
+            if (action == 'delete') {
+              await ProjectDataService.deleteTask(task.id);
+              await refreshTasks();
+            } else if (action == 'save' && controller.text.trim().isNotEmpty) {
+              final updated = ProjectTask(id: task.id, projectId: task.projectId, title: controller.text.trim(), isCompleted: task.isCompleted);
+              await ProjectDataService.updateTask(updated);
+              await refreshTasks();
+            }
+          }
+
+          Future<void> showAddTaskDialog() async {
+            final controller = TextEditingController();
+            final added = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: _pageBg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: const BiTitle(en: 'ADD TASK', ko: '작업 추가', enSize: 15, koSize: 12),
+                content: TextField(
+                  controller: controller,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(hintText: biHint('Task', '작업 내용'), hintStyle: const TextStyle(color: Colors.white38), border: InputBorder.none),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context, false), child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white54)),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
+                    onPressed: () {
+                      if (controller.text.trim().isEmpty) return;
+                      Navigator.pop(context, true);
+                    },
+                    child: const BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            );
+            if (added == true && controller.text.trim().isNotEmpty) {
+              await ProjectDataService.addTask(ProjectTask(id: DateTime.now().microsecondsSinceEpoch.toString(), projectId: project.id, title: controller.text.trim()));
+              await refreshTasks();
+            }
+          }
+
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            // 🆕 [스크롤 수정] 항목이 많아져도 전체가 스크롤되어 오버플로우가 나지 않음
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  BiInline(en: project.title, ko: '하위 작업', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                  const SizedBox(height: 12),
+                  if (tasks.isEmpty)
+                    const BiInline(en: 'No tasks yet', ko: '등록된 작업이 없습니다', color: Colors.white38, fontSize: 13)
+                  else
+                    ...tasks.map((t) => Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      child: CheckboxListTile(
+                        value: t.isCompleted,
+                        onChanged: (val) async {
+                          t.isCompleted = val ?? false;
+                          await ProjectDataService.updateTask(t);
+                          await refreshTasks();
+                        },
+                        title: Text(t.title, style: TextStyle(color: t.isCompleted ? Colors.white38 : Colors.white, decoration: t.isCompleted ? TextDecoration.lineThrough : null)),
+                        activeColor: _brandGolden,
+                        checkColor: _pageBg,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        // 🆕 [연필 아이콘 추가] 가로로 반듯한 3선(빨/노/파) 연필 - 누르면 수정/삭제 팝업
+                        secondary: IconButton(
+                          icon: const HorizontalPencilIcon(size: 18),
+                          onPressed: () => showEditTaskDialog(t),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                        ),
+                      ),
+                    )),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: showAddTaskDialog,
+                    icon: const Icon(Icons.add, color: _brandGolden, size: 18),
+                    label: const BiInline(en: 'Add Task', ko: '작업 추가', color: _brandGolden, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
             ),
           );
         },

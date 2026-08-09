@@ -16,6 +16,7 @@ class ProjectItem {
   final String status; // '진행중' | '완료' | '보류'
   final String description;
   final String createdAt;
+  final String completedDate; // 🆕 [리포트 연동] 상태가 '완료'로 바뀐 날짜('yyyy-MM-dd'), 리포트의 "완료된 프로젝트" 집계에 사용
 
   ProjectItem({
     required this.id,
@@ -25,6 +26,7 @@ class ProjectItem {
     this.status = '진행중',
     this.description = '',
     required this.createdAt,
+    this.completedDate = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +37,7 @@ class ProjectItem {
     'status': status,
     'description': description,
     'createdAt': createdAt,
+    'completedDate': completedDate,
   };
 
   factory ProjectItem.fromJson(Map<String, dynamic> json) => ProjectItem(
@@ -45,6 +48,7 @@ class ProjectItem {
     status: json['status'] as String? ?? '진행중',
     description: json['description'] as String? ?? '',
     createdAt: json['createdAt'] as String? ?? '',
+    completedDate: json['completedDate'] as String? ?? '',
   );
 }
 

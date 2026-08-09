@@ -2,17 +2,14 @@
 // 🆕 [일반 플래너 - 알림] ReminderDataService
 // 알림(제목/날짜/시간/반복/켜짐여부/메모)을 저장/불러오는 서비스입니다.
 //
-// ⚠️ [중요 - 다음 작업 필요] 이 서비스는 "알림 데이터"를 저장/관리하는
-// 부분까지만 구현되어 있습니다. 저장된 알림을 실제로 정해진 시각에 폰에서
-// 푸시 알림으로 띄우는 것은 별도 연결이 필요합니다. 이 앱에는 이미
-// services/timer2_services.dart(Timer2Service)라는 알림 발송 서비스가
-// 타이머 화면에서 쓰이고 있으므로, 그 서비스의 실제 코드를 확인한 뒤
-// 안전하게 연결해야 합니다(잘못 연결하면 기존 타이머 알림 기능이
-// 깨질 위험이 있어 이번 작업에서는 데이터 저장까지만 완료했습니다).
+// 🆕 [실제 알림 연동 완료] 이제 add/update/delete 시 notification_service.dart를
+// 통해 실제 푸시 알림이 예약/취소됩니다. 기존 타이머 알림(Timer2Service)과는
+// 완전히 별도의 독립된 알림 채널을 사용하므로 서로 영향을 주지 않습니다.
 // ============================================================================
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'notification_service.dart'; // 🆕 [실제 알림 연동]
 
 class ReminderItem {
   final String id;
@@ -79,6 +76,16 @@ class ReminderDataService {
     final all = await loadAll();
     all.add(item);
     await _saveAll(all);
+    if (item.isEnabled) {
+      await NotificationService.scheduleAt(
+        id: item.id,
+        title: item.title,
+        body: item.memo.isNotEmpty ? item.memo : 'GKE StudyUp 알림',
+        date: item.date,
+        time: item.time,
+        repeatType: item.repeatType,
+      );
+    }
   }
 
   static Future<void> update(ReminderItem updated) async {
@@ -88,12 +95,26 @@ class ReminderDataService {
       all[idx] = updated;
       await _saveAll(all);
     }
+    // 🆕 [실제 알림 연동] 켜짐 상태면 다시 예약, 꺼짐 상태면 취소
+    if (updated.isEnabled) {
+      await NotificationService.scheduleAt(
+        id: updated.id,
+        title: updated.title,
+        body: updated.memo.isNotEmpty ? updated.memo : 'GKE StudyUp 알림',
+        date: updated.date,
+        time: updated.time,
+        repeatType: updated.repeatType,
+      );
+    } else {
+      await NotificationService.cancel(updated.id);
+    }
   }
 
   static Future<void> delete(String id) async {
     final all = await loadAll();
     all.removeWhere((e) => e.id == id);
     await _saveAll(all);
+    await NotificationService.cancel(id); // 🆕 [실제 알림 연동] 삭제 시 예약된 알림도 취소
   }
 
   static Future<void> _saveAll(List<ReminderItem> items) async {

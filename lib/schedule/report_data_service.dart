@@ -10,6 +10,8 @@
 import 'schedule_data_service.dart';
 import 'timeline_data_service.dart';
 import 'goal_data_service.dart';
+import 'appointment_data_service.dart'; // 🆕 [약속 연동]
+import 'project_data_service.dart'; // 🆕 [프로젝트 연동]
 
 class ReportSummary {
   final int totalCount; // 일정 + 타임라인 전체 항목 수
@@ -43,13 +45,17 @@ class ReportDataService {
   static Future<ReportSummary> summarize(DateTime start, DateTime end) async {
     final allSchedules = await ScheduleDataService.loadAll();
     final allBlocks = await TimelineDataService.loadAllBlocks();
+    final allAppointments = await AppointmentDataService.loadAll(); // 🆕 [약속 연동]
 
     final schedulesInRange = allSchedules.where((s) => _inRange(s.date, start, end)).toList();
     final blocksInRange = allBlocks.where((b) => _inRange(b.date, start, end)).toList();
+    final appointmentsInRange = allAppointments.where((a) => _inRange(a.date, start, end)).toList(); // 🆕 [약속 연동]
 
-    final int totalCount = schedulesInRange.length + blocksInRange.length;
-    final int completedCount =
-        schedulesInRange.where((s) => s.isCompleted).length + blocksInRange.where((b) => b.status == 'completed').length;
+    // 🆕 [약속 연동] 약속도 일정/타임라인과 함께 전체 완료율에 포함시킴
+    final int totalCount = schedulesInRange.length + blocksInRange.length + appointmentsInRange.length;
+    final int completedCount = schedulesInRange.where((s) => s.isCompleted).length +
+        blocksInRange.where((b) => b.status == 'completed').length +
+        appointmentsInRange.where((a) => a.isCompleted).length;
 
     final Map<String, int> categoryMinutes = {};
     for (final block in blocksInRange) {
@@ -157,5 +163,11 @@ class ReportDataService {
   static Future<int> countAchievementsInRange(DateTime start, DateTime end) async {
     final all = await GoalDataService.loadAchievements();
     return all.where((a) => _inRange(a.achievedDate, start, end)).length;
+  }
+
+  // 🆕 [프로젝트 연동] 이 기간 안에 "완료" 처리된 프로젝트 개수
+  static Future<int> countProjectsCompletedInRange(DateTime start, DateTime end) async {
+    final all = await ProjectDataService.loadAll();
+    return all.where((p) => p.status == '완료' && p.completedDate.isNotEmpty && _inRange(p.completedDate, start, end)).length;
   }
 }

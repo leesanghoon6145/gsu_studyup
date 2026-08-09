@@ -241,6 +241,17 @@ class TimelineDataService {
     await _saveRoutines(all);
   }
 
+  // 🆕 [수정 기능 신설] 기존엔 루틴을 만들기/삭제만 가능했고 수정이 없었음.
+  // 같은 id를 가진 루틴을 새 내용(이름/항목)으로 교체.
+  static Future<void> updateRoutine(RoutineTemplate updated) async {
+    final all = await loadRoutines();
+    final idx = all.indexWhere((r) => r.id == updated.id);
+    if (idx != -1) {
+      all[idx] = updated;
+      await _saveRoutines(all);
+    }
+  }
+
   static Future<void> deleteRoutine(String id) async {
     final all = await loadRoutines();
     all.removeWhere((e) => e.id == id);

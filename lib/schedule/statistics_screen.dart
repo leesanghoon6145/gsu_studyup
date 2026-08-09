@@ -1,13 +1,16 @@
 // ============================================================================
-// 🆕 [일반 플래너 4단계] StatisticsScreen
-// 전체 기간 누적 분류별 시간 비중과, 올해 1~12월 완료율 막대그래프를
-// 보여줍니다. 기록이 없는 달은 회색 "데이터 없음" 막대로 구분해서 표시하고,
-// 0%처럼 보이는 가짜 값을 만들지 않습니다.
+// 🆕 [일반 플래너 - 병기+연동 정리] StatisticsScreen
+// 전체 기간 누적 분류별 시간 비중, 올해 1~12월 완료율 막대그래프, 그리고
+// 지금까지 총 달성한 목표 개수를 보여줍니다. 기록이 없는 달은 회색
+// "No Data" 막대로 구분해서 표시하고, 가짜 값을 만들지 않습니다.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'report_data_service.dart';
+import 'goal_data_service.dart'; // 🆕 [목표 연동] 총 달성 목표 개수 표시용
+import 'project_data_service.dart'; // 🆕 [프로젝트 연동] 총 완료 프로젝트 개수 표시용
+import 'bilingual_text.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -32,6 +35,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   ReportSummary? _allTimeSummary;
   Map<int, int> _monthlyRates = {};
+  int _totalAchievements = 0; // 🆕 [목표 연동]
+  int _totalCompletedProjects = 0; // 🆕 [프로젝트 연동]
   bool _isLoading = true;
 
   @override
@@ -43,14 +48,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     final now = DateTime.now();
-    // 전체 기간 집계를 위해 넉넉히 5년 전부터 오늘까지로 범위를 잡음
     final summary = await ReportDataService.summarize(DateTime(now.year - 5, 1, 1), now);
     final monthly = await ReportDataService.calcMonthlyCompletionRates(now.year);
+    final achievements = await GoalDataService.loadAchievements(); // 🆕 [목표 연동]
+    final allProjects = await ProjectDataService.loadAll(); // 🆕 [프로젝트 연동]
+    final completedProjects = allProjects.where((p) => p.status == '완료').length;
 
     if (!mounted) return;
     setState(() {
       _allTimeSummary = summary;
       _monthlyRates = monthly;
+      _totalAchievements = achievements.length;
+      _totalCompletedProjects = completedProjects;
       _isLoading = false;
     });
   }
@@ -63,26 +72,55 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('STATISTICS', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('통계', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
+        title: const BiTitle(en: 'STATISTICS', ko: '통계', enSize: 19, koSize: 14),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _buildAchievementCard(), // 🆕 [목표 연동]
+          const SizedBox(height: 16),
+          _buildProjectCard(), // 🆕 [프로젝트 연동]
+          const SizedBox(height: 16),
           _buildCategoryBreakdownCard(),
           const SizedBox(height: 16),
           _buildMonthlyBarChartCard(),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [목표 연동] 지금까지 총 달성한 목표 개수
+  Widget _buildAchievementCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Row(
+        children: [
+          const Icon(Icons.emoji_events, color: _brandGolden, size: 24),
+          const SizedBox(width: 12),
+          const Expanded(child: BiInline(en: 'Total Goals Achieved', ko: '총 달성한 목표', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text('$_totalAchievements', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [프로젝트 연동] 지금까지 총 완료한 프로젝트 개수
+  Widget _buildProjectCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Row(
+        children: [
+          const Icon(Icons.rocket_launch_rounded, color: _brandGolden, size: 24),
+          const SizedBox(width: 12),
+          const Expanded(child: BiInline(en: 'Total Projects Completed', ko: '총 완료된 프로젝트', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text('$_totalCompletedProjects', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -96,16 +134,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('시간 사용 비율 (전체 기간)', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          const BiInline(en: 'Time Usage (All Time)', ko: '시간 사용 비율 (전체 기간)', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
           const SizedBox(height: 14),
           if (total == 0)
-            Text('아직 완료된 타임라인 기록이 없습니다.', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12))
+            const BiInline(en: 'No completed timeline records yet.', ko: '아직 완료된 타임라인 기록이 없습니다.', color: Colors.white38, fontSize: 12)
           else ...[
-            // 가로 누적 막대 (원형 그래프 대신, 실제 개발 시간을 절약할 수 있는 누적 바 형태로 표현)
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -114,10 +151,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   children: List.generate(entries.length, (i) {
                     final e = entries[i];
                     final double flexValue = e.value / total;
-                    return Expanded(
-                      flex: (flexValue * 1000).round().clamp(1, 1000),
-                      child: Container(color: _categoryColors[i % _categoryColors.length]),
-                    );
+                    return Expanded(flex: (flexValue * 1000).round().clamp(1, 1000), child: Container(color: _categoryColors[i % _categoryColors.length]));
                   }),
                 ),
               ),
@@ -149,11 +183,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${now.year}년 월별 목표 달성률', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          BiInline(en: '${now.year} Monthly Completion', ko: '${now.year}년 월별 목표 달성률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
           const SizedBox(height: 16),
           ...List.generate(12, (i) {
             final int month = i + 1;
@@ -167,21 +201,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   Expanded(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: hasData ? rate / 100 : 0,
-                        minHeight: 14,
-                        backgroundColor: Colors.white12,
-                        valueColor: AlwaysStoppedAnimation<Color>(hasData ? _brandGolden : Colors.white24),
-                      ),
+                      child: LinearProgressIndicator(value: hasData ? rate / 100 : 0, minHeight: 14, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(hasData ? _brandGolden : Colors.white24)),
                     ),
                   ),
                   const SizedBox(width: 10),
                   SizedBox(
-                    width: 60,
-                    child: Text(
-                      hasData ? '$rate%' : '데이터없음',
-                      style: TextStyle(color: hasData ? _brandGolden : Colors.white24, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                    width: 62,
+                    child: Text(hasData ? '$rate%' : 'No Data', style: TextStyle(color: hasData ? _brandGolden : Colors.white24, fontSize: 10.5, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
