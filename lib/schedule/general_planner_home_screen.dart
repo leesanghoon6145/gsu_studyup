@@ -1,14 +1,18 @@
 // ============================================================================
-// 🆕 [일반 플래너 3단계 갱신] GeneralPlannerHomeScreen
-// 1단계(일정)+2단계(타임라인)에 이어, 3단계(목표: 인생/연간/월간/주간/오늘
-// 목표/ToDo/진행률/성취)까지 전부 실제로 연결되었습니다. 리포트 섹션만
-// 아직 "준비 중"이며 4단계에서 이어서 만들 예정입니다.
+// 🆕 [일반 플래너 4단계 - 최종] GeneralPlannerHomeScreen
+// 1단계(일정)+2단계(타임라인)+3단계(목표)+4단계(리포트)까지 전체 4개 대분류가
+// 모두 실제로 연결된 최종 버전입니다. "약속/프로젝트/알림/일정분석"만 아직
+// 준비 중이며, 나머지 모든 메뉴는 실제 데이터를 저장/불러오는 화면입니다.
 // 디자인 톤: 기존 home_dashboard_screen.dart와 동일한 다크네이비+골드 테마.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'calendar_screen.dart';
+import 'appointment_screen.dart';
+import 'project_screen.dart';
+import 'reminder_screen.dart';
+import 'schedule_analysis_screen.dart';
 import 'today_schedule_screen.dart';
 import 'today_timeline_screen.dart';
 import 'routine_screen.dart';
@@ -23,6 +27,11 @@ import 'today_goal_screen.dart';
 import 'todo_screen.dart';
 import 'progress_screen.dart';
 import 'achievement_screen.dart';
+import 'daily_report_screen.dart';
+import 'weekly_report_screen.dart';
+import 'monthly_report_screen.dart';
+import 'yearly_report_screen.dart';
+import 'statistics_screen.dart';
 
 class GeneralPlannerHomeScreen extends StatelessWidget {
   const GeneralPlannerHomeScreen({super.key});
@@ -57,10 +66,10 @@ class GeneralPlannerHomeScreen extends StatelessWidget {
             _buildMenuGrid(context, [
               _MenuEntry('📅', 'CALENDAR', '캘린더', () => _navigate(context, const CalendarScreen())),
               _MenuEntry('📝', "TODAY'S SCHEDULE", '오늘의 일정', () => _navigate(context, const TodayScheduleScreen())),
-              _MenuEntry('⏰', 'APPOINTMENT', '약속', () => _showComingSoon(context, '약속')),
-              _MenuEntry('📌', 'PROJECT', '프로젝트', () => _showComingSoon(context, '프로젝트')),
-              _MenuEntry('🔔', 'REMINDER', '알림', () => _showComingSoon(context, '알림')),
-              _MenuEntry('📈', 'SCHEDULE ANALYSIS', '일정 분석', () => _showComingSoon(context, '일정 분석')),
+              _MenuEntry('⏰', 'APPOINTMENT', '약속', () => _navigate(context, const AppointmentScreen())),
+              _MenuEntry('📌', 'PROJECT', '프로젝트', () => _navigate(context, const ProjectScreen())),
+              _MenuEntry('🔔', 'REMINDER', '알림', () => _navigate(context, const ReminderScreen())),
+              _MenuEntry('📈', 'SCHEDULE ANALYSIS', '일정 분석', () => _navigate(context, const ScheduleAnalysisScreen())),
             ]),
             const SizedBox(height: 30),
 
@@ -92,11 +101,11 @@ class GeneralPlannerHomeScreen extends StatelessWidget {
             _buildSectionTitle('REPORT', '리포트'),
             const SizedBox(height: 12),
             _buildMenuGrid(context, [
-              _MenuEntry('📊', 'DAILY REPORT', '일간 리포트', () => _showComingSoon(context, '일간 리포트')),
-              _MenuEntry('📊', 'WEEKLY REPORT', '주간 리포트', () => _showComingSoon(context, '주간 리포트')),
-              _MenuEntry('📊', 'MONTHLY REPORT', '월간 리포트', () => _showComingSoon(context, '월간 리포트')),
-              _MenuEntry('📊', 'YEARLY REPORT', '연간 리포트', () => _showComingSoon(context, '연간 리포트')),
-              _MenuEntry('📈', 'STATISTICS', '통계', () => _showComingSoon(context, '통계')),
+              _MenuEntry('📊', 'DAILY REPORT', '일간 리포트', () => _navigate(context, const DailyReportScreen())),
+              _MenuEntry('📊', 'WEEKLY REPORT', '주간 리포트', () => _navigate(context, const WeeklyReportScreen())),
+              _MenuEntry('📊', 'MONTHLY REPORT', '월간 리포트', () => _navigate(context, const MonthlyReportScreen())),
+              _MenuEntry('📊', 'YEARLY REPORT', '연간 리포트', () => _navigate(context, const YearlyReportScreen())),
+              _MenuEntry('📈', 'STATISTICS', '통계', () => _navigate(context, const StatisticsScreen())),
             ]),
             const SizedBox(height: 20),
           ],

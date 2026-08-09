@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
+import 'bilingual_text.dart';
 
 class AchievementScreen extends StatefulWidget {
   const AchievementScreen({super.key});
@@ -27,6 +28,13 @@ class _AchievementScreenState extends State<AchievementScreen> {
     'monthly': '월간 목표',
     'weekly': '주간 목표',
     'today': '오늘 목표',
+  };
+  static const Map<String, String> _typeLabelsEn = {
+    'life': 'Life Goal',
+    'yearly': 'Yearly Goal',
+    'monthly': 'Monthly Goal',
+    'weekly': 'Weekly Goal',
+    'today': 'Today Goal',
   };
 
   List<AchievementRecord> _achievements = [];
@@ -60,20 +68,19 @@ class _AchievementScreenState extends State<AchievementScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('ACHIEVEMENT', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('성취', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
+        title: const BiTitle(en: 'ACHIEVEMENT', ko: '성취', enSize: 17, koSize: 13),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _achievements.isEmpty
           ? Center(
-        child: Text('아직 달성한 목표가 없습니다.\n목표 화면에서 "성취 완료"를 눌러보세요.',
-            textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 14)),
+        child: BiInline(
+          en: 'No achievements yet.\nToggle "Achieved" in a goal to record one.',
+          ko: '아직 달성한 목표가 없습니다.\n목표 화면에서 "달성함"을 켜보세요.',
+          color: Colors.white38,
+          fontSize: 14,
+          textAlign: TextAlign.center,
+        ),
       )
           : ListView(
         padding: const EdgeInsets.all(16),
@@ -82,12 +89,12 @@ class _AchievementScreenState extends State<AchievementScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+            decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
             child: Row(
               children: [
                 const Icon(Icons.emoji_events, color: _brandGolden, size: 32),
                 const SizedBox(width: 12),
-                Text('총 ${_achievements.length}개 달성', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                BiInline(en: 'Total ${_achievements.length} achieved', ko: '총 ${_achievements.length}개 달성', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
               ],
             ),
           ),
@@ -111,8 +118,12 @@ class _AchievementScreenState extends State<AchievementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(record.goalTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('${_typeLabels[record.goalType] ?? record.goalType} · ${record.achievedDate}',
-                    style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11)),
+                BiInline(
+                  en: '${_typeLabelsEn[record.goalType] ?? record.goalType} · ${record.achievedDate}',
+                  ko: '${_typeLabels[record.goalType] ?? record.goalType} · ${record.achievedDate}',
+                  color: Colors.white38,
+                  fontSize: 10.5,
+                ),
               ],
             ),
           ),

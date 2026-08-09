@@ -1,13 +1,14 @@
 // ============================================================================
-// 🆕 [일반 플래너 3단계] LifeGoalScreen
-// 장기적인 인생 목표(예: "50세까지 내 집 마련", "건강하게 은퇴하기")를
-// 관리하는 화면입니다. 기간별 목표(연간~오늘)와 구조는 동일하지만, 기간
-// 개념이 없다는 점만 다르므로 독립된 화면으로 만들었습니다.
+// 🆕 [일반 플래너 - 고급 팝업 + 병기 적용] LifeGoalScreen
+// 장기적인 인생 목표를 관리합니다. period_goal_screen.dart와 동일한 디자인
+// 원칙(진한 골드 팝업, 가로3선 연필, 하단 삭제/취소/저장 한 줄, 영한 병기)을
+// 적용했습니다. 기간(periodKey) 개념이 없다는 점만 기간별 목표와 다릅니다.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
+import 'bilingual_text.dart';
 
 class LifeGoalScreen extends StatefulWidget {
   const LifeGoalScreen({super.key});
@@ -46,108 +47,144 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
     });
   }
 
-  Future<void> _showAddGoalDialog() async {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController categoryController = TextEditingController();
+  Future<void> _showGoalDialog({GoalItem? existing}) async {
+    final bool isEdit = existing != null;
+    final titleController = TextEditingController(text: existing?.title ?? '');
+    final categoryController = TextEditingController(text: existing?.category ?? '');
+    bool isAchieved = existing?.isAchieved ?? false;
 
-    final bool? confirmed = await showDialog<bool>(
+    final String? action = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _containerBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'ADD LIFE GOAL\n(인생 목표 추가)',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '목표 (예: 건강하게 은퇴하기)',
-                hintStyle: const TextStyle(color: Colors.white38),
-                filled: true,
-                fillColor: _pageBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.all(12),
+      barrierColor: Colors.black.withOpacity(0.65),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+            child: LuxuryDialogFrame(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    luxuryDialogHeader(icon: isEdit ? Icons.edit_note_rounded : Icons.stars_rounded, en: isEdit ? 'EDIT LIFE GOAL' : 'ADD LIFE GOAL', ko: isEdit ? '인생 목표 수정' : '인생 목표 추가'),
+
+                    _buildField(icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 건강하게 은퇴하기'),
+                    const SizedBox(height: 12),
+                    _buildField(icon: Icons.category_outlined, controller: categoryController, hintEn: 'Category', hintKo: '건강/재정/가족, 비워도 됨'),
+                    const SizedBox(height: 14),
+
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const BiInline(en: 'Achieved', ko: '달성함', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                          Switch(value: isAchieved, activeColor: _brandGolden, onChanged: (v) => setDialogState(() => isAchieved = v)),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    luxuryBottomActions(
+                      isEdit: isEdit,
+                      onDelete: isEdit ? () => Navigator.of(context).pop('delete') : null,
+                      onCancel: () => Navigator.of(context).pop(null),
+                      onSave: () {
+                        if (titleController.text.trim().isEmpty) return;
+                        Navigator.of(context).pop('save');
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: categoryController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '분야 (예: 건강/재정/가족, 비워도 됨)',
-                hintStyle: const TextStyle(color: Colors.white38),
-                filled: true,
-                fillColor: _pageBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.all(12),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('취소', style: TextStyle(color: Colors.white54))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
-            onPressed: () {
-              if (titleController.text.trim().isEmpty) return;
-              Navigator.of(context).pop(true);
-            },
-            child: const Text('저장', style: TextStyle(color: _pageBg, fontWeight: FontWeight.bold)),
-          ),
-        ],
+          );
+        },
       ),
     );
 
-    if (confirmed == true && titleController.text.trim().isNotEmpty) {
-      final newGoal = GoalItem(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        type: 'life',
-        title: titleController.text.trim(),
-        category: categoryController.text.trim().isEmpty ? '일반' : categoryController.text.trim(),
-        createdAt: DateTime.now().toIso8601String(),
-      );
-      await GoalDataService.addGoal(newGoal);
+    if (action == 'delete' && existing != null) {
+      await GoalDataService.deleteGoal(existing.id);
+      await _loadGoals();
+      return;
+    }
+
+    if (action == 'save' && titleController.text.trim().isNotEmpty) {
+      if (isEdit) {
+        final wasAchieved = existing!.isAchieved;
+        final updated = GoalItem(
+          id: existing.id,
+          type: 'life',
+          title: titleController.text.trim(),
+          category: categoryController.text.trim().isEmpty ? '일반' : categoryController.text.trim(),
+          periodKey: existing.periodKey,
+          isAchieved: isAchieved,
+          createdAt: existing.createdAt,
+        );
+        if (isAchieved && !wasAchieved) {
+          await GoalDataService.markGoalAchieved(updated);
+        } else {
+          await GoalDataService.updateGoal(updated);
+        }
+      } else {
+        final newGoal = GoalItem(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          type: 'life',
+          title: titleController.text.trim(),
+          category: categoryController.text.trim().isEmpty ? '일반' : categoryController.text.trim(),
+          isAchieved: isAchieved,
+          createdAt: DateTime.now().toIso8601String(),
+        );
+        await GoalDataService.addGoal(newGoal);
+        if (isAchieved) await GoalDataService.markGoalAchieved(newGoal);
+      }
       await _loadGoals();
     }
   }
 
   Future<void> _showAddTodoDialog(GoalItem goal) async {
-    final TextEditingController controller = TextEditingController();
+    final controller = TextEditingController();
     final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _containerBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('할 일 추가', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: '예: 매달 50만원 저축',
-            hintStyle: const TextStyle(color: Colors.white38),
-            filled: true,
-            fillColor: _pageBg,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.all(12),
+      barrierColor: Colors.black.withOpacity(0.65),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: LuxuryDialogFrame(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              luxuryDialogHeader(icon: Icons.playlist_add_rounded, en: 'ADD TASK', ko: '할 일 추가'),
+              _buildField(icon: Icons.check_box_outlined, controller: controller, hintEn: 'Task', hintKo: 'e.g. 매달 50만원 저축'),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white70, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      onPressed: () {
+                        if (controller.text.trim().isEmpty) return;
+                        Navigator.of(context).pop(true);
+                      },
+                      child: const BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('취소', style: TextStyle(color: Colors.white54))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
-            onPressed: () {
-              if (controller.text.trim().isEmpty) return;
-              Navigator.of(context).pop(true);
-            },
-            child: const Text('추가', style: TextStyle(color: _pageBg, fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
 
@@ -179,10 +216,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(goal.title, style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
+                BiInline(en: goal.title, ko: 'Tasks (할 일)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
                 const SizedBox(height: 12),
                 if (todos.isEmpty)
-                  Text('연결된 할 일이 없습니다.', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13))
+                  const BiInline(en: 'No tasks yet', ko: '연결된 할 일이 없습니다', color: Colors.white38, fontSize: 13)
                 else
                   ...todos.map((t) => CheckboxListTile(
                     value: t.isCompleted,
@@ -205,18 +242,21 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
     );
   }
 
-  Future<void> _achieveGoal(GoalItem goal) async {
-    await GoalDataService.markGoalAchieved(goal);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${goal.title}" 목표를 달성했습니다! 🎉', style: GoogleFonts.notoSansKr())),
+  Widget _buildField({required IconData icon, required TextEditingController controller, required String hintEn, required String hintKo}) {
+    return Container(
+      decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: _brandGolden.withOpacity(0.85), size: 19),
+          hintText: biHint(hintEn, hintKo),
+          hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
     );
-    await _loadGoals();
-  }
-
-  Future<void> _deleteGoal(GoalItem goal) async {
-    await GoalDataService.deleteGoal(goal.id);
-    await _loadGoals();
   }
 
   @override
@@ -227,25 +267,13 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('LIFE GOAL', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('인생 목표', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
+        title: const BiTitle(en: 'LIFE GOAL', ko: '인생 목표', enSize: 17, koSize: 13),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _goals.isEmpty
-          ? Center(
-        child: Text('등록된 인생 목표가 없습니다.\n+ 버튼으로 추가해 보세요.',
-            textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 14)),
-      )
+          ? Center(child: BiInline(en: 'No life goals yet. Tap + to add one.', ko: '등록된 인생 목표가 없습니다. + 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center))
           : ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _goals.length,
@@ -253,7 +281,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _brandGolden,
-        onPressed: _showAddGoalDialog,
+        onPressed: () => _showGoalDialog(),
         child: const Icon(Icons.add, color: _pageBg),
       ),
     );
@@ -266,11 +294,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _containerBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: goal.isAchieved ? _brandGolden : Colors.white12, width: goal.isAchieved ? 1.5 : 1),
-      ),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(14), border: Border.all(color: _brandGolden.withOpacity(goal.isAchieved ? 0.7 : 0.4), width: goal.isAchieved ? 1.6 : 1)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -278,20 +302,13 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
             children: [
               if (goal.isAchieved) const Padding(padding: EdgeInsets.only(right: 6), child: Icon(Icons.emoji_events, color: _brandGolden, size: 18)),
               Expanded(
-                child: Text(goal.title,
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, decoration: goal.isAchieved ? TextDecoration.lineThrough : null)),
+                child: Text(goal.title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, decoration: goal.isAchieved ? TextDecoration.lineThrough : null)),
               ),
-              PopupMenuButton<String>(
-                color: _containerBg,
-                icon: const Icon(Icons.more_vert, color: Colors.white38, size: 20),
-                onSelected: (value) {
-                  if (value == 'delete') _deleteGoal(goal);
-                  if (value == 'achieve') _achieveGoal(goal);
-                },
-                itemBuilder: (context) => [
-                  if (!goal.isAchieved) PopupMenuItem(value: 'achieve', child: Text('성취 완료', style: GoogleFonts.notoSansKr(color: _brandGolden))),
-                  PopupMenuItem(value: 'delete', child: Text('삭제', style: GoogleFonts.notoSansKr(color: Colors.redAccent))),
-                ],
+              IconButton(
+                icon: const HorizontalPencilIcon(size: 18),
+                onPressed: () => _showGoalDialog(existing: goal),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
               ),
             ],
           ),
@@ -299,15 +316,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              backgroundColor: Colors.white12,
-              valueColor: const AlwaysStoppedAnimation<Color>(_brandGolden),
-            ),
+            child: LinearProgressIndicator(value: progress, minHeight: 10, backgroundColor: Colors.white12, valueColor: const AlwaysStoppedAnimation<Color>(_brandGolden)),
           ),
           const SizedBox(height: 6),
-          Text('$percent% 진행', style: GoogleFonts.notoSansKr(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+          BiInline(en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -316,7 +328,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                   style: OutlinedButton.styleFrom(side: const BorderSide(color: _brandGolden)),
                   onPressed: () => _showGoalTodos(goal),
                   icon: const Icon(Icons.checklist, color: _brandGolden, size: 16),
-                  label: Text('할 일 보기', style: GoogleFonts.notoSansKr(color: _brandGolden, fontSize: 12)),
+                  label: const BiInline(en: 'View Tasks', ko: '할 일 보기', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 8),
@@ -325,7 +337,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                   style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white38)),
                   onPressed: () => _showAddTodoDialog(goal),
                   icon: const Icon(Icons.add, color: Colors.white70, size: 16),
-                  label: Text('할 일 추가', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12)),
+                  label: const BiInline(en: 'Add Task', ko: '할 일 추가', color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
             ],

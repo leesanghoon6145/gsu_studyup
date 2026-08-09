@@ -1,14 +1,67 @@
 // ============================================================================
-// 🆕 [일반 플래너 1단계] CalendarScreen
-// 월간 캘린더를 보여주고, 일정이 있는 날짜에 점(●)을 표시합니다.
+// 🆕 [일반 플래너 1단계 - 다국어 정리 + 카테고리/디자인 고급화 + UX개선] CalendarScreen
+// 월간 캘린더를 보여주고, 일정이 있는 날짜에 카테고리별 색상 점을 표시합니다.
 // 날짜를 탭하면 그날의 일정 목록을 하단에 보여주고, 그 자리에서 새 일정을
-// 추가할 수 있습니다. 데이터는 ScheduleDataService를 통해 다른 화면과 공유됩니다.
-// 디자인 톤: 기존 앱과 동일한 다크네이비(#030712)+골드(#E5C158) 테마.
+// 추가/수정할 수 있습니다. 데이터는 ScheduleDataService를 통해 다른 화면과 공유됩니다.
+//
+// 🆕 [카테고리] 중요일정(빨강)/회사일정(진파랑)/개인일정(진노랑) 3종 프리셋.
+// 🆕 [요일 색상] 일요일 날짜 숫자는 빨강, 토요일은 파랑으로 표시.
+// 🆕 [수정 UX] 일정 목록의 개별 연필/휴지통 아이콘을 없애고, 3선(파랑/노랑/흰색)
+// 연필 모양 아이콘 하나로 통합 — 누르면 수정 팝업이 열리고, 그 팝업 맨 아래에
+// 삭제/취소/저장 3개 버튼을 작게 한 줄로 배치함.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'schedule_data_service.dart';
+import 'bilingual_text.dart';
+import 'holiday_data.dart'; // 🆕 [국경일 표시] 대한민국 공휴일 데이터
+
+// 🆕 카테고리 프리셋 정의 (색상 + 영/한 라벨)
+class ScheduleCategory {
+  final String koLabel;
+  final String enLabel;
+  final Color color;
+  const ScheduleCategory({required this.koLabel, required this.enLabel, required this.color});
+}
+
+const List<ScheduleCategory> kScheduleCategories = [
+  ScheduleCategory(koLabel: '중요일정', enLabel: 'Important', color: Color(0xFFDC2626)),
+  ScheduleCategory(koLabel: '회사일정', enLabel: 'Company', color: Color(0xFF1E3A8A)),
+  ScheduleCategory(koLabel: '개인일정', enLabel: 'Personal', color: Color(0xFFB8860B)),
+];
+
+Color categoryColorOf(String category) {
+  for (final c in kScheduleCategories) {
+    if (c.koLabel == category) return c.color;
+  }
+  return const Color(0xFFE5C158); // 기존 데이터(분류 미지정)는 골드로 표시
+}
+
+// 🆕 [수정 아이콘] 파랑/노랑/흰색 3개의 대각선으로 이루어진 연필 모양 아이콘
+class TriColorPencilIcon extends StatelessWidget {
+  final double size;
+  const TriColorPencilIcon({super.key, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Transform.rotate(
+        angle: -0.78, // 약 -45도, 연필이 대각선으로 놓인 모양
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(2))),
+            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFFFACC15), borderRadius: BorderRadius.circular(2))),
+            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2))),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -21,11 +74,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   static const Color _brandGolden = Color(0xFFE5C158);
   static const Color _pageBg = Color(0xFF030712);
   static const Color _containerBg = Color(0xFF0D1527);
+  static const Color _sundayRed = Color(0xFFEF4444);
+  static const Color _saturdayBlue = Color(0xFF3B82F6);
 
   DateTime _displayedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _selectedDate = DateTime.now();
 
-  Set<String> _datesWithSchedule = {};
+  Map<String, Set<String>> _categoriesByDate = {};
   List<ScheduleItem> _selectedDateItems = [];
   bool _isLoading = true;
 
@@ -40,11 +95,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Future<void> _loadCalendarData() async {
     setState(() => _isLoading = true);
-    final dates = await ScheduleDataService.loadDatesWithSchedule();
+    final all = await ScheduleDataService.loadAll();
+    final Map<String, Set<String>> catMap = {};
+    for (final item in all) {
+      catMap.putIfAbsent(item.date, () => {}).add(item.category);
+    }
     final items = await ScheduleDataService.loadForDate(_dateKey(_selectedDate));
     if (!mounted) return;
     setState(() {
-      _datesWithSchedule = dates;
+      _categoriesByDate = catMap;
       _selectedDateItems = items;
       _isLoading = false;
     });
@@ -69,103 +128,270 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
   }
 
-  Future<void> _showAddScheduleDialog() async {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController timeController = TextEditingController();
-    final TextEditingController memoController = TextEditingController();
+  // 🆕 [수정/삭제 지원] existingItem이 있으면 "수정 모드" — 팝업 맨 아래에 삭제 버튼도 함께 표시.
+  // 반환값: 'save'(저장/수정완료) | 'delete'(삭제) | null(취소)
+  Future<void> _showScheduleDialog({ScheduleItem? existingItem}) async {
+    final bool isEditMode = existingItem != null;
+    final TextEditingController titleController = TextEditingController(text: existingItem?.title ?? '');
+    final TextEditingController timeController = TextEditingController(text: existingItem?.time ?? '');
+    final TextEditingController memoController = TextEditingController(text: existingItem?.memo ?? '');
+    String? selectedCategory = existingItem?.category ??
+        (kScheduleCategories.isNotEmpty ? kScheduleCategories.last.koLabel : null); // 기본값: 개인일정
 
-    final bool? confirmed = await showDialog<bool>(
+    final String? action = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _containerBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'ADD SCHEDULE\n(일정 추가)',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '제목 (예: 병원 예약)',
-                hintStyle: const TextStyle(color: Colors.white38),
-                filled: true,
-                fillColor: _pageBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.all(12),
+      barrierColor: Colors.black.withOpacity(0.6),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF11192E), Color(0xFF0A0F1E)],
+                ),
+                border: Border.all(color: _brandGolden.withOpacity(0.45), width: 1.2),
+                boxShadow: [
+                  BoxShadow(color: _brandGolden.withOpacity(0.18), blurRadius: 34, spreadRadius: 1),
+                  const BoxShadow(color: Colors.black, blurRadius: 24, offset: Offset(0, 10)),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 상단 헤더
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(isEditMode ? Icons.edit_calendar_rounded : Icons.event_available_rounded, color: _brandGolden, size: 22),
+                        const SizedBox(width: 8),
+                        BiTitle(
+                          en: isEditMode ? 'EDIT SCHEDULE' : 'ADD SCHEDULE',
+                          ko: isEditMode ? '일정 수정' : '일정 추가',
+                          enSize: 17,
+                          koSize: 12.5,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 1,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.transparent, _brandGolden.withOpacity(0.5), Colors.transparent],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // 카테고리 선택
+                    const BiInline(en: 'CATEGORY', ko: '분류', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: kScheduleCategories.map((cat) {
+                        final bool isSel = selectedCategory == cat.koLabel;
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() => selectedCategory = cat.koLabel),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+                                decoration: BoxDecoration(
+                                  color: isSel ? cat.color.withOpacity(0.18) : _pageBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: isSel ? cat.color : Colors.white12, width: isSel ? 1.4 : 1),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 14,
+                                      height: 14,
+                                      decoration: BoxDecoration(color: cat.color, borderRadius: BorderRadius.circular(3)),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    // 🆕 [영한 병기] 영문(위, 작게) + 한글(아래) 2줄로 표시
+                                    Text(
+                                      cat.enLabel,
+                                      style: GoogleFonts.gowunBatang(
+                                        color: isSel ? Colors.white70 : Colors.white38,
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      cat.koLabel,
+                                      style: GoogleFonts.notoSansKr(
+                                        color: isSel ? Colors.white : Colors.white54,
+                                        fontSize: 10.5,
+                                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 18),
+
+                    _buildDialogField(icon: Icons.title_rounded, controller: titleController, hintEn: 'Title', hintKo: 'e.g. 병원 예약'),
+                    const SizedBox(height: 12),
+                    _buildDialogField(icon: Icons.access_time_rounded, controller: timeController, hintEn: 'Time', hintKo: '예: 14:30, 비워도 됨'),
+                    const SizedBox(height: 12),
+                    _buildDialogField(icon: Icons.notes_rounded, controller: memoController, hintEn: 'Memo', hintKo: '선택 사항', maxLines: 2),
+
+                    const SizedBox(height: 20),
+
+                    // 🆕 [UX개선] 맨 아래 버튼 - 수정 모드일 때만 삭제 버튼 포함, 크기 줄여서 한 줄에 배치
+                    Row(
+                      children: [
+                        if (isEditMode) ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFFDC2626)),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => Navigator.of(context).pop('delete'),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Delete', style: GoogleFonts.gowunBatang(color: const Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                  Text('삭제', style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white24),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => Navigator.of(context).pop(null),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Cancel', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                Text('취소', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _brandGolden,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              elevation: 4,
+                              shadowColor: _brandGolden.withOpacity(0.5),
+                            ),
+                            onPressed: () {
+                              if (titleController.text.trim().isEmpty) return;
+                              Navigator.of(context).pop('save');
+                            },
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(isEditMode ? 'Update' : 'Save', style: GoogleFonts.gowunBatang(color: _pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                Text(isEditMode ? '수정완료' : '저장', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: timeController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '시간 (예: 14:30, 비워도 됨)',
-                hintStyle: const TextStyle(color: Colors.white38),
-                filled: true,
-                fillColor: _pageBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.all(12),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: memoController,
-              maxLines: 2,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '메모 (선택)',
-                hintStyle: const TextStyle(color: Colors.white38),
-                filled: true,
-                fillColor: _pageBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.all(12),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
-            onPressed: () {
-              if (titleController.text.trim().isEmpty) return;
-              Navigator.of(context).pop(true);
-            },
-            child: const Text('저장', style: TextStyle(color: _pageBg, fontWeight: FontWeight.bold)),
-          ),
-        ],
+          );
+        },
       ),
     );
 
-    if (confirmed == true && titleController.text.trim().isNotEmpty) {
-      final newItem = ScheduleItem(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        date: _dateKey(_selectedDate),
-        time: timeController.text.trim(),
-        title: titleController.text.trim(),
-        memo: memoController.text.trim(),
-      );
-      await ScheduleDataService.add(newItem);
+    if (action == 'delete' && existingItem != null) {
+      await ScheduleDataService.delete(existingItem.id);
+      await _loadCalendarData();
+      return;
+    }
+
+    if (action == 'save' && titleController.text.trim().isNotEmpty) {
+      if (isEditMode) {
+        final updated = ScheduleItem(
+          id: existingItem!.id,
+          date: existingItem.date,
+          time: timeController.text.trim(),
+          title: titleController.text.trim(),
+          memo: memoController.text.trim(),
+          category: selectedCategory ?? existingItem.category,
+          isCompleted: existingItem.isCompleted,
+        );
+        await ScheduleDataService.update(updated);
+      } else {
+        final newItem = ScheduleItem(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          date: _dateKey(_selectedDate),
+          time: timeController.text.trim(),
+          title: titleController.text.trim(),
+          memo: memoController.text.trim(),
+          category: selectedCategory ?? '개인일정',
+        );
+        await ScheduleDataService.add(newItem);
+      }
       await _loadCalendarData();
     }
+  }
+
+  Widget _buildDialogField({
+    required IconData icon,
+    required TextEditingController controller,
+    required String hintEn,
+    required String hintKo,
+    int maxLines = 1,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _pageBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: _brandGolden.withOpacity(0.85), size: 19),
+          hintText: biHint(hintEn, hintKo),
+          hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleComplete(ScheduleItem item) async {
     item.isCompleted = !item.isCompleted;
     await ScheduleDataService.update(item);
-    await _loadCalendarData();
-  }
-
-  Future<void> _deleteItem(ScheduleItem item) async {
-    await ScheduleDataService.delete(item.id);
     await _loadCalendarData();
   }
 
@@ -181,13 +407,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('CALENDAR', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 20)),
-            Text('캘린더', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
-          ],
-        ),
+        title: const BiTitle(en: 'CALENDAR', ko: '캘린더', enSize: 19, koSize: 14),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -205,7 +425,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _brandGolden,
-        onPressed: _showAddScheduleDialog,
+        onPressed: () => _showScheduleDialog(),
         child: const Icon(Icons.add, color: _pageBg),
       ),
     );
@@ -220,7 +440,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           onPressed: _goToPreviousMonth,
         ),
         Text(
-          '${_displayedMonth.year}년 ${_displayedMonth.month}월',
+          '${_displayedMonth.year}.${_displayedMonth.month.toString().padLeft(2, '0')}',
           style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         IconButton(
@@ -234,16 +454,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildCalendarGrid() {
     final int daysInMonth = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 0).day;
     final int firstWeekday = DateTime(_displayedMonth.year, _displayedMonth.month, 1).weekday; // 1=월 ~ 7=일
-    // 일요일 시작 기준 앞쪽 빈 칸 개수 (weekday: 월=1...일=7 -> 일요일 시작 오프셋으로 변환)
-    final int leadingEmpty = firstWeekday % 7; // 일요일이면 0, 월요일이면 1 ...
+    final int leadingEmpty = firstWeekday % 7; // 일요일 시작 기준 앞쪽 빈 칸
 
     final List<Widget> dayCells = [];
 
-    const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
-    for (final label in weekdayLabels) {
+    const weekdayPairs = [
+      ['SUN', '일'], ['MON', '월'], ['TUE', '화'], ['WED', '수'], ['THU', '목'], ['FRI', '금'], ['SAT', '토'],
+    ];
+    for (int i = 0; i < weekdayPairs.length; i++) {
+      final pair = weekdayPairs[i];
+      // 🆕 [요일 색상] 요일 헤더도 일요일=빨강, 토요일=파랑으로 구분
+      final Color headerColor = i == 0 ? _sundayRed : (i == 6 ? _saturdayBlue : Colors.white);
       dayCells.add(
         Center(
-          child: Text(label, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(pair[0], style: GoogleFonts.gowunBatang(color: headerColor.withOpacity(0.85), fontSize: 10, fontWeight: FontWeight.w900)),
+              Text(pair[1], style: GoogleFonts.notoSansKr(color: headerColor, fontSize: 12, fontWeight: FontWeight.w900)),
+            ],
+          ),
         ),
       );
     }
@@ -255,9 +485,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
     for (int day = 1; day <= daysInMonth; day++) {
       final DateTime thisDate = DateTime(_displayedMonth.year, _displayedMonth.month, day);
       final String key = _dateKey(thisDate);
-      final bool hasSchedule = _datesWithSchedule.contains(key);
+      final Set<String> cats = _categoriesByDate[key] ?? {};
       final bool isSelected = _dateKey(_selectedDate) == key;
       final bool isToday = _dateKey(DateTime.now()) == key;
+
+      // 🆕 [요일/공휴일 색상] 공휴일이 최우선으로 빨강, 그 다음 일요일 빨강, 토요일 파랑.
+      // 선택된 날은 골드 배경과 대비되도록 어두운 색을 유지함.
+      final String? holidayName = KoreaHolidays.nameOf(thisDate);
+      Color numberColor;
+      if (isSelected) {
+        numberColor = _pageBg;
+      } else if (holidayName != null) {
+        numberColor = _sundayRed;
+      } else if (thisDate.weekday == DateTime.sunday) {
+        numberColor = _sundayRed;
+      } else if (thisDate.weekday == DateTime.saturday) {
+        numberColor = _saturdayBlue;
+      } else {
+        numberColor = Colors.white;
+      }
 
       dayCells.add(
         GestureDetector(
@@ -274,18 +520,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 Text(
                   '$day',
                   style: TextStyle(
-                    color: isSelected ? _pageBg : Colors.white,
+                    color: numberColor,
                     fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
-                if (hasSchedule)
-                  Container(
-                    margin: const EdgeInsets.only(top: 2),
-                    width: 5,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: isSelected ? _pageBg : _brandGolden,
-                      shape: BoxShape.circle,
+                if (cats.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: cats.take(3).map((c) {
+                        final color = isSelected ? _pageBg : categoryColorOf(c);
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                        );
+                      }).toList(),
                     ),
                   ),
               ],
@@ -316,16 +568,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${_selectedDate.month}월 ${_selectedDate.day}일 일정',
-            style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+          BiInline(
+            en: '${_selectedDate.month}/${_selectedDate.day} Schedule',
+            ko: '${_selectedDate.month}월 ${_selectedDate.day}일 일정',
+            color: _brandGolden,
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
           ),
+          // 🆕 [국경일 표시] 선택한 날짜가 공휴일이면 이름을 함께 표시
+          if (KoreaHolidays.nameOf(_selectedDate) != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.celebration_outlined, color: _sundayRed, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  KoreaHolidays.nameOf(_selectedDate)!,
+                  style: GoogleFonts.notoSansKr(color: _sundayRed, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           if (_selectedDateItems.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 20),
               child: Center(
-                child: Text('등록된 일정이 없습니다.', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13)),
+                child: BiInline(en: 'No schedules yet', ko: '등록된 일정이 없습니다', color: Colors.white38, fontSize: 13),
               ),
             )
           else
@@ -354,6 +623,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
               size: 22,
             ),
           ),
+          const SizedBox(width: 8),
+          // 🆕 카테고리 색상 정사각형 (한글 글자 크기)
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(color: categoryColorOf(item.category), borderRadius: BorderRadius.circular(3)),
+          ),
           const SizedBox(width: 10),
           if (item.time.isNotEmpty) ...[
             Text(item.time, style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -369,9 +645,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
+          // 🆕 [UX개선] 연필/휴지통 2개 아이콘 대신 3선 연필 아이콘 하나로 통합 (누르면 수정 팝업, 삭제는 팝업 안에)
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.white38, size: 18),
-            onPressed: () => _deleteItem(item),
+            icon: const TriColorPencilIcon(size: 18),
+            onPressed: () => _showScheduleDialog(existingItem: item),
           ),
         ],
       ),

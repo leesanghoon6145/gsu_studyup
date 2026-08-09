@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'global_lang.dart';
 import 'parent/parent_main_dashboard_screen.dart';
 import 'services/user_profile_service.dart'; // 🆕 [실사용 전환 2026-07-29] 실제 가입자 이름/유형 저장용
-
+import 'schedule/general_planner_home_screen.dart'; // 🆕 [임시 테스트용] 일반 플래너 진입
 // =============================================================================
 // 🆕 [12개국 다국어 연동] 2026-07-29 추가: signup_screen.dart 전용 렌더 헬퍼 함수 3종
 // 기존 위젯 구조(폰트/색상/크기/레이아웃)는 전혀 변경하지 않고, 텍스트 소스만
@@ -277,6 +277,16 @@ class _SignupScreenState extends State<SignupScreen> {
               ? _nameController.text
               : "홍길동",
         ),
+      ),
+    );
+  }
+
+  // ✅ [임시 테스트용] 일반 플래너 진입 함수
+  void _goToGeneralPlanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const GeneralPlannerHomeScreen(),
       ),
     );
   }
@@ -702,6 +712,33 @@ class _SignupScreenState extends State<SignupScreen> {
                   enStyle: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 18),
                   koStyle: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 14),
                 ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ✅ [임시 테스트용] 일반 플래너 진입 버튼
+            ElevatedButton(
+              onPressed: _goToGeneralPlanner,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E3A5F),
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFFE5C158), width: 1.5),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'GENERAL PLANNER (Temporary)',
+                    style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  Text(
+                    '일반 플래너 진입 (임시)',
+                    style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ],
               ),
             ),
           ],

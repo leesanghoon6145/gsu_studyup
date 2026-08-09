@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
+import 'bilingual_text.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -27,6 +28,13 @@ class _ProgressScreenState extends State<ProgressScreen> {
     'monthly': '월간 목표',
     'weekly': '주간 목표',
     'today': '오늘 목표',
+  };
+  static const Map<String, String> _typeLabelsEn = {
+    'life': 'Life Goal',
+    'yearly': 'Yearly Goal',
+    'monthly': 'Monthly Goal',
+    'weekly': 'Weekly Goal',
+    'today': 'Today Goal',
   };
 
   List<GoalItem> _allGoals = [];
@@ -72,20 +80,19 @@ class _ProgressScreenState extends State<ProgressScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('PROGRESS', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 20)),
-            Text('진행률', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
+        title: const BiTitle(en: 'PROGRESS', ko: '진행률', enSize: 19, koSize: 14),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _allGoals.isEmpty
           ? Center(
-        child: Text('등록된 목표가 없습니다.\n목표를 만들고 할 일을 체크하면\n여기에 진행률이 표시됩니다.',
-            textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 14)),
+        child: BiInline(
+          en: 'No goals yet. Create a goal and check off tasks\nto see progress here.',
+          ko: '등록된 목표가 없습니다.\n목표를 만들고 할 일을 체크하면\n여기에 진행률이 표시됩니다.',
+          color: Colors.white38,
+          fontSize: 14,
+          textAlign: TextAlign.center,
+        ),
       )
           : ListView(
         padding: const EdgeInsets.all(16),
@@ -103,14 +110,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('전체 목표 평균 진행률', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          const BiInline(en: 'Overall Average Progress', ko: '전체 목표 평균 진행률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
           const SizedBox(height: 8),
           Text('$percent%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          Text('총 ${_allGoals.length}개 목표', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12)),
+          BiInline(en: 'Total ${_allGoals.length} goals', ko: '총 ${_allGoals.length}개 목표', color: Colors.white38, fontSize: 12),
         ],
       ),
     );
@@ -128,7 +135,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
+            BiInline(en: _typeLabelsEn[type] ?? type, ko: label, color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
             const SizedBox(height: 10),
             ...goals.map((g) {
               final double progress = _progressCache[g.id] ?? 0.0;
