@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'appointment_data_service.dart';
 import 'bilingual_text.dart';
+import 'notification_service.dart'; // 🆕 [권한 안내 배너]
 
 class AppointmentScreen extends StatefulWidget {
   const AppointmentScreen({super.key});
@@ -285,12 +286,21 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
-          : _items.isEmpty
-          ? Center(child: BiInline(en: 'No appointments yet', ko: '등록된 약속이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
-          : ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _items.length,
-        itemBuilder: (context, index) => _buildTile(_items[index]),
+          : Padding(
+        padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
+        child: Column(
+          children: [
+            const NotificationPermissionBanner(), // 🆕 [권한 안내 배너] 알림이 꺼져있으면 여기 안내가 뜸
+            Expanded(
+              child: _items.isEmpty
+                  ? Center(child: BiInline(en: 'No appointments yet', ko: '등록된 약속이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
+                  : ListView.builder(
+                itemCount: _items.length,
+                itemBuilder: (context, index) => _buildTile(_items[index]),
+              ),
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _brandGolden,

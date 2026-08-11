@@ -523,6 +523,134 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     String? selectedRecordType; // '강의' 또는 '평가'
     String? selectedLectureSubType; // '개념강의' 또는 '단원정리 및 문제해설' (강의일 때만 사용)
 
+    // 🆕 [버그 수정 2026-08-10] 각 입력 구간(섹션)에 고유 GlobalKey를 부여해서,
+    // 선택할 때마다 "다음에 입력해야 할 항목"이 화면에 정확히 보이도록 Scrollable.ensureVisible로
+    // 스크롤을 이동시킴. 기존엔 고정된 픽셀 offset(140, 180, 260...)을 그대로 스크롤했는데,
+    // 강의/평가 선택에 따라 위에 있는 항목 개수/높이가 달라지므로 실제 콘텐츠 위치와 offset이 어긋나서
+    // 필요 이상으로 더 내려가거나 다음 입력칸이 화면 밖으로 벗어나는 문제가 있었음.
+    final GlobalKey keyLectureType = GlobalKey();
+    final GlobalKey keyDetails = GlobalKey();
+    final GlobalKey keyScore = GlobalKey();
+    final GlobalKey keyIncorrectNote = GlobalKey();
+    final GlobalKey keyUnderstanding = GlobalKey();
+    final GlobalKey keyDifficulty = GlobalKey();
+    final GlobalKey keyFocus = GlobalKey();
+    final GlobalKey keyCondition = GlobalKey();
+    final GlobalKey keyNextGoal = GlobalKey();
+    final GlobalKey keySaveButton = GlobalKey();
+
+    // 🆕 [연동 2026-08-10] 타이머에서 [평가] 기록 시, 그 점수를 '나의 성적 기록'(gke_exam_records,
+    // 주평가/단원평가/중간고사/기말고사/모의고사)에도 자동으로 반영하기 위한 추가 상태값들.
+    String? selectedExamCategory; // 주평가/단원평가/중간고사/기말고사/모의고사
+    int? selectedBigUnitNum; // 단원평가일 때만 사용 (1~4)
+    int? selectedMidUnitNum; // 단원평가일 때만 사용 (1~4)
+    int selectedGradeNum = 2; // 학년 (기본값 2학년 - member_achievement_screen.dart 기본값과 동일)
+    final TextEditingController mockMonthController = TextEditingController(); // 모의고사일 때만 사용
+    final TextEditingController mockRankController = TextEditingController(); // 모의고사일 때만 사용
+
+    final GlobalKey keyExamCategory = GlobalKey();
+    final GlobalKey keyUnitDetail = GlobalKey(); // 단원평가(대/중단원) 또는 모의고사(월/등급) 입력칸 공용
+    final GlobalKey keyGrade = GlobalKey();
+
+    // 🆕 [연동] member_achievement_screen.dart의 주평가 단원명 자동 생성 로직과 동일한 방식으로
+    // "몇주차"를 계산 (일요일을 한 주의 시작으로 보고, 그 달 1일이 포함된 주를 1주차로 계산).
+    String computeWeekOfMonthLabel(DateTime now) {
+      final DateTime firstOfMonth = DateTime(now.year, now.month, 1);
+      final int sundayIndex = firstOfMonth.weekday % 7;
+      final int weekNum = ((now.day - 1 + sundayIndex) ~/ 7) + 1;
+      return "$weekNum주차";
+    }
+
+    // 🆕 [연동] 3~8월=1학기, 9~2월=2학기로 자동 판별 (한국 학사일정 기준 근사치).
+    String computeSemesterLabel(DateTime now) {
+      return (now.month >= 3 && now.month <= 8) ? "1학기" : "2학기";
+    }
+
+    int computeSemesterInt(DateTime now) {
+      return (now.month >= 3 && now.month <= 8) ? 1 : 2;
+    }
+
+    // 🆕 [연동] 시험 유형별로 member_achievement_screen.dart가 저장/조회에 사용하는 것과
+    // 동일한 형식의 단원명(unit) 문자열을 생성. 이 형식이 어긋나면 "주평가"/"단원평가" 탭의
+    // 필터(연도/월/주차, 대단원/중단원 일치검사)에서 기록이 조회되지 않으므로 형식을 정확히 맞춤.
+    String buildExamUnitLabel(String category) {
+      final DateTime now = DateTime.now();
+      switch (category) {
+        case '주평가':
+          return "${now.year}년 ${now.month}월 ${computeWeekOfMonthLabel(now)}";
+        case '단원평가':
+          return "대단원 ${selectedBigUnitNum ?? 1} (중단원 ${selectedMidUnitNum ?? 1})";
+        case '모의고사':
+          return "${mockMonthController.text.trim()} 모의고사 (${mockRankController.text.trim()})";
+        default: // 중간고사, 기말고사
+          return computeSemesterLabel(now);
+      }
+    }
+
+    // 🆕 [연동] member_achievement_screen.dart의 _ExamRecord.toJson()과 완전히 동일한 필드 구조로
+    // gke_exam_records(SharedPreferences, 단일 JSON 배열 문자열)에 새 레코드를 이어붙여 저장.
+    Future<void> appendExamRecord({
+      required String category,
+      required String subject,
+      required double score,
+      required String difficulty,
+      required int understandingPercent,
+      required int durationMinutes,
+    }) async {
+      final prefs = await SharedPreferences.getInstance();
+      final String? existingJson = prefs.getString('gke_exam_records');
+      List<dynamic> list = [];
+      if (existingJson != null && existingJson.isNotEmpty) {
+        try {
+          list = jsonDecode(existingJson) as List<dynamic>;
+        } catch (_) {
+          list = [];
+        }
+      }
+
+      // 이해도(%)를 만족도 별점(1~5)으로 환산 (100%->5, 80%->4 ... 20%->1)
+      final int starSatisfaction = (understandingPercent / 20).round().clamp(1, 5);
+      // 이해도가 80% 이상이면 복습 불필요로, 그 미만이면 복습 필요로 자동 판단
+      final String reviewRequired = understandingPercent >= 80 ? "불필요" : "필요";
+
+      final Map<String, dynamic> newRecord = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'type': category,
+        'grade': selectedGradeNum,
+        'semester': computeSemesterInt(DateTime.now()),
+        'date': DateTime.now().toIso8601String(),
+        'subject': subject,
+        'unit': buildExamUnitLabel(category),
+        'score': score,
+        'durationText': "$durationMinutes분",
+        'difficultyLevel': difficulty,
+        'starSatisfaction': starSatisfaction,
+        'errorCauses': const ["개념부족"],
+        'reviewRequired': reviewRequired,
+        'mockMonth': category == '모의고사' ? mockMonthController.text.trim() : "",
+        'mockRank': category == '모의고사' ? mockRankController.text.trim() : "",
+      };
+
+      list.add(newRecord);
+      await prefs.setString('gke_exam_records', jsonEncode(list));
+    }
+
+    // 다음 표시할 항목의 key로 정확히 스크롤 이동. 고정 offset을 쓰지 않으므로
+    // 현재 화면에 어떤 항목이 조건부로 보이거나 안 보이는지와 관계없이 항상 정확하게 동작함.
+    void scrollToNext(GlobalKey targetKey) {
+      Future.delayed(const Duration(milliseconds: 150), () {
+        final ctx = targetKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+            alignment: 0.05, // 화면 상단 쪽에 가깝게 배치해서 다음 항목이 확실히 보이게 함
+          );
+        }
+      });
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -537,6 +665,15 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
             final bool needsIncorrectNoteField = selectedRecordType == '평가' ||
                 (selectedRecordType == '강의' && selectedLectureSubType == '단원정리 및 문제해설');
 
+            // 🆕 [연동 2026-08-10] "평가" 기록일 때 시험 유형 선택 + 유형별 상세 입력까지 필수로 검증.
+            final bool examCategoryDetailFilled = selectedExamCategory == null
+                ? false
+                : (selectedExamCategory == '단원평가'
+                ? (selectedBigUnitNum != null && selectedMidUnitNum != null)
+                : (selectedExamCategory == '모의고사'
+                ? (mockMonthController.text.trim().isNotEmpty && mockRankController.text.trim().isNotEmpty)
+                : true));
+
             bool isAllFilled = detailController.text.trim().isNotEmpty &&
                 nextGoalController.text.trim().isNotEmpty &&
                 selectedUnderstanding != null &&
@@ -545,21 +682,9 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                 selectedCondition != null &&
                 selectedRecordType != null &&
                 (selectedRecordType == '평가'
-                    ? scoreController.text.trim().isNotEmpty
+                    ? (scoreController.text.trim().isNotEmpty && examCategoryDetailFilled)
                     : selectedLectureSubType != null) &&
                 (!needsIncorrectNoteField || isIncorrectNoted != null);
-
-            void autoScrollNext(double offset) {
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (dialogScrollController.hasClients) {
-                  dialogScrollController.animateTo(
-                    offset,
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              });
-            }
 
             return AlertDialog(
               backgroundColor: const Color(0xFF0D1527),
@@ -591,31 +716,35 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       // 먼저 "강의"인지 "평가"인지 선택하게 하고, 이에 따라 아래 항목이 달라짐.
                       Text('RECORD TYPE (기록 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
-                      Row(
+                      // 🆕 [버그 수정 2026-08-10] Row → Wrap 교체.
+                      // "강의 (Lecture)" / "평가 (Evaluation)" 라벨이 길어서, 화면이 좁은 기기에서
+                      // Row 안의 ChoiceChip 두 개가 가로 폭을 초과해 우측이 잘리는(오버플로우) 문제가 있었음.
+                      // Wrap은 폭이 부족하면 자동으로 다음 줄로 넘어가므로 어떤 화면 크기에서도 잘리지 않음.
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
                         children: ['강의', '평가'].map((type) {
                           final bool isSel = selectedRecordType == type;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: ChoiceChip(
-                              label: Text(
-                                type == '강의' ? '강의 (Lecture)' : '평가 (Evaluation)',
-                                style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                              selected: isSel,
-                              selectedColor: brandGolden,
-                              backgroundColor: const Color(0xFF050B14),
-                              onSelected: (_) {
-                                setDialogState(() {
-                                  selectedRecordType = type;
-                                  if (type == '평가') {
-                                    selectedLectureSubType = null; // 평가로 바꾸면 강의 세부유형 초기화
-                                  } else {
-                                    scoreController.clear(); // 강의로 바꾸면 점수 입력값 초기화
-                                  }
-                                });
-                                autoScrollNext(140.0);
-                              },
+                          return ChoiceChip(
+                            label: Text(
+                              type == '강의' ? '강의 (Lecture)' : '평가 (Evaluation)',
+                              style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold),
                             ),
+                            selected: isSel,
+                            selectedColor: brandGolden,
+                            backgroundColor: const Color(0xFF050B14),
+                            onSelected: (_) {
+                              setDialogState(() {
+                                selectedRecordType = type;
+                                if (type == '평가') {
+                                  selectedLectureSubType = null; // 평가로 바꾸면 강의 세부유형 초기화
+                                } else {
+                                  scoreController.clear(); // 강의로 바꾸면 점수 입력값 초기화
+                                }
+                              });
+                              // 강의를 고르면 다음 필수 항목은 "강의 세부 유형", 평가를 고르면 곧바로 "상세 내용"
+                              scrollToNext(type == '강의' ? keyLectureType : keyDetails);
+                            },
                           );
                         }).toList(),
                       ),
@@ -623,229 +752,449 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       // 🆕 [기록 유형 구분] "강의" 선택 시에만 세부 유형(개념강의/단원정리 및 문제해설) 선택 노출
                       if (selectedRecordType == '강의') ...[
                         const SizedBox(height: 12),
-                        Text('LECTURE TYPE (강의 세부 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6.0,
-                          children: ['개념강의', '단원정리 및 문제해설'].map((val) {
-                            final bool isSel = selectedLectureSubType == val;
-                            return ChoiceChip(
-                              label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
-                              selected: isSel,
-                              selectedColor: brandGolden,
-                              backgroundColor: const Color(0xFF050B14),
-                              onSelected: (_) {
-                                setDialogState(() => selectedLectureSubType = val);
-                                autoScrollNext(180.0);
-                              },
-                            );
-                          }).toList(),
+                        Column(
+                          key: keyLectureType,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('LECTURE TYPE (강의 세부 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6.0,
+                              runSpacing: 6.0,
+                              children: ['개념강의', '단원정리 및 문제해설'].map((val) {
+                                final bool isSel = selectedLectureSubType == val;
+                                return ChoiceChip(
+                                  label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  selected: isSel,
+                                  selectedColor: brandGolden,
+                                  backgroundColor: const Color(0xFF050B14),
+                                  onSelected: (_) {
+                                    setDialogState(() => selectedLectureSubType = val);
+                                    scrollToNext(keyDetails);
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
                         ),
                       ],
                       const SizedBox(height: 16),
 
-                      Text('DETAILS (상세 내용) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: detailController,
-                        maxLines: 2,
-                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
-                        onChanged: (_) => setDialogState(() {}),
-                        onSubmitted: (_) => autoScrollNext(80.0),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., Solved concepts and problems. (예: 개념 및 문제풀이 함)',
-                          hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFF050B14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.all(10),
-                        ),
+                      Column(
+                        key: keyDetails,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('DETAILS (상세 내용) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: detailController,
+                            maxLines: 2,
+                            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                            onChanged: (_) => setDialogState(() {}),
+                            onSubmitted: (_) => scrollToNext(
+                                selectedRecordType == '평가' ? keyScore : (needsIncorrectNoteField ? keyIncorrectNote : keyUnderstanding)),
+                            decoration: InputDecoration(
+                              hintText: 'e.g., Solved concepts and problems. (예: 개념 및 문제풀이 함)',
+                              hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
+                              filled: true,
+                              fillColor: const Color(0xFF050B14),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                              contentPadding: const EdgeInsets.all(10),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
                       // 🆕 [기록 유형 구분] "평가"일 때만 SCORE 필드 노출 (강의는 점수 없음)
                       if (selectedRecordType == '평가') ...[
-                        Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: scoreController,
-                          keyboardType: TextInputType.number,
-                          style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                          onChanged: (_) => setDialogState(() {}),
-                          onSubmitted: (_) => autoScrollNext(180.0),
-                          decoration: InputDecoration(
-                            hintText: '100',
-                            hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
-                            suffixText: 'Points (점)',
-                            suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
-                            filled: true,
-                            fillColor: const Color(0xFF050B14),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          ),
+                        Column(
+                          key: keyScore,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: scoreController,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              onChanged: (_) => setDialogState(() {}),
+                              onSubmitted: (_) => scrollToNext(keyExamCategory),
+                              decoration: InputDecoration(
+                                hintText: '100',
+                                hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
+                                suffixText: 'Points (점)',
+                                suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
+                                filled: true,
+                                fillColor: const Color(0xFF050B14),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 16),
+
+                        // 🆕 [연동 2026-08-10] "평가" 기록의 점수를 '나의 성적 기록'(주평가/단원평가/중간고사/
+                        // 기말고사/모의고사)에도 자동으로 반영하기 위해, 어떤 시험 유형인지 반드시 선택하게 함.
+                        Column(
+                          key: keyExamCategory,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('EXAM CATEGORY (시험 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6.0,
+                              runSpacing: 6.0,
+                              children: ['주평가', '단원평가', '중간고사', '기말고사', '모의고사'].map((cat) {
+                                final bool isSel = selectedExamCategory == cat;
+                                return ChoiceChip(
+                                  label: Text(cat, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  selected: isSel,
+                                  selectedColor: brandGolden,
+                                  backgroundColor: const Color(0xFF050B14),
+                                  onSelected: (_) {
+                                    setDialogState(() {
+                                      selectedExamCategory = cat;
+                                      // 시험 유형이 바뀌면 이전에 입력해둔 단원평가/모의고사 전용 값은 초기화
+                                      selectedBigUnitNum = null;
+                                      selectedMidUnitNum = null;
+                                      mockMonthController.clear();
+                                      mockRankController.clear();
+                                    });
+                                    if (cat == '단원평가' || cat == '모의고사') {
+                                      scrollToNext(keyUnitDetail);
+                                    } else {
+                                      scrollToNext(keyGrade);
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+
+                        // 🆕 [연동] "단원평가" 선택 시에만 대단원/중단원 번호 선택 노출
+                        if (selectedExamCategory == '단원평가') ...[
+                          const SizedBox(height: 16),
+                          Column(
+                            key: keyUnitDetail,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('BIG UNIT (대단원) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6.0,
+                                runSpacing: 6.0,
+                                children: [1, 2, 3, 4].map((n) {
+                                  final bool isSel = selectedBigUnitNum == n;
+                                  return ChoiceChip(
+                                    label: Text('대단원 $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    selected: isSel,
+                                    selectedColor: brandGolden,
+                                    backgroundColor: const Color(0xFF050B14),
+                                    onSelected: (_) {
+                                      setDialogState(() => selectedBigUnitNum = n);
+                                      if (selectedMidUnitNum != null) scrollToNext(keyGrade);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 12),
+                              Text('MID UNIT (중단원) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6.0,
+                                runSpacing: 6.0,
+                                children: [1, 2, 3, 4].map((n) {
+                                  final bool isSel = selectedMidUnitNum == n;
+                                  return ChoiceChip(
+                                    label: Text('중단원 $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    selected: isSel,
+                                    selectedColor: brandGolden,
+                                    backgroundColor: const Color(0xFF050B14),
+                                    onSelected: (_) {
+                                      setDialogState(() => selectedMidUnitNum = n);
+                                      scrollToNext(keyGrade);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ],
+
+                        // 🆕 [연동] "모의고사" 선택 시에만 몇월/등급(석차) 직접 입력 노출
+                        if (selectedExamCategory == '모의고사') ...[
+                          const SizedBox(height: 16),
+                          Column(
+                            key: keyUnitDetail,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('MOCK MONTH (몇 월 모의고사) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: mockMonthController,
+                                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                                onChanged: (_) => setDialogState(() {}),
+                                onSubmitted: (_) => scrollToNext(keyGrade),
+                                decoration: InputDecoration(
+                                  hintText: 'e.g., 6월 (예: 6월)',
+                                  hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
+                                  filled: true,
+                                  fillColor: const Color(0xFF050B14),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text('MOCK RANK (등급 또는 석차) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: mockRankController,
+                                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                                onChanged: (_) => setDialogState(() {}),
+                                onSubmitted: (_) => scrollToNext(keyGrade),
+                                decoration: InputDecoration(
+                                  hintText: 'e.g., 1등급 (예: 1등급)',
+                                  hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
+                                  filled: true,
+                                  fillColor: const Color(0xFF050B14),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+
+                        // 🆕 [연동] 시험 유형이 선택된 이후, 학년 선택 (grade 필드는 filter 매칭에 필요)
+                        if (selectedExamCategory != null) ...[
+                          const SizedBox(height: 16),
+                          Column(
+                            key: keyGrade,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('GRADE (학년) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6.0,
+                                runSpacing: 6.0,
+                                children: [1, 2, 3].map((n) {
+                                  final bool isSel = selectedGradeNum == n;
+                                  return ChoiceChip(
+                                    label: Text('$n학년', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    selected: isSel,
+                                    selectedColor: brandGolden,
+                                    backgroundColor: const Color(0xFF050B14),
+                                    onSelected: (_) {
+                                      setDialogState(() => selectedGradeNum = n);
+                                      scrollToNext(needsIncorrectNoteField ? keyIncorrectNote : keyUnderstanding);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 16),
                       ],
 
                       // 🆕 [기록 유형 구분] 평가이거나, 강의 중 "단원정리 및 문제해설"(문제풀이 포함)일 때만 노출
                       if (needsIncorrectNoteField) ...[
-                        Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Container(
-                          decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () {
-                                    setDialogState(() => isIncorrectNoted = true);
-                                    autoScrollNext(260.0);
-                                  },
-                                  child: Container(
-                                    alignment: Alignment.center,
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                        color: isIncorrectNoted == true ? brandGolden : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(8)
+                        Column(
+                          key: keyIncorrectNote,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Container(
+                              decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () {
+                                        setDialogState(() => isIncorrectNoted = true);
+                                        scrollToNext(keyUnderstanding);
+                                      },
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                            color: isIncorrectNoted == true ? brandGolden : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(8)
+                                        ),
+                                        child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                                      ),
                                     ),
-                                    child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                   ),
-                                ),
-                              ),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () {
-                                    setDialogState(() => isIncorrectNoted = false);
-                                    autoScrollNext(260.0);
-                                  },
-                                  child: Container(
-                                    alignment: Alignment.center,
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                        color: isIncorrectNoted == false ? brandGolden : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(8)
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () {
+                                        setDialogState(() => isIncorrectNoted = false);
+                                        scrollToNext(keyUnderstanding);
+                                      },
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                            color: isIncorrectNoted == false ? brandGolden : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(8)
+                                        ),
+                                        child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                                      ),
                                     ),
-                                    child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
                       ], // needsIncorrectNoteField 조건부 블록 닫힘
 
-                      Text('UNDERSTANDING (이해도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [20, 40, 60, 80, 100].map((val) {
-                            final bool isSel = selectedUnderstanding == val;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6.0),
-                              child: ChoiceChip(
-                                label: Text('$val%', style: GoogleFonts.rajdhani(color: isSel ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold)),
+                      Column(
+                        key: keyUnderstanding,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('UNDERSTANDING (이해도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [20, 40, 60, 80, 100].map((val) {
+                                final bool isSel = selectedUnderstanding == val;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6.0),
+                                  child: ChoiceChip(
+                                    label: Text('$val%', style: GoogleFonts.rajdhani(color: isSel ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold)),
+                                    selected: isSel,
+                                    selectedColor: brandGolden,
+                                    backgroundColor: const Color(0xFF050B14),
+                                    onSelected: (_) {
+                                      setDialogState(() => selectedUnderstanding = val);
+                                      scrollToNext(keyDifficulty);
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Column(
+                        key: keyDifficulty,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('DIFFICULTY (난이도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6.0,
+                            runSpacing: 6.0,
+                            children: ['매우어려움', '어려움', '보통', '쉬움'].map((val) {
+                              final bool isSel = selectedDifficulty == val;
+                              return ChoiceChip(
+                                label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                 selected: isSel,
                                 selectedColor: brandGolden,
                                 backgroundColor: const Color(0xFF050B14),
                                 onSelected: (_) {
-                                  setDialogState(() => selectedUnderstanding = val);
-                                  autoScrollNext(360.0);
+                                  setDialogState(() => selectedDifficulty = val);
+                                  scrollToNext(keyFocus);
                                 },
-                              ),
-                            );
-                          }).toList(),
-                        ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
-                      Text('DIFFICULTY (난이도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6.0,
-                        children: ['매우어려움', '어려움', '보통', '쉬움'].map((val) {
-                          final bool isSel = selectedDifficulty == val;
-                          return ChoiceChip(
-                            label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
-                            selected: isSel,
-                            selectedColor: brandGolden,
-                            backgroundColor: const Color(0xFF050B14),
-                            onSelected: (_) {
-                              setDialogState(() => selectedDifficulty = val);
-                              autoScrollNext(440.0);
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Text('CONCENTRATION (집중도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: ['높음', '보통', '낮음'].map((val) {
-                          final bool isSel = selectedFocus == val;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6.0),
-                            child: ChoiceChip(
-                              label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
-                              selected: isSel,
-                              selectedColor: brandGolden,
-                              backgroundColor: const Color(0xFF050B14),
-                              onSelected: (_) {
-                                setDialogState(() => selectedFocus = val);
-                                autoScrollNext(520.0);
-                              },
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Text('LEARNING CONDITION (학습 컨디션) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      Row(
+                      Column(
+                        key: keyFocus,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          {'label': '좋음', 'emoji': '😊'},
-                          {'label': '보통', 'emoji': '😐'},
-                          {'label': '피곤함', 'emoji': '😴'}
-                        ].map((item) {
-                          final String val = item['label']!;
-                          final String emoji = item['emoji']!;
-                          final bool isSel = selectedCondition == val;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6.0),
-                            child: ChoiceChip(
-                              label: Text('$emoji $val', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
-                              selected: isSel,
-                              selectedColor: brandGolden,
-                              backgroundColor: const Color(0xFF050B14),
-                              onSelected: (_) {
-                                setDialogState(() => selectedCondition = val);
-                                autoScrollNext(620.0);
-                              },
-                            ),
-                          );
-                        }).toList(),
+                          Text('CONCENTRATION (집중도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6.0,
+                            runSpacing: 6.0,
+                            children: ['높음', '보통', '낮음'].map((val) {
+                              final bool isSel = selectedFocus == val;
+                              return ChoiceChip(
+                                label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                selected: isSel,
+                                selectedColor: brandGolden,
+                                backgroundColor: const Color(0xFF050B14),
+                                onSelected: (_) {
+                                  setDialogState(() => selectedFocus = val);
+                                  scrollToNext(keyCondition);
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
-                      Text('NEXT GOAL (다음 목표) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: nextGoalController,
-                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
-                        onChanged: (_) => setDialogState(() {}),
-                        onSubmitted: (_) => autoScrollNext(700.0),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., Advanced function problems (예: 함수 심화문제)',
-                          hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFF050B14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                        ),
+                      Column(
+                        key: keyCondition,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('LEARNING CONDITION (학습 컨디션) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6.0,
+                            runSpacing: 6.0,
+                            children: [
+                              {'label': '좋음', 'emoji': '😊'},
+                              {'label': '보통', 'emoji': '😐'},
+                              {'label': '피곤함', 'emoji': '😴'}
+                            ].map((item) {
+                              final String val = item['label']!;
+                              final String emoji = item['emoji']!;
+                              final bool isSel = selectedCondition == val;
+                              return ChoiceChip(
+                                label: Text('$emoji $val', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                selected: isSel,
+                                selectedColor: brandGolden,
+                                backgroundColor: const Color(0xFF050B14),
+                                onSelected: (_) {
+                                  setDialogState(() => selectedCondition = val);
+                                  scrollToNext(keyNextGoal);
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 16),
+
+                      Column(
+                        key: keyNextGoal,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('NEXT GOAL (다음 목표) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: nextGoalController,
+                            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                            onChanged: (_) => setDialogState(() {}),
+                            onSubmitted: (_) => scrollToNext(keySaveButton),
+                            decoration: InputDecoration(
+                              hintText: 'e.g., Advanced function problems (예: 함수 심화문제)',
+                              hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
+                              filled: true,
+                              fillColor: const Color(0xFF050B14),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(key: keySaveButton, height: 4),
                     ],
                   ),
                 ),
@@ -895,6 +1244,20 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           subjectKey) ?? [];
                       subjectHistoryList.add(jsonEncode(dkeFinalPacket));
                       await prefs.setStringList(subjectKey, subjectHistoryList);
+
+                      // 🆕 [연동 2026-08-10] "평가" 기록이면서 시험 유형(주평가/단원평가/중간고사/기말고사/모의고사)이
+                      // 선택된 경우, 같은 점수를 member_achievement_screen.dart의 "나의 성적 기록"(gke_exam_records)에도
+                      // 자동으로 이어붙여 저장함. 이제 학생이 같은 점수를 두 번 입력할 필요가 없음.
+                      if (selectedRecordType == '평가' && selectedExamCategory != null) {
+                        await appendExamRecord(
+                          category: selectedExamCategory!,
+                          subject: widget.selectedSubject,
+                          score: (int.tryParse(scoreController.text.trim()) ?? 0).toDouble(),
+                          difficulty: selectedDifficulty ?? "보통",
+                          understandingPercent: selectedUnderstanding ?? 60,
+                          durationMinutes: (_elapsedSeconds / 60).round(),
+                        );
+                      }
 
                       // 🆕 [별 경제 시스템] 별은 이미 학습 중 실시간으로 DkeStars에 적립/저장되어 있으므로
                       // 여기서는 다시 계산해서 더하지 않고, 이번 세션에서 쌓인 값 + 현재 전체 누적치만 조회함.

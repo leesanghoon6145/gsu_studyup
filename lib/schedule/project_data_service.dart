@@ -57,16 +57,29 @@ class ProjectTask {
   final String projectId;
   final String title;
   bool isCompleted;
+  String createdAt; // 🆕 [시간 기록] 'yyyy-MM-dd HH:mm' 형식, 정렬 및 수정에 사용
 
-  ProjectTask({required this.id, required this.projectId, required this.title, this.isCompleted = false});
+  ProjectTask({
+    required this.id,
+    required this.projectId,
+    required this.title,
+    this.isCompleted = false,
+    String? createdAt,
+  }) : createdAt = createdAt ?? _nowString();
 
-  Map<String, dynamic> toJson() => {'id': id, 'projectId': projectId, 'title': title, 'isCompleted': isCompleted};
+  static String _nowString() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, dynamic> toJson() => {'id': id, 'projectId': projectId, 'title': title, 'isCompleted': isCompleted, 'createdAt': createdAt};
 
   factory ProjectTask.fromJson(Map<String, dynamic> json) => ProjectTask(
     id: json['id'] as String,
     projectId: json['projectId'] as String? ?? '',
     title: json['title'] as String? ?? '',
     isCompleted: json['isCompleted'] as bool? ?? false,
+    createdAt: json['createdAt'] as String?,
   );
 }
 
@@ -81,7 +94,16 @@ class ProjectDataService {
       if (raw == null || raw.isEmpty) return [];
       final List<dynamic> decoded = jsonDecode(raw);
       final list = decoded.map((e) => ProjectItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // 🆕 [정렬 버그 수정] 만든 순서가 아니라 마감일이 가까운 순서로 정렬.
+      // 마감일이 없는 프로젝트는 맨 아래로 보냄.
+      list.sort((a, b) {
+        final bool aHasDeadline = a.deadline.isNotEmpty;
+        final bool bHasDeadline = b.deadline.isNotEmpty;
+        if (aHasDeadline && !bHasDeadline) return -1;
+        if (!aHasDeadline && bHasDeadline) return 1;
+        if (!aHasDeadline && !bHasDeadline) return b.createdAt.compareTo(a.createdAt); // 둘 다 마감일 없으면 최신 생성순
+        return a.deadline.compareTo(b.deadline); // 마감일 가까운 것부터
+      });
       return list;
     } catch (e) {
       return [];
@@ -135,7 +157,10 @@ class ProjectDataService {
 
   static Future<List<ProjectTask>> loadTasksForProject(String projectId) async {
     final all = await loadAllTasks();
-    return all.where((t) => t.projectId == projectId).toList();
+    final filtered = all.where((t) => t.projectId == projectId).toList();
+    // 🆕 [정렬 수정] 오래된 것이 아래로, 가장 최근 기록이 맨 위로 오도록 내림차순 정렬
+    filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return filtered;
   }
 
   static Future<void> addTask(ProjectTask task) async {

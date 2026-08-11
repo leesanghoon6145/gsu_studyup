@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'schedule_data_service.dart';
+import 'appointment_data_service.dart'; // 🆕 [약속 연동] 리포트와 동일하게 일정분석에도 약속 데이터 포함
 import 'calendar_screen.dart' show categoryColorOf, kScheduleCategories; // 🆕 캘린더와 동일한 카테고리 색상 재사용
 import 'bilingual_text.dart';
 
@@ -25,6 +26,7 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
   static const Color _containerBg = Color(0xFF0D1527);
 
   List<ScheduleItem> _all = [];
+  List<AppointmentItem> _allAppointments = []; // 🆕 [약속 연동]
   bool _isLoading = true;
 
   @override
@@ -36,15 +38,19 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     final all = await ScheduleDataService.loadAll();
+    final allAppointments = await AppointmentDataService.loadAll(); // 🆕 [약속 연동]
     if (!mounted) return;
     setState(() {
       _all = all;
+      _allAppointments = allAppointments;
       _isLoading = false;
     });
   }
 
-  int get _completedCount => _all.where((e) => e.isCompleted).length;
-  double get _completionRate => _all.isEmpty ? 0 : _completedCount / _all.length;
+  // 🆕 [약속 연동] 일정+약속을 합쳐서 완료율 계산 (리포트 화면과 동일한 방식)
+  int get _totalCount => _all.length + _allAppointments.length;
+  int get _completedCount => _all.where((e) => e.isCompleted).length + _allAppointments.where((a) => a.isCompleted).length;
+  double get _completionRate => _totalCount == 0 ? 0 : _completedCount / _totalCount;
 
   Map<String, int> get _categoryCounts {
     final Map<String, int> result = {};
@@ -124,7 +130,7 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
           const BiInline(en: 'Overall Completion', ko: '전체 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
           const SizedBox(height: 8),
           Text('$percent%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          BiInline(en: 'Completed $_completedCount / Total ${_all.length}', ko: '완료 $_completedCount건 / 전체 ${_all.length}건', color: Colors.white38, fontSize: 12),
+          BiInline(en: 'Completed $_completedCount / Total $_totalCount', ko: '완료 $_completedCount건 / 전체 $_totalCount건', color: Colors.white38, fontSize: 12),
         ],
       ),
     );

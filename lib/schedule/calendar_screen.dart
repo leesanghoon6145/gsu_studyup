@@ -16,6 +16,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'schedule_data_service.dart';
 import 'bilingual_text.dart';
 import 'holiday_data.dart'; // 🆕 [국경일 표시] 대한민국 공휴일 데이터
+import 'appointment_data_service.dart'; // 🆕 [약속 연동] 캘린더에도 약속을 시각적으로 표시
+import 'appointment_screen.dart'; // 🆕 [약속 연동] 약속 미리보기 탭하면 이동
 
 // 🆕 카테고리 프리셋 정의 (색상 + 영/한 라벨)
 class ScheduleCategory {
@@ -81,7 +83,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _selectedDate = DateTime.now();
 
   Map<String, Set<String>> _categoriesByDate = {};
+  Set<String> _datesWithAppointments = {}; // 🆕 [약속 연동]
   List<ScheduleItem> _selectedDateItems = [];
+  List<AppointmentItem> _selectedDateAppointments = []; // 🆕 [약속 연동]
   bool _isLoading = true;
 
   @override
@@ -100,11 +104,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
     for (final item in all) {
       catMap.putIfAbsent(item.date, () => {}).add(item.category);
     }
+
+    // 🆕 [약속 연동] 약속이 있는 날짜 집합을 만들어 캘린더에 표시
+    final allAppointments = await AppointmentDataService.loadAll();
+    final Set<String> apptDates = allAppointments.map((a) => a.date).toSet();
+
     final items = await ScheduleDataService.loadForDate(_dateKey(_selectedDate));
+    final selectedAppointments = allAppointments.where((a) => a.date == _dateKey(_selectedDate)).toList();
+
     if (!mounted) return;
     setState(() {
       _categoriesByDate = catMap;
+      _datesWithAppointments = apptDates;
       _selectedDateItems = items;
+      _selectedDateAppointments = selectedAppointments;
       _isLoading = false;
     });
   }
@@ -112,8 +125,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Future<void> _onDateTapped(DateTime date) async {
     setState(() => _selectedDate = date);
     final items = await ScheduleDataService.loadForDate(_dateKey(date));
+    final allAppointments = await AppointmentDataService.loadAll();
+    final selectedAppointments = allAppointments.where((a) => a.date == _dateKey(date)).toList();
     if (!mounted) return;
-    setState(() => _selectedDateItems = items);
+    setState(() {
+      _selectedDateItems = items;
+      _selectedDateAppointments = selectedAppointments; // 🆕 [약속 연동]
+    });
   }
 
   void _goToPreviousMonth() {
@@ -505,6 +523,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         numberColor = Colors.white;
       }
 
+      final bool hasAppointment = _datesWithAppointments.contains(key); // 🆕 [약속 연동]
+
       dayCells.add(
         GestureDetector(
           onTap: () => _onDateTapped(thisDate),
@@ -517,12 +537,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  '$day',
-                  style: TextStyle(
-                    color: numberColor,
-                    fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$day',
+                      style: TextStyle(
+                        color: numberColor,
+                        fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                    // 🆕 [위치 수정] 시계 아이콘을 날짜 숫자 오른쪽 위에 자연스럽게 붙임 (Stack 겹침 대신 Row로 안전하게 배치)
+                    if (hasAppointment)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 1, top: 1),
+                        child: Icon(Icons.watch_later_rounded, size: 8, color: isSelected ? _pageBg : Colors.white70),
+                      ),
+                  ],
                 ),
                 if (cats.isNotEmpty)
                   Padding(
@@ -590,16 +622,66 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           ],
           const SizedBox(height: 12),
-          if (_selectedDateItems.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: BiInline(en: 'No schedules yet', ko: '등록된 일정이 없습니다', color: Colors.white38, fontSize: 13),
-              ),
-            )
-          else
-            ..._selectedDateItems.map((item) => _buildScheduleTile(item)),
+          // 🆕 [시간순 통합 표시] 일정(ScheduleItem)과 약속(AppointmentItem)을 하나로 합쳐서
+          // 시간순으로 정렬해 보여줍니다. 이전에는 일정만 보이고 약속은 아예 안 보였습니다.
+          Builder(builder: (context) {
+            final List<_CalendarDayEntry> combined = [
+              ..._selectedDateItems.map((s) => _CalendarDayEntry.schedule(s)),
+              ..._selectedDateAppointments.map((a) => _CalendarDayEntry.appointment(a)),
+            ];
+            combined.sort((a, b) => a.time.compareTo(b.time));
+
+            if (combined.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: BiInline(en: 'No schedules yet', ko: '등록된 일정이 없습니다', color: Colors.white38, fontSize: 13),
+                ),
+              );
+            }
+
+            return Column(
+              children: combined.map((entry) {
+                if (entry.schedule != null) return _buildScheduleTile(entry.schedule!);
+                return _buildAppointmentPreviewTile(entry.appointment!);
+              }).toList(),
+            );
+          }),
         ],
+      ),
+    );
+  }
+
+  // 🆕 [약속 미리보기 타일] 캘린더에서는 약속을 읽기 전용으로 보여주고,
+  // 수정/삭제는 약속 화면으로 이동해서 하도록 안내합니다.
+  Widget _buildAppointmentPreviewTile(AppointmentItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _pageBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppointmentScreen())),
+        child: Row(
+          children: [
+            Icon(item.isCompleted ? Icons.check_circle : Icons.watch_later_rounded, color: item.isCompleted ? _brandGolden : Colors.white54, size: 20),
+            const SizedBox(width: 10),
+            if (item.time.isNotEmpty) ...[
+              Text(item.time, style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                item.title,
+                style: TextStyle(color: item.isCompleted ? Colors.white38 : Colors.white, decoration: item.isCompleted ? TextDecoration.lineThrough : null, fontWeight: FontWeight.w600),
+              ),
+            ),
+            BiInline(en: 'Appt', ko: '약속', color: Colors.white38, fontSize: 10),
+          ],
+        ),
       ),
     );
   }
@@ -654,4 +736,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
     );
   }
+}
+
+// 🆕 [시간순 통합 표시] 캘린더 하루 목록에서 일정/약속을 하나로 합쳐 시간순 정렬하기 위한 헬퍼
+class _CalendarDayEntry {
+  final ScheduleItem? schedule;
+  final AppointmentItem? appointment;
+
+  _CalendarDayEntry.schedule(this.schedule) : appointment = null;
+  _CalendarDayEntry.appointment(this.appointment) : schedule = null;
+
+  String get time => schedule?.time ?? appointment?.time ?? '';
 }

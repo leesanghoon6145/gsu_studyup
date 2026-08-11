@@ -23,6 +23,13 @@ class TimelineBlock {
   String? actualEnd; // 'HH:mm', 완료 전엔 null
   String status; // 'planned' | 'running' | 'completed'
 
+  // 🆕 [완료 설문] 완료할 때 기록하는 데이터 - AI 분석/코멘트 생성의 재료가 됨
+  int? satisfaction; // 1~5 (만족도/집중도)
+  List<String> disruptions; // 방해요인 (예: '피곤함','딴생각'), 없으면 빈 리스트
+  String energyLevel; // '낮음' | '보통' | '높음' | '' (미기록)
+  String memo; // 한줄 메모, 선택사항
+  Map<String, String> extraAnswers; // 분야별 추가 질문 답변 (질문id -> 답변)
+
   TimelineBlock({
     required this.id,
     required this.date,
@@ -34,7 +41,13 @@ class TimelineBlock {
     this.actualStart,
     this.actualEnd,
     this.status = 'planned',
-  });
+    this.satisfaction,
+    List<String>? disruptions,
+    this.energyLevel = '',
+    this.memo = '',
+    Map<String, String>? extraAnswers,
+  })  : disruptions = disruptions ?? [],
+        extraAnswers = extraAnswers ?? {};
 
   // 🆕 계획 소요 시간(분)
   int get plannedMinutes => _diffMinutes(plannedStart, plannedEnd);
@@ -79,6 +92,11 @@ class TimelineBlock {
     'actualStart': actualStart,
     'actualEnd': actualEnd,
     'status': status,
+    'satisfaction': satisfaction,
+    'disruptions': disruptions,
+    'energyLevel': energyLevel,
+    'memo': memo,
+    'extraAnswers': extraAnswers,
   };
 
   factory TimelineBlock.fromJson(Map<String, dynamic> json) => TimelineBlock(
@@ -92,6 +110,11 @@ class TimelineBlock {
     actualStart: json['actualStart'] as String?,
     actualEnd: json['actualEnd'] as String?,
     status: json['status'] as String? ?? 'planned',
+    satisfaction: json['satisfaction'] as int?,
+    disruptions: (json['disruptions'] as List?)?.map((e) => e.toString()).toList() ?? [],
+    energyLevel: json['energyLevel'] as String? ?? '',
+    memo: json['memo'] as String? ?? '',
+    extraAnswers: (json['extraAnswers'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? {},
   );
 }
 

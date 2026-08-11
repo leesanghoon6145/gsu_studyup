@@ -295,68 +295,127 @@ class _ProjectScreenState extends State<ProjectScreen> {
   Future<void> _showTasksSheet(ProjectItem project) async {
     List<ProjectTask> tasks = await ProjectDataService.loadTasksForProject(project.id);
     if (!mounted) return;
+
     await showModalBottomSheet(
       context: context,
       backgroundColor: _containerBg,
-      isScrollControlled: true, // 🆕 [스크롤 수정] 내용이 길어져도 화면 높이를 넘겨서 스크롤 가능하게 함
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
           Future<void> refreshTasks() async {
             tasks = await ProjectDataService.loadTasksForProject(project.id);
             setSheetState(() {});
             await _load();
           }
 
+          // 🆕 [날짜/시간 선택] 작업의 기록 시각을 고르는 공용 함수
+          Future<DateTime?> pickDateTime(DateTime initial) async {
+            final pickedDate = await showDatePicker(
+              context: sheetContext,
+              initialDate: initial,
+              firstDate: DateTime(DateTime.now().year - 2),
+              lastDate: DateTime(DateTime.now().year + 2),
+              builder: (ctx, child) => Theme(
+                data: ThemeData.dark().copyWith(colorScheme: const ColorScheme.dark(primary: _brandGolden, onPrimary: _pageBg, surface: _containerBg)),
+                child: child!,
+              ),
+            );
+            if (pickedDate == null) return null;
+            final pickedTime = await showTimePicker(context: sheetContext, initialTime: TimeOfDay.fromDateTime(initial));
+            if (pickedTime == null) return null;
+            return DateTime(pickedDate.year, pickedDate.month, pickedDate.day, pickedTime.hour, pickedTime.minute);
+          }
+
+          String formatDateTime(DateTime d) =>
+              '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+          DateTime parseCreatedAt(String s) {
+            try {
+              final parts = s.split(' ');
+              final dateParts = parts[0].split('-');
+              final timeParts = parts[1].split(':');
+              return DateTime(int.parse(dateParts[0]), int.parse(dateParts[1]), int.parse(dateParts[2]), int.parse(timeParts[0]), int.parse(timeParts[1]));
+            } catch (e) {
+              return DateTime.now();
+            }
+          }
+
+          // 🆕 [수정 팝업 - 시트가 안 닫히도록 명확히 분리된 dialogContext 사용]
           Future<void> showEditTaskDialog(ProjectTask task) async {
             final controller = TextEditingController(text: task.title);
+            DateTime selectedTime = parseCreatedAt(task.createdAt);
+
             final String? action = await showDialog<String>(
-              context: context,
+              context: sheetContext,
               barrierColor: Colors.black.withOpacity(0.65),
-              builder: (context) => Dialog(
-                backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-                child: LuxuryDialogFrame(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      luxuryDialogHeader(icon: Icons.edit_note_rounded, en: 'EDIT TASK', ko: '작업 수정'),
-                      Container(
-                        decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
-                        child: TextField(
-                          controller: controller,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            prefixIcon: Icon(Icons.check_box_outlined, color: _brandGolden.withOpacity(0.85), size: 19),
-                            hintText: biHint('Task', '작업 내용'),
-                            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              builder: (editDialogContext) => StatefulBuilder(
+                builder: (editDialogContext, setEditDialogState) {
+                  return Dialog(
+                    backgroundColor: Colors.transparent,
+                    insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: LuxuryDialogFrame(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          luxuryDialogHeader(icon: Icons.edit_note_rounded, en: 'EDIT TASK', ko: '작업 수정'),
+                          Container(
+                            decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                            child: TextField(
+                              controller: controller,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                prefixIcon: Icon(Icons.check_box_outlined, color: _brandGolden.withOpacity(0.85), size: 19),
+                                hintText: biHint('Task', '작업 내용'),
+                                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          // 🆕 [시간 기록 수정] 작업 기록 시각을 직접 고쳐서 저장할 수 있음
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), minimumSize: const Size(double.infinity, 0)),
+                            onPressed: () async {
+                              final picked = await pickDateTime(selectedTime);
+                              if (picked != null) setEditDialogState(() => selectedTime = picked);
+                            },
+                            icon: const Icon(Icons.access_time_rounded, color: _brandGolden, size: 16),
+                            label: Text('Recorded (기록 시각): ${formatDateTime(selectedTime)}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                          ),
+                          const SizedBox(height: 20),
+                          luxuryBottomActions(
+                            isEdit: true,
+                            onDelete: () => Navigator.of(editDialogContext).pop('delete'),
+                            onCancel: () => Navigator.of(editDialogContext).pop(null),
+                            onSave: () {
+                              if (controller.text.trim().isEmpty) return;
+                              Navigator.of(editDialogContext).pop('save');
+                            },
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 20),
-                      luxuryBottomActions(
-                        isEdit: true,
-                        onDelete: () => Navigator.of(context).pop('delete'),
-                        onCancel: () => Navigator.of(context).pop(null),
-                        onSave: () {
-                          if (controller.text.trim().isEmpty) return;
-                          Navigator.of(context).pop('save');
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
             );
 
+            // 🆕 [시트 유지 확인] 여기는 showDialog가 이미 완전히 닫힌 뒤에만 실행되므로,
+            // 이 시점에 원래 열려있던 할일보기 시트(sheetContext)는 그대로 살아있음.
             if (action == 'delete') {
               await ProjectDataService.deleteTask(task.id);
               await refreshTasks();
             } else if (action == 'save' && controller.text.trim().isNotEmpty) {
-              final updated = ProjectTask(id: task.id, projectId: task.projectId, title: controller.text.trim(), isCompleted: task.isCompleted);
+              final updated = ProjectTask(
+                id: task.id,
+                projectId: task.projectId,
+                title: controller.text.trim(),
+                isCompleted: task.isCompleted,
+                createdAt: formatDateTime(selectedTime),
+              );
               await ProjectDataService.updateTask(updated);
               await refreshTasks();
             }
@@ -364,45 +423,105 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
           Future<void> showAddTaskDialog() async {
             final controller = TextEditingController();
-            final added = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: _pageBg,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: const BiTitle(en: 'ADD TASK', ko: '작업 추가', enSize: 15, koSize: 12),
-                content: TextField(
-                  controller: controller,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(hintText: biHint('Task', '작업 내용'), hintStyle: const TextStyle(color: Colors.white38), border: InputBorder.none),
-                ),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context, false), child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white54)),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
-                    onPressed: () {
-                      if (controller.text.trim().isEmpty) return;
-                      Navigator.pop(context, true);
-                    },
-                    child: const BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold),
-                  ),
-                ],
+            DateTime selectedTime = DateTime.now();
+
+            final String? action = await showDialog<String>(
+              context: sheetContext,
+              barrierColor: Colors.black.withOpacity(0.65),
+              builder: (addDialogContext) => StatefulBuilder(
+                builder: (addDialogContext, setAddDialogState) {
+                  return Dialog(
+                    backgroundColor: Colors.transparent,
+                    insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: LuxuryDialogFrame(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          luxuryDialogHeader(icon: Icons.playlist_add_rounded, en: 'ADD TASK', ko: '작업 추가'),
+                          Container(
+                            decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                            child: TextField(
+                              controller: controller,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                prefixIcon: Icon(Icons.check_box_outlined, color: _brandGolden.withOpacity(0.85), size: 19),
+                                hintText: biHint('Task', '작업 내용'),
+                                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // 🆕 [시간 기록] 처음부터 기록 시각을 원하는 대로 지정 가능 (기본값: 지금)
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), minimumSize: const Size(double.infinity, 0)),
+                            onPressed: () async {
+                              final picked = await pickDateTime(selectedTime);
+                              if (picked != null) setAddDialogState(() => selectedTime = picked);
+                            },
+                            icon: const Icon(Icons.access_time_rounded, color: _brandGolden, size: 16),
+                            label: Text('Recorded (기록 시각): ${formatDateTime(selectedTime)}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                  onPressed: () => Navigator.of(addDialogContext).pop(null),
+                                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                    Text('Cancel', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                    Text('취소', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                  ]),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                  onPressed: () {
+                                    if (controller.text.trim().isEmpty) return;
+                                    Navigator.of(addDialogContext).pop('save');
+                                  },
+                                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                    Text('Add', style: GoogleFonts.gowunBatang(color: _pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                    Text('추가', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                  ]),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             );
-            if (added == true && controller.text.trim().isNotEmpty) {
-              await ProjectDataService.addTask(ProjectTask(id: DateTime.now().microsecondsSinceEpoch.toString(), projectId: project.id, title: controller.text.trim()));
+
+            if (action == 'save' && controller.text.trim().isNotEmpty) {
+              await ProjectDataService.addTask(ProjectTask(
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
+                projectId: project.id,
+                title: controller.text.trim(),
+                createdAt: formatDateTime(selectedTime),
+              ));
               await refreshTasks();
             }
           }
 
           return Padding(
             padding: const EdgeInsets.all(20),
-            // 🆕 [스크롤 수정] 항목이 많아져도 전체가 스크롤되어 오버플로우가 나지 않음
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   BiInline(en: project.title, ko: '하위 작업', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                  const SizedBox(height: 4),
+                  const BiInline(en: 'Newest first', ko: '최근 기록이 맨 위', color: Colors.white38, fontSize: 10.5),
                   const SizedBox(height: 12),
                   if (tasks.isEmpty)
                     const BiInline(en: 'No tasks yet', ko: '등록된 작업이 없습니다', color: Colors.white38, fontSize: 13)
@@ -417,11 +536,11 @@ class _ProjectScreenState extends State<ProjectScreen> {
                           await refreshTasks();
                         },
                         title: Text(t.title, style: TextStyle(color: t.isCompleted ? Colors.white38 : Colors.white, decoration: t.isCompleted ? TextDecoration.lineThrough : null)),
+                        subtitle: Text(t.createdAt, style: const TextStyle(color: Colors.white38, fontSize: 10.5)), // 🆕 [시간 기록 표시]
                         activeColor: _brandGolden,
                         checkColor: _pageBg,
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
-                        // 🆕 [연필 아이콘 추가] 가로로 반듯한 3선(빨/노/파) 연필 - 누르면 수정/삭제 팝업
                         secondary: IconButton(
                           icon: const HorizontalPencilIcon(size: 18),
                           onPressed: () => showEditTaskDialog(t),
