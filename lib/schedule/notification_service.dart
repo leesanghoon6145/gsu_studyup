@@ -101,11 +101,13 @@ class NotificationService {
 
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
-          'gke_general_planner_channel',
+          'gke_general_planner_channel_v2', // 🆕 [알람 소리 수정] 채널ID를 바꿔서, 예전에 소리 꺼진 채로 기기에 저장된 채널 설정을 무시하고 새로 만듦 (안드로이드는 채널을 한번 만들면 설정이 코드로 안 바뀌고 고정되기 때문)
           'GKE StudyUp 알림',
           channelDescription: '일반 플래너 알림/약속 알림',
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true, // 🆕 [명시적 설정] 소리 재생을 명시적으로 켬
+          enableVibration: true,
         ),
         iOS: const DarwinNotificationDetails(),
       );

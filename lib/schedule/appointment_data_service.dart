@@ -16,6 +16,7 @@ class AppointmentItem {
   final String location;
   final String memo;
   bool isCompleted;
+  String createdAt; // 🆕 [정렬 수정] 최근에 입력한 게 맨 위로 오도록 하는 기준 시각
 
   AppointmentItem({
     required this.id,
@@ -26,7 +27,8 @@ class AppointmentItem {
     this.location = '',
     this.memo = '',
     this.isCompleted = false,
-  });
+    String? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -37,6 +39,7 @@ class AppointmentItem {
     'location': location,
     'memo': memo,
     'isCompleted': isCompleted,
+    'createdAt': createdAt,
   };
 
   factory AppointmentItem.fromJson(Map<String, dynamic> json) => AppointmentItem(
@@ -48,6 +51,7 @@ class AppointmentItem {
     location: json['location'] as String? ?? '',
     memo: json['memo'] as String? ?? '',
     isCompleted: json['isCompleted'] as bool? ?? false,
+    createdAt: json['createdAt'] as String?,
   );
 }
 
@@ -61,11 +65,24 @@ class AppointmentDataService {
       if (raw == null || raw.isEmpty) return [];
       final List<dynamic> decoded = jsonDecode(raw);
       final list = decoded.map((e) => AppointmentItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-      // 날짜+시간 순으로 정렬 (다가오는 약속이 위로)
+      // 🆕 [정렬 재변경] 지난 날짜/시간이 이미 지난 약속은 아래로 내리고,
+      // 아직 안 지난 약속들 사이에서는 최근에 입력한 것이 맨 위로 오도록 정렬.
+      final now = DateTime.now();
+      final String todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final String nowHHmm = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+      bool isPast(AppointmentItem item) {
+        if (item.date.compareTo(todayKey) < 0) return true;
+        if (item.date.compareTo(todayKey) > 0) return false;
+        if (item.time.isEmpty) return false;
+        return item.time.compareTo(nowHHmm) < 0;
+      }
+
       list.sort((a, b) {
-        final cmp = a.date.compareTo(b.date);
-        if (cmp != 0) return cmp;
-        return a.time.compareTo(b.time);
+        final bool aPast = isPast(a);
+        final bool bPast = isPast(b);
+        if (aPast != bPast) return aPast ? 1 : -1;
+        return b.createdAt.compareTo(a.createdAt);
       });
       return list;
     } catch (e) {

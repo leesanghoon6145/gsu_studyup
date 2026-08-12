@@ -363,33 +363,11 @@ class _ReminderScreenState extends State<ReminderScreen> {
             onChanged: (_) => _toggleEnabled(item),
             activeColor: _brandGolden,
           ),
-          IconButton(icon: const _MiniPencilIcon(), onPressed: () => _showDialog(existing: item)),
+          IconButton(icon: const EditPencilIcon(size: 20), onPressed: () => _showDialog(existing: item)),
         ],
       ),
     );
   }
 }
 
-class _MiniPencilIcon extends StatelessWidget {
-  const _MiniPencilIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    const double size = 18;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Transform.rotate(
-        angle: -0.78,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(2))),
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFFFACC15), borderRadius: BorderRadius.circular(2))),
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2))),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// (자체 연필 아이콘 정의는 제거하고 calendar_screen.dart의 공용 TriColorPencilIcon을 사용합니다)

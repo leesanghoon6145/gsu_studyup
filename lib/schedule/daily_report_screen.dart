@@ -156,7 +156,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
           const BiInline(en: "Today's Completion", ko: '오늘의 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
           const SizedBox(height: 8),
           Text('${today.completionPercent}%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          BiInline(en: 'Completed ${today.completedCount} · Pending ${today.totalCount - today.completedCount}', ko: '완료 ${today.completedCount}건 · 미완료 ${today.totalCount - today.completedCount}건', color: Colors.white38, fontSize: 12),
+          BiInline(en: 'Completed ${today.completedCount} · Pending ${today.totalCount - today.completedCount}', ko: '완료 ${today.completedCount}건 · 미완료 ${today.totalCount - today.completedCount}건', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
         ],
       ),
     );

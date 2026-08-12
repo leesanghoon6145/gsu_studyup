@@ -221,3 +221,20 @@ Widget luxuryBottomActions({
   );
 }
 
+// ============================================================================
+// 🆕 [진짜 연필 아이콘 - 최종 확정] EditPencilIcon
+// 기존에 쓰던 "색깔 막대 3개"는 실제로 연필처럼 안 보인다는 피드백을 받아서,
+// 누가 봐도 명확한 "메모 줄 + 연필" 모양(Icons.edit_note_rounded)으로 교체함.
+// 앞으로 모든 화면의 수정/편집 버튼은 이 아이콘으로 통일합니다.
+// ============================================================================
+class EditPencilIcon extends StatelessWidget {
+  final double size;
+  final Color color;
+  const EditPencilIcon({super.key, this.size = 22, this.color = const Color(0xFFE5C158)});
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(Icons.edit_note_rounded, color: color, size: size);
+  }
+}
+

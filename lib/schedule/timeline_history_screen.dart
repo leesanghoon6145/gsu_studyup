@@ -286,7 +286,18 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
               decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: _brandGolden.withOpacity(0.3))),
               child: Row(
                 children: [
-                  Icon(b.status == 'completed' ? Icons.check_circle : Icons.radio_button_unchecked, color: b.status == 'completed' ? _brandGolden : Colors.white38, size: 18),
+                  GestureDetector(
+                    onTap: () async {
+                      b.status = b.status == 'completed' ? 'planned' : 'completed';
+                      if (b.status == 'completed' && (b.actualEnd == null || b.actualEnd!.isEmpty)) {
+                        final now = DateTime.now();
+                        b.actualEnd = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+                      }
+                      await TimelineDataService.updateBlock(b);
+                      setState(() {});
+                    },
+                    child: Icon(b.status == 'completed' ? Icons.check_circle : Icons.radio_button_unchecked, color: b.status == 'completed' ? _brandGolden : Colors.white38, size: 18),
+                  ),
                   const SizedBox(width: 10),
                   Text('${b.plannedStart}~${b.plannedEnd}', style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 10),

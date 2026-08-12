@@ -100,12 +100,45 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
     setState(() => _isLoading = true);
     final blocks = await TimelineDataService.loadForDate(_todayKey);
 
-    // [자동 기본 틀] 오늘 항목이 하나도 없으면, 사용자가 버튼을 누를 필요 없이
-    // 바로 05:00~24:00 기본 틀을 자동으로 만들어서 채워줌.
+    // 🆕 [요청 반영] 오늘 항목이 하나도 없으면, 무조건 새 기본틀(자유시간)로
+    // 초기화하는 대신 - 먼저 "어제" 시간표가 있는지 확인해서 그대로 이어받음.
+    // 사용자가 직접 수정하지 않는 한, 어제 만들어둔 나만의 시간표가 매일 계속
+    // 이어지는 게 목표. 어제도 기록이 없을 때(정말 처음 쓰는 경우)만 기본틀 생성.
     if (blocks.isEmpty) {
+      final now = DateTime.now();
+      final yesterday = now.subtract(const Duration(days: 1));
+      final String yesterdayKey = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+      final yesterdayBlocks = await TimelineDataService.loadForDate(yesterdayKey);
+
+      if (yesterdayBlocks.isNotEmpty) {
+        // 🆕 [전날 이어받기] 어제 만들어둔 제목/시간/분류를 그대로 복사해서 오늘 것으로 만듦.
+        // 실행 상태(시작/완료/설문 답변)는 새로 시작하는 오늘 것이므로 초기화함.
+        for (final yb in yesterdayBlocks) {
+          final carriedOver = TimelineBlock(
+            id: '${DateTime.now().microsecondsSinceEpoch}_${yb.id}',
+            date: _todayKey,
+            plannedStart: yb.plannedStart,
+            plannedEnd: yb.plannedEnd,
+            title: yb.title,
+            category: yb.category,
+            isRoutine: yb.isRoutine,
+          );
+          await TimelineDataService.addBlock(carriedOver);
+        }
+        final carried = await TimelineDataService.loadForDate(_todayKey);
+        await _autoStartDueBlocks(carried);
+        if (!mounted) return;
+        setState(() {
+          _blocks = carried;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 어제도 기록이 없는 경우(정말 처음 사용하는 경우)에만 기본 틀 생성
       await _generateDefaultSlots();
       final refilled = await TimelineDataService.loadForDate(_todayKey);
-      await _autoStartDueBlocks(refilled); // 🆕 [자동 실행]
+      await _autoStartDueBlocks(refilled);
       if (!mounted) return;
       setState(() {
         _blocks = refilled;
@@ -117,7 +150,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
       return;
     }
 
-    await _autoStartDueBlocks(blocks); // 🆕 [자동 실행]
+    await _autoStartDueBlocks(blocks);
     if (!mounted) return;
     setState(() {
       _blocks = blocks;
@@ -823,7 +856,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                luxuryDialogHeader(icon: Icons.undo_rounded, en: 'UNDO', ko: '되돌리기'),
+                luxuryDialogHeader(icon: Icons.replay_circle_filled, en: 'UNDO', ko: '되돌리기'),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
@@ -995,10 +1028,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
     // (planned/running) 완료(completed)만 안 됐고 시간이 지났으면 전부 회색 처리함.
     final bool isPastUnfinished = !isCompleted && endMin >= 0 && nowMin >= endMin;
 
-    final Color tileBg = isPastUnfinished ? const Color(0xFF15181D) : _containerBg;
-    final Color borderColor = isPastUnfinished
-        ? Colors.white.withOpacity(0.08)
-        : isRunning
+    // 🆕 [요청 반영] 배경색/테두리는 절대 바꾸지 않고, 글자만 흐릿하게 통일함.
+    // (배경색이 갑자기 바뀌면 놀란다는 피드백을 받아 원상태 유지로 변경)
+    final Color tileBg = _containerBg;
+    final Color borderColor = isRunning
         ? _brandGolden
         : isNow
         ? _brandGolden.withOpacity(0.8)
@@ -1013,9 +1046,8 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
       decoration: BoxDecoration(
         color: tileBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: (isRunning || isNow) && !isPastUnfinished ? 1.6 : 1),
-        // 🆕 [회색 처리 버그 수정] 지나서 미완료인 칸은 빛나는 효과(glow)도 없어야 진짜 회색으로 보임
-        boxShadow: (isRunning || isNow) && !isPastUnfinished ? [BoxShadow(color: _brandGolden.withOpacity(0.2), blurRadius: 14, spreadRadius: 1)] : null,
+        border: Border.all(color: borderColor, width: (isRunning || isNow) ? 1.6 : 1),
+        boxShadow: (isRunning || isNow) ? [BoxShadow(color: _brandGolden.withOpacity(0.2), blurRadius: 14, spreadRadius: 1)] : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1024,7 +1056,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: isPastUnfinished ? Colors.white.withOpacity(0.05) : _pageBg, borderRadius: BorderRadius.circular(6)),
+                decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(6)),
                 child: Text('${block.plannedStart}~${block.plannedEnd}', style: TextStyle(color: timeTextColor, fontSize: 15, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 6),
@@ -1043,7 +1075,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
               // 되돌릴 수 있게 함. 3선 연필 바로 왼쪽에 배치.
               if (block.status != 'planned')
                 IconButton(
-                  icon: Icon(Icons.undo_rounded, color: isPastUnfinished ? Colors.white24 : Colors.orangeAccent.withOpacity(0.85), size: 19),
+                  icon: Icon(Icons.replay_circle_filled, color: isPastUnfinished ? Colors.white24 : Colors.orangeAccent.withOpacity(0.85), size: 20), // 🆕 [정확한 모양] 동그라미 안에 화살표 모양 아이콘
                   tooltip: 'Undo (되돌리기)',
                   onPressed: () => _undoBlockStatus(block),
                   padding: EdgeInsets.zero,
@@ -1092,19 +1124,19 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
               height: 36,
               child: ElevatedButton(
                 onPressed: () => _showCompletionSurveyDialog(block), // 🆕 [설문 연동] 바로 완료 대신 설문 먼저
-                style: ElevatedButton.styleFrom(backgroundColor: isPastUnfinished ? Colors.white24 : Colors.greenAccent.shade400),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent.shade400),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       'Started ${block.actualStart}',
-                      style: TextStyle(color: isPastUnfinished ? Colors.white70 : _pageBg, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(color: _pageBg, fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(width: 10),
                     Text(
                       '실행중',
                       // 🆕 [진하게 하지 않음 + 글자크기 통일] w900 -> w600으로 낮추고, 크기도 옆 글자와 동일하게(13)
-                      style: TextStyle(color: isPastUnfinished ? Colors.white70 : _pageBg, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(color: _pageBg, fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),

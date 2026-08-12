@@ -17,6 +17,7 @@ class ProjectItem {
   final String description;
   final String createdAt;
   final String completedDate; // 🆕 [리포트 연동] 상태가 '완료'로 바뀐 날짜('yyyy-MM-dd'), 리포트의 "완료된 프로젝트" 집계에 사용
+  String updatedAt; // 🆕 [정렬 수정] 최근에 만들거나 수정한 게 맨 위로 오도록 하는 기준 시각
 
   ProjectItem({
     required this.id,
@@ -27,7 +28,8 @@ class ProjectItem {
     this.description = '',
     required this.createdAt,
     this.completedDate = '',
-  });
+    String? updatedAt,
+  }) : updatedAt = updatedAt ?? createdAt;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -38,6 +40,7 @@ class ProjectItem {
     'description': description,
     'createdAt': createdAt,
     'completedDate': completedDate,
+    'updatedAt': updatedAt,
   };
 
   factory ProjectItem.fromJson(Map<String, dynamic> json) => ProjectItem(
@@ -49,6 +52,7 @@ class ProjectItem {
     description: json['description'] as String? ?? '',
     createdAt: json['createdAt'] as String? ?? '',
     completedDate: json['completedDate'] as String? ?? '',
+    updatedAt: json['updatedAt'] as String?,
   );
 }
 
@@ -94,16 +98,8 @@ class ProjectDataService {
       if (raw == null || raw.isEmpty) return [];
       final List<dynamic> decoded = jsonDecode(raw);
       final list = decoded.map((e) => ProjectItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-      // 🆕 [정렬 버그 수정] 만든 순서가 아니라 마감일이 가까운 순서로 정렬.
-      // 마감일이 없는 프로젝트는 맨 아래로 보냄.
-      list.sort((a, b) {
-        final bool aHasDeadline = a.deadline.isNotEmpty;
-        final bool bHasDeadline = b.deadline.isNotEmpty;
-        if (aHasDeadline && !bHasDeadline) return -1;
-        if (!aHasDeadline && bHasDeadline) return 1;
-        if (!aHasDeadline && !bHasDeadline) return b.createdAt.compareTo(a.createdAt); // 둘 다 마감일 없으면 최신 생성순
-        return a.deadline.compareTo(b.deadline); // 마감일 가까운 것부터
-      });
+      // 🆕 [정렬 재변경] 최근에 만들거나 수정한 프로젝트가 맨 위로 오도록 정렬
+      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return list;
     } catch (e) {
       return [];
