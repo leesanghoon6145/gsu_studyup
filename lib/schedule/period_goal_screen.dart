@@ -63,20 +63,27 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
 
   // 🆕 [핵심] 목표 유형에 따라 "지금" 기준 기간의 시작/끝 날짜를 계산.
   // 이 범위가 캘린더+타임라인 완료율을 조회하는 데 그대로 쓰입니다.
-  (DateTime, DateTime) _currentPeriodRange() {
+  (DateTime, DateTime) _currentPeriodRange() => _periodRangeWithOffset(0);
+
+  // 🆕 [버그 수정] offset을 받아서 다음달/이전달, 다음주/이전주, 내년/작년 등
+  // "지금"이 아닌 다른 기간도 계산할 수 있게 함. offset=0이면 지금과 동일.
+  (DateTime, DateTime) _periodRangeWithOffset(int offset) {
     final now = DateTime.now();
     final todayZero = DateTime(now.year, now.month, now.day);
     switch (widget.goalType) {
       case 'today':
-        return (todayZero, todayZero);
+        final d = todayZero.add(Duration(days: offset));
+        return (d, d);
       case 'weekly':
-        final start = todayZero.subtract(Duration(days: now.weekday - 1)); // 이번 주 월요일
-        final end = start.add(const Duration(days: 6)); // 이번 주 일요일
+        final thisWeekStart = todayZero.subtract(Duration(days: now.weekday - 1));
+        final start = thisWeekStart.add(Duration(days: 7 * offset));
+        final end = start.add(const Duration(days: 6));
         return (start, end);
       case 'monthly':
-        return (DateTime(now.year, now.month, 1), DateTime(now.year, now.month + 1, 0));
+        final targetMonth = now.month + offset;
+        return (DateTime(now.year, targetMonth, 1), DateTime(now.year, targetMonth + 1, 0));
       case 'yearly':
-        return (DateTime(now.year, 1, 1), DateTime(now.year, 12, 31));
+        return (DateTime(now.year + offset, 1, 1), DateTime(now.year + offset, 12, 31));
       default:
         return (todayZero, todayZero);
     }
@@ -95,18 +102,19 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
     final titleController = TextEditingController(text: existing?.title ?? '');
     final categoryController = TextEditingController(text: existing?.category ?? '');
     bool isAchieved = existing?.isAchieved ?? false;
+    int periodOffset = 0; // 🆕 [기간 선택] 0=지금, +1=다음 기간, -1=이전 기간 ...
 
     final (currentStart, currentEnd) = _currentPeriodRange();
-    final String periodLabel = _periodLabel(
-      isEdit ? (DateTime.tryParse(existing!.periodStart) ?? currentStart) : currentStart,
-      isEdit ? (DateTime.tryParse(existing!.periodEnd) ?? currentEnd) : currentEnd,
-    );
+    final String editPeriodLabel = isEdit ? _periodLabel(DateTime.tryParse(existing!.periodStart) ?? currentStart, DateTime.tryParse(existing.periodEnd) ?? currentEnd) : '';
 
     final String? action = await showDialog<String>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.65),
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final (selStart, selEnd) = _periodRangeWithOffset(periodOffset);
+          final String periodLabel = isEdit ? editPeriodLabel : _periodLabel(selStart, selEnd);
+
           return Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -118,15 +126,35 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                   children: [
                     luxuryDialogHeader(icon: isEdit ? Icons.edit_note_rounded : Icons.flag_rounded, en: isEdit ? 'EDIT GOAL' : 'ADD GOAL', ko: isEdit ? '목표 수정' : '목표 추가'),
 
+                    // 🆕 [버그 수정] 새 목표를 만들 때는 다른 달/주/연도로 이동해서 만들 수 있음
+                    // (예: 지금 8월인데 9월 목표를 미리 만들기). 수정할 때는 이미 정해진
+                    // 기간이라 이동 불가능(고정 표시만).
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       margin: const EdgeInsets.only(bottom: 14),
                       decoration: BoxDecoration(color: _brandGolden.withOpacity(0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: _brandGolden.withOpacity(0.3))),
                       child: Row(
                         children: [
+                          if (!isEdit)
+                            IconButton(
+                              icon: const Icon(Icons.chevron_left, color: _brandGolden),
+                              onPressed: () => setDialogState(() => periodOffset -= 1),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                          const SizedBox(width: 4),
                           const Icon(Icons.date_range, color: _brandGolden, size: 14),
                           const SizedBox(width: 6),
-                          BiInline(en: 'Period: $periodLabel', ko: '기간: $periodLabel', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
+                          Expanded(
+                            child: BiInline(en: 'Period: $periodLabel', ko: '기간: $periodLabel', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold, textAlign: TextAlign.center),
+                          ),
+                          if (!isEdit)
+                            IconButton(
+                              icon: const Icon(Icons.chevron_right, color: _brandGolden),
+                              onPressed: () => setDialogState(() => periodOffset += 1),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
                         ],
                       ),
                     ),
@@ -192,7 +220,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
           await GoalDataService.updateGoal(updated);
         }
       } else {
-        final (start, end) = _currentPeriodRange();
+        final (start, end) = _periodRangeWithOffset(periodOffset); // 🆕 [버그 수정] 선택한 기간(미래/과거 포함) 사용
         final dateStr = (DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
         final newGoal = GoalItem(
           id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -289,10 +317,10 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                 child: Text(goal.title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, decoration: goal.isAchieved ? TextDecoration.lineThrough : null)),
               ),
               IconButton(
-                icon: const HorizontalPencilIcon(size: 18),
+                icon: const ThreeColorPencilIcon(size: 18),
                 onPressed: () => _showGoalDialog(existing: goal),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
           ),

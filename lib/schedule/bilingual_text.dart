@@ -222,19 +222,46 @@ Widget luxuryBottomActions({
 }
 
 // ============================================================================
-// 🆕 [진짜 연필 아이콘 - 최종 확정] EditPencilIcon
-// 기존에 쓰던 "색깔 막대 3개"는 실제로 연필처럼 안 보인다는 피드백을 받아서,
-// 누가 봐도 명확한 "메모 줄 + 연필" 모양(Icons.edit_note_rounded)으로 교체함.
-// 앞으로 모든 화면의 수정/편집 버튼은 이 아이콘으로 통일합니다.
+// 🆕 [최종 확정 아이콘] ThreeColorPencilIcon
+// 빨강/노랑/파랑 3선을 가로로(대각선 아님) 놓고, 그 위에 실제 연필 모양을
+// 겹쳐서 "3색선 + 연필"을 동시에 만족합니다. 앱 전체의 모든 수정 버튼은
+// 이제부터 이 아이콘 하나로 통일합니다. (기존 TriColorPencilIcon,
+// HorizontalPencilIcon, EditPencilIcon은 전부 이걸로 교체 예정)
 // ============================================================================
-class EditPencilIcon extends StatelessWidget {
+class ThreeColorPencilIcon extends StatelessWidget {
   final double size;
-  final Color color;
-  const EditPencilIcon({super.key, this.size = 22, this.color = const Color(0xFFE5C158)});
+  const ThreeColorPencilIcon({super.key, this.size = 22});
 
   @override
   Widget build(BuildContext context) {
-    return Icon(Icons.edit_note_rounded, color: color, size: size);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 3색 가로선 (배경, 살짝 왼쪽 위 정렬)
+          Positioned(
+            left: 0,
+            top: size * 0.12,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(width: size * 0.62, height: size * 0.13, margin: EdgeInsets.symmetric(vertical: size * 0.045), decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(2))),
+                Container(width: size * 0.62, height: size * 0.13, margin: EdgeInsets.symmetric(vertical: size * 0.045), decoration: BoxDecoration(color: const Color(0xFFFACC15), borderRadius: BorderRadius.circular(2))),
+                Container(width: size * 0.62, height: size * 0.13, margin: EdgeInsets.symmetric(vertical: size * 0.045), decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(2))),
+              ],
+            ),
+          ),
+          // 진짜 연필 모양 (오른쪽 아래에 겹쳐서 배치)
+          Positioned(
+            right: -size * 0.05,
+            bottom: -size * 0.08,
+            child: Icon(Icons.edit_rounded, size: size * 0.58, color: const Color(0xFFE5C158)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

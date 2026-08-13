@@ -109,8 +109,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   // ============================================================================
   late Map<String, List<Map<String, dynamic>>> _yearlyTargetsMap;
   // 🆕 [2026-08-03] 월간 "학습 리스트" 체크리스트 - 연간 목표 리스트와 동일한 방식(체크박스+줄긋기)으로
-  // 동작하도록 함. 월(1~12) 번호를 키로 사용하며, 각 항목은 번역 카탈로그 키(labelKey)와 완료 여부(done)만
-  // 저장함 — 실제 표시 문구는 언어 설정에 따라 _t(labelKey)로 매번 새로 생성되므로 다국어가 항상 정확함.
+  // 동작하도록 함. 월(1~12) 번호를 키로 사용하며, 각 항목은 내장 항목이면 번역 카탈로그 키(labelKey)를,
+  // 사용자가 직접 추가한 항목이면 원문 그대로(customText)를 저장함 — 완료 여부(done)와 함께.
   late Map<int, List<Map<String, dynamic>>> _monthlyTargetsMap;
 
   // 🆕 [2026-08-03] 학사 타이머(academic_timeline_screen.dart)의 [개인] 시간표 연동.
@@ -121,9 +121,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   // index 0=일 ... 6=토 (weekdaysSunFirst와 순서 일치)
   static const List<String> _weekdayEnKeysSunFirst = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   late List<Map<String, dynamic>> _globalSchedules;
-
-  // [주석] 5개 주차(0~4) × 7개 요일(1~7) 단위의 순환형 주간 고정 시간표 템플릿 마스터 (토/일 스펙 템플릿은 삭제됨)
-  late Map<int, Map<int, List<Map<String, dynamic>>>> _weeklyTemplateMaster;
 
   // [주석] 사용자가 특정 날짜에 수행하고 완료(별 획득)한 실제 기록 인스턴스 저장소
   late Map<String, List<Map<String, dynamic>>> _dailyExecutionInstanceMap;
@@ -239,6 +236,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     // 🆕 [2026-08-02] 주간(Week) 탭 - 실제 캘린더 주 전환에 따른 신규 문구
     'weekGoToday': {'KO': '오늘로 이동', 'EN': 'Go to Today', 'JA': '今日に移動', 'ZH': '回到今天', 'FR': 'Aller à aujourd\'hui', 'DE': 'Zu heute springen', 'RU': 'Перейти к сегодня', 'AR': 'الانتقال لليوم', 'HI': 'आज पर जाएं', 'VI': 'Về hôm nay', 'ES': 'Ir a hoy', 'TH': 'ไปที่วันนี้'},
     'weekEmptyMain': {'KO': '이번 주에 등록된 주요 일정이 없습니다.', 'EN': 'No main schedule registered for this week.', 'JA': '今週登録された主要日程がありません。', 'ZH': '本周暂无已登记的主要日程。', 'FR': 'Aucun programme principal cette semaine.', 'DE': 'Kein Hauptplan für diese Woche registriert.', 'RU': 'На эту неделю основное расписание не добавлено.', 'AR': 'لا يوجد جدول رئيسي مسجل لهذا الأسبوع.', 'HI': 'इस सप्ताह के लिए कोई मुख्य कार्यक्रम दर्ज नहीं है।', 'VI': 'Chưa có lịch chính nào được đăng ký cho tuần này.', 'ES': 'No hay horario principal registrado para esta semana.', 'TH': 'ไม่มีตารางหลักที่ลงทะเบียนไว้สำหรับสัปดาห์นี้'},
+
+    // 🆕 [2026-08-10 연동/버그수정] 신규 문구
+    'addMonthlyTargetTitle': {'KO': '월간 목표 추가', 'EN': 'Add Monthly Target', 'JA': '月間目標を追加', 'ZH': '添加月度目标', 'FR': 'Ajouter un objectif mensuel', 'DE': 'Monatsziel hinzufügen', 'RU': 'Добавить месячную цель', 'AR': 'إضافة هدف شهري', 'HI': 'मासिक लक्ष्य जोड़ें', 'VI': 'Thêm mục tiêu hằng tháng', 'ES': 'Añadir objetivo mensual', 'TH': 'เพิ่มเป้าหมายรายเดือน'},
+    'addNewTimeSlotBtn': {'KO': '새 학습 시간대 추가', 'EN': 'Add Time Slot', 'JA': '新規学習時間帯を追加', 'ZH': '添加新学习时段', 'FR': 'Ajouter un créneau', 'DE': 'Neuen Zeitraum hinzufügen', 'RU': 'Добавить интервал', 'AR': 'إضافة فترة جديدة', 'HI': 'नया समय स्लॉट जोड़ें', 'VI': 'Thêm khung giờ mới', 'ES': 'Añadir bloque de horario', 'TH': 'เพิ่มช่วงเวลาใหม่'},
+    'emptyDayTimelineState': {'KO': '이 날짜에 등록된 학습 타임라인이 없습니다. 주간 탭에서 요일별 시간표를 먼저 등록해보세요.', 'EN': 'No study timeline registered for this date. Try registering a weekday schedule in the Week tab first.', 'JA': 'この日付に登録された学習タイムラインがありません。まず週間タブで曜日別時間表を登録してください。', 'ZH': '该日期暂无已登记的学习时间线。请先在周视图中登记该星期的课程表。', 'FR': 'Aucune chronologie d\'étude enregistrée pour cette date. Essayez d\'abord d\'enregistrer un horaire dans l\'onglet Semaine.', 'DE': 'Für dieses Datum ist keine Lernzeitleiste registriert. Registrieren Sie zuerst einen Wochentagsplan im Wochen-Tab.', 'RU': 'Для этой даты не зарегистрирована учебная хронология. Сначала зарегистрируйте расписание на вкладке Неделя.', 'AR': 'لا يوجد جدول زمني للدراسة مسجل لهذا التاريخ. جرّب تسجيل جدول أسبوعي أولاً في تبويب الأسبوع.', 'HI': 'इस तारीख के लिए कोई अध्ययन समयरेखा दर्ज नहीं है। पहले सप्ताह टैब में साप्ताहिक शेड्यूल दर्ज करें।', 'VI': 'Chưa có dòng thời gian học tập nào cho ngày này. Hãy đăng ký lịch theo ngày trong tuần trước ở tab Tuần.', 'ES': 'No hay cronología de estudio registrada para esta fecha. Intenta registrar primero un horario semanal en la pestaña Semana.', 'TH': 'ไม่มีไทม์ไลน์การเรียนที่ลงทะเบียนไว้สำหรับวันนี้ ลองลงทะเบียนตารางประจำวันในแท็บสัปดาห์ก่อน'},
   };
 
   static String _t(String key) {
@@ -510,25 +512,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       }
     });
 
-    _weeklyTemplateMaster = {
-      for (int w = 0; w < 5; w++)
-        w: {
-          for (int d = 1; d <= 7; d++)
-            d: [
-              {'time': '06:00 ~ 07:00', 'title': '기상 및 암기', 'memo': '새벽 기상 후 핵심 단어 및 암기과정 마스터 리프레시', 'category': '기타', 'custom_book': '', 'is_starred': false},
-              {'time': '07:00 ~ 08:00', 'title': '등교', 'memo': '오전 등교 및 주간 자율 플래너 로드 진입 완료', 'category': '기타', 'custom_book': '', 'is_starred': false},
-              {'time': '08:00 ~ 16:00', 'title': '학교생활', 'memo': '학교 정규 교과 수업 집중 이수 및 학업 성취도 빌드업', 'category': '교과서', 'custom_book': '', 'is_starred': false},
-              {'time': '16:00 ~ 17:00', 'title': '휴식', 'memo': '에너지 충전 및 하교 후 자기주도 학습 모드 전환 휴식', 'category': '기타', 'custom_book': '', 'is_starred': false},
-              {'time': '17:00 ~ 18:00', 'title': '고등수학', 'memo': '고등 수학 기본 개념 맵핑 및 유형별 고난도 문제 격파', 'category': '문제집', 'custom_book': '블랙라벨', 'is_starred': false},
-              {'time': '18:00 ~ 19:00', 'title': '저녁식사', 'memo': '균형 잡힌 영양 섭취 및 야간 집중 자습 리커버리 시간', 'category': '기타', 'custom_book': '', 'is_starred': false},
-              {'time': '19:00 ~ 20:00', 'title': '고등영어 자이스토리 실전', 'memo': '자이스토리 실전 모의고사 분석 및 고난도 구문 독해 트레이닝', 'category': '문제집', 'custom_book': '기출문제집', 'is_starred': false},
-              {'time': '20:00 ~ 21:00', 'title': '중등2-2 진도', 'memo': '중등 2학년 2학기 핵심 기하 파트 심화 진도 선행 점검', 'category': '동영상', 'custom_book': '', 'is_starred': false},
-              {'time': '21:00 ~ 22:00', 'title': '세계사', 'memo': '세계사 주요 연표 마인드맵핑 및 흐름 정리 암기 트랙', 'category': '교과서', 'custom_book': '', 'is_starred': false},
-              {'time': '22:00 ~ 23:00', 'title': '오늘것 오답 또는 총정리', 'memo': '오늘 진행된 전체 진도 오답노트 정밀 기록 및 최종 스터디업 클로징', 'category': '문제집', 'custom_book': '', 'is_starred': false},
-            ],
-        }
-    };
-
     _yearlyTargetsMap = {
       '2026년': [
         {'title': '2026 민사고 합격 독점 스케줄', 'done': true},
@@ -550,26 +533,24 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
     _globalSchedules = [
       {
+        'id': 'seed_1',
         'year': 2026, 'month': 7, 'day': 3, 'time': '12:00',
         'title': '자기주도 학습 핵심 아키텍처 가동', 'color': schoolColor, 'memo': '시스템 리팩토링 및 캘린더 엔진 결합',
       }
     ];
     _fixedDayTimelines = [];
+    _dailyExecutionInstanceMap = {};
 
     _sortGlobalSchedules();
 
-    _initStorageAndLoad().then((_) {
-      _syncDailyTimelineForDate(_selectedDayDate);
-      _calculateMonthlyProgress();
+    // 🆕 [버그 수정 2026-08-10] 개인 시간표를 먼저 불러온 뒤에 오늘 날짜 타임라인을 동기화해야
+    // "가짜 10개 항목" 대신 실제 개인 시간표 데이터를 정확히 참조할 수 있음(순서 중요).
+    _loadPersonalTimetableCache().then((_) {
+      _initStorageAndLoad().then((_) {
+        _syncDailyTimelineForDate(_selectedDayDate);
+        _calculateMonthlyProgress();
+      });
     });
-    _loadPersonalTimetableCache(); // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 최초 로드
-  }
-
-  int _getContinuousWeekIndex(DateTime date) {
-    final DateTime yearStart = DateTime(date.year, 1, 1);
-    final int daysDiff = date.difference(yearStart).inDays;
-    final int yearWeekNumber = ((daysDiff + yearStart.weekday) / 7).ceil();
-    return (yearWeekNumber - 1) % 5;
   }
 
   void _syncDailyTimelineForDate(DateTime date) async {
@@ -584,13 +565,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     final String? prepPeriod = prefs.getString('gke_exam_prep_period');
     final bool timelineEnabled = prefs.getBool('gke_exam_timeline_enabled') ?? false;
 
-    final String? studyTimelineData = prefs.getString('gke_study_timeline_data');
-    if (studyTimelineData != null && studyTimelineData.isNotEmpty) {
-      debugPrint('[GKE StudyUp] Academic study timeline synced: $studyTimelineData');
-    }
-
     bool isExamModeActive = false;
-    String examStatusTitleEn = "REGULAR STUDY RUN";
     String examStatusTitleKo = "평상시 자율 학습 계획 트랙";
 
     if (timelineEnabled && startStr != null && endStr != null) {
@@ -621,7 +596,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           dDayLabel = "D+${dDayCount.abs()}";
         }
 
-        examStatusTitleEn = "EXAM PREP: WEEK $currentExamWeek DAY $currentExamDayNum ($dDayLabel)";
         examStatusTitleKo = "[$examType 대비] $currentExamWeek주차 $currentExamDayNum일차 실전 모드 ($dDayLabel)";
       }
     }
@@ -638,10 +612,24 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           {'time': '22:00 ~ 23:00', 'title': 'CLOSING SUMMARY & STAR COLLECT\n[오늘 시험 범위 최종 마감 및 별 수집]', 'memo': '자정 전 완벽 리커버리', 'category': '기타', 'custom_book': '', 'is_starred': false},
         ];
       } else {
-        int calculatedWeekIdx = _getContinuousWeekIndex(date);
-        int weekdayIdx = date.weekday;
-        List<Map<String, dynamic>> templateList = _weeklyTemplateMaster[calculatedWeekIdx]?[weekdayIdx] ?? [];
-        freshInstance = templateList.map((item) => Map<String, dynamic>.from(item)).toList();
+        // 🆕 [버그 수정 2026-08-10] 기존엔 모든 요일에 동일한 가짜 10개 항목(_weeklyTemplateMaster)이
+        // 자동으로 채워져서, 사용자가 실제로 1개를 추가해도 "이미 있던 가짜 10개"까지 함께 보여
+        // "1개 넣었는데 10개가 생겼다"처럼 보이는 문제가 있었음. 이제 그 가짜 데이터를 완전히 제거하고,
+        // 대신 주간 탭과 동일한 "진짜 개인 시간표"(gke_custom_schedules)를 그대로 복사해와서 시작함.
+        // 개인 시간표에 그 요일 데이터가 없으면 빈 목록으로 시작함(가짜 데이터로 채우지 않음).
+        if (!_personalTimetableLoaded) {
+          await _loadPersonalTimetableCache();
+        }
+        final String weekdayEnKey = _weekdayEnKeysSunFirst[date.weekday % 7];
+        final List<Map<String, String>> personalItems = _getPersonalScheduleFor(weekdayEnKey);
+        freshInstance = personalItems.map((item) => <String, dynamic>{
+          'time': item['time'] ?? '',
+          'title': item['task'] ?? '',
+          'memo': '',
+          'category': '기타',
+          'custom_book': '',
+          'is_starred': false,
+        }).toList();
       }
 
       _dailyExecutionInstanceMap[dateKey] = freshInstance;
@@ -654,7 +642,6 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     if (mounted) {
       setState(() {
         _fixedDayTimelines = _dailyExecutionInstanceMap[dateKey]!;
-        _selectedWeekIndex = _getContinuousWeekIndex(date);
       });
     }
   }
@@ -761,6 +748,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           _personalTimetableCache = restored;
           _personalTimetableLoaded = true;
         });
+      } else {
+        _personalTimetableCache = restored;
+        _personalTimetableLoaded = true;
       }
     } catch (e) {
       debugPrint('[GKE StudyUp] 개인 시간표 로드 실패: $e');
@@ -911,6 +901,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     });
   }
 
+  // 🆕 [버그 수정 2026-08-10] 새 일정에 고유 ID를 부여하기 위한 헬퍼.
+  // 기존엔 ID가 없어서 삭제 시 "제목+월+일"이 같은 항목을 통째로 지웠는데, 같은 날 같은 제목의
+  // 일정이 두 개 이상이면 둘 다 삭제되는 위험이 있었음. 이제 매번 고유한 ID를 부여해서 정확히
+  // 그 항목 하나만 지울 수 있게 함.
+  String _generateUniqueScheduleId() {
+    return 'sch_${DateTime.now().microsecondsSinceEpoch}_${_globalSchedules.length}';
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -1018,7 +1016,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
-        _buildDynamicSectionHeader('sectionYearlyTarget', () { _showAddScheduleBottomSheet(context, '목표'); }),
+        // 🆕 [버그 수정 2026-08-10] 연간 탭의 "+"만 [일정]/[목표] 둘 다 선택 가능 (allowTargetOption: true).
+        _buildDynamicSectionHeader('sectionYearlyTarget', () { _showAddScheduleBottomSheet(context, '목표', allowTargetOption: true); }),
         const SizedBox(height: 12),
         SizedBox(
           height: 38,
@@ -1198,6 +1197,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
+        // 🆕 [버그 수정 2026-08-10] 월간 탭의 "+"는 [일정]만 추가 (allowTargetOption: false, 기본값).
+        // 월간 목표(학습 리스트) 추가는 아래 별도의 작은 "+" 버튼으로 분리함.
         _buildDynamicSectionHeader('sectionMonthlyMgmt', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 15),
         Container(
@@ -1329,11 +1330,34 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${_monthNumText(targetMonth)} ${_t('monthMasterPack')}', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text('${_monthNumText(targetMonth)} ${_t('monthMasterPack')}', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
+                    ),
+                    // 🆕 [버그 수정 2026-08-10] 월간 목표(학습 리스트) 전용 추가 버튼 신설.
+                    // 지금까지는 이 리스트에 새 항목을 추가할 방법이 전혀 없었음.
+                    GestureDetector(
+                      onTap: () => _showAddMonthlyTargetDialog(targetMonth),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.2), color: goldColor.withValues(alpha: 0.08)),
+                        child: Icon(Icons.add, color: goldColor, size: 15),
+                      ),
+                    ),
+                  ],
+                ),
                 const Divider(color: Color(0xFF1E293B), height: 16),
-                ...(_monthlyTargetsMap[targetMonth] ?? []).asMap().entries.map((entry) {
-                  return _buildMonthChecklistItem(entry.value['labelKey'], entry.value['done'], entry.key, targetMonth);
-                }).toList(),
+                if ((_monthlyTargetsMap[targetMonth] ?? []).isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text(_t('emptyMonthSchedule'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)),
+                  )
+                else
+                  ...(_monthlyTargetsMap[targetMonth] ?? []).asMap().entries.map((entry) {
+                    return _buildMonthChecklistItem(entry.value, entry.key, targetMonth);
+                  }).toList(),
               ],
             ),
           ),
@@ -1375,7 +1399,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           children: [
                             SizedBox(
                               width: 76,
-                              child: Text(dateTimeLabel, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                              child: Text(dateTimeLabel, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                             ),
                             Container(width: 3, height: 32, margin: const EdgeInsets.symmetric(horizontal: 10), color: schedule['color'] ?? goldColor),
                             Expanded(
@@ -1409,9 +1433,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   // - "1~5주차 순환 템플릿" 방식의 가상 주차 개념을 버리고, 실제 일~토 캘린더 주 기준으로 전환.
   // - 진입 시 항상 오늘이 속한 실제 주가 기본 선택됨 (initState의 _weekViewRangeStart 참고).
   // - ◀ ▶ 로 실제 주 단위 이동, "오늘로 이동" 버튼으로 즉시 복귀.
-  // - [학습 타임라인] 서브탭: 요일별 고정 템플릿(_weeklyTemplateMaster) 로직 자체는 그대로 유지하되,
-  //   이제 그 주의 "실제 날짜"에 맞춰 계산(_getContinuousWeekIndex(실제날짜))하여 표시 — 일간 탭과 동일한
-  //   계산식을 쓰므로 일간에서 보이는 고정 시간표와 항상 일치함.
+  // - [학습 타임라인] 서브탭: 요일별 실제 개인 시간표(gke_custom_schedules)를 그대로 보여줌 — 일간
+  //   탭의 "일정 타임라인 상세"와 완전히 동일한 원본 데이터를 공유함.
   // - [주요 일정] 서브탭: 더 이상 정적 문구가 아니라, 실제 _globalSchedules 중 이 주 범위(일~토)에 속하는
   //   항목만 필터링해서 보여주고, 탭하면 기존 수정/삭제 팝업과 연결됨(typeKey: 'WEEK_MAIN').
   // ============================================================================
@@ -1440,6 +1463,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
+        // 🆕 [버그 수정 2026-08-10] 주간 탭의 "+"도 [일정]만 추가 (allowTargetOption: false, 기본값).
         _buildDynamicSectionHeader('sectionWeeklyAnalytics', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
 
@@ -1557,7 +1581,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         ),
         const SizedBox(height: 16),
         if (_isWeekTimelineSelected) ...[
-          Text('$weekRangeLabel ${_t('weekdayTemplateOverview')}', style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
+          Text('$weekRangeLabel ${_t('weekdayTemplateOverview')}', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
           const SizedBox(height: 10),
           ...weekDates.asMap().entries.map((entry) {
             int i = entry.key; // 0=일 ... 6=토
@@ -1600,7 +1624,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                             child: Text('${actualDate.month}/${actualDate.day}($dayLabel)', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
                           ),
                           const SizedBox(height: 3),
-                          Text(dayLabelEn, style: GoogleFonts.gowunBatang(fontSize: 10, color: isSunday ? examColor : slate400, fontWeight: FontWeight.bold)),
+                          Text(dayLabelEn, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.gowunBatang(fontSize: 10, color: isSunday ? examColor : slate400, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -1648,9 +1672,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(dateBadge, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
-                            Text(dateBadgeEn, style: GoogleFonts.gowunBatang(fontSize: 10, color: goldColor.withValues(alpha: 0.7), fontWeight: FontWeight.bold)),
-                            Text(schedule['time'] ?? '', style: GoogleFonts.notoSerif(fontSize: 10, color: slate400)),
+                            Text(dateBadge, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                            Text(dateBadgeEn, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.gowunBatang(fontSize: 10, color: goldColor.withValues(alpha: 0.7), fontWeight: FontWeight.bold)),
+                            Text(schedule['time'] ?? '', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 10, color: slate400)),
                           ],
                         ),
                       ),
@@ -1682,10 +1706,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     List<Map<String, dynamic>> targetDaySchedules = _globalSchedules
         .where((s) => s['year'] == _selectedDayDate.year && s['month'] == _selectedDayDate.month && s['day'] == _selectedDayDate.day)
         .toList();
+    // 🆕 [버그 수정 2026-08-10] DailyTodoListSection 위젯은 자체적으로 정렬하지 않으므로,
+    // 기존 인라인 코드가 하던 "시간 순 정렬"을 여기서 미리 적용해서 동일한 표시 순서를 유지함.
+    targetDaySchedules.sort((a, b) => (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString()));
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
+        // 🆕 [버그 수정 2026-08-10] 일간 탭의 "+"도 [일정]만 추가 (allowTargetOption: false, 기본값).
         _buildDynamicSectionHeader('sectionDailyScheduler', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
         PlannerCalendarView(
@@ -1802,69 +1830,186 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           ],
         ),
         const SizedBox(height: 16),
-        Builder(
-          builder: (context) {
-            List<Map<String, dynamic>> sortedDaySchedules = List<Map<String, dynamic>>.from(targetDaySchedules);
-            sortedDaySchedules.sort((a, b) => (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString()));
-
-            if (sortedDaySchedules.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24.0),
-                child: Center(
-                  child: Text(
-                    _t('emptyDaySchedule'),
-                    style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
-                  ),
+        // 🆕 [버그 수정 2026-08-10] 토글 값(_isTimeViewSelected)을 실제로 반영해서 화면을 분기함.
+        // 기존엔 이 값과 무관하게 항상 "오늘 주요 일정"만 보여줬음 — [일정 타임라인 상세] 화면 자체가
+        // 열릴 방법이 없었던 근본 원인.
+        // 🆕 [버그 수정 2026-08-10] "일정 타임라인 상세"는 지금까지 한 번도 화면에 정상적으로
+        // 노출된 적이 없던(고장나있던) 기능이므로, 이미 만들어져 있던 전용 위젯(StudyTimelineSection)을
+        // 그대로 연결해서 중복 코드 없이 사용함. 반대로 "오늘 주요 일정"은 지금까지 실제로 화면에
+        // 정상 노출되어 왔던 기능이라, 디자인을 임의로 바꾸지 않기 위해 기존과 동일한 인라인 렌더링을
+        // (색상 바 + 시간 + 제목/메모 + 통일 아이콘) 그대로 유지함 — DailyTodoListSection 위젯은
+        // 디자인(사각형 색상 표기+카테고리 괄호 병기)이 달라서 여기 연결하면 원치 않는 디자인 변경이
+        // 되므로 사용하지 않음(그 위젯은 다른 화면 전용으로 남겨둠).
+        _isTimeViewSelected
+            ? StudyTimelineSection(
+          fixedDayTimelines: _fixedDayTimelines,
+          selectedDayDate: _selectedDayDate,
+          goldColor: goldColor,
+          slate400: slate400,
+          slate800: slate800,
+          examColor: examColor,
+          onUnifiedPopupTrack: (item, idx) => _showUnifiedPopupTrack(item, typeKey: 'DAY_TIME', index: idx),
+          onAddNewTimeSlot: _showAddDayTimeSlotDialog,
+        )
+            : (targetDaySchedules.isEmpty
+            ? Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24.0),
+          child: Center(
+            child: Text(
+              _t('emptyDaySchedule'),
+              style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+            ),
+          ),
+        )
+            : Column(
+          children: targetDaySchedules.map((item) {
+            return GestureDetector(
+              onTap: () { _showUnifiedPopupTrack(item, typeKey: 'DAY_MAIN'); },
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF020617),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: slate800),
                 ),
-              );
-            }
-
-            return Column(
-              children: sortedDaySchedules.map((item) {
-                return GestureDetector(
-                  onTap: () { _showUnifiedPopupTrack(item, typeKey: 'DAY_MAIN'); },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF020617),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: slate800),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      child: Text(
+                        item['time'] ?? '',
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold),
+                      ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 56,
-                          child: Text(
-                            item['time'] ?? '',
-                            style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        Container(width: 3, height: 32, margin: const EdgeInsets.symmetric(horizontal: 10), color: item['color'] ?? goldColor),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold)),
-                              if ((item['memo'] ?? '').toString().isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(item['memo'], style: GoogleFonts.notoSansKr(fontSize: 11, color: slate400)),
-                              ],
-                            ],
-                          ),
-                        ),
-                        _buildEditActionIcon(size: 14),
-                      ],
+                    Container(width: 3, height: 32, margin: const EdgeInsets.symmetric(horizontal: 10), color: item['color'] ?? goldColor),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold)),
+                          if ((item['memo'] ?? '').toString().isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(item['memo'], style: GoogleFonts.notoSansKr(fontSize: 11, color: slate400)),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              }).toList(),
+                    _buildEditActionIcon(size: 14),
+                  ],
+                ),
+              ),
             );
-          },
-        ),
+          }).toList(),
+        )),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  // 🆕 [버그 수정 2026-08-10] 일간 "일정 타임라인 상세"에 새 시간대를 직접 추가하는 다이얼로그.
+  // 여기서 추가한 항목은 그날짜만의 기록(_fixedDayTimelines/_dailyExecutionInstanceMap)에 저장되며,
+  // 개인 시간표(주간 탭)와는 독립적으로 그날만 반영됨(그날 하루만 특별한 일정을 넣고 싶을 때 사용).
+  void _showAddDayTimeSlotDialog() {
+    final TextEditingController timeController = TextEditingController();
+    final TextEditingController titleController = TextEditingController();
+    final TextEditingController memoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF020617),
+          shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
+          title: Text(
+            _biStr('popupAddNewEntryTitle'),
+            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+            style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: '09:00 ~ 10:00', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                    filled: true, fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(_biStr('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: titleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: _biStr('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                    filled: true, fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(_biStr('labelMemo'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: memoController, maxLines: 2, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: _biStr('hintScheduleDetail'), hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                    filled: true, fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: TextButton(
+                    onPressed: () { Navigator.of(dialogContext).pop(); },
+                    child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                    onPressed: () {
+                      if (titleController.text.trim().isEmpty) return;
+                      final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                      setState(() {
+                        _fixedDayTimelines.add({
+                          'time': timeController.text.trim().isEmpty ? _currentTimeString() : timeController.text.trim(),
+                          'title': titleController.text.trim(),
+                          'memo': memoController.text.trim(),
+                          'category': '기타',
+                          'custom_book': '',
+                          'is_starred': false,
+                        });
+                        _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                      });
+                      _calculateMonthlyProgress();
+                      _saveMasterData();
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: Text(_biStr('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1943,15 +2088,19 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    TextButton(
-                      onPressed: () { Navigator.of(dialogContext).pop(); },
-                      child: Text(_biStr('btnClose'), style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Flexible(
+                      child: TextButton(
+                        onPressed: () { Navigator.of(dialogContext).pop(); },
+                        child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
                     ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: goldColor, visualDensity: VisualDensity.compact),
-                      icon: const Icon(Icons.add, size: 14, color: Color(0xFF020617)),
-                      label: Text(_biStr('btnAdd'), style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
-                      onPressed: () { Navigator.of(dialogContext).pop(); _showCalendarQuickAddPopup(dayNum); },
+                    Flexible(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: goldColor, visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.add, size: 14, color: Color(0xFF020617)),
+                        label: Text(_biStr('btnAdd'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                        onPressed: () { Navigator.of(dialogContext).pop(); _showCalendarQuickAddPopup(dayNum); },
+                      ),
                     ),
                   ],
                 ),
@@ -2001,7 +2150,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           Expanded(
                             child: Text(
                               '${date.month}/${date.day} ($dayLabelKo/$dayLabelEn) ${_t('weekTimelineWord')}',
-                              overflow: TextOverflow.ellipsis, maxLines: 1,
+                              overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
                               style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -2060,6 +2209,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                                       width: 92,
                                       child: Text(
                                         item['time'] ?? '',
+                                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
                                         style: GoogleFonts.notoSerif(fontSize: 12, color: isTimePassedNow ? slate500 : goldColor, fontWeight: FontWeight.bold),
                                       ),
                                     ),
@@ -2110,6 +2260,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
           title: Text(
             index == null ? _biStr('popupAddNewEntryTitle') : _biStr('popupEditModeTitle'),
+            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
             style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: SingleChildScrollView(
@@ -2146,60 +2297,66 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 if (index != null)
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
-                        list.removeAt(index);
-                        _personalTimetableCache[cacheKey] = list;
-                      });
-                      _savePersonalTimetableCache();
-                      onSaved();
-                      Navigator.of(dialogContext).pop();
-                    },
-                    child: Text(_biStr('btnDelete'), style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
-                  )
-                else
-                  const SizedBox.shrink(),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () { Navigator.of(dialogContext).pop(); },
-                      child: Text(_biStr('btnClose'), style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 4),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                  Flexible(
+                    child: TextButton(
                       onPressed: () {
-                        final String newTime = timeController.text.trim();
-                        final String newTask = taskController.text.trim();
-                        if (newTime.isEmpty || newTask.isEmpty) return;
-
                         setState(() {
                           final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
-                          final Map<String, String> newItem = {'time': newTime, 'task': newTask};
-                          if (index == null) {
-                            // 🆕 시간순 자동 배치 - 시작 시각 기준으로 올바른 위치에 삽입
-                            final int? newStart = _parsePersonalStartMinutes(newTime);
-                            int insertAt = list.length;
-                            if (newStart != null) {
-                              insertAt = list.indexWhere((e) {
-                                final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
-                                return existingStart != null && existingStart > newStart;
-                              });
-                              if (insertAt == -1) insertAt = list.length;
-                            }
-                            list.insert(insertAt, newItem);
-                          } else {
-                            list[index] = newItem;
-                          }
+                          list.removeAt(index);
                           _personalTimetableCache[cacheKey] = list;
                         });
                         _savePersonalTimetableCache();
                         onSaved();
                         Navigator.of(dialogContext).pop();
                       },
-                      child: Text(_biStr('btnSave'), style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                      child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                Row(
+                  children: [
+                    Flexible(
+                      child: TextButton(
+                        onPressed: () { Navigator.of(dialogContext).pop(); },
+                        child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                        onPressed: () {
+                          final String newTime = timeController.text.trim();
+                          final String newTask = taskController.text.trim();
+                          if (newTime.isEmpty || newTask.isEmpty) return;
+
+                          setState(() {
+                            final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
+                            final Map<String, String> newItem = {'time': newTime, 'task': newTask};
+                            if (index == null) {
+                              // 🆕 시간순 자동 배치 - 시작 시각 기준으로 올바른 위치에 삽입
+                              final int? newStart = _parsePersonalStartMinutes(newTime);
+                              int insertAt = list.length;
+                              if (newStart != null) {
+                                insertAt = list.indexWhere((e) {
+                                  final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
+                                  return existingStart != null && existingStart > newStart;
+                                });
+                                if (insertAt == -1) insertAt = list.length;
+                              }
+                              list.insert(insertAt, newItem);
+                            } else {
+                              list[index] = newItem;
+                            }
+                            _personalTimetableCache[cacheKey] = list;
+                          });
+                          _savePersonalTimetableCache();
+                          onSaved();
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Text(_biStr('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                      ),
                     ),
                   ],
                 ),
@@ -2312,6 +2469,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
                         setState(() {
                           _globalSchedules.add({
+                            'id': _generateUniqueScheduleId(),
                             'year': _selectedDayDate.year, 'month': _selectedDayDate.month, 'day': dayNum, 'time': '12:00',
                             'title': quickTitleController.text.trim(), 'color': choiceColor, 'memo': quickMemoController.text.trim(),
                           });
@@ -2322,13 +2480,74 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         Navigator.of(dialogContext).pop();
                         _showCalendarDaySchedulesPopup(dayNum);
                       },
-                      child: Text(_biStr('btnSaveApply'), style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                      child: Text(_biStr('btnSaveApply'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  // 🆕 [버그 수정 2026-08-10] 월간 "학습 리스트"에 사용자가 직접 새 목표 항목을 추가하는 다이얼로그.
+  // 내장 항목(labelKey)과 구분하기 위해 사용자가 추가한 항목은 원문 그대로 customText에 저장함.
+  void _showAddMonthlyTargetDialog(int monthKey) {
+    final TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF020617),
+          shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
+          title: Text(
+            _biStr('addMonthlyTargetTitle'),
+            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+            style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: TextField(
+            controller: controller,
+            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: _biStr('hintTargetGeneric'),
+              hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+              filled: true, fillColor: const Color(0xFF0F172A),
+              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)),
+              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+            ),
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                    onPressed: () {
+                      if (controller.text.trim().isEmpty) return;
+                      setState(() {
+                        final List<Map<String, dynamic>> list = List<Map<String, dynamic>>.from(_monthlyTargetsMap[monthKey] ?? []);
+                        list.add({'customText': controller.text.trim(), 'done': false});
+                        _monthlyTargetsMap[monthKey] = list;
+                      });
+                      _saveMasterData();
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: Text(_biStr('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
         );
       },
     );
@@ -2386,14 +2605,16 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                   children: [
                     const Divider(color: Color(0xFF1E293B), height: 10),
                     const SizedBox(height: 8),
-                    _buildReadOnlyLine('⏰ ${_biStr('labelTime')}', targetItem['time'] ?? _biStr('labelAllDay')),
+                    if (typeKey != 'YEAR_TARGET' && typeKey != 'MONTH_TARGET')
+                      _buildReadOnlyLine('⏰ ${_biStr('labelTime')}', targetItem['time'] ?? _biStr('labelAllDay')),
                     _buildReadOnlyLine('📚 ${_biStr('labelTitleField')}', targetItem['title'] ?? ''),
                     if (typeKey == 'DAY_TIME') ...[
                       _buildReadOnlyLine('📂 ${_biStr('labelCategory')}', '[${_categoryDisplayLabel(targetItem['category'])}]'),
                       if (targetItem['category'] == '문제집' && (targetItem['custom_book'] ?? '').toString().isNotEmpty)
                         _buildReadOnlyLine('📘 ${_biStr('labelTextbook')}', targetItem['custom_book']),
                     ],
-                    _buildReadOnlyLine('📢 ${_biStr('labelMemo')}', targetItem['memo'] ?? _biStr('labelNoMemo')),
+                    if (typeKey != 'YEAR_TARGET' && typeKey != 'MONTH_TARGET')
+                      _buildReadOnlyLine('📢 ${_biStr('labelMemo')}', targetItem['memo'] ?? _biStr('labelNoMemo')),
                     const SizedBox(height: 10),
                     if (typeKey == 'DAY_TIME') ...[
                       const SizedBox(height: 8),
@@ -2407,11 +2628,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           icon: Icon(isStarred ? Icons.star : Icons.star_border, color: goldColor, size: 18),
                           label: Text(
                             isStarred ? _biStr('starCollected') : _biStr('starCollectAction'),
+                            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
                             style: GoogleFonts.notoSansKr(fontSize: 12, color: isStarred ? slate400 : goldColor, fontWeight: FontWeight.bold),
                           ),
                           onPressed: () {
                             setViewState(() { isStarred = !isStarred; });
                             setState(() { _fixedDayTimelines[index]['is_starred'] = isStarred; });
+                            final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                            _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
                             _calculateMonthlyProgress();
                             _saveMasterData();
                           },
@@ -2425,16 +2649,20 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    TextButton(
-                      onPressed: () { Navigator.of(dialogContext).pop(); },
-                      style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                      child: Text(_biStr('btnClose'), style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Flexible(
+                      child: TextButton(
+                        onPressed: () { Navigator.of(dialogContext).pop(); },
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                        child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
                     ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: goldColor, visualDensity: VisualDensity.compact),
-                      icon: const Icon(Icons.settings, size: 14, color: Color(0xFF020617)),
-                      label: Text(_biStr('btnEdit'), style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
-                      onPressed: () { Navigator.of(dialogContext).pop(); _showActualEditorPopup(targetItem, typeKey: typeKey, index: index); },
+                    Flexible(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: goldColor, visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.settings, size: 14, color: Color(0xFF020617)),
+                        label: Text(_biStr('btnEdit'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                        onPressed: () { Navigator.of(dialogContext).pop(); _showActualEditorPopup(targetItem, typeKey: typeKey, index: index); },
+                      ),
                     ),
                   ],
                 ),
@@ -2501,6 +2729,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
       {'value': '기타', 'labelKey': 'catEtc'},
     ];
     final TextEditingController bookInputController = TextEditingController(text: targetItem['custom_book'] ?? '');
+    final bool isTargetChecklistType = (typeKey == 'YEAR_TARGET' || typeKey == 'MONTH_TARGET');
 
     showDialog(
       context: context,
@@ -2520,16 +2749,19 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 child: Column(
                   mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
-                    TextField(
-                      controller: editTimeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: _biStr('hintTimeInput'), hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
-                        filled: true, fillColor: const Color(0xFF0F172A),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                    // 🆕 [버그 수정 2026-08-10] 연간/월간 "목표" 항목은 시간 필드가 의미 없으므로 숨김
+                    if (!isTargetChecklistType) ...[
+                      Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                      TextField(
+                        controller: editTimeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: _biStr('hintTimeInput'), hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
+                          filled: true, fillColor: const Color(0xFF0F172A),
+                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
+                    ],
                     Text(_biStr('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
                     TextField(
                       controller: editTitleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
@@ -2547,7 +2779,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         children: categoriesList.map((category) {
                           bool isSel = currentCategory == category['value'];
                           return ChoiceChip(
-                            label: Text(_biStr(category['labelKey']!), style: GoogleFonts.notoSansKr(fontSize: 11, color: isSel ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold)),
+                            label: Text(_biStr(category['labelKey']!), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSel ? const Color(0xFF020617) : Colors.white, fontWeight: FontWeight.bold)),
                             selected: isSel, selectedColor: goldColor, backgroundColor: const Color(0xFF0F172A),
                             checkmarkColor: const Color(0xFF020617), side: BorderSide(color: isSel ? goldColor : slate800),
                             onSelected: (bool selected) { if (selected) { setPopState(() { currentCategory = category['value']!; }); } },
@@ -2568,15 +2800,18 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         const SizedBox(height: 12),
                       ],
                     ],
-                    Text(_biStr('labelMemo'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
-                    TextField(
-                      controller: editMemoController, maxLines: 2, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: _biStr('hintMemoInput'), hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
-                        filled: true, fillColor: const Color(0xFF0F172A),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                    // 🆕 [버그 수정 2026-08-10] 연간/월간 목표는 메모 필드도 저장되는 실체가 없으므로 숨김
+                    if (!isTargetChecklistType) ...[
+                      Text(_biStr('labelMemo'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                      TextField(
+                        controller: editMemoController, maxLines: 2, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: _biStr('hintMemoInput'), hintStyle: GoogleFonts.notoSansKr(color: slate400, fontSize: 12),
+                          filled: true, fillColor: const Color(0xFF0F172A),
+                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -2584,60 +2819,118 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    // 🆕 [버그 수정 2026-08-10] 삭제 로직 완전 재정비:
+                    // - DAY_TIME: 그날짜의 _fixedDayTimelines에서 삭제 (기존과 동일)
+                    // - YEAR_TARGET: _yearlyTargetsMap[yearKey]에서 index로 정확히 삭제
+                    // - MONTH_TARGET: _monthlyTargetsMap[monthKey]에서 index로 정확히 삭제
+                    // - 그 외(일반 일정): 더 이상 "제목+월+일"이 아니라 고유 id로 정확히 삭제
+                    //   (같은 날 같은 제목의 일정이 여러 개 있어도 이제 안전함)
                     if (typeKey == 'DAY_TIME')
-                      TextButton(
+                      Flexible(
+                        child: TextButton(
+                          onPressed: () {
+                            final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                            setState(() {
+                              _fixedDayTimelines.removeAt(index);
+                              _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                            });
+                            _calculateMonthlyProgress();
+                            _saveMasterData();
+                            Navigator.of(dialogContext).pop();
+                          },
+                          child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
+                      )
+                    else if (typeKey == 'YEAR_TARGET')
+                      Flexible(
+                        child: TextButton(
+                          onPressed: () {
+                            final String yearKey = targetItem['yearKey'] as String;
+                            setState(() {
+                              _yearlyTargetsMap[yearKey]!.removeAt(index);
+                            });
+                            _saveMasterData();
+                            Navigator.of(dialogContext).pop();
+                          },
+                          child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
+                      )
+                    else if (typeKey == 'MONTH_TARGET')
+                        Flexible(
+                          child: TextButton(
+                            onPressed: () {
+                              final int monthKey = targetItem['monthKey'] as int;
+                              setState(() {
+                                _monthlyTargetsMap[monthKey]!.removeAt(index);
+                              });
+                              _saveMasterData();
+                              Navigator.of(dialogContext).pop();
+                            },
+                            child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ),
+                        )
+                      else
+                        Flexible(
+                          child: TextButton(
+                            onPressed: () {
+                              setState(() {
+                                final String? targetId = targetItem['id'] as String?;
+                                _globalSchedules.removeWhere((s) {
+                                  if (targetId != null && s['id'] != null) {
+                                    return s['id'] == targetId;
+                                  }
+                                  // 🆕 id가 없는 예전 데이터를 위한 안전장치(폴백)
+                                  return s['title'] == targetItem['title'] && s['day'] == targetItem['day'] && s['month'] == targetItem['month'];
+                                });
+                              });
+                              _saveMasterData();
+                              Navigator.of(dialogContext).pop();
+                            },
+                            child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: TextButton(
                         onPressed: () {
-                          final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                          String newTime = editTimeController.text.trim();
+                          String newTitle = editTitleController.text.trim();
+                          String newMemo = editMemoController.text.trim();
+                          if (newTitle.isEmpty) return;
+
                           setState(() {
-                            _fixedDayTimelines.removeAt(index);
-                            _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                            if (typeKey == 'DAY_TIME') {
+                              _fixedDayTimelines[index]['time'] = newTime.isEmpty ? _fixedDayTimelines[index]['time'] : newTime;
+                              _fixedDayTimelines[index]['title'] = newTitle;
+                              _fixedDayTimelines[index]['memo'] = newMemo;
+                              _fixedDayTimelines[index]['category'] = currentCategory;
+                              _fixedDayTimelines[index]['custom_book'] = currentCategory == '문제집' ? bookInputController.text.trim() : '';
+                              final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                              _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                            } else if (typeKey == 'YEAR_TARGET') {
+                              final String yearKey = targetItem['yearKey'] as String;
+                              _yearlyTargetsMap[yearKey]![index]['title'] = newTitle;
+                            } else if (typeKey == 'MONTH_TARGET') {
+                              final int monthKey = targetItem['monthKey'] as int;
+                              _monthlyTargetsMap[monthKey]![index]['customText'] = newTitle;
+                              _monthlyTargetsMap[monthKey]![index].remove('labelKey');
+                            } else {
+                              int idx = _globalSchedules.indexOf(targetItem);
+                              if (idx != -1) {
+                                _globalSchedules[idx]['time'] = newTime;
+                                _globalSchedules[idx]['title'] = newTitle;
+                                _globalSchedules[idx]['memo'] = newMemo;
+                                _sortGlobalSchedules();
+                              }
+                            }
                           });
+
                           _calculateMonthlyProgress();
                           _saveMasterData();
                           Navigator.of(dialogContext).pop();
                         },
-                        child: Text(_biStr('btnDelete'), style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
-                      )
-                    else if (typeKey != 'DAY_TIME')
-                      TextButton(
-                        onPressed: () {
-                          setState(() { _globalSchedules.removeWhere((s) => s['title'] == targetItem['title'] && s['day'] == targetItem['day'] && s['month'] == targetItem['month']); });
-                          _saveMasterData();
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: Text(_biStr('btnDelete'), style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                        child: Text(_biStr('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
                       ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () {
-                        String newTime = editTimeController.text.trim();
-                        String newTitle = editTitleController.text.trim();
-                        String newMemo = editMemoController.text.trim();
-                        if (newTitle.isEmpty) return;
-
-                        setState(() {
-                          if (typeKey == 'DAY_TIME') {
-                            _fixedDayTimelines[index]['time'] = newTime.isEmpty ? _fixedDayTimelines[index]['time'] : newTime;
-                            _fixedDayTimelines[index]['title'] = newTitle;
-                            _fixedDayTimelines[index]['memo'] = newMemo;
-                            _fixedDayTimelines[index]['category'] = currentCategory;
-                            _fixedDayTimelines[index]['custom_book'] = currentCategory == '문제집' ? bookInputController.text.trim() : '';
-                          } else {
-                            int idx = _globalSchedules.indexOf(targetItem);
-                            if (idx != -1) {
-                              _globalSchedules[idx]['time'] = newTime;
-                              _globalSchedules[idx]['title'] = newTitle;
-                              _globalSchedules[idx]['memo'] = newMemo;
-                              _sortGlobalSchedules();
-                            }
-                          }
-                        });
-
-                        _calculateMonthlyProgress();
-                        _saveMasterData();
-                        Navigator.of(dialogContext).pop();
-                      },
-                      child: Text(_biStr('btnSave'), style: GoogleFonts.notoSansKr(color: goldColor, fontSize: 13, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -2695,14 +2988,18 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           Expanded(
             child: GestureDetector(
               onTap: () {
+                // 🆕 [버그 수정 2026-08-10] typeKey를 'YEAR'에서 'YEAR_TARGET'으로 변경(연간 "주요일정"
+                // 타임라인 항목이 쓰는 'YEAR'와 겹쳐서 서로 다른 데이터를 같은 typeKey로 처리하던
+                // 충돌을 제거함). 또한 index와 yearKey를 targetItem에 실어서 수정/삭제가 정확한
+                // 항목을 찾아갈 수 있도록 함(기존엔 이 정보가 없어서 수정/삭제가 조용히 실패했음).
                 _showUnifiedPopupTrack({
-                  'time': '${_yearNumText(yearKey)} ${_biStr('yearChecklistPopupTimeLabel')}', 'title': title,
-                  'memo': _biStr('yearChecklistPopupMemo'), 'done': isChecked,
-                }, typeKey: 'YEAR');
+                  'title': title,
+                  'yearKey': yearKey,
+                }, typeKey: 'YEAR_TARGET', index: index);
               },
               child: Container(
                 color: Colors.transparent, alignment: Alignment.centerLeft,
-                child: Text(title, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+                child: Text(title, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
               ),
             ),
           ),
@@ -2714,9 +3011,12 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
   // 🆕 [2026-08-03] 월간 "학습 리스트" 체크리스트 항목 - 연간 체크리스트와 완전히 동일한 스타일
   // (체크박스 탭 → 완료 처리 + 줄긋기, 텍스트 탭 → 상세 팝업). labelKey는 번역 카탈로그 키이므로
-  // 표시 문구는 항상 현재 언어 설정에 맞게 다시 생성됨.
-  Widget _buildMonthChecklistItem(String labelKey, bool isChecked, int index, int monthKey) {
-    final String displayTitle = '${_monthNumText(monthKey)} ${_t(labelKey)}';
+  // 표시 문구는 항상 현재 언어 설정에 맞게 다시 생성됨. 사용자가 직접 추가한 항목은 customText를 원문
+  // 그대로 사용함(번역하지 않음 - 사용자가 입력한 언어 그대로 유지).
+  Widget _buildMonthChecklistItem(Map<String, dynamic> entry, int index, int monthKey) {
+    final bool isChecked = entry['done'] ?? false;
+    final String rawText = entry['labelKey'] != null ? _t(entry['labelKey']) : (entry['customText']?.toString() ?? '');
+    final String displayTitle = '${_monthNumText(monthKey)} $rawText';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 8.0),
       child: Row(
@@ -2735,14 +3035,16 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           Expanded(
             child: GestureDetector(
               onTap: () {
+                // 🆕 [버그 수정 2026-08-10] index/monthKey를 targetItem에 실어서 수정/삭제가
+                // 정확한 항목을 찾아갈 수 있도록 함(기존엔 이 정보가 없어서 조용히 실패했음).
                 _showUnifiedPopupTrack({
-                  'time': '${_monthNumText(monthKey)} ${_t('monthMasterPack')}', 'title': displayTitle,
-                  'memo': _biStr('monthChecklistPopupMemo'), 'done': isChecked,
-                }, typeKey: 'MONTH_TARGET');
+                  'title': displayTitle,
+                  'monthKey': monthKey,
+                }, typeKey: 'MONTH_TARGET', index: index);
               },
               child: Container(
                 color: Colors.transparent, alignment: Alignment.centerLeft,
-                child: Text(displayTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+                child: Text(displayTitle, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
               ),
             ),
           ),
@@ -2761,8 +3063,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(timeLabel, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor)),
-            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14.0), child: Text(eventTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.right))),
+            Text(timeLabel, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor)),
+            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14.0), child: Text(eventTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis))),
             _buildEditActionIcon(size: 14),
           ],
         ),
@@ -2771,8 +3073,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   // 🆕 [12개국] 내부 entryType/selectedCategory 값(한국어 고정 키)은 그대로 유지, 표시 라벨만 번역
-  void _showAddScheduleBottomSheet(BuildContext context, String initialType) {
-    String entryType = initialType; String selectedCategory = '학교';
+  // 🆕 [버그 수정 2026-08-10] allowTargetOption 매개변수 추가 - 연간 탭에서만 true로 호출하여
+  // [일정]/[목표] 두 유형 모두 선택 가능하게 하고, 월간/주간/일간 탭은 false(기본값)로 [일정]만
+  // 추가하도록 제한함. 기존엔 어느 탭에서 열든 [목표]를 고르면 무조건 연간 목표로만 저장되는
+  // 문제가 있었음(월간/주간/일간에서 "목표" 저장이 안 되는 것처럼 보이던 근본 원인).
+  void _showAddScheduleBottomSheet(BuildContext context, String initialType, {bool allowTargetOption = false}) {
+    String entryType = allowTargetOption ? initialType : '일정';
+    String selectedCategory = '학교';
     final TextEditingController titleController = TextEditingController();
     final TextEditingController monthController = TextEditingController();
     final TextEditingController dayController = TextEditingController();
@@ -2809,14 +3116,17 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                       foreignStyle: GoogleFonts.notoSans(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                     const Divider(color: Color(0xFF1E293B), height: 20),
-                    Row(
-                      children: entryTypeOptions.map((type) {
-                        return Row(children: [
-                          Radio<String>(value: type['value']!, groupValue: entryType, activeColor: goldColor, onChanged: (value) { setModalState(() { entryType = value!; }); }),
-                          Text(_biStr(type['labelKey']!), style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white)), const SizedBox(width: 20),
-                        ]);
-                      }).toList(),
-                    ),
+                    // 🆕 [버그 수정 2026-08-10] allowTargetOption이 false인 탭(월간/주간/일간)에서는
+                    // [일정]/[목표] 라디오 자체를 숨겨서 혼동을 차단함.
+                    if (allowTargetOption)
+                      Row(
+                        children: entryTypeOptions.map((type) {
+                          return Row(children: [
+                            Radio<String>(value: type['value']!, groupValue: entryType, activeColor: goldColor, onChanged: (value) { setModalState(() { entryType = value!; }); }),
+                            Text(_biStr(type['labelKey']!), style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white)), const SizedBox(width: 20),
+                          ]);
+                        }).toList(),
+                      ),
                     if (entryType == '일정') ...[
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -2894,6 +3204,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                               // 연간 탭에서 선택 중인 연도(기본값=실제 오늘 연도)를 그대로 사용하도록 수정.
                               final int resolvedYear = int.tryParse(_scrollableYears[_selectedYearIndex].replaceAll('년', '')) ?? DateTime.now().year;
                               _globalSchedules.add({
+                                'id': _generateUniqueScheduleId(),
                                 'year': resolvedYear, 'month': inputMonth, 'day': inputDay, 'time': finalTime,
                                 'title': titleController.text.trim(), 'color': sColor, 'memo': memoController.text.trim(),
                               });
@@ -2908,7 +3219,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                           }
                           Navigator.pop(modalContext);
                         },
-                        child: Text(_biStr('btnSaveApplyLink'), style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                        child: Text(_biStr('btnSaveApplyLink'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -2955,7 +3266,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     SizedBox(
                       width: 90,
                       // [주석] 시간 표시 (일반글자크기 12, 황금색 명조)
-                      child: Text(item['time'] ?? '', style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
+                      child: Text(item['time'] ?? '', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
                     ),
                     Container(width: 3, height: 24, margin: const EdgeInsets.symmetric(horizontal: 8), color: goldColor),
                     Expanded(

@@ -252,6 +252,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
           description: descCtrl.text.trim(),
           createdAt: existing.createdAt,
           completedDate: completedDate,
+          updatedAt: DateTime.now().toIso8601String(), // 🆕 [정렬 수정] 수정할 때마다 최신순 정렬 기준을 갱신
         );
         await ProjectDataService.update(updated);
       } else {
@@ -542,10 +543,10 @@ class _ProjectScreenState extends State<ProjectScreen> {
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
                         secondary: IconButton(
-                          icon: const HorizontalPencilIcon(size: 18),
+                          icon: const ThreeColorPencilIcon(size: 18),
                           onPressed: () => showEditTaskDialog(t),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                         ),
                       ),
                     )),

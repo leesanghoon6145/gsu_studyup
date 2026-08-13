@@ -372,8 +372,10 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
             ),
           ),
           IconButton(
-            icon: const _TriColorPencilIconMini(),
+            icon: const ThreeColorPencilIcon(size: 22),
             onPressed: () => _showDialog(existing: item),
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48), // 🆕 [터치범위 확대]
+            padding: const EdgeInsets.all(8),
           ),
         ],
       ),
@@ -382,26 +384,4 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
 }
 
 // 🆕 캘린더와 동일한 3선 연필 아이콘 (파랑/노랑/흰색)
-class _TriColorPencilIconMini extends StatelessWidget {
-  const _TriColorPencilIconMini();
-
-  @override
-  Widget build(BuildContext context) {
-    const double size = 18;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Transform.rotate(
-        angle: -0.78,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(2))),
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFFFACC15), borderRadius: BorderRadius.circular(2))),
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2))),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// (연필 아이콘은 bilingual_text.dart의 ThreeColorPencilIcon으로 통일됨)

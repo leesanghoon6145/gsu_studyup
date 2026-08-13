@@ -304,6 +304,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
         child: Column(
           children: [
             const NotificationPermissionBanner(), // 🆕 [권한 안내 배너] 알림이 꺼져있으면 여기 안내가 뜸
+            const NotificationTestButton(), // 🆕 [진단 도구] 10초 테스트 알림 버튼
             Expanded(
               child: _items.isEmpty
                   ? Center(child: BiInline(en: 'No reminders yet', ko: '등록된 알림이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
@@ -363,7 +364,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
             onChanged: (_) => _toggleEnabled(item),
             activeColor: _brandGolden,
           ),
-          IconButton(icon: const EditPencilIcon(size: 20), onPressed: () => _showDialog(existing: item)),
+          IconButton(icon: const ThreeColorPencilIcon(size: 20), onPressed: () => _showDialog(existing: item)),
         ],
       ),
     );

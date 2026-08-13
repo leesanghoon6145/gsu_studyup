@@ -151,7 +151,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
         builder: (context, setDialogState) {
           Future<void> addItem() async {
             final newItem = await _showAddItemDialog();
-            if (newItem != null) setDialogState(() => tempItems.add(newItem));
+            if (newItem != null) {
+              setDialogState(() {
+                tempItems.add(newItem);
+                // 🆕 [버그 수정] 추가만 하고 정렬을 안 해서 맨 아래에 쌓이던 문제 - 시간순으로 자동 정렬
+                tempItems.sort((a, b) => a.startTime.compareTo(b.startTime));
+              });
+            }
           }
 
           return Dialog(
@@ -199,7 +205,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.close, color: Colors.white38, size: 16),
                                   padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                                   onPressed: () => setDialogState(() => tempItems.remove(item)),
                                 ),
                               ],
@@ -300,10 +306,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
                     Expanded(child: Text(routine.name, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
                     // 🆕 [신 팝업] 삭제 아이콘 단독 제거 -> 가로3선 연필로 교체 (수정 팝업 안에서 삭제 가능)
                     IconButton(
-                      icon: const HorizontalPencilIcon(size: 18),
+                      icon: const ThreeColorPencilIcon(size: 18),
                       onPressed: () => _showRoutineDialog(existing: routine),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     ),
                   ],
                 ),

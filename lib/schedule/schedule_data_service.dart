@@ -19,6 +19,7 @@ class ScheduleItem {
   final String memo;
   final String category; // '일정' / '약속' / '프로젝트' 등 (1단계에서는 자유 텍스트)
   bool isCompleted;
+  String createdAt; // 🆕 [정렬 수정] 최근 입력이 맨 위로 오도록 하는 기준 시각
 
   ScheduleItem({
     required this.id,
@@ -28,7 +29,8 @@ class ScheduleItem {
     this.memo = '',
     this.category = '일정',
     this.isCompleted = false,
-  });
+    String? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -38,6 +40,7 @@ class ScheduleItem {
     'memo': memo,
     'category': category,
     'isCompleted': isCompleted,
+    'createdAt': createdAt,
   };
 
   factory ScheduleItem.fromJson(Map<String, dynamic> json) => ScheduleItem(
@@ -48,6 +51,7 @@ class ScheduleItem {
     memo: json['memo'] as String? ?? '',
     category: json['category'] as String? ?? '일정',
     isCompleted: json['isCompleted'] as bool? ?? false,
+    createdAt: json['createdAt'] as String?,
   );
 }
 
@@ -73,8 +77,29 @@ class ScheduleDataService {
   static Future<List<ScheduleItem>> loadForDate(String dateKey) async {
     final all = await loadAll();
     final filtered = all.where((item) => item.date == dateKey).toList();
-    // 시간 순으로 정렬 (시간 없는 항목은 맨 위)
-    filtered.sort((a, b) => a.time.compareTo(b.time));
+
+    // 🆕 [정렬 재변경] 오늘 날짜를 보는 경우, 이미 지난 시각의 일정은 아래로
+    // 내리고, 그 안에서는 최근에 입력한 순서로 정렬. (다른 날짜를 볼 때는
+    // 그냥 시간순 - '지났다'는 개념이 오늘 기준으로만 의미가 있으므로)
+    final now = DateTime.now();
+    final String todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final String nowHHmm = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    if (dateKey == todayKey) {
+      bool isPast(ScheduleItem item) {
+        if (item.time.isEmpty) return false;
+        return item.time.compareTo(nowHHmm) < 0;
+      }
+
+      filtered.sort((a, b) {
+        final bool aPast = isPast(a);
+        final bool bPast = isPast(b);
+        if (aPast != bPast) return aPast ? 1 : -1;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+    } else {
+      filtered.sort((a, b) => a.time.compareTo(b.time));
+    }
     return filtered;
   }
 

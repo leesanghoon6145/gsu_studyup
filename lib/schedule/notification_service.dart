@@ -66,14 +66,22 @@ class NotificationService {
     required String time, // 'HH:mm'
     String? repeatType,
   }) async {
+    debugPrint('[NotificationService] scheduleAt 호출됨: id=$id, date=$date, time=$time, repeatType=$repeatType');
     await _ensureInitialized();
+    debugPrint('[NotificationService] 초기화 완료');
     await cancel(id); // 기존 예약이 있으면 먼저 취소하고 새로 등록 (수정 시 중복 방지)
 
-    if (time.isEmpty) return; // 시간이 없으면 정확한 알림 시점을 특정할 수 없어 건너뜀
+    if (time.isEmpty) {
+      debugPrint('[NotificationService] 시간이 비어있어서 예약 건너뜀');
+      return;
+    }
 
     final dateParts = date.split('-');
     final timeParts = time.split(':');
-    if (dateParts.length != 3 || timeParts.length != 2) return;
+    if (dateParts.length != 3 || timeParts.length != 2) {
+      debugPrint('[NotificationService] 날짜/시간 형식이 잘못됨: date=$date, time=$time');
+      return;
+    }
 
     try {
       tz.TZDateTime scheduledDate = tz.TZDateTime(
@@ -86,6 +94,7 @@ class NotificationService {
       );
 
       final now = tz.TZDateTime.now(tz.local);
+      debugPrint('[NotificationService] 예약 목표시각=$scheduledDate / 지금=$now / tz.local=${tz.local.name}');
       DateTimeComponents? matchComponents;
 
       if (repeatType == '매일') {
@@ -96,7 +105,10 @@ class NotificationService {
         if (scheduledDate.isBefore(now)) scheduledDate = scheduledDate.add(const Duration(days: 7));
       } else {
         // 1회성 알림인데 이미 지난 시각이면 등록하지 않음
-        if (scheduledDate.isBefore(now)) return;
+        if (scheduledDate.isBefore(now)) {
+          debugPrint('[NotificationService] ⚠️ 목표시각이 이미 지나서 예약을 건너뜀! (목표=$scheduledDate, 지금=$now) - 초기화/권한요청에 시간이 오래 걸려서 짧은 테스트가 이미 지나버렸을 수 있음');
+          return;
+        }
       }
 
       final details = NotificationDetails(
@@ -124,6 +136,7 @@ class NotificationService {
           matchDateTimeComponents: matchComponents,
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         );
+        debugPrint('[NotificationService] ✅ 정확한 알람으로 예약 성공! notifId=${_notifId(id)}, 예약시각=$scheduledDate');
       } catch (e) {
         // 🆕 [2차 시도 - 안전장치] 정확한 알람 권한이 없어서 실패한 경우,
         // 조용히 무시하지 않고 "근사 시각" 알람으로라도 등록해서 최소한 울리게 함.
@@ -218,6 +231,90 @@ class _NotificationPermissionBannerState extends State<NotificationPermissionBan
             child: Text(
               'Notifications are turned off.\nGo to Settings > Apps > This App > Notifications to turn them back on.\n(알림이 꺼져 있습니다. 설정 > 앱 > 알림에서 다시 켜주세요.)',
               style: TextStyle(color: Colors.white, fontSize: 11.5, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 🆕 [진단 도구] NotificationTestButton
+// "폰 설정을 확인해달라"는 안내만 반복하지 않고, 앱 안에서 직접 10초 뒤
+// 테스트 알림을 예약해볼 수 있는 버튼. 10초 안에 알림이 오면 코드는 정상이고
+// 순수하게 폰 설정(배터리 최적화, 정확한 알람 권한) 문제라는 게 확실해지고,
+// 10초가 지나도 안 오면 다른 원인을 찾아야 한다는 것도 명확해집니다.
+// ============================================================================
+class NotificationTestButton extends StatefulWidget {
+  const NotificationTestButton({super.key});
+
+  @override
+  State<NotificationTestButton> createState() => _NotificationTestButtonState();
+}
+
+class _NotificationTestButtonState extends State<NotificationTestButton> {
+  bool _isTesting = false;
+
+  Future<void> _runTest() async {
+    setState(() => _isTesting = true);
+    final target = DateTime.now().add(const Duration(seconds: 30)); // 🆕 [경합 방지] 초기화/권한요청 시간을 고려해 10초 -> 30초로 여유있게
+    final String dateKey = '${target.year}-${target.month.toString().padLeft(2, '0')}-${target.day.toString().padLeft(2, '0')}';
+    final String timeKey = '${target.hour.toString().padLeft(2, '0')}:${target.minute.toString().padLeft(2, '0')}';
+
+    await NotificationService.scheduleAt(
+      id: 'test_notification_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Test Alarm (테스트 알림)',
+      body: 'If you see this, notifications are working! (이게 보이면 알림 정상 작동 중입니다)',
+      date: dateKey,
+      time: timeKey,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('30초 후 테스트 알림이 울립니다. 앱을 백그라운드로 보내고 기다려보세요.')),
+      );
+    }
+
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted) setState(() => _isTesting = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1527),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.science_outlined, color: Color(0xFFE5C158), size: 18),
+              SizedBox(width: 8),
+              Text('Notification Test (알림 테스트)', style: TextStyle(color: Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 12.5)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '아래 버튼을 누르면 30초 뒤 테스트 알림이 예약됩니다. 앱을 백그라운드로 보내고 30초 기다려서 실제로 오는지 확인해보세요.',
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isTesting ? null : _runTest,
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158), padding: const EdgeInsets.symmetric(vertical: 11)),
+              child: Text(
+                _isTesting ? 'Scheduled... (예약됨...)' : 'Test in 30 seconds (30초 후 테스트)',
+                style: const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 13),
+              ),
             ),
           ),
         ],

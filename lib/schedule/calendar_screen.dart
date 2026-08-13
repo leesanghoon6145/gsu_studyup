@@ -40,30 +40,7 @@ Color categoryColorOf(String category) {
   return const Color(0xFFE5C158); // 기존 데이터(분류 미지정)는 골드로 표시
 }
 
-// 🆕 [수정 아이콘] 파랑/노랑/흰색 3개의 대각선으로 이루어진 연필 모양 아이콘
-class TriColorPencilIcon extends StatelessWidget {
-  final double size;
-  const TriColorPencilIcon({super.key, this.size = 20});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Transform.rotate(
-        angle: -0.78, // 약 -45도, 연필이 대각선으로 놓인 모양
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(2))),
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: const Color(0xFFFACC15), borderRadius: BorderRadius.circular(2))),
-            Container(width: size * 0.9, height: size * 0.16, margin: const EdgeInsets.symmetric(vertical: 0.6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2))),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// (연필 아이콘 정의는 bilingual_text.dart의 ThreeColorPencilIcon으로 통일됨 - 여기 있던 대각선 버전은 삭제)
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -629,7 +606,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ..._selectedDateItems.map((s) => _CalendarDayEntry.schedule(s)),
               ..._selectedDateAppointments.map((a) => _CalendarDayEntry.appointment(a)),
             ];
-            combined.sort((a, b) => a.time.compareTo(b.time));
+            final now = DateTime.now();
+            final String todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+            final String nowHHmm = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+            if (_dateKey(_selectedDate) == todayKey) {
+              // 🆕 [버그 수정] 오늘 날짜를 보고 있으면, 지난 시간은 아래로 내림
+              bool isPast(_CalendarDayEntry e) => e.time.isNotEmpty && e.time.compareTo(nowHHmm) < 0;
+              combined.sort((a, b) {
+                final bool aPast = isPast(a);
+                final bool bPast = isPast(b);
+                if (aPast != bPast) return aPast ? 1 : -1;
+                return b.time.compareTo(a.time); // 같은 그룹 안에서는 최근 시간이 위로
+              });
+            } else {
+              combined.sort((a, b) => a.time.compareTo(b.time));
+            }
 
             if (combined.isEmpty) {
               return Padding(
@@ -729,7 +721,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           // 🆕 [UX개선] 연필/휴지통 2개 아이콘 대신 3선 연필 아이콘 하나로 통합 (누르면 수정 팝업, 삭제는 팝업 안에)
           IconButton(
-            icon: const TriColorPencilIcon(size: 18),
+            icon: const ThreeColorPencilIcon(size: 18),
             onPressed: () => _showScheduleDialog(existingItem: item),
           ),
         ],

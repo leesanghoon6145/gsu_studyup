@@ -34,7 +34,7 @@ class _TodoScreenState extends State<TodoScreen> {
   Future<void> _loadTodos() async {
     setState(() => _isLoading = true);
     final todos = await GoalDataService.loadStandaloneTodos();
-    todos.sort((a, b) => b.date.compareTo(a.date));
+    todos.sort((a, b) => b.createdAt.compareTo(a.createdAt)); // 🆕 [정렬 수정] 날짜만이 아니라 정확한 시각까지 비교해서 최근 입력이 맨 위로
     if (!mounted) return;
     setState(() {
       _todos = todos;
@@ -165,7 +165,7 @@ class _TodoScreenState extends State<TodoScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const HorizontalPencilIcon(size: 18),
+                        icon: const ThreeColorPencilIcon(size: 18),
                         onPressed: () => _showTodoDialog(existing: todo),
                       ),
                     ],

@@ -19,6 +19,7 @@ class ReminderItem {
   final String repeatType; // '한번' | '매일' | '매주'
   bool isEnabled;
   final String memo;
+  String createdAt; // 🆕 [정렬 수정] 최근 입력이 목록 맨 위로 오도록 하는 기준 시각
 
   ReminderItem({
     required this.id,
@@ -28,7 +29,8 @@ class ReminderItem {
     this.repeatType = '한번',
     this.isEnabled = true,
     this.memo = '',
-  });
+    String? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -38,6 +40,7 @@ class ReminderItem {
     'repeatType': repeatType,
     'isEnabled': isEnabled,
     'memo': memo,
+    'createdAt': createdAt,
   };
 
   factory ReminderItem.fromJson(Map<String, dynamic> json) => ReminderItem(
@@ -48,6 +51,7 @@ class ReminderItem {
     repeatType: json['repeatType'] as String? ?? '한번',
     isEnabled: json['isEnabled'] as bool? ?? true,
     memo: json['memo'] as String? ?? '',
+    createdAt: json['createdAt'] as String?,
   );
 }
 
@@ -61,10 +65,36 @@ class ReminderDataService {
       if (raw == null || raw.isEmpty) return [];
       final List<dynamic> decoded = jsonDecode(raw);
       final list = decoded.map((e) => ReminderItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      // 🆕 [정렬 재변경] "최근 입력순"이 아니라 "지금 시각에 가장 가까운 순"으로 변경.
+      // 아직 안 지난 알림 중 가장 빨리 울릴 것이 맨 위, 이미 지난 알림은 아래로 내려감.
+      final now = DateTime.now();
+      final String todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final String nowHHmm = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+      bool isPast(ReminderItem item) {
+        // 반복 알림(매일/매주)은 항상 다시 돌아오므로 '지난 것'으로 취급하지 않음
+        if (item.repeatType == '매일' || item.repeatType == '매주') return false;
+        if (item.date.compareTo(todayKey) < 0) return true;
+        if (item.date.compareTo(todayKey) > 0) return false;
+        if (item.time.isEmpty) return false;
+        return item.time.compareTo(nowHHmm) < 0;
+      }
+
       list.sort((a, b) {
-        final cmp = a.date.compareTo(b.date);
-        if (cmp != 0) return cmp;
-        return a.time.compareTo(b.time);
+        final bool aPast = isPast(a);
+        final bool bPast = isPast(b);
+        if (aPast != bPast) return aPast ? 1 : -1; // 지난 것은 아래로
+        if (!aPast) {
+          // 아직 안 지난 것들끼리는 날짜+시간이 가까운(빠른) 순
+          final cmp = a.date.compareTo(b.date);
+          if (cmp != 0) return cmp;
+          return a.time.compareTo(b.time);
+        } else {
+          // 지난 것들끼리는 가장 최근에 지난 것이 위로
+          final cmp = b.date.compareTo(a.date);
+          if (cmp != 0) return cmp;
+          return b.time.compareTo(a.time);
+        }
       });
       return list;
     } catch (e) {

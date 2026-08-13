@@ -15,7 +15,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'schedule_data_service.dart';
-import 'calendar_screen.dart' show kScheduleCategories, categoryColorOf, TriColorPencilIcon;
+import 'calendar_screen.dart' show kScheduleCategories, categoryColorOf;
 import 'bilingual_text.dart';
 
 class TodayScheduleScreen extends StatefulWidget {
@@ -307,10 +307,10 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
           ),
           // 🆕 [신 팝업] 삭제 아이콘 제거 -> 캘린더와 동일한 대각선 3선 연필로 교체
           IconButton(
-            icon: const TriColorPencilIcon(size: 18),
+            icon: const ThreeColorPencilIcon(size: 18),
             onPressed: () => _showScheduleDialog(existing: item),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
         ],
       ),

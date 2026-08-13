@@ -201,39 +201,95 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
   }
 
   Future<void> _showGoalTodos(GoalItem goal) async {
-    final todos = await GoalDataService.loadTodosForGoal(goal.id);
+    List<TodoItem> todos = await GoalDataService.loadTodosForGoal(goal.id);
     if (!mounted) return;
     await showModalBottomSheet(
       context: context,
       backgroundColor: _containerBg,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          Future<void> refreshTodos() async {
+            todos = await GoalDataService.loadTodosForGoal(goal.id);
+            setSheetState(() {});
+            await _loadGoals();
+          }
+
+          // 🆕 [버그 수정] 할 일 추가 후 수정/삭제가 아예 안 되던 문제 - 연필 눌러서
+          // 수정/삭제할 수 있는 팝업을 새로 추가함.
+          Future<void> showEditTodoDialog(TodoItem todo) async {
+            final controller = TextEditingController(text: todo.title);
+            final String? action = await showDialog<String>(
+              context: sheetContext,
+              barrierColor: Colors.black.withOpacity(0.65),
+              builder: (editDialogContext) => Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+                child: LuxuryDialogFrame(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      luxuryDialogHeader(icon: Icons.edit_note_rounded, en: 'EDIT TASK', ko: '할 일 수정'),
+                      _buildField(icon: Icons.check_box_outlined, controller: controller, hintEn: 'Task', hintKo: '할 일 내용'),
+                      const SizedBox(height: 20),
+                      luxuryBottomActions(
+                        isEdit: true,
+                        onDelete: () => Navigator.of(editDialogContext).pop('delete'),
+                        onCancel: () => Navigator.of(editDialogContext).pop(null),
+                        onSave: () {
+                          if (controller.text.trim().isEmpty) return;
+                          Navigator.of(editDialogContext).pop('save');
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+
+            if (action == 'delete') {
+              await GoalDataService.deleteTodo(todo.id);
+              await refreshTodos();
+            } else if (action == 'save' && controller.text.trim().isNotEmpty) {
+              final updated = TodoItem(id: todo.id, goalId: todo.goalId, title: controller.text.trim(), date: todo.date, isCompleted: todo.isCompleted, createdAt: todo.createdAt);
+              await GoalDataService.updateTodo(updated);
+              await refreshTodos();
+            }
+          }
+
           return Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                BiInline(en: goal.title, ko: 'Tasks (할 일)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
-                const SizedBox(height: 12),
-                if (todos.isEmpty)
-                  const BiInline(en: 'No tasks yet', ko: '연결된 할 일이 없습니다', color: Colors.white38, fontSize: 13)
-                else
-                  ...todos.map((t) => CheckboxListTile(
-                    value: t.isCompleted,
-                    onChanged: (val) async {
-                      t.isCompleted = val ?? false;
-                      await GoalDataService.updateTodo(t);
-                      setSheetState(() {});
-                      await _loadGoals();
-                    },
-                    title: Text(t.title, style: TextStyle(color: t.isCompleted ? Colors.white38 : Colors.white, decoration: t.isCompleted ? TextDecoration.lineThrough : null)),
-                    activeColor: _brandGolden,
-                    checkColor: _pageBg,
-                    controlAffinity: ListTileControlAffinity.leading,
-                  )),
-              ],
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  BiInline(en: goal.title, ko: 'Tasks (할 일)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                  const SizedBox(height: 12),
+                  if (todos.isEmpty)
+                    const BiInline(en: 'No tasks yet', ko: '연결된 할 일이 없습니다', color: Colors.white38, fontSize: 13)
+                  else
+                    ...todos.map((t) => CheckboxListTile(
+                      value: t.isCompleted,
+                      onChanged: (val) async {
+                        t.isCompleted = val ?? false;
+                        await GoalDataService.updateTodo(t);
+                        await refreshTodos();
+                      },
+                      title: Text(t.title, style: TextStyle(color: t.isCompleted ? Colors.white38 : Colors.white, decoration: t.isCompleted ? TextDecoration.lineThrough : null)),
+                      activeColor: _brandGolden,
+                      checkColor: _pageBg,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      secondary: IconButton(
+                        icon: const ThreeColorPencilIcon(size: 20),
+                        onPressed: () => showEditTodoDialog(t),
+                        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                      ),
+                    )),
+                ],
+              ),
             ),
           );
         },
@@ -304,10 +360,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                 child: Text(goal.title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, decoration: goal.isAchieved ? TextDecoration.lineThrough : null)),
               ),
               IconButton(
-                icon: const HorizontalPencilIcon(size: 18),
+                icon: const ThreeColorPencilIcon(size: 18),
                 onPressed: () => _showGoalDialog(existing: goal),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
           ),

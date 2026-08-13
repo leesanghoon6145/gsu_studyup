@@ -809,6 +809,11 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
     );
 
     if (confirmed == true) {
+      // 🆕 [버그 수정] 계획 상태에서 시작도 안 한 채 바로 완료 처리하는 경우,
+      // 시작시각이 비어있으면 계획된 시작시각으로 채워서 기록이 비지 않게 함.
+      if (block.actualStart == null || block.actualStart!.isEmpty) {
+        block.actualStart = block.plannedStart;
+      }
       block.actualEnd = _nowHHmm;
       block.status = 'completed';
       block.satisfaction = satisfaction != null ? satisfaction! + 1 : null; // 1~5로 저장
@@ -827,18 +832,22 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
     final bool confirmed = await _showUndoConfirmDialog(block);
     if (!confirmed) return;
 
-    block.status = 'planned';
-    block.actualStart = null;
-    block.actualEnd = null;
-    block.satisfaction = null;
-    block.disruptions = [];
-    block.energyLevel = '';
-    block.memo = '';
-    block.extraAnswers = {};
+    // 🆕 [버그 수정] 무조건 "계획"으로 완전히 초기화하지 않고, 한 단계씩만 되돌림.
+    // 완료 -> 실행중(시작시각/설문답변은 유지, 종료시각만 지움)
+    // 실행중 -> 계획(시작시각도 지움)
+    // 이렇게 해야 완료 처리했던 설문 답변 등 자료가 갑자기 사라지지 않음.
+    if (block.status == 'completed') {
+      block.status = 'running';
+      block.actualEnd = null;
+      // satisfaction/disruptions/energyLevel/memo/extraAnswers는 유지 - 다시 완료하면 그대로 씀
+    } else if (block.status == 'running') {
+      block.status = 'planned';
+      block.actualStart = null;
+    }
     await TimelineDataService.updateBlock(block);
     await _loadTimeline();
     if (mounted) {
-      biSnack(context, 'Reverted to planned', '계획 상태로 되돌렸습니다');
+      biSnack(context, 'Reverted to previous state', '이전 상태로 되돌렸습니다');
     }
   }
 
@@ -965,6 +974,8 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            _buildCurrentTimeCard(), // 🆕 [현재 시간 표시 복구] 항상 고정으로 보이는 현재 시각 카드
+            const SizedBox(height: 12),
             _buildProgressCard(completed, total, rate),
             const SizedBox(height: 16),
             ..._blocks.map((b) => _buildTimelineTile(b)),
@@ -975,6 +986,32 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
         backgroundColor: _brandGolden,
         onPressed: _showAddBlockDialog,
         child: const Icon(Icons.add, color: _pageBg),
+      ),
+    );
+  }
+
+  // 🆕 [현재 시간 표시 복구] 작은 배지에만 의존하지 않고, 화면 맨 위에
+  // "지금 몇 시인지"를 항상 고정으로 보여주는 카드. 30초마다 자동 새로고침되는
+  // 타이머(_autoCheckTimer)와 함께 계속 최신 시각으로 갱신됨.
+  Widget _buildCurrentTimeCard() {
+    final now = DateTime.now();
+    final String nowText = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [_brandGolden.withOpacity(0.18), _brandGolden.withOpacity(0.05)]),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _brandGolden.withOpacity(0.5), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.access_time_filled_rounded, color: _brandGolden, size: 20),
+          const SizedBox(width: 10),
+          const BiInline(en: 'Current Time', ko: '현재 시간', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12),
+          const Spacer(),
+          Text(nowText, style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
@@ -1063,9 +1100,9 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
               // 🆕 [NOW 배지도 회색 처리 대상이면 숨김] 이미 지나서 미완료인 칸은 "지금"이 아니므로 NOW를 보여주지 않음
               if (isNow && !isPastUnfinished)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(color: _brandGolden, borderRadius: BorderRadius.circular(20)),
-                  child: const Text('NOW', style: TextStyle(color: _pageBg, fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(color: _brandGolden, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: _brandGolden.withOpacity(0.5), blurRadius: 8, spreadRadius: 1)]),
+                  child: const Text('● NOW', style: TextStyle(color: _pageBg, fontSize: 11.5, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                 ),
               const SizedBox(width: 5),
               if (block.isRoutine) Icon(Icons.repeat, color: isPastUnfinished ? Colors.white24 : Colors.white38, size: 13),
@@ -1079,16 +1116,16 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                   tooltip: 'Undo (되돌리기)',
                   onPressed: () => _undoBlockStatus(block),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                 ),
               IconButton(
                 icon: Opacity(
                   opacity: isPastUnfinished ? 0.35 : 1.0,
-                  child: const HorizontalPencilIcon(size: 17),
+                  child: const ThreeColorPencilIcon(size: 17),
                 ),
                 onPressed: () => _showEditBlockDialog(block),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
           ),
@@ -1137,6 +1174,30 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                       '실행중',
                       // 🆕 [진하게 하지 않음 + 글자크기 통일] w900 -> w600으로 낮추고, 크기도 옆 글자와 동일하게(13)
                       style: const TextStyle(color: _pageBg, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // 🆕 [버그 수정] 시간이 지나도록 손 안 댄(planned) 칸은 지금까지 완료할 방법이
+          // 아예 없었음(버튼이 "실행중"일 때만 보였기 때문). 이제 계획 상태여도
+          // 완료 처리를 할 수 있도록 버튼을 추가함.
+          if (isPlanned) const SizedBox(height: 8),
+          if (isPlanned)
+            SizedBox(
+              width: double.infinity,
+              height: 36,
+              child: OutlinedButton(
+                onPressed: () => _showCompletionSurveyDialog(block),
+                style: OutlinedButton.styleFrom(side: BorderSide(color: _brandGolden.withOpacity(0.6))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline, color: _brandGolden.withOpacity(0.9), size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Mark as Complete (완료 처리)',
+                      style: TextStyle(color: _brandGolden.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),

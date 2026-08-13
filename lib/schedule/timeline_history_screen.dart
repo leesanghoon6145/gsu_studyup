@@ -303,10 +303,10 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
                   const SizedBox(width: 10),
                   Expanded(child: Text(b.title, style: const TextStyle(color: Colors.white))),
                   IconButton(
-                    icon: const HorizontalPencilIcon(size: 18),
+                    icon: const ThreeColorPencilIcon(size: 18),
                     onPressed: () => _showBlockDialog(existing: b),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                   ),
                 ],
               ),

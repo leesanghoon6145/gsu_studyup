@@ -257,10 +257,10 @@ class _ExecutionRecordScreenState extends State<ExecutionRecordScreen> {
               Text('(${block.category})', style: const TextStyle(color: Colors.white38, fontSize: 11)),
               const SizedBox(width: 4),
               IconButton(
-                icon: const HorizontalPencilIcon(size: 18),
+                icon: const ThreeColorPencilIcon(size: 18),
                 onPressed: () => _showRecordDialog(existing: block),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
           ),

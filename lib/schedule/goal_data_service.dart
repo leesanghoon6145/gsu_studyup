@@ -67,10 +67,12 @@ class TodoItem {
   final String title;
   final String date; // 'yyyy-MM-dd'
   bool isCompleted;
+  String createdAt; // 🆕 [정렬 수정] 같은 날 여러 개 만들어도 정확한 순서로 "최근 입력이 맨 위" 정렬 가능하게 함
 
-  TodoItem({required this.id, this.goalId, required this.title, required this.date, this.isCompleted = false});
+  TodoItem({required this.id, this.goalId, required this.title, required this.date, this.isCompleted = false, String? createdAt})
+      : createdAt = createdAt ?? DateTime.now().toIso8601String();
 
-  Map<String, dynamic> toJson() => {'id': id, 'goalId': goalId, 'title': title, 'date': date, 'isCompleted': isCompleted};
+  Map<String, dynamic> toJson() => {'id': id, 'goalId': goalId, 'title': title, 'date': date, 'isCompleted': isCompleted, 'createdAt': createdAt};
 
   factory TodoItem.fromJson(Map<String, dynamic> json) => TodoItem(
     id: json['id'] as String,
@@ -78,6 +80,7 @@ class TodoItem {
     title: json['title'] as String? ?? '',
     date: json['date'] as String? ?? '',
     isCompleted: json['isCompleted'] as bool? ?? false,
+    createdAt: json['createdAt'] as String?,
   );
 }
 
