@@ -117,12 +117,31 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'DAILY REPORT', ko: '일간 리포트', enSize: 16, koSize: 13),
+        title: BiTitle(
+          en: 'DAILY REPORT', ko: '일간 리포트', enSize: 16, koSize: 13,
+          translations: const {'JA': '日次レポート', 'ZH': '日报', 'FR': 'Rapport quotidien', 'DE': 'Täglicher Bericht', 'RU': 'Дневной отчёт', 'AR': 'التقرير اليومي', 'HI': 'दैनिक रिपोर्ट', 'VI': 'Báo cáo hàng ngày', 'ES': 'Informe diario', 'TH': 'รายงานรายวัน'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : (_today == null || !_today!.hasData)
-          ? Center(child: BiInline(en: 'No schedule or timeline records for today.\nAdd and complete some to see your report.', ko: '오늘 등록된 일정이나 타임라인이 없습니다.\n일정을 추가하고 완료해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center))
+          ? Center(
+        child: BiInline(
+          en: 'No schedule or timeline records for today.\nAdd and complete some to see your report.', ko: '오늘 등록된 일정이나 타임라인이 없습니다.\n일정을 추가하고 완료해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center,
+          translations: const {
+            'JA': '今日の予定やタイムラインの記録がありません。\n追加して完了してみてください。',
+            'ZH': '今天没有日程或时间线记录。\n添加并完成一些吧。',
+            'FR': "Aucun programme ni chronologie aujourd'hui.\nAjoutez-en et terminez-les pour voir votre rapport.",
+            'DE': 'Keine Termin- oder Zeitleistendaten für heute.\nFügen Sie welche hinzu und schließen Sie sie ab.',
+            'RU': 'Нет расписания или хронологии на сегодня.\nДобавьте и завершите что-нибудь.',
+            'AR': 'لا توجد سجلات جدول أو زمنية لليوم.\nأضف بعضها وأكملها لرؤية تقريرك.',
+            'HI': 'आज के लिए कोई शेड्यूल या समयरेखा रिकॉर्ड नहीं है।\nरिपोर्ट देखने के लिए कुछ जोड़ें और पूरा करें।',
+            'VI': 'Không có lịch trình hoặc dòng thời gian nào hôm nay.\nThêm và hoàn thành để xem báo cáo của bạn.',
+            'ES': 'No hay horario ni cronología para hoy.\nAñade y completa algunos para ver tu informe.',
+            'TH': 'ไม่มีบันทึกตารางเวลาหรือไทม์ไลน์วันนี้\nเพิ่มและทำให้เสร็จเพื่อดูรายงานของคุณ',
+          },
+        ),
+      )
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -153,10 +172,27 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const BiInline(en: "Today's Completion", ko: '오늘의 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: "Today's Completion", ko: '오늘의 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': '今日の達成率', 'ZH': '今日完成率', 'FR': "Taux d'achèvement du jour", 'DE': 'Heutige Fertigstellungsrate', 'RU': 'Процент выполнения сегодня', 'AR': 'نسبة الإنجاز اليوم', 'HI': 'आज की पूर्णता दर', 'VI': 'Tỷ lệ hoàn thành hôm nay', 'ES': 'Finalización de hoy', 'TH': 'อัตราความสำเร็จวันนี้'},
+          ),
           const SizedBox(height: 8),
           Text('${today.completionPercent}%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          BiInline(en: 'Completed ${today.completedCount} · Pending ${today.totalCount - today.completedCount}', ko: '완료 ${today.completedCount}건 · 미완료 ${today.totalCount - today.completedCount}건', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: 'Completed ${today.completedCount} · Pending ${today.totalCount - today.completedCount}', ko: '완료 ${today.completedCount}건 · 미완료 ${today.totalCount - today.completedCount}건', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: {
+              'JA': '完了 ${today.completedCount} · 未完了 ${today.totalCount - today.completedCount}',
+              'ZH': '完成 ${today.completedCount} · 未完成 ${today.totalCount - today.completedCount}',
+              'FR': 'Terminé ${today.completedCount} · En attente ${today.totalCount - today.completedCount}',
+              'DE': 'Erledigt ${today.completedCount} · Ausstehend ${today.totalCount - today.completedCount}',
+              'RU': 'Выполнено ${today.completedCount} · В ожидании ${today.totalCount - today.completedCount}',
+              'AR': 'مكتمل ${today.completedCount} · معلق ${today.totalCount - today.completedCount}',
+              'HI': 'पूर्ण ${today.completedCount} · लंबित ${today.totalCount - today.completedCount}',
+              'VI': 'Hoàn thành ${today.completedCount} · Đang chờ ${today.totalCount - today.completedCount}',
+              'ES': 'Completado ${today.completedCount} · Pendiente ${today.totalCount - today.completedCount}',
+              'TH': 'เสร็จ ${today.completedCount} · รอดำเนินการ ${today.totalCount - today.completedCount}',
+            },
+          ),
         ],
       ),
     );
@@ -171,7 +207,12 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         children: [
           const Icon(Icons.emoji_events, color: _brandGolden, size: 22),
           const SizedBox(width: 12),
-          const Expanded(child: BiInline(en: 'Goals Achieved Today', ko: '오늘 달성한 목표', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Expanded(
+            child: BiInline(
+              en: 'Goals Achieved Today', ko: '오늘 달성한 목표', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+              translations: const {'JA': '今日達成した目標', 'ZH': '今日达成目标', 'FR': "Objectifs atteints aujourd'hui", 'DE': 'Heute erreichte Ziele', 'RU': 'Цели, достигнутые сегодня', 'AR': 'الأهداف المحققة اليوم', 'HI': 'आज हासिल किए गए लक्ष्य', 'VI': 'Mục tiêu đạt được hôm nay', 'ES': 'Objetivos logrados hoy', 'TH': 'เป้าหมายที่บรรลุวันนี้'},
+            ),
+          ),
           Text('$_achievedGoalCount', style: const TextStyle(color: _brandGolden, fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
@@ -188,7 +229,12 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         children: [
           const Icon(Icons.rocket_launch_rounded, color: _brandGolden, size: 22),
           const SizedBox(width: 12),
-          const Expanded(child: BiInline(en: 'Projects Completed Today', ko: '오늘 완료된 프로젝트', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Expanded(
+            child: BiInline(
+              en: 'Projects Completed Today', ko: '오늘 완료된 프로젝트', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+              translations: const {'JA': '今日完了したプロジェクト', 'ZH': '今日完成的项目', 'FR': "Projets terminés aujourd'hui", 'DE': 'Heute abgeschlossene Projekte', 'RU': 'Проекты, завершённые сегодня', 'AR': 'المشاريع المكتملة اليوم', 'HI': 'आज पूर्ण की गई परियोजनाएं', 'VI': 'Dự án hoàn thành hôm nay', 'ES': 'Proyectos completados hoy', 'TH': 'โครงการที่เสร็จวันนี้'},
+            ),
+          ),
           Text('$_completedProjectCount', style: const TextStyle(color: _brandGolden, fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
@@ -207,10 +253,16 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const BiInline(en: 'Time by Category', ko: '분류별 시간 사용', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: 'Time by Category', ko: '분류별 시간 사용', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': 'カテゴリー別使用時間', 'ZH': '按分类用时', 'FR': 'Temps par catégorie', 'DE': 'Zeit nach Kategorie', 'RU': 'Время по категориям', 'AR': 'الوقت حسب الفئة', 'HI': 'श्रेणी अनुसार समय', 'VI': 'Thời gian theo danh mục', 'ES': 'Tiempo por categoría', 'TH': 'เวลาตามหมวดหมู่'},
+          ),
           const SizedBox(height: 12),
           if (entries.isEmpty)
-            const BiInline(en: 'No completed timeline items yet.', ko: '완료된 타임라인 항목이 없습니다.', color: Colors.white38, fontSize: 12)
+            BiInline(
+              en: 'No completed timeline items yet.', ko: '완료된 타임라인 항목이 없습니다.', color: Colors.white38, fontSize: 12,
+              translations: const {'JA': 'まだ完了したタイムライン項目がありません。', 'ZH': '暂无已完成的时间线项目。', 'FR': "Aucun élément de chronologie terminé pour l'instant.", 'DE': 'Noch keine abgeschlossenen Zeitleisteneinträge.', 'RU': 'Пока нет завершённых элементов хронологии.', 'AR': 'لا توجد عناصر جدول زمني مكتملة بعد.', 'HI': 'अभी तक कोई पूर्ण समयरेखा आइटम नहीं।', 'VI': 'Chưa có mục dòng thời gian nào hoàn thành.', 'ES': 'Aún no hay elementos de cronología completados.', 'TH': 'ยังไม่มีรายการไทม์ไลน์ที่เสร็จสิ้น'},
+            )
           else
             ...entries.map((e) {
               final int hours = e.value ~/ 60;
@@ -228,7 +280,14 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
             }),
           if (total > 0) ...[
             const Divider(color: Colors.white12, height: 20),
-            BiInline(en: 'Total: ${total ~/ 60}h ${total % 60}m', ko: '총 사용 시간: ${total ~/ 60}시간 ${total % 60}분', color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+            BiInline(
+              en: 'Total: ${total ~/ 60}h ${total % 60}m', ko: '총 사용 시간: ${total ~/ 60}시간 ${total % 60}분', color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold,
+              translations: {
+                'JA': '合計: ${total ~/ 60}時間${total % 60}分', 'ZH': '总计: ${total ~/ 60}小时${total % 60}分', 'FR': 'Total : ${total ~/ 60}h ${total % 60}min', 'DE': 'Gesamt: ${total ~/ 60}Std ${total % 60}Min',
+                'RU': 'Всего: ${total ~/ 60}ч ${total % 60}мин', 'AR': 'الإجمالي: ${total ~/ 60}س ${total % 60}د', 'HI': 'कुल: ${total ~/ 60}घं ${total % 60}मि', 'VI': 'Tổng: ${total ~/ 60}g ${total % 60}p',
+                'ES': 'Total: ${total ~/ 60}h ${total % 60}m', 'TH': 'รวม: ${total ~/ 60}ชม ${total % 60}น',
+              },
+            ),
           ],
         ],
       ),
@@ -275,7 +334,12 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
             children: [
               const Icon(Icons.smart_toy_outlined, color: _brandGolden, size: 20),
               const SizedBox(width: 8),
-              const Expanded(child: BiInline(en: 'AI Coach Comment', ko: 'AI 코치 코멘트', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
+              Expanded(
+                child: BiInline(
+                  en: 'AI Coach Comment', ko: 'AI 코치 코멘트', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13,
+                  translations: const {'JA': 'AIコーチコメント', 'ZH': 'AI教练评语', 'FR': "Commentaire du coach IA", 'DE': 'KI-Coach-Kommentar', 'RU': 'Комментарий AI-тренера', 'AR': 'تعليق مدرب الذكاء الاصطناعي', 'HI': 'AI कोच टिप्पणी', 'VI': 'Nhận xét từ HLV AI', 'ES': 'Comentario del entrenador IA', 'TH': 'ความคิดเห็นจากโค้ช AI'},
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -285,7 +349,12 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                 onPressed: _loadAiComment,
-                child: Text('View Today\'s Comment (오늘의 코멘트 보기)', style: GoogleFonts.notoSansKr(color: _pageBg, fontWeight: FontWeight.bold, fontSize: 13)),
+                child: appLanguage.isDefault
+                    ? const Text("View Today's Comment (오늘의 코멘트 보기)", style: TextStyle(color: _pageBg, fontWeight: FontWeight.bold, fontSize: 13))
+                    : Text(
+                  {'JA': '今日のコメントを見る', 'ZH': '查看今日评语', 'FR': "Voir le commentaire du jour", 'DE': 'Heutigen Kommentar ansehen', 'RU': 'Смотреть комментарий за сегодня', 'AR': 'عرض تعليق اليوم', 'HI': 'आज की टिप्पणी देखें', 'VI': 'Xem nhận xét hôm nay', 'ES': 'Ver comentario de hoy', 'TH': 'ดูความคิดเห็นวันนี้'}[appLanguage.current] ?? "View Today's Comment",
+                  style: const TextStyle(color: _pageBg, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
               ),
             )
           else ...[
@@ -298,8 +367,18 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                   Text(_aiComment!.textEn, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 12.5, height: 1.5)),
                   const SizedBox(height: 6),
                   Text(_aiComment!.textKo, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.5)),
+                  // 🆕 [10개국어 확장 참고] AI 코멘트 본문 자체는 아직 규칙기반 생성기가
+                  // 영/한만 만들기 때문에 외국어 자동 번역은 지원하지 않습니다.
+                  // (실제 문장 생성 로직이 10개국어를 만들도록 확장되면 그때 연결)
                   const SizedBox(height: 8),
-                  Text('Generated (생성됨): ${_aiComment!.generatedAt}', style: const TextStyle(color: Colors.white24, fontSize: 10)),
+                  BiInline(
+                    en: 'Generated: ${_aiComment!.generatedAt}', ko: '생성됨: ${_aiComment!.generatedAt}', color: Colors.white24, fontSize: 10,
+                    translations: {
+                      'JA': '生成日時: ${_aiComment!.generatedAt}', 'ZH': '生成时间: ${_aiComment!.generatedAt}', 'FR': 'Généré : ${_aiComment!.generatedAt}', 'DE': 'Erstellt: ${_aiComment!.generatedAt}',
+                      'RU': 'Создано: ${_aiComment!.generatedAt}', 'AR': 'تم الإنشاء: ${_aiComment!.generatedAt}', 'HI': 'बनाया गया: ${_aiComment!.generatedAt}', 'VI': 'Đã tạo: ${_aiComment!.generatedAt}',
+                      'ES': 'Generado: ${_aiComment!.generatedAt}', 'TH': 'สร้างเมื่อ: ${_aiComment!.generatedAt}',
+                    },
+                  ),
                 ],
               ),
             ),
@@ -307,9 +386,16 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
             TextButton.icon(
               onPressed: () => setState(() => _showAiHistory = !_showAiHistory),
               icon: Icon(_showAiHistory ? Icons.expand_less : Icons.expand_more, color: _brandGolden, size: 18),
-              label: Text(
+              label: appLanguage.isDefault
+                  ? Text(
                 _showAiHistory ? 'Hide History (기록 숨기기)' : 'Show History (기록 보기, ${_aiHistory.length}개)',
-                style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+              )
+                  : Text(
+                _showAiHistory
+                    ? ({'JA': '履歴を隠す', 'ZH': '隐藏记录', 'FR': "Masquer l'historique", 'DE': 'Verlauf ausblenden', 'RU': 'Скрыть историю', 'AR': 'إخفاء السجل', 'HI': 'इतिहास छिपाएं', 'VI': 'Ẩn lịch sử', 'ES': 'Ocultar historial', 'TH': 'ซ่อนประวัติ'}[appLanguage.current] ?? 'Hide History')
+                    : '${{'JA': '履歴を見る', 'ZH': '查看记录', 'FR': "Voir l'historique", 'DE': 'Verlauf anzeigen', 'RU': 'Смотреть историю', 'AR': 'عرض السجل', 'HI': 'इतिहास देखें', 'VI': 'Xem lịch sử', 'ES': 'Ver historial', 'TH': 'ดูประวัติ'}[appLanguage.current] ?? 'Show History'} (${_aiHistory.length})',
+                style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
             if (_showAiHistory)

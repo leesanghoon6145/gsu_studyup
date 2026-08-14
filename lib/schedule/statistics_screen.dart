@@ -73,7 +73,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'STATISTICS', ko: '통계', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'STATISTICS', ko: '통계', enSize: 19, koSize: 14,
+          translations: const {'JA': '統計', 'ZH': '统计', 'FR': 'Statistiques', 'DE': 'Statistik', 'RU': 'Статистика', 'AR': 'الإحصائيات', 'HI': 'सांख्यिकी', 'VI': 'Thống kê', 'ES': 'Estadísticas', 'TH': 'สถิติ'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -102,7 +105,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         children: [
           const Icon(Icons.emoji_events, color: _brandGolden, size: 24),
           const SizedBox(width: 12),
-          const Expanded(child: BiInline(en: 'Total Goals Achieved', ko: '총 달성한 목표', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Expanded(
+            child: BiInline(
+              en: 'Total Goals Achieved', ko: '총 달성한 목표', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+              translations: const {'JA': '達成した目標の合計', 'ZH': '累计达成目标', 'FR': 'Total des objectifs atteints', 'DE': 'Insgesamt erreichte Ziele', 'RU': 'Всего достигнутых целей', 'AR': 'إجمالي الأهداف المحققة', 'HI': 'कुल हासिल किए गए लक्ष्य', 'VI': 'Tổng mục tiêu đạt được', 'ES': 'Total de objetivos logrados', 'TH': 'เป้าหมายที่บรรลุทั้งหมด'},
+            ),
+          ),
           Text('$_totalAchievements', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
       ),
@@ -119,7 +127,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         children: [
           const Icon(Icons.rocket_launch_rounded, color: _brandGolden, size: 24),
           const SizedBox(width: 12),
-          const Expanded(child: BiInline(en: 'Total Projects Completed', ko: '총 완료된 프로젝트', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+          Expanded(
+            child: BiInline(
+              en: 'Total Projects Completed', ko: '총 완료된 프로젝트', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+              translations: const {'JA': '完了したプロジェクトの合計', 'ZH': '累计完成项目', 'FR': 'Total des projets terminés', 'DE': 'Insgesamt abgeschlossene Projekte', 'RU': 'Всего завершённых проектов', 'AR': 'إجمالي المشاريع المكتملة', 'HI': 'कुल पूर्ण की गई परियोजनाएं', 'VI': 'Tổng dự án hoàn thành', 'ES': 'Total de proyectos completados', 'TH': 'โครงการที่เสร็จทั้งหมด'},
+            ),
+          ),
           Text('$_totalCompletedProjects', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
       ),
@@ -138,10 +151,16 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const BiInline(en: 'Time Usage (All Time)', ko: '시간 사용 비율 (전체 기간)', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: 'Time Usage (All Time)', ko: '시간 사용 비율 (전체 기간)', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': '時間使用率（全期間）', 'ZH': '时间使用比例（全部时间）', 'FR': 'Utilisation du temps (toute période)', 'DE': 'Zeitnutzung (gesamter Zeitraum)', 'RU': 'Использование времени (за всё время)', 'AR': 'استخدام الوقت (كل الفترات)', 'HI': 'समय उपयोग (संपूर्ण अवधि)', 'VI': 'Sử dụng thời gian (toàn bộ)', 'ES': 'Uso del tiempo (todo el período)', 'TH': 'การใช้เวลา (ทั้งหมด)'},
+          ),
           const SizedBox(height: 14),
           if (total == 0)
-            const BiInline(en: 'No completed timeline records yet.', ko: '아직 완료된 타임라인 기록이 없습니다.', color: Colors.white38, fontSize: 12)
+            BiInline(
+              en: 'No completed timeline records yet.', ko: '아직 완료된 타임라인 기록이 없습니다.', color: Colors.white38, fontSize: 12,
+              translations: const {'JA': 'まだ完了したタイムライン記録がありません。', 'ZH': '暂无已完成的时间线记录。', 'FR': "Aucun enregistrement de chronologie terminé pour l'instant.", 'DE': 'Noch keine abgeschlossenen Zeitleistenaufzeichnungen.', 'RU': 'Пока нет завершённых записей хронологии.', 'AR': 'لا توجد سجلات جدول زمني مكتملة بعد.', 'HI': 'अभी तक कोई पूर्ण समयरेखा रिकॉर्ड नहीं।', 'VI': 'Chưa có bản ghi dòng thời gian nào hoàn thành.', 'ES': 'Aún no hay registros de cronología completados.', 'TH': 'ยังไม่มีบันทึกไทม์ไลน์ที่เสร็จสิ้น'},
+            )
           else ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -187,7 +206,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          BiInline(en: '${now.year} Monthly Completion', ko: '${now.year}년 월별 목표 달성률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: '${now.year} Monthly Completion', ko: '${now.year}년 월별 목표 달성률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: {
+              'JA': '${now.year}年 月別達成率', 'ZH': '${now.year}年 月度完成率', 'FR': "Achèvement mensuel ${now.year}", 'DE': 'Monatliche Fertigstellung ${now.year}',
+              'RU': 'Ежемесячное выполнение ${now.year}', 'AR': 'الإنجاز الشهري ${now.year}', 'HI': '${now.year} मासिक पूर्णता', 'VI': 'Hoàn thành hàng tháng ${now.year}',
+              'ES': 'Finalización mensual ${now.year}', 'TH': 'ความสำเร็จรายเดือน ${now.year}',
+            },
+          ),
           const SizedBox(height: 16),
           ...List.generate(12, (i) {
             final int month = i + 1;
@@ -197,7 +223,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(
                 children: [
-                  SizedBox(width: 32, child: Text('${month}월', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                  SizedBox(width: 32, child: Text(appLanguage.isDefault ? '$month월' : '$month', style: const TextStyle(color: Colors.white70, fontSize: 12))),
                   Expanded(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4),

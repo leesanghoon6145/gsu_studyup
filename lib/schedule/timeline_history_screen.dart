@@ -50,12 +50,20 @@ class _TimelineHistoryScreenState extends State<TimelineHistoryScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'TIMELINE HISTORY', ko: '타임라인 기록', enSize: 16, koSize: 13),
+        title: BiTitle(
+          en: 'TIMELINE HISTORY', ko: '타임라인 기록', enSize: 16, koSize: 13,
+          translations: const {'JA': 'タイムライン履歴', 'ZH': '时间线记录', 'FR': "Historique de chronologie", 'DE': 'Zeitleisten-Verlauf', 'RU': 'История хронологии', 'AR': 'سجل الجدول الزمني', 'HI': 'समयरेखा इतिहास', 'VI': 'Lịch sử dòng thời gian', 'ES': 'Historial de cronología', 'TH': 'ประวัติไทม์ไลน์'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _dates.isEmpty
-          ? Center(child: BiInline(en: 'No timeline history yet', ko: '아직 저장된 타임라인 기록이 없습니다', color: Colors.white38, fontSize: 14))
+          ? Center(
+        child: BiInline(
+          en: 'No timeline history yet', ko: '아직 저장된 타임라인 기록이 없습니다', color: Colors.white38, fontSize: 14,
+          translations: const {'JA': 'まだタイムライン履歴がありません', 'ZH': '暂无时间线记录', 'FR': "Aucun historique de chronologie pour l'instant", 'DE': 'Noch kein Zeitleisten-Verlauf', 'RU': 'Пока нет истории хронологии', 'AR': 'لا يوجد سجل زمني بعد', 'HI': 'अभी तक कोई समयरेखा इतिहास नहीं', 'VI': 'Chưa có lịch sử dòng thời gian', 'ES': 'Aún no hay historial de cronología', 'TH': 'ยังไม่มีประวัติไทม์ไลน์'},
+        ),
+      )
           : ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _dates.length,
@@ -272,12 +280,31 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          BiInline(en: 'Completed $completed / ${_blocks.length}', ko: '완료 $completed / ${_blocks.length}', color: _brandGolden, fontWeight: FontWeight.bold),
+          BiInline(
+            en: 'Completed $completed / ${_blocks.length}', ko: '완료 $completed / ${_blocks.length}', color: _brandGolden, fontWeight: FontWeight.bold,
+            translations: {
+              'JA': '完了 $completed / ${_blocks.length}',
+              'ZH': '完成 $completed / ${_blocks.length}',
+              'FR': 'Terminé $completed / ${_blocks.length}',
+              'DE': 'Erledigt $completed / ${_blocks.length}',
+              'RU': 'Выполнено $completed / ${_blocks.length}',
+              'AR': 'مكتمل $completed / ${_blocks.length}',
+              'HI': 'पूर्ण $completed / ${_blocks.length}',
+              'VI': 'Hoàn thành $completed / ${_blocks.length}',
+              'ES': 'Completado $completed / ${_blocks.length}',
+              'TH': 'เสร็จ $completed / ${_blocks.length}',
+            },
+          ),
           const SizedBox(height: 12),
           if (_blocks.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 30),
-              child: Center(child: BiInline(en: 'No timeline items for this date', ko: '이 날짜에는 등록된 타임라인이 없습니다', color: Colors.white38, fontSize: 13)),
+              child: Center(
+                child: BiInline(
+                  en: 'No timeline items for this date', ko: '이 날짜에는 등록된 타임라인이 없습니다', color: Colors.white38, fontSize: 13,
+                  translations: const {'JA': 'この日付にはタイムライン項目がありません', 'ZH': '该日期没有时间线项目', 'FR': "Aucun élément de chronologie pour cette date", 'DE': 'Keine Zeitleisteneinträge für dieses Datum', 'RU': 'Нет записей хронологии на эту дату', 'AR': 'لا توجد عناصر جدول زمني لهذا التاريخ', 'HI': 'इस तारीख के लिए कोई समयरेखा आइटम नहीं', 'VI': 'Không có mục dòng thời gian cho ngày này', 'ES': 'No hay elementos de cronología para esta fecha', 'TH': 'ไม่มีรายการไทม์ไลน์สำหรับวันที่นี้'},
+                ),
+              ),
             )
           else
             ..._blocks.map((b) => Container(

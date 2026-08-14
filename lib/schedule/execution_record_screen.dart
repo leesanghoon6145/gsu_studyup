@@ -117,7 +117,10 @@ class _ExecutionRecordScreenState extends State<ExecutionRecordScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    const BiInline(en: 'PLANNED', ko: '계획 시간', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'PLANNED', ko: '계획 시간', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': '計画時間', 'ZH': '计划时间', 'FR': 'Temps prévu', 'DE': 'Geplante Zeit', 'RU': 'Запланированное время', 'AR': 'الوقت المخطط', 'HI': 'नियोजित समय', 'VI': 'Thời gian dự kiến', 'ES': 'Tiempo planificado', 'TH': 'เวลาที่วางแผน'},
+                    ),
                     const SizedBox(height: 8),
                     Row(children: [
                       timeButton('Start', plannedStart, (v) => plannedStart = v),
@@ -126,7 +129,10 @@ class _ExecutionRecordScreenState extends State<ExecutionRecordScreen> {
                     ]),
                     const SizedBox(height: 14),
 
-                    const BiInline(en: 'ACTUAL', ko: '실제 시간', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'ACTUAL', ko: '실제 시간', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': '実際の時間', 'ZH': '实际时间', 'FR': 'Temps réel', 'DE': 'Tatsächliche Zeit', 'RU': 'Фактическое время', 'AR': 'الوقت الفعلي', 'HI': 'वास्तविक समय', 'VI': 'Thời gian thực tế', 'ES': 'Tiempo real', 'TH': 'เวลาจริง'},
+                    ),
                     const SizedBox(height: 8),
                     Row(children: [
                       timeButton('Start', actualStart, (v) => actualStart = v),
@@ -219,12 +225,31 @@ class _ExecutionRecordScreenState extends State<ExecutionRecordScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'EXECUTION RECORD', ko: '실행 기록', enSize: 16, koSize: 13),
+        title: BiTitle(
+          en: 'EXECUTION RECORD', ko: '실행 기록', enSize: 16, koSize: 13,
+          translations: const {'JA': '実行記録', 'ZH': '执行记录', 'FR': "Journal d'exécution", 'DE': 'Ausführungsprotokoll', 'RU': 'Журнал выполнения', 'AR': 'سجل التنفيذ', 'HI': 'निष्पादन रिकॉर्ड', 'VI': 'Nhật ký thực hiện', 'ES': 'Registro de ejecución', 'TH': 'บันทึกการดำเนินการ'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _records.isEmpty
-          ? Center(child: BiInline(en: 'No records yet. Tap + to add one.', ko: '아직 완료된 실행 기록이 없습니다. + 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center))
+          ? Center(
+        child: BiInline(
+          en: 'No records yet. Tap + to add one.', ko: '아직 완료된 실행 기록이 없습니다. + 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center,
+          translations: const {
+            'JA': 'まだ実行記録がありません。+ボタンで追加してください。',
+            'ZH': '暂无执行记录。点击+号添加。',
+            'FR': "Aucun enregistrement pour l'instant. Appuyez sur + pour en ajouter un.",
+            'DE': 'Noch keine Aufzeichnungen. Tippen Sie auf +, um eine hinzuzufügen.',
+            'RU': 'Пока нет записей. Нажмите +, чтобы добавить.',
+            'AR': 'لا توجد سجلات بعد. اضغط + للإضافة.',
+            'HI': 'अभी तक कोई रिकॉर्ड नहीं है। + दबाकर जोड़ें।',
+            'VI': 'Chưa có bản ghi nào. Nhấn + để thêm.',
+            'ES': 'Aún no hay registros. Toca + para añadir uno.',
+            'TH': 'ยังไม่มีบันทึก แตะ + เพื่อเพิ่ม',
+          },
+        ),
+      )
           : ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _records.length,
@@ -271,9 +296,9 @@ class _ExecutionRecordScreenState extends State<ExecutionRecordScreen> {
             decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(8)),
             child: Row(
               children: [
-                Expanded(child: _buildStat('Planned', '계획', '${block.plannedStart}~${block.plannedEnd}')),
-                Expanded(child: _buildStat('Actual', '실제', '${block.actualStart}~${block.actualEnd}')),
-                Expanded(child: _buildStat('Diff', '차이', diffText, color: diffColor)),
+                Expanded(child: _buildStat('Planned', '계획', '${block.plannedStart}~${block.plannedEnd}', translations: const {'JA': '計画', 'ZH': '计划', 'FR': 'Prévu', 'DE': 'Geplant', 'RU': 'План', 'AR': 'مخطط', 'HI': 'नियोजित', 'VI': 'Dự kiến', 'ES': 'Planificado', 'TH': 'วางแผน'})),
+                Expanded(child: _buildStat('Actual', '실제', '${block.actualStart}~${block.actualEnd}', translations: const {'JA': '実際', 'ZH': '实际', 'FR': 'Réel', 'DE': 'Tatsächlich', 'RU': 'Факт', 'AR': 'فعلي', 'HI': 'वास्तविक', 'VI': 'Thực tế', 'ES': 'Real', 'TH': 'จริง'})),
+                Expanded(child: _buildStat('Diff', '차이', diffText, color: diffColor, translations: const {'JA': '差', 'ZH': '差异', 'FR': 'Écart', 'DE': 'Differenz', 'RU': 'Разница', 'AR': 'الفرق', 'HI': 'अंतर', 'VI': 'Chênh lệch', 'ES': 'Diferencia', 'TH': 'ผลต่าง'})),
               ],
             ),
           ),
@@ -282,11 +307,11 @@ class _ExecutionRecordScreenState extends State<ExecutionRecordScreen> {
     );
   }
 
-  Widget _buildStat(String en, String ko, String value, {Color? color}) {
+  Widget _buildStat(String en, String ko, String value, {Color? color, Map<String, String>? translations}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        BiInline(en: en, ko: ko, color: Colors.white38, fontSize: 9),
+        BiInline(en: en, ko: ko, color: Colors.white38, fontSize: 9, translations: translations),
         Text(value, style: TextStyle(color: color ?? Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
       ],
     );

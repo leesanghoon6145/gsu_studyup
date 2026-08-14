@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
+import 'report_data_service.dart'; // 🆕 [버그 수정] 기간별 목표는 캘린더+타임라인 실데이터로 진행률 계산
 import 'bilingual_text.dart';
 
 class ProgressScreen extends StatefulWidget {
@@ -36,6 +37,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
     'weekly': 'Weekly Goal',
     'today': 'Today Goal',
   };
+  // 🆕 [10개국어 확장] 목표 유형별 이름 번역
+  static const Map<String, Map<String, String>> _typeLabelsTranslations = {
+    'life': {'JA': '人生の目標', 'ZH': '人生目标', 'FR': 'Objectif de vie', 'DE': 'Lebensziel', 'RU': 'Жизненная цель', 'AR': 'هدف الحياة', 'HI': 'जीवन लक्ष्य', 'VI': 'Mục tiêu cuộc đời', 'ES': 'Objetivo de vida', 'TH': 'เป้าหมายชีวิต'},
+    'yearly': {'JA': '年間目標', 'ZH': '年度目标', 'FR': 'Objectif annuel', 'DE': 'Jahresziel', 'RU': 'Годовая цель', 'AR': 'الهدف السنوي', 'HI': 'वार्षिक लक्ष्य', 'VI': 'Mục tiêu năm', 'ES': 'Objetivo anual', 'TH': 'เป้าหมายรายปี'},
+    'monthly': {'JA': '月間目標', 'ZH': '月度目标', 'FR': 'Objectif mensuel', 'DE': 'Monatsziel', 'RU': 'Месячная цель', 'AR': 'الهدف الشهري', 'HI': 'मासिक लक्ष्य', 'VI': 'Mục tiêu tháng', 'ES': 'Objetivo mensual', 'TH': 'เป้าหมายรายเดือน'},
+    'weekly': {'JA': '週間目標', 'ZH': '每周目标', 'FR': 'Objectif hebdomadaire', 'DE': 'Wochenziel', 'RU': 'Недельная цель', 'AR': 'الهدف الأسبوعي', 'HI': 'साप्ताहिक लक्ष्य', 'VI': 'Mục tiêu tuần', 'ES': 'Objetivo semanal', 'TH': 'เป้าหมายรายสัปดาห์'},
+    'today': {'JA': '今日の目標', 'ZH': '今日目标', 'FR': "Objectif du jour", 'DE': 'Tagesziel', 'RU': 'Цель на сегодня', 'AR': 'هدف اليوم', 'HI': 'आज का लक्ष्य', 'VI': 'Mục tiêu hôm nay', 'ES': 'Objetivo de hoy', 'TH': 'เป้าหมายวันนี้'},
+  };
 
   List<GoalItem> _allGoals = [];
   Map<String, double> _progressCache = {};
@@ -52,7 +61,17 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final all = await GoalDataService.loadAllGoals();
     final Map<String, double> progressMap = {};
     for (final g in all) {
-      progressMap[g.id] = await GoalDataService.calcGoalProgress(g.id);
+      if (g.type == 'life') {
+        // 🆕 인생목표만 할 일 체크 기반으로 계산 (의도된 예외)
+        progressMap[g.id] = await GoalDataService.calcGoalProgress(g.id);
+      } else {
+        // 🆕 [버그 수정] 연간/월간/주간/오늘 목표는 캘린더+타임라인 실데이터 기준으로 계산
+        // (period_goal_screen.dart와 완전히 동일한 방식 - 더 이상 할 일 체크를 쓰지 않음)
+        final start = DateTime.tryParse(g.periodStart) ?? DateTime.now();
+        final end = DateTime.tryParse(g.periodEnd) ?? DateTime.now();
+        final summary = await ReportDataService.summarize(start, end);
+        progressMap[g.id] = summary.completionRate;
+      }
     }
     if (!mounted) return;
     setState(() {
@@ -80,7 +99,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const BiTitle(en: 'PROGRESS', ko: '진행률', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'PROGRESS', ko: '진행률', enSize: 19, koSize: 14,
+          translations: const {'JA': '進捗', 'ZH': '进度', 'FR': 'Progrès', 'DE': 'Fortschritt', 'RU': 'Прогресс', 'AR': 'التقدم', 'HI': 'प्रगति', 'VI': 'Tiến độ', 'ES': 'Progreso', 'TH': 'ความคืบหน้า'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -92,6 +114,18 @@ class _ProgressScreenState extends State<ProgressScreen> {
           color: Colors.white38,
           fontSize: 14,
           textAlign: TextAlign.center,
+          translations: const {
+            'JA': 'まだ目標がありません。\n目標を作成して作業をチェックすると、\nここに進捗が表示されます。',
+            'ZH': '暂无目标。\n创建目标并勾选任务后，\n进度会显示在这里。',
+            'FR': "Aucun objectif pour l'instant.\nCréez un objectif et cochez des tâches\npour voir la progression ici.",
+            'DE': 'Noch keine Ziele.\nErstellen Sie ein Ziel und haken Sie Aufgaben ab,\num hier den Fortschritt zu sehen.',
+            'RU': 'Пока нет целей.\nСоздайте цель и отмечайте задачи,\nчтобы увидеть прогресс здесь.',
+            'AR': 'لا توجد أهداف بعد.\nأنشئ هدفًا وحدد المهام\nلرؤية التقدم هنا.',
+            'HI': 'अभी तक कोई लक्ष्य नहीं है।\nलक्ष्य बनाएं और कार्य चेक करें\nयहां प्रगति देखने के लिए।',
+            'VI': 'Chưa có mục tiêu nào.\nTạo mục tiêu và đánh dấu công việc\nđể xem tiến độ tại đây.',
+            'ES': 'Aún no hay objetivos.\nCrea un objetivo y marca tareas\npara ver el progreso aquí.',
+            'TH': 'ยังไม่มีเป้าหมาย\nสร้างเป้าหมายและทำเครื่องหมายงาน\nเพื่อดูความคืบหน้าที่นี่',
+          },
         ),
       )
           : ListView(
@@ -114,10 +148,20 @@ class _ProgressScreenState extends State<ProgressScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const BiInline(en: 'Overall Average Progress', ko: '전체 목표 평균 진행률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: 'Overall Average Progress', ko: '전체 목표 평균 진행률', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': '全体平均進捗', 'ZH': '总体平均进度', 'FR': 'Progression moyenne globale', 'DE': 'Durchschnittlicher Gesamtfortschritt', 'RU': 'Средний общий прогресс', 'AR': 'متوسط التقدم الإجمالي', 'HI': 'कुल औसत प्रगति', 'VI': 'Tiến độ trung bình tổng thể', 'ES': 'Progreso promedio general', 'TH': 'ความคืบหน้าเฉลี่ยโดยรวม'},
+          ),
           const SizedBox(height: 8),
           Text('$percent%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          BiInline(en: 'Total ${_allGoals.length} goals', ko: '총 ${_allGoals.length}개 목표', color: Colors.white38, fontSize: 12),
+          BiInline(
+            en: 'Total ${_allGoals.length} goals', ko: '총 ${_allGoals.length}개 목표', color: Colors.white38, fontSize: 12,
+            translations: {
+              'JA': '合計 ${_allGoals.length}件', 'ZH': '共 ${_allGoals.length} 个目标', 'FR': '${_allGoals.length} objectifs au total', 'DE': 'Insgesamt ${_allGoals.length} Ziele',
+              'RU': 'Всего ${_allGoals.length} целей', 'AR': 'إجمالي ${_allGoals.length} أهداف', 'HI': 'कुल ${_allGoals.length} लक्ष्य', 'VI': 'Tổng ${_allGoals.length} mục tiêu',
+              'ES': 'Total ${_allGoals.length} objetivos', 'TH': 'ทั้งหมด ${_allGoals.length} เป้าหมาย',
+            },
+          ),
         ],
       ),
     );
@@ -135,7 +179,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            BiInline(en: _typeLabelsEn[type] ?? type, ko: label, color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+            BiInline(en: _typeLabelsEn[type] ?? type, ko: label, color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14, translations: _typeLabelsTranslations[type]),
             const SizedBox(height: 10),
             ...goals.map((g) {
               final double progress = _progressCache[g.id] ?? 0.0;

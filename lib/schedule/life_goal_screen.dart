@@ -67,11 +67,23 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    luxuryDialogHeader(icon: isEdit ? Icons.edit_note_rounded : Icons.stars_rounded, en: isEdit ? 'EDIT LIFE GOAL' : 'ADD LIFE GOAL', ko: isEdit ? '인생 목표 수정' : '인생 목표 추가'),
+                    luxuryDialogHeader(
+                      icon: isEdit ? Icons.edit_note_rounded : Icons.stars_rounded,
+                      en: isEdit ? 'EDIT LIFE GOAL' : 'ADD LIFE GOAL', ko: isEdit ? '인생 목표 수정' : '인생 목표 추가',
+                      translations: isEdit
+                          ? {'JA': '人生目標を編集', 'ZH': '编辑人生目标', 'FR': 'Modifier objectif de vie', 'DE': 'Lebensziel bearbeiten', 'RU': 'Изменить жизненную цель', 'AR': 'تعديل هدف الحياة', 'HI': 'जीवन लक्ष्य संपादित करें', 'VI': 'Sửa mục tiêu cuộc đời', 'ES': 'Editar objetivo de vida', 'TH': 'แก้ไขเป้าหมายชีวิต'}
+                          : {'JA': '人生目標を追加', 'ZH': '添加人生目标', 'FR': 'Ajouter objectif de vie', 'DE': 'Lebensziel hinzufügen', 'RU': 'Добавить жизненную цель', 'AR': 'إضافة هدف الحياة', 'HI': 'जीवन लक्ष्य जोड़ें', 'VI': 'Thêm mục tiêu cuộc đời', 'ES': 'Añadir objetivo de vida', 'TH': 'เพิ่มเป้าหมายชีวิต'},
+                    ),
 
-                    _buildField(icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 건강하게 은퇴하기'),
+                    _buildField(
+                      icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 건강하게 은퇴하기',
+                      translations: const {'JA': '目標 (例: 健康に引退する)', 'ZH': '目标 (例: 健康退休)', 'FR': 'Objectif (ex. Prendre une retraite en bonne santé)', 'DE': 'Ziel (z. B. gesund in Rente gehen)', 'RU': 'Цель (напр., выйти на пенсию здоровым)', 'AR': 'الهدف (مثال: التقاعد بصحة جيدة)', 'HI': 'लक्ष्य (जैसे: स्वस्थ रिटायरमेंट)', 'VI': 'Mục tiêu (VD: Nghỉ hưu khỏe mạnh)', 'ES': 'Objetivo (ej. Jubilarme con salud)', 'TH': 'เป้าหมาย (เช่น เกษียณอย่างมีสุขภาพดี)'},
+                    ),
                     const SizedBox(height: 12),
-                    _buildField(icon: Icons.category_outlined, controller: categoryController, hintEn: 'Category', hintKo: '건강/재정/가족, 비워도 됨'),
+                    _buildField(
+                      icon: Icons.category_outlined, controller: categoryController, hintEn: 'Category', hintKo: '건강/재정/가족, 비워도 됨',
+                      translations: const {'JA': 'カテゴリー (任意)', 'ZH': '分类 (可留空)', 'FR': 'Catégorie (facultatif)', 'DE': 'Kategorie (optional)', 'RU': 'Категория (необязательно)', 'AR': 'الفئة (اختياري)', 'HI': 'श्रेणी (वैकल्पिक)', 'VI': 'Danh mục (không bắt buộc)', 'ES': 'Categoría (opcional)', 'TH': 'หมวดหมู่ (ไม่บังคับ)'},
+                    ),
                     const SizedBox(height: 14),
 
                     Container(
@@ -80,7 +92,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const BiInline(en: 'Achieved', ko: '달성함', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                          BiInline(
+                            en: 'Achieved', ko: '달성함', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                            translations: const {'JA': '達成済み', 'ZH': '已达成', 'FR': 'Atteint', 'DE': 'Erreicht', 'RU': 'Достигнуто', 'AR': 'تم تحقيقه', 'HI': 'हासिल किया', 'VI': 'Đã đạt được', 'ES': 'Logrado', 'TH': 'บรรลุแล้ว'},
+                          ),
                           Switch(value: isAchieved, activeColor: _brandGolden, onChanged: (v) => setDialogState(() => isAchieved = v)),
                         ],
                       ),
@@ -156,7 +171,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              luxuryDialogHeader(icon: Icons.playlist_add_rounded, en: 'ADD TASK', ko: '할 일 추가'),
+              luxuryDialogHeader(
+                icon: Icons.playlist_add_rounded, en: 'ADD TASK', ko: '할 일 추가',
+                translations: const {'JA': '作業を追加', 'ZH': '添加任务', 'FR': 'Ajouter une tâche', 'DE': 'Aufgabe hinzufügen', 'RU': 'Добавить задачу', 'AR': 'إضافة مهمة', 'HI': 'कार्य जोड़ें', 'VI': 'Thêm công việc', 'ES': 'Añadir tarea', 'TH': 'เพิ่มงาน'},
+              ),
               _buildField(icon: Icons.check_box_outlined, controller: controller, hintEn: 'Task', hintKo: 'e.g. 매달 50만원 저축'),
               const SizedBox(height: 20),
               Row(
@@ -165,7 +183,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                       onPressed: () => Navigator.of(context).pop(false),
-                      child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white70, fontWeight: FontWeight.bold),
+                      child: BiInline(en: 'Cancel', ko: '취소', color: Colors.white70, fontWeight: FontWeight.bold, translations: commonButtonTranslations['Cancel']),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -176,7 +194,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                         if (controller.text.trim().isEmpty) return;
                         Navigator.of(context).pop(true);
                       },
-                      child: const BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold),
+                      child: BiInline(en: 'Add', ko: '추가', color: _pageBg, fontWeight: FontWeight.bold, translations: commonButtonTranslations['Add']),
                     ),
                   ),
                 ],
@@ -231,7 +249,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      luxuryDialogHeader(icon: Icons.edit_note_rounded, en: 'EDIT TASK', ko: '할 일 수정'),
+                      luxuryDialogHeader(
+                        icon: Icons.edit_note_rounded, en: 'EDIT TASK', ko: '할 일 수정',
+                        translations: const {'JA': '作業を編集', 'ZH': '编辑任务', 'FR': 'Modifier la tâche', 'DE': 'Aufgabe bearbeiten', 'RU': 'Изменить задачу', 'AR': 'تعديل المهمة', 'HI': 'कार्य संपादित करें', 'VI': 'Sửa công việc', 'ES': 'Editar tarea', 'TH': 'แก้ไขงาน'},
+                      ),
                       _buildField(icon: Icons.check_box_outlined, controller: controller, hintEn: 'Task', hintKo: '할 일 내용'),
                       const SizedBox(height: 20),
                       luxuryBottomActions(
@@ -266,10 +287,13 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  BiInline(en: goal.title, ko: 'Tasks (할 일)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                  BiInline(en: goal.title, ko: 'Tasks (할 일)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15), // goal.title은 사용자가 직접 입력한 목표명이라 번역 대상 아님
                   const SizedBox(height: 12),
                   if (todos.isEmpty)
-                    const BiInline(en: 'No tasks yet', ko: '연결된 할 일이 없습니다', color: Colors.white38, fontSize: 13)
+                    BiInline(
+                      en: 'No tasks yet', ko: '연결된 할 일이 없습니다', color: Colors.white38, fontSize: 13,
+                      translations: const {'JA': 'まだ作業がありません', 'ZH': '暂无关联任务', 'FR': "Aucune tâche liée pour l'instant", 'DE': 'Noch keine verknüpften Aufgaben', 'RU': 'Пока нет связанных задач', 'AR': 'لا توجد مهام مرتبطة بعد', 'HI': 'अभी तक कोई जुड़ा कार्य नहीं', 'VI': 'Chưa có công việc liên kết', 'ES': 'Aún no hay tareas vinculadas', 'TH': 'ยังไม่มีงานที่เชื่อมโยง'},
+                    )
                   else
                     ...todos.map((t) => CheckboxListTile(
                       value: t.isCompleted,
@@ -297,7 +321,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
     );
   }
 
-  Widget _buildField({required IconData icon, required TextEditingController controller, required String hintEn, required String hintKo}) {
+  Widget _buildField({required IconData icon, required TextEditingController controller, required String hintEn, required String hintKo, Map<String, String>? translations}) {
     return Container(
       decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
       child: TextField(
@@ -305,7 +329,7 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: _brandGolden.withOpacity(0.85), size: 19),
-          hintText: biHint(hintEn, hintKo),
+          hintText: biHint(hintEn, hintKo, translations: translations),
           hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -323,12 +347,31 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'LIFE GOAL', ko: '인생 목표', enSize: 17, koSize: 13),
+        title: BiTitle(
+          en: 'LIFE GOAL', ko: '인생 목표', enSize: 17, koSize: 13,
+          translations: const {'JA': '人生の目標', 'ZH': '人生目标', 'FR': 'Objectif de vie', 'DE': 'Lebensziel', 'RU': 'Жизненная цель', 'AR': 'هدف الحياة', 'HI': 'जीवन लक्ष्य', 'VI': 'Mục tiêu cuộc đời', 'ES': 'Objetivo de vida', 'TH': 'เป้าหมายชีวิต'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _goals.isEmpty
-          ? Center(child: BiInline(en: 'No life goals yet. Tap + to add one.', ko: '등록된 인생 목표가 없습니다. + 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center))
+          ? Center(
+        child: BiInline(
+          en: 'No life goals yet. Tap + to add one.', ko: '등록된 인생 목표가 없습니다. + 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center,
+          translations: const {
+            'JA': 'まだ人生目標がありません。+ボタンで追加してください。',
+            'ZH': '暂无人生目标。点击+号添加。',
+            'FR': "Aucun objectif de vie pour l'instant. Appuyez sur + pour en ajouter un.",
+            'DE': 'Noch keine Lebensziele. Tippen Sie auf +, um eines hinzuzufügen.',
+            'RU': 'Пока нет жизненных целей. Нажмите +, чтобы добавить.',
+            'AR': 'لا توجد أهداف حياة بعد. اضغط + للإضافة.',
+            'HI': 'अभी तक कोई जीवन लक्ष्य नहीं है। + दबाकर जोड़ें।',
+            'VI': 'Chưa có mục tiêu cuộc đời nào. Nhấn + để thêm.',
+            'ES': 'Aún no hay objetivos de vida. Toca + para añadir uno.',
+            'TH': 'ยังไม่มีเป้าหมายชีวิต แตะ + เพื่อเพิ่ม',
+          },
+        ),
+      )
           : ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _goals.length,
@@ -374,7 +417,14 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
             child: LinearProgressIndicator(value: progress, minHeight: 10, backgroundColor: Colors.white12, valueColor: const AlwaysStoppedAnimation<Color>(_brandGolden)),
           ),
           const SizedBox(height: 6),
-          BiInline(en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+          BiInline(
+            en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold,
+            translations: {
+              'JA': '$percent% 完了', 'ZH': '$percent% 完成', 'FR': '$percent % Terminé', 'DE': '$percent % Erledigt',
+              'RU': '$percent% Выполнено', 'AR': '$percent% مكتمل', 'HI': '$percent% पूर्ण', 'VI': '$percent% Hoàn thành',
+              'ES': '$percent% Completado', 'TH': '$percent% เสร็จสิ้น',
+            },
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -383,7 +433,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                   style: OutlinedButton.styleFrom(side: const BorderSide(color: _brandGolden)),
                   onPressed: () => _showGoalTodos(goal),
                   icon: const Icon(Icons.checklist, color: _brandGolden, size: 16),
-                  label: const BiInline(en: 'View Tasks', ko: '할 일 보기', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
+                  label: BiInline(
+                    en: 'View Tasks', ko: '할 일 보기', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold,
+                    translations: const {'JA': '作業を見る', 'ZH': '查看任务', 'FR': 'Voir les tâches', 'DE': 'Aufgaben ansehen', 'RU': 'Просмотр задач', 'AR': 'عرض المهام', 'HI': 'कार्य देखें', 'VI': 'Xem công việc', 'ES': 'Ver tareas', 'TH': 'ดูงาน'},
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -392,7 +445,10 @@ class _LifeGoalScreenState extends State<LifeGoalScreen> {
                   style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white38)),
                   onPressed: () => _showAddTodoDialog(goal),
                   icon: const Icon(Icons.add, color: Colors.white70, size: 16),
-                  label: const BiInline(en: 'Add Task', ko: '할 일 추가', color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                  label: BiInline(
+                    en: 'Add Task', ko: '할 일 추가', color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold,
+                    translations: const {'JA': '作業を追加', 'ZH': '添加任务', 'FR': 'Ajouter une tâche', 'DE': 'Aufgabe hinzufügen', 'RU': 'Добавить задачу', 'AR': 'إضافة مهمة', 'HI': 'कार्य जोड़ें', 'VI': 'Thêm công việc', 'ES': 'Añadir tarea', 'TH': 'เพิ่มงาน'},
+                  ),
                 ),
               ),
             ],

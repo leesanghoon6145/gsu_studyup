@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'timeline_data_service.dart';
+import 'bilingual_text.dart'; // 🆕 [42건 정리] 이 화면만 병기 공용위젯이 빠져있었음
 
 class TimelineAnalysisScreen extends StatefulWidget {
   const TimelineAnalysisScreen({super.key});
@@ -93,10 +94,24 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
           ? Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            '아직 분석할 데이터가 없습니다.\n타임라인을 실행하고 완료할수록\n더 정확한 분석을 볼 수 있습니다.',
+          child: BiInline(
+            en: 'No data to analyze yet.\nThe more timeline items you run and complete,\nthe more accurate this analysis becomes.',
+            ko: '아직 분석할 데이터가 없습니다.\n타임라인을 실행하고 완료할수록\n더 정확한 분석을 볼 수 있습니다.',
+            color: Colors.white38,
+            fontSize: 13,
             textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 14),
+            translations: const {
+              'JA': 'まだ分析するデータがありません。\nタイムラインを実行して完了するほど、\nより正確な分析が見られます。',
+              'ZH': '暂无可分析的数据。\n运行并完成的时间线越多，\n分析就越准确。',
+              'FR': "Aucune donnée à analyser pour l'instant.\nPlus vous exécutez et terminez d'éléments,\nplus cette analyse devient précise.",
+              'DE': 'Noch keine Daten zur Analyse.\nJe mehr Zeitleisteneinträge Sie ausführen und abschließen,\ndesto genauer wird diese Analyse.',
+              'RU': 'Пока нет данных для анализа.\nЧем больше элементов хронологии вы выполните,\nтем точнее будет анализ.',
+              'AR': 'لا توجد بيانات للتحليل بعد.\nكلما نفذت وأكملت المزيد من عناصر الجدول الزمني،\nأصبح هذا التحليل أكثر دقة.',
+              'HI': 'अभी विश्लेषण के लिए कोई डेटा नहीं है।\nजितने अधिक समयरेखा आइटम चलाएंगे और पूरा करेंगे,\nविश्लेषण उतना ही सटीक होगा।',
+              'VI': 'Chưa có dữ liệu để phân tích.\nBạn chạy và hoàn thành càng nhiều mục dòng thời gian,\nphân tích này càng chính xác.',
+              'ES': 'Aún no hay datos para analizar.\nCuantos más elementos de cronología ejecutes y completes,\nmás preciso será este análisis.',
+              'TH': 'ยังไม่มีข้อมูลให้วิเคราะห์\nยิ่งคุณดำเนินการและทำรายการไทม์ไลน์เสร็จมากเท่าไร\nการวิเคราะห์นี้จะยิ่งแม่นยำมากขึ้นเท่านั้น',
+            },
           ),
         ),
       )
@@ -122,10 +137,27 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('전체 완료율', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          BiInline(
+            en: 'Overall Completion', ko: '전체 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': '全体達成率', 'ZH': '总完成率', 'FR': "Taux d'achèvement global", 'DE': 'Gesamtfertigstellung', 'RU': 'Общий процент выполнения', 'AR': 'نسبة الإنجاز الكلية', 'HI': 'कुल पूर्णता दर', 'VI': 'Tỷ lệ hoàn thành tổng thể', 'ES': 'Finalización general', 'TH': 'อัตราความสำเร็จโดยรวม'},
+          ),
           const SizedBox(height: 8),
           Text('$percent%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          Text('완료 ${_completedBlocks.length} / 전체 ${_allBlocks.length}건', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12)),
+          BiInline(
+            en: 'Completed ${_completedBlocks.length} / Total ${_allBlocks.length}', ko: '완료 ${_completedBlocks.length} / 전체 ${_allBlocks.length}건', color: Colors.white38, fontSize: 12,
+            translations: {
+              'JA': '完了 ${_completedBlocks.length} / 全体 ${_allBlocks.length}',
+              'ZH': '完成 ${_completedBlocks.length} / 总计 ${_allBlocks.length}',
+              'FR': 'Terminé ${_completedBlocks.length} / Total ${_allBlocks.length}',
+              'DE': 'Erledigt ${_completedBlocks.length} / Gesamt ${_allBlocks.length}',
+              'RU': 'Выполнено ${_completedBlocks.length} / Всего ${_allBlocks.length}',
+              'AR': 'مكتمل ${_completedBlocks.length} / الإجمالي ${_allBlocks.length}',
+              'HI': 'पूर्ण ${_completedBlocks.length} / कुल ${_allBlocks.length}',
+              'VI': 'Hoàn thành ${_completedBlocks.length} / Tổng ${_allBlocks.length}',
+              'ES': 'Completado ${_completedBlocks.length} / Total ${_allBlocks.length}',
+              'TH': 'เสร็จ ${_completedBlocks.length} / ทั้งหมด ${_allBlocks.length}',
+            },
+          ),
         ],
       ),
     );
@@ -143,10 +175,13 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('분류별 실제 사용 시간', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          BiInline(
+            en: 'Time by Category (Actual)', ko: '분류별 실제 사용 시간', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': 'カテゴリー別実使用時間', 'ZH': '按分类实际用时', 'FR': 'Temps réel par catégorie', 'DE': 'Tatsächliche Zeit nach Kategorie', 'RU': 'Фактическое время по категориям', 'AR': 'الوقت الفعلي حسب الفئة', 'HI': 'श्रेणी अनुसार वास्तविक समय', 'VI': 'Thời gian thực tế theo danh mục', 'ES': 'Tiempo real por categoría', 'TH': 'เวลาจริงตามหมวดหมู่'},
+          ),
           const SizedBox(height: 12),
           if (total == 0)
-            Text('데이터 없음', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12))
+            BiInline(en: 'No data', ko: '데이터 없음', color: Colors.white38, fontSize: 12, translations: commonButtonTranslations['No data'])
           else
             ...entries.map((e) {
               final int pct = total == 0 ? 0 : ((e.value / total) * 100).round();
@@ -159,7 +194,7 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(e.key, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                        Text('${e.value}분 ($pct%)', style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text('${e.value}min (${e.value}분) $pct%', style: const TextStyle(color: _brandGolden, fontSize: 11.5, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -207,7 +242,10 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('계획 대비 실행 경향', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          BiInline(
+            en: 'Planned vs Actual Trend', ko: '계획 대비 실행 경향', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': '計画対実行の傾向', 'ZH': '计划与执行趋势', 'FR': 'Tendance prévu vs réel', 'DE': 'Geplant vs. tatsächlich Trend', 'RU': 'Тенденция план/факт', 'AR': 'اتجاه المخطط مقابل الفعلي', 'HI': 'नियोजित बनाम वास्तविक रुझान', 'VI': 'Xu hướng kế hoạch và thực tế', 'ES': 'Tendencia planificado vs real', 'TH': 'แนวโน้มแผนเทียบกับจริง'},
+          ),
           const SizedBox(height: 10),
           Text(summaryText, style: GoogleFonts.notoSansKr(color: summaryColor, fontSize: 14, fontWeight: FontWeight.bold, height: 1.5)),
         ],

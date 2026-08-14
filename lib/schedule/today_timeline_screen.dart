@@ -231,10 +231,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                         onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        child: appLanguage.isDefault
+                            ? Column(mainAxisSize: MainAxisSize.min, children: [
                           Text('Cancel', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
                           Text('취소', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ]),
+                        ])
+                            : Text(tButton('Cancel'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -242,10 +244,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 4),
                         onPressed: () => Navigator.of(dialogContext).pop(true),
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        child: appLanguage.isDefault
+                            ? Column(mainAxisSize: MainAxisSize.min, children: [
                           Text('Reset', style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                           Text('초기화', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ]),
+                        ])
+                            : Text(tButton('Reset'), style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -297,10 +301,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 6, shadowColor: _brandGolden.withOpacity(0.5)),
                     onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    child: appLanguage.isDefault
+                        ? Column(mainAxisSize: MainAxisSize.min, children: [
                       Text('Got it', style: GoogleFonts.gowunBatang(color: _pageBg, fontSize: 12, fontWeight: FontWeight.bold)),
                       Text('확인했어요', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 12, fontWeight: FontWeight.bold)),
-                    ]),
+                    ])
+                        : Text(tButton('Got it'), style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 12.5, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -391,7 +397,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                             onPressed: () => Navigator.of(dialogContext).pop(false),
-                            child: const BiInline(en: 'Cancel', ko: '취소', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                            child: BiInline(en: 'Cancel', ko: '취소', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13, translations: commonButtonTranslations['Cancel']),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -402,7 +408,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                               if (titleController.text.trim().isEmpty) return;
                               Navigator.of(dialogContext).pop(true);
                             },
-                            child: const BiInline(en: 'Save', ko: '저장', color: _pageBg, fontWeight: FontWeight.bold, fontSize: 13),
+                            child: BiInline(en: 'Save', ko: '저장', color: _pageBg, fontWeight: FontWeight.bold, fontSize: 13, translations: commonButtonTranslations['Save']),
                           ),
                         ),
                       ],
@@ -508,10 +514,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFDC2626)), padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                             onPressed: () => Navigator.of(dialogContext).pop('delete'),
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            child: appLanguage.isDefault
+                                ? Column(mainAxisSize: MainAxisSize.min, children: [
                               Text('Delete', style: GoogleFonts.gowunBatang(color: const Color(0xFFDC2626), fontSize: 13, fontWeight: FontWeight.bold)),
                               Text('삭제', style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 13, fontWeight: FontWeight.bold)),
-                            ]),
+                            ])
+                                : Text(tButton('Delete'), style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 13.5, fontWeight: FontWeight.bold)),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -519,10 +527,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                             onPressed: () => Navigator.of(dialogContext).pop('copy'),
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            child: appLanguage.isDefault
+                                ? Column(mainAxisSize: MainAxisSize.min, children: [
                               Text('Copy', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
                               Text('복사', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-                            ]),
+                            ])
+                                : Text(tButton('Copy'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13.5, fontWeight: FontWeight.bold)),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -533,10 +543,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                               if (titleController.text.trim().isEmpty) return;
                               Navigator.of(dialogContext).pop('save');
                             },
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            child: appLanguage.isDefault
+                                ? Column(mainAxisSize: MainAxisSize.min, children: [
                               Text('Update', style: GoogleFonts.gowunBatang(color: _pageBg, fontSize: 13, fontWeight: FontWeight.bold)),
                               Text('수정완료', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 13, fontWeight: FontWeight.bold)),
-                            ]),
+                            ])
+                                : Text(tButton('Update'), style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 13.5, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -635,7 +647,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                     luxuryDialogHeader(icon: Icons.check_circle_outline_rounded, en: 'HOW DID IT GO?', ko: '어떠셨나요?'),
 
                     // 🆕 [Q1] 만족도/집중도 - 이모지 5단계
-                    const BiInline(en: 'Satisfaction / Focus', ko: '만족도 / 집중도', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'Satisfaction / Focus', ko: '만족도 / 집중도', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': '満足度 / 集中度', 'ZH': '满意度 / 专注度', 'FR': 'Satisfaction / Concentration', 'DE': 'Zufriedenheit / Fokus', 'RU': 'Удовлетворённость / Концентрация', 'AR': 'الرضا / التركيز', 'HI': 'संतुष्टि / एकाग्रता', 'VI': 'Sự hài lòng / Tập trung', 'ES': 'Satisfacción / Concentración', 'TH': 'ความพึงพอใจ / สมาธิ'},
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -659,7 +674,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                     const SizedBox(height: 14),
 
                     // 🆕 [Q2] 방해요인 - 다중선택 칩
-                    const BiInline(en: 'Distractions', ko: '방해요인', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'Distractions', ko: '방해요인', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': '邪魔要因', 'ZH': '干扰因素', 'FR': 'Distractions', 'DE': 'Ablenkungen', 'RU': 'Отвлекающие факторы', 'AR': 'عوامل التشتيت', 'HI': 'ध्यान भटकाने वाले कारक', 'VI': 'Yếu tố gây xao nhãng', 'ES': 'Distracciones', 'TH': 'สิ่งรบกวน'},
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
@@ -695,7 +713,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                     const SizedBox(height: 14),
 
                     // 🆕 [Q3] 에너지 레벨
-                    const BiInline(en: 'Energy Level', ko: '에너지 레벨', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'Energy Level', ko: '에너지 레벨', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': 'エネルギーレベル', 'ZH': '能量水平', 'FR': "Niveau d'énergie", 'DE': 'Energielevel', 'RU': 'Уровень энергии', 'AR': 'مستوى الطاقة', 'HI': 'ऊर्जा स्तर', 'VI': 'Mức năng lượng', 'ES': 'Nivel de energía', 'TH': 'ระดับพลังงาน'},
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: energyLevelOptions.map((opt) {
@@ -723,7 +744,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                     const SizedBox(height: 14),
 
                     // 🆕 [Q4] 한줄 메모 (선택)
-                    const BiInline(en: 'Memo (optional)', ko: '한줄 메모 (선택)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'Memo (optional)', ko: '한줄 메모 (선택)', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': 'メモ（任意）', 'ZH': '备注（选填）', 'FR': 'Mémo (facultatif)', 'DE': 'Notiz (optional)', 'RU': 'Заметка (необязательно)', 'AR': 'ملاحظة (اختياري)', 'HI': 'नोट (वैकल्पिक)', 'VI': 'Ghi chú (không bắt buộc)', 'ES': 'Nota (opcional)', 'TH': 'บันทึกย่อ (ไม่บังคับ)'},
+                    ),
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
@@ -747,7 +771,14 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                         TextButton.icon(
                           onPressed: () => setDialogState(() => showDetail = true),
                           icon: const Icon(Icons.expand_more_rounded, color: _brandGolden, size: 18),
-                          label: BiInline(en: 'More Details (${block.category})', ko: '더 자세히 (${block.category})', color: _brandGolden, fontWeight: FontWeight.bold),
+                          label: BiInline(
+                            en: 'More Details (${block.category})', ko: '더 자세히 (${block.category})', color: _brandGolden, fontWeight: FontWeight.bold,
+                            translations: {
+                              'JA': '詳細を見る (${block.category})', 'ZH': '查看详情 (${block.category})', 'FR': 'Plus de détails (${block.category})', 'DE': 'Mehr Details (${block.category})',
+                              'RU': 'Подробнее (${block.category})', 'AR': 'مزيد من التفاصيل (${block.category})', 'HI': 'अधिक विवरण (${block.category})', 'VI': 'Chi tiết hơn (${block.category})',
+                              'ES': 'Más detalles (${block.category})', 'TH': 'รายละเอียดเพิ่มเติม (${block.category})',
+                            },
+                          ),
                         )
                       else
                         Column(
@@ -758,7 +789,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  BiInline(en: q.labelEn, ko: q.labelKo, color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5),
+                                  BiInline(en: q.labelEn, ko: q.labelKo, color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5, translations: q.labelTranslations),
                                   const SizedBox(height: 6),
                                   Row(
                                     children: q.options.map((opt) {
@@ -796,7 +827,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 6, shadowColor: _brandGolden.withOpacity(0.5)),
                         onPressed: () => Navigator.of(dialogContext).pop(true),
-                        child: const BiInline(en: 'Done', ko: '완료', color: _pageBg, fontWeight: FontWeight.bold),
+                        child: BiInline(en: 'Done', ko: '완료', color: _pageBg, fontWeight: FontWeight.bold, translations: const {'JA': '完了', 'ZH': '完成', 'FR': 'Terminé', 'DE': 'Fertig', 'RU': 'Готово', 'AR': 'تم', 'HI': 'पूर्ण', 'VI': 'Hoàn tất', 'ES': 'Hecho', 'TH': 'เสร็จสิ้น'}),
                       ),
                     ),
                   ],
@@ -895,10 +926,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                         onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        child: appLanguage.isDefault
+                            ? Column(mainAxisSize: MainAxisSize.min, children: [
                           Text('Keep', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
                           Text('유지', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ]),
+                        ])
+                            : Text(tButton('Keep'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -906,10 +939,12 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 4),
                         onPressed: () => Navigator.of(dialogContext).pop(true),
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        child: appLanguage.isDefault
+                            ? Column(mainAxisSize: MainAxisSize.min, children: [
                           Text('Undo', style: GoogleFonts.gowunBatang(color: _pageBg, fontSize: 12, fontWeight: FontWeight.bold)),
                           Text('되돌리기', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ]),
+                        ])
+                            : Text(tButton('Undo'), style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 12.5, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -959,7 +994,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: "TODAY'S TIMELINE", ko: '오늘의 타임라인', enSize: 16, koSize: 13),
+        title: BiTitle(
+          en: "TODAY'S TIMELINE", ko: '오늘의 타임라인', enSize: 16, koSize: 13,
+          translations: const {'JA': '今日のタイムライン', 'ZH': '今日时间线', 'FR': 'Chronologie du jour', 'DE': 'Heutige Zeitleiste', 'RU': 'Хронология на сегодня', 'AR': 'الجدول الزمني لليوم', 'HI': 'आज की समयरेखा', 'VI': 'Dòng thời gian hôm nay', 'ES': 'Cronología de hoy', 'TH': 'ไทม์ไลน์วันนี้'},
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.grid_view_rounded, color: _brandGolden), tooltip: 'Default Timeline', onPressed: _createDefaultTimeline),
           IconButton(icon: const Icon(Icons.repeat, color: _brandGolden), tooltip: 'Apply Routine', onPressed: _applyRoutine),
@@ -1008,7 +1046,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
         children: [
           const Icon(Icons.access_time_filled_rounded, color: _brandGolden, size: 20),
           const SizedBox(width: 10),
-          const BiInline(en: 'Current Time', ko: '현재 시간', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12),
+          BiInline(
+            en: 'Current Time', ko: '현재 시간', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12,
+            translations: const {'JA': '現在の時刻', 'ZH': '当前时间', 'FR': 'Heure actuelle', 'DE': 'Aktuelle Zeit', 'RU': 'Текущее время', 'AR': 'الوقت الحالي', 'HI': 'वर्तमान समय', 'VI': 'Thời gian hiện tại', 'ES': 'Hora actual', 'TH': 'เวลาปัจจุบัน'},
+          ),
           const Spacer(),
           Text(nowText, style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
@@ -1031,7 +1072,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const BiInline(en: 'Completion Rate', ko: '완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+              BiInline(
+                en: 'Completion Rate', ko: '완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                translations: const {'JA': '達成率', 'ZH': '完成率', 'FR': "Taux d'achèvement", 'DE': 'Fertigstellungsrate', 'RU': 'Процент выполнения', 'AR': 'نسبة الإنجاز', 'HI': 'पूर्णता दर', 'VI': 'Tỷ lệ hoàn thành', 'ES': 'Tasa de finalización', 'TH': 'อัตราความสำเร็จ'},
+              ),
               Text('$completed / $total', style: const TextStyle(color: _brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
           ),

@@ -57,7 +57,13 @@ class _TodoScreenState extends State<TodoScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              luxuryDialogHeader(icon: isEdit ? Icons.edit_note_rounded : Icons.playlist_add_rounded, en: isEdit ? 'EDIT TODO' : 'ADD TODO', ko: isEdit ? '할 일 수정' : '할 일 추가'),
+              luxuryDialogHeader(
+                icon: isEdit ? Icons.edit_note_rounded : Icons.playlist_add_rounded,
+                en: isEdit ? 'EDIT TODO' : 'ADD TODO', ko: isEdit ? '할 일 수정' : '할 일 추가',
+                translations: isEdit
+                    ? {'JA': 'やることを編集', 'ZH': '编辑待办事项', 'FR': 'Modifier la tâche', 'DE': 'Aufgabe bearbeiten', 'RU': 'Изменить задачу', 'AR': 'تعديل المهمة', 'HI': 'कार्य संपादित करें', 'VI': 'Sửa việc cần làm', 'ES': 'Editar tarea', 'TH': 'แก้ไขสิ่งที่ต้องทำ'}
+                    : {'JA': 'やることを追加', 'ZH': '添加待办事项', 'FR': 'Ajouter une tâche', 'DE': 'Aufgabe hinzufügen', 'RU': 'Добавить задачу', 'AR': 'إضافة مهمة', 'HI': 'कार्य जोड़ें', 'VI': 'Thêm việc cần làm', 'ES': 'Añadir tarea', 'TH': 'เพิ่มสิ่งที่ต้องทำ'},
+              ),
               Container(
                 decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
                 child: TextField(
@@ -65,7 +71,10 @@ class _TodoScreenState extends State<TodoScreen> {
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     prefixIcon: Icon(Icons.check_box_outlined, color: _brandGolden.withOpacity(0.85), size: 19),
-                    hintText: biHint('Task', '할 일을 입력하세요'),
+                    hintText: biHint(
+                      'Task', '할 일을 입력하세요',
+                      translations: const {'JA': 'やることを入力', 'ZH': '请输入待办事项', 'FR': 'Saisissez la tâche', 'DE': 'Aufgabe eingeben', 'RU': 'Введите задачу', 'AR': 'أدخل المهمة', 'HI': 'कार्य दर्ज करें', 'VI': 'Nhập việc cần làm', 'ES': 'Introduce la tarea', 'TH': 'กรอกสิ่งที่ต้องทำ'},
+                    ),
                     hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -129,7 +138,10 @@ class _TodoScreenState extends State<TodoScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'TODO', ko: '할 일', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'TODO', ko: '할 일', enSize: 19, koSize: 14,
+          translations: const {'JA': 'やること', 'ZH': '待办事项', 'FR': 'À faire', 'DE': 'Aufgaben', 'RU': 'Задачи', 'AR': 'المهام', 'HI': 'कार्य सूची', 'VI': 'Việc cần làm', 'ES': 'Tareas', 'TH': 'สิ่งที่ต้องทำ'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -137,11 +149,23 @@ class _TodoScreenState extends State<TodoScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: BiInline(en: '$done / $total Completed', ko: '$done / $total 완료', color: _brandGolden, fontWeight: FontWeight.bold),
+            child: BiInline(
+              en: '$done / $total Completed', ko: '$done / $total 완료', color: _brandGolden, fontWeight: FontWeight.bold,
+              translations: {
+                'JA': '$done / $total 完了', 'ZH': '$done / $total 已完成', 'FR': '$done / $total Terminé', 'DE': '$done / $total Erledigt',
+                'RU': '$done / $total Выполнено', 'AR': '$done / $total مكتمل', 'HI': '$done / $total पूर्ण', 'VI': '$done / $total Hoàn thành',
+                'ES': '$done / $total Completado', 'TH': '$done / $total เสร็จสิ้น',
+              },
+            ),
           ),
           Expanded(
             child: _todos.isEmpty
-                ? Center(child: BiInline(en: 'No tasks yet', ko: '할 일이 없습니다', color: Colors.white38))
+                ? Center(
+              child: BiInline(
+                en: 'No tasks yet', ko: '할 일이 없습니다', color: Colors.white38,
+                translations: const {'JA': 'まだやることがありません', 'ZH': '暂无待办事项', 'FR': "Aucune tâche pour l'instant", 'DE': 'Noch keine Aufgaben', 'RU': 'Пока нет задач', 'AR': 'لا توجد مهام بعد', 'HI': 'अभी तक कोई कार्य नहीं', 'VI': 'Chưa có việc cần làm', 'ES': 'Aún no hay tareas', 'TH': 'ยังไม่มีสิ่งที่ต้องทำ'},
+              ),
+            )
                 : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _todos.length,

@@ -781,6 +781,54 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     return _personalTimetableCache['PERSONAL_$weekdayEnKey'] ?? [];
   }
 
+  // 🆕 [양방향 연동 2026-08-12] 일간 "일정 타임라인 상세"에서 추가/수정/삭제한 시간+제목을
+  // 그 날짜가 속한 요일의 주간 반복 개인 시간표(gke_custom_schedules, PERSONAL_요일)에도 그대로
+  // 반영함. 원장님 확인: "일간에서 추가/수정하면 그 요일의 주간 반복 시간표까지 같이 바뀌어야 함".
+  // - 별 수집 여부/카테고리/메모는 개인 시간표 쪽에 그런 항목이 없으므로 시간+제목만 동기화함.
+  // - 추가: oldTime/oldTitle을 null로 두고 newTime/newTitle만 전달
+  // - 수정: oldTime/oldTitle(수정 전 값)과 newTime/newTitle(수정 후 값)을 모두 전달
+  // - 삭제: newTime/newTitle을 null로 두고 oldTime/oldTitle(삭제되는 값)만 전달
+  void _syncDayTimeChangeToPersonalTimetable({
+    required String weekdayEnKey,
+    String? oldTime,
+    String? oldTitle,
+    String? newTime,
+    String? newTitle,
+  }) {
+    final String cacheKey = 'PERSONAL_$weekdayEnKey';
+    final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
+
+    if (newTime == null && newTitle == null) {
+      // 삭제: 수정 전 시간+제목이 정확히 일치하는 항목을 찾아 제거
+      if (oldTime != null && oldTitle != null) {
+        list.removeWhere((e) => e['time'] == oldTime && e['task'] == oldTitle);
+      }
+    } else if (oldTime == null && oldTitle == null) {
+      // 추가: 시작 시각 기준으로 올바른 위치에 시간순 삽입 (개인 시간표 편집 다이얼로그와 동일한 규칙)
+      final int? newStart = _parsePersonalStartMinutes(newTime!);
+      int insertAt = list.length;
+      if (newStart != null) {
+        insertAt = list.indexWhere((e) {
+          final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
+          return existingStart != null && existingStart > newStart;
+        });
+        if (insertAt == -1) insertAt = list.length;
+      }
+      list.insert(insertAt, {'time': newTime, 'task': newTitle ?? ''});
+    } else {
+      // 수정: 수정 전 값과 일치하는 항목을 찾아서 새 값으로 교체 (못 찾으면 새로 추가)
+      final int idx = list.indexWhere((e) => e['time'] == oldTime && e['task'] == oldTitle);
+      if (idx != -1) {
+        list[idx] = {'time': newTime!, 'task': newTitle ?? ''};
+      } else {
+        list.add({'time': newTime!, 'task': newTitle ?? ''});
+      }
+    }
+
+    _personalTimetableCache[cacheKey] = list;
+    _savePersonalTimetableCache();
+  }
+
   // 🆕 "09:00 - 10:00" 형식에서 시작 시각만 분(分) 단위로 파싱 (학사 타이머와 동일한 파싱 규칙)
   int? _parsePersonalStartMinutes(String timeStr) {
     try {
@@ -1136,7 +1184,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             final List<Map<String, dynamic>> currentMonthSchedules = isViewingCurrentYear
                 ? filteredYearSchedules.where((s) => s['month'] == currentRealMonth).toList()
                 : <Map<String, dynamic>>[];
-            final List<Map<String, dynamic>> itemsToShow = _isYearScheduleExpanded ? filteredYearSchedules : currentMonthSchedules;
+            // 🆕 [버그 수정 2026-08-13] 원장님 지시: 최근순 정렬 - 현재 시점에서 가장 최근 일정이
+            // 맨 위로 오도록 함. _globalSchedules 자체는 다른 화면(주간 등)에서 오름차순을 그대로
+            // 써야 하므로 건드리지 않고, 이 리스트를 화면에 뿌릴 때만 .reversed로 뒤집음.
+            final List<Map<String, dynamic>> itemsToShow = (_isYearScheduleExpanded ? filteredYearSchedules : currentMonthSchedules).reversed.toList();
             final String collapsedTitle = isViewingCurrentYear
                 ? '${_yearNumText(currentYearKey)} ${_monthNumText(currentRealMonth)} ${_t('yearMainScheduleWord')}'
                 : '${_yearNumText(currentYearKey)} ${_t('yearMainScheduleWord')}';
@@ -1987,16 +2038,21 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                     onPressed: () {
                       if (titleController.text.trim().isEmpty) return;
                       final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                      final String finalTime = timeController.text.trim().isEmpty ? _currentTimeString() : timeController.text.trim();
+                      final String finalTitle = titleController.text.trim();
                       setState(() {
                         _fixedDayTimelines.add({
-                          'time': timeController.text.trim().isEmpty ? _currentTimeString() : timeController.text.trim(),
-                          'title': titleController.text.trim(),
+                          'time': finalTime,
+                          'title': finalTitle,
                           'memo': memoController.text.trim(),
                           'category': '기타',
                           'custom_book': '',
                           'is_starred': false,
                         });
                         _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                        // 🆕 [양방향 연동 2026-08-12] 그 날짜가 속한 요일의 주간 반복 시간표에도 동일하게 추가
+                        final String weekdayEnKey = _weekdayEnKeysSunFirst[_selectedDayDate.weekday % 7];
+                        _syncDayTimeChangeToPersonalTimetable(weekdayEnKey: weekdayEnKey, newTime: finalTime, newTitle: finalTitle);
                       });
                       _calculateMonthlyProgress();
                       _saveMasterData();
@@ -2117,12 +2173,16 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   // 그 요일의 전체 일정을 스크롤로 모두 보여주고, 추가/수정/삭제가 가능하며, 저장은
   // gke_custom_schedules(SharedPreferences)에 그대로 반영되어 학사 타이머 화면과 실시간 연동됨.
   // ============================================================================
-  void _showPersonalDayScheduleSheet(DateTime date, int dayIdxSunFirst, String weekdayEnKey) {
-    // 팝업을 열 때마다 최신 데이터로 한 번 더 갱신 (다른 화면에서 방금 수정했을 수도 있으므로)
-    _loadPersonalTimetableCache();
+  void _showPersonalDayScheduleSheet(DateTime date, int dayIdxSunFirst, String weekdayEnKey) async {
+    // 🆕 [버그 수정 2026-08-12] 기존엔 await 없이 그냥 호출만 하고 바로 시트를 열었기 때문에,
+    // 다른 화면(학사 타이머 등)에서 방금 수정한 데이터가 이 시트의 첫 렌더링에 반영되지 않는
+    // 경쟁 상태(race condition)가 있었음. 이제 로드가 끝날 때까지 확실히 기다린 뒤에 시트를 염.
+    await _loadPersonalTimetableCache();
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: const Color(0xFF020617),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -2252,8 +2312,17 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     final TextEditingController taskController = TextEditingController(text: initialTask ?? '');
     final String cacheKey = 'PERSONAL_$weekdayEnKey';
 
+    // 🆕 [버그 수정 2026-08-12] 이 다이얼로그는 "주간 → 요일 탭" 시 열리는 바텀시트(모달) 안에서
+    // 호출됨. showDialog()는 기본적으로 최상위(root) 네비게이터를 기준으로 열리는데, 바텀시트는
+    // 🆕 [버그 수정 2026-08-13] useRootNavigator: false(로컬 네비게이터 통일) 방식으로도 여전히
+    // 화면이 흐려지기만 하고 다이얼로그가 안 보이는 증상이 남아있어서, 더 확실한 방법으로 교체함.
+    // 앱 전체 구조상 이 화면보다 더 안쪽에 숨겨진 네비게이터가 있을 수 있어 "로컬" 기준은 상황에 따라
+    // 여전히 어긋날 수 있음. 대신 시트(_showPersonalDayScheduleSheet)와 이 다이얼로그 둘 다
+    // useRootNavigator: true로 명시해서 항상 앱의 최상위 네비게이터 하나로 통일시킴 - 중첩된 바텀시트
+    // 안에서 다이얼로그를 띄울 때 가장 안전하고 표준적인 해법.
     showDialog(
       context: context,
+      useRootNavigator: true,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFF020617),
@@ -2830,9 +2899,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                         child: TextButton(
                           onPressed: () {
                             final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
+                            final String removedTime = _fixedDayTimelines[index]['time'] ?? '';
+                            final String removedTitle = _fixedDayTimelines[index]['title'] ?? '';
                             setState(() {
                               _fixedDayTimelines.removeAt(index);
                               _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                              // 🆕 [양방향 연동 2026-08-12] 그 요일의 주간 반복 시간표에서도 동일 항목 제거
+                              final String weekdayEnKey = _weekdayEnKeysSunFirst[_selectedDayDate.weekday % 7];
+                              _syncDayTimeChangeToPersonalTimetable(weekdayEnKey: weekdayEnKey, oldTime: removedTime, oldTitle: removedTitle);
                             });
                             _calculateMonthlyProgress();
                             _saveMasterData();
@@ -2900,13 +2974,27 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
                           setState(() {
                             if (typeKey == 'DAY_TIME') {
-                              _fixedDayTimelines[index]['time'] = newTime.isEmpty ? _fixedDayTimelines[index]['time'] : newTime;
+                              // 🆕 [양방향 연동 2026-08-12] 변경 전 값을 먼저 기억해둬야 주간 반복
+                              // 시간표에서 정확히 같은 항목을 찾아 교체할 수 있음.
+                              final String oldTime = _fixedDayTimelines[index]['time'] ?? '';
+                              final String oldTitle = _fixedDayTimelines[index]['title'] ?? '';
+                              final String finalTime = newTime.isEmpty ? oldTime : newTime;
+                              _fixedDayTimelines[index]['time'] = finalTime;
                               _fixedDayTimelines[index]['title'] = newTitle;
                               _fixedDayTimelines[index]['memo'] = newMemo;
                               _fixedDayTimelines[index]['category'] = currentCategory;
                               _fixedDayTimelines[index]['custom_book'] = currentCategory == '문제집' ? bookInputController.text.trim() : '';
                               final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
                               _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
+                              // 그 요일의 주간 반복 시간표에서도 동일 항목을 찾아 새 값으로 교체
+                              final String weekdayEnKey = _weekdayEnKeysSunFirst[_selectedDayDate.weekday % 7];
+                              _syncDayTimeChangeToPersonalTimetable(
+                                weekdayEnKey: weekdayEnKey,
+                                oldTime: oldTime,
+                                oldTitle: oldTitle,
+                                newTime: finalTime,
+                                newTitle: newTitle,
+                              );
                             } else if (typeKey == 'YEAR_TARGET') {
                               final String yearKey = targetItem['yearKey'] as String;
                               _yearlyTargetsMap[yearKey]![index]['title'] = newTitle;
@@ -2985,6 +3073,10 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
           ),
           const SizedBox(width: 8),
+          // 🆕 [버그 수정 2026-08-12] 기존엔 Expanded(GestureDetector(Text)) 뒤에 _buildEditActionIcon이
+          // 별도 형제로 붙어있어서, 정확히 그 아이콘(오른쪽 수정 표시) 위를 탭하면 GestureDetector
+          // 범위 밖이라 아무 반응이 없었음. 이제 제목 텍스트 + 아이콘을 한 GestureDetector 안에
+          // 함께 넣어서, 오른쪽 아이콘을 탭해도 정확히 같은 수정/삭제 팝업이 열리도록 함.
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -2998,12 +3090,18 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 }, typeKey: 'YEAR_TARGET', index: index);
               },
               child: Container(
-                color: Colors.transparent, alignment: Alignment.centerLeft,
-                child: Text(title, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+                color: Colors.transparent,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(title, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+                    ),
+                    _buildEditActionIcon(size: 14),
+                  ],
+                ),
               ),
             ),
           ),
-          _buildEditActionIcon(size: 14),
         ],
       ),
     );
@@ -3032,6 +3130,8 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
             ),
           ),
           const SizedBox(width: 8),
+          // 🆕 [버그 수정 2026-08-12] 연간 목표 리스트와 동일한 원인의 버그: 아이콘이 GestureDetector
+          // 바깥에 있어서 아이콘 영역 탭이 반응하지 않던 문제를 동일하게 수정함.
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -3043,28 +3143,41 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
                 }, typeKey: 'MONTH_TARGET', index: index);
               },
               child: Container(
-                color: Colors.transparent, alignment: Alignment.centerLeft,
-                child: Text(displayTitle, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+                color: Colors.transparent,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(displayTitle, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: isChecked ? slate400 : Colors.white, decoration: isChecked ? TextDecoration.lineThrough : null)),
+                    ),
+                    _buildEditActionIcon(size: 14),
+                  ],
+                ),
               ),
             ),
           ),
-          _buildEditActionIcon(size: 14),
         ],
       ),
     );
   }
 
   Widget _buildScheduleTimelineItem(String timeLabel, String eventTitle, Color leftBarColor, int index, String memo) {
+    // 🆕 [버그 수정 2026-08-13] 원장님 지시: 카테고리 색상 표시를 컨테이너 왼쪽 테두리 바(bar)가 아니라,
+    // "일자"와 "제목" 사이에 색깔 있는 "|" 구분자로 옮김. 제목 정렬 기준도 오른쪽(textAlign.right)에서
+    // 왼쪽(textAlign.left)으로 변경 - 이제 제목이 "|" 바로 옆에서부터 왼쪽 정렬로 시작함.
     return GestureDetector(
       onTap: () { if (index >= 0 && index < _globalSchedules.length) { _showUnifiedPopupTrack(_globalSchedules[index], typeKey: 'YEAR'); } },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4), padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: const Color(0xFF020617), border: Border(left: BorderSide(color: leftBarColor, width: 4))),
+        decoration: const BoxDecoration(color: Color(0xFF020617)),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(timeLabel, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor)),
-            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14.0), child: Text(eventTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis))),
+            const SizedBox(width: 8),
+            Text('|', style: TextStyle(color: leftBarColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(eventTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.left, overflow: TextOverflow.ellipsis),
+            ),
             _buildEditActionIcon(size: 14),
           ],
         ),

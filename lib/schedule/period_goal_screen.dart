@@ -124,7 +124,13 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    luxuryDialogHeader(icon: isEdit ? Icons.edit_note_rounded : Icons.flag_rounded, en: isEdit ? 'EDIT GOAL' : 'ADD GOAL', ko: isEdit ? '목표 수정' : '목표 추가'),
+                    luxuryDialogHeader(
+                      icon: isEdit ? Icons.edit_note_rounded : Icons.flag_rounded,
+                      en: isEdit ? 'EDIT GOAL' : 'ADD GOAL', ko: isEdit ? '목표 수정' : '목표 추가',
+                      translations: isEdit
+                          ? {'JA': '目標を編集', 'ZH': '编辑目标', 'FR': "Modifier l'objectif", 'DE': 'Ziel bearbeiten', 'RU': 'Изменить цель', 'AR': 'تعديل الهدف', 'HI': 'लक्ष्य संपादित करें', 'VI': 'Sửa mục tiêu', 'ES': 'Editar objetivo', 'TH': 'แก้ไขเป้าหมาย'}
+                          : {'JA': '目標を追加', 'ZH': '添加目标', 'FR': 'Ajouter un objectif', 'DE': 'Ziel hinzufügen', 'RU': 'Добавить цель', 'AR': 'إضافة هدف', 'HI': 'लक्ष्य जोड़ें', 'VI': 'Thêm mục tiêu', 'ES': 'Añadir objetivo', 'TH': 'เพิ่มเป้าหมาย'},
+                    ),
 
                     // 🆕 [버그 수정] 새 목표를 만들 때는 다른 달/주/연도로 이동해서 만들 수 있음
                     // (예: 지금 8월인데 9월 목표를 미리 만들기). 수정할 때는 이미 정해진
@@ -146,7 +152,14 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                           const Icon(Icons.date_range, color: _brandGolden, size: 14),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: BiInline(en: 'Period: $periodLabel', ko: '기간: $periodLabel', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold, textAlign: TextAlign.center),
+                            child: BiInline(
+                              en: 'Period: $periodLabel', ko: '기간: $periodLabel', color: _brandGolden, fontSize: 11, fontWeight: FontWeight.bold, textAlign: TextAlign.center,
+                              translations: {
+                                'JA': '期間: $periodLabel', 'ZH': '期间: $periodLabel', 'FR': 'Période : $periodLabel', 'DE': 'Zeitraum: $periodLabel',
+                                'RU': 'Период: $periodLabel', 'AR': 'الفترة: $periodLabel', 'HI': 'अवधि: $periodLabel', 'VI': 'Giai đoạn: $periodLabel',
+                                'ES': 'Período: $periodLabel', 'TH': 'ช่วงเวลา: $periodLabel',
+                              },
+                            ),
                           ),
                           if (!isEdit)
                             IconButton(
@@ -159,9 +172,15 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                       ),
                     ),
 
-                    _buildField(icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 일정 90% 달성하기'),
+                    _buildField(
+                      icon: Icons.title_rounded, controller: titleController, hintEn: 'Goal', hintKo: 'e.g. 일정 90% 달성하기',
+                      translations: const {'JA': '目標 (例: 予定90%達成)', 'ZH': '目标 (例: 完成90%日程)', 'FR': 'Objectif (ex. Atteindre 90% du programme)', 'DE': 'Ziel (z. B. 90% des Zeitplans erreichen)', 'RU': 'Цель (напр., выполнить 90% расписания)', 'AR': 'الهدف (مثال: تحقيق 90٪ من الجدول)', 'HI': 'लक्ष्य (जैसे: 90% शेड्यूल पूरा करना)', 'VI': 'Mục tiêu (VD: Hoàn thành 90% lịch trình)', 'ES': 'Objetivo (ej. Lograr 90% del horario)', 'TH': 'เป้าหมาย (เช่น ทำตารางเวลาสำเร็จ 90%)'},
+                    ),
                     const SizedBox(height: 12),
-                    _buildField(icon: Icons.category_outlined, controller: categoryController, hintEn: 'Category', hintKo: '건강/자기계발/재정, 비워도 됨'),
+                    _buildField(
+                      icon: Icons.category_outlined, controller: categoryController, hintEn: 'Category', hintKo: '건강/자기계발/재정, 비워도 됨',
+                      translations: const {'JA': 'カテゴリー (任意)', 'ZH': '分类 (可留空)', 'FR': 'Catégorie (facultatif)', 'DE': 'Kategorie (optional)', 'RU': 'Категория (необязательно)', 'AR': 'الفئة (اختياري)', 'HI': 'श्रेणी (वैकल्पिक)', 'VI': 'Danh mục (không bắt buộc)', 'ES': 'Categoría (opcional)', 'TH': 'หมวดหมู่ (ไม่บังคับ)'},
+                    ),
                     const SizedBox(height: 14),
 
                     Container(
@@ -170,7 +189,10 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const BiInline(en: 'Achieved', ko: '달성함', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                          BiInline(
+                            en: 'Achieved', ko: '달성함', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                            translations: const {'JA': '達成済み', 'ZH': '已达成', 'FR': 'Atteint', 'DE': 'Erreicht', 'RU': 'Достигнуто', 'AR': 'تم تحقيقه', 'HI': 'हासिल किया', 'VI': 'Đã đạt được', 'ES': 'Logrado', 'TH': 'บรรลุแล้ว'},
+                          ),
                           Switch(value: isAchieved, activeColor: _brandGolden, onChanged: (v) => setDialogState(() => isAchieved = v)),
                         ],
                       ),
@@ -239,7 +261,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
     }
   }
 
-  Widget _buildField({required IconData icon, required TextEditingController controller, required String hintEn, required String hintKo}) {
+  Widget _buildField({required IconData icon, required TextEditingController controller, required String hintEn, required String hintKo, Map<String, String>? translations}) {
     return Container(
       decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
       child: TextField(
@@ -247,7 +269,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: _brandGolden.withOpacity(0.85), size: 19),
-          hintText: biHint(hintEn, hintKo),
+          hintText: biHint(hintEn, hintKo, translations: translations),
           hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -265,7 +287,15 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: BiTitle(en: widget.enTitle, ko: widget.koTitle, enSize: 17, koSize: 13),
+        title: BiTitle(
+          en: widget.enTitle, ko: widget.koTitle, enSize: 17, koSize: 13,
+          translations: const {
+            'yearly': {'JA': '年間目標', 'ZH': '年度目标', 'FR': 'Objectif annuel', 'DE': 'Jahresziel', 'RU': 'Годовая цель', 'AR': 'الهدف السنوي', 'HI': 'वार्षिक लक्ष्य', 'VI': 'Mục tiêu năm', 'ES': 'Objetivo anual', 'TH': 'เป้าหมายรายปี'},
+            'monthly': {'JA': '月間目標', 'ZH': '月度目标', 'FR': 'Objectif mensuel', 'DE': 'Monatsziel', 'RU': 'Месячная цель', 'AR': 'الهدف الشهري', 'HI': 'मासिक लक्ष्य', 'VI': 'Mục tiêu tháng', 'ES': 'Objetivo mensual', 'TH': 'เป้าหมายรายเดือน'},
+            'weekly': {'JA': '週間目標', 'ZH': '每周目标', 'FR': 'Objectif hebdomadaire', 'DE': 'Wochenziel', 'RU': 'Недельная цель', 'AR': 'الهدف الأسبوعي', 'HI': 'साप्ताहिक लक्ष्य', 'VI': 'Mục tiêu tuần', 'ES': 'Objetivo semanal', 'TH': 'เป้าหมายรายสัปดาห์'},
+            'today': {'JA': '今日の目標', 'ZH': '今日目标', 'FR': "Objectif du jour", 'DE': 'Tagesziel', 'RU': 'Цель на сегодня', 'AR': 'هدف اليوم', 'HI': 'आज का लक्ष्य', 'VI': 'Mục tiêu hôm nay', 'ES': 'Objetivo de hoy', 'TH': 'เป้าหมายวันนี้'},
+          }[widget.goalType],
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -279,6 +309,18 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
             color: Colors.white38,
             fontSize: 13,
             textAlign: TextAlign.center,
+            translations: const {
+              'JA': 'まだ目標がありません。+ボタンで追加してください。\n進捗はカレンダー/タイムライン記録を基に\n自動で計算されます。',
+              'ZH': '暂无目标。点击+号添加。\n进度将根据日历/时间线记录\n自动计算。',
+              'FR': "Aucun objectif pour l'instant. Appuyez sur + pour en ajouter un.\nLa progression est calculée automatiquement à partir de\nvos enregistrements de calendrier et de chronologie.",
+              'DE': 'Noch keine Ziele. Tippen Sie auf +, um eines hinzuzufügen.\nDer Fortschritt wird automatisch aus Ihren\nKalender- und Zeitleistendaten berechnet.',
+              'RU': 'Пока нет целей. Нажмите +, чтобы добавить.\nПрогресс рассчитывается автоматически на основе\nваших записей календаря и хронологии.',
+              'AR': 'لا توجد أهداف بعد. اضغط + للإضافة.\nيتم حساب التقدم تلقائيًا استنادًا إلى\nسجلات التقويم والجدول الزمني الخاصة بك.',
+              'HI': 'अभी तक कोई लक्ष्य नहीं है। + दबाकर जोड़ें।\nप्रगति आपके कैलेंडर और समयरेखा रिकॉर्ड के आधार पर\nस्वचालित रूप से गणना की जाती है।',
+              'VI': 'Chưa có mục tiêu nào. Nhấn + để thêm.\nTiến độ được tính tự động dựa trên\nlịch và dữ liệu dòng thời gian của bạn.',
+              'ES': 'Aún no hay objetivos. Toca + para añadir uno.\nEl progreso se calcula automáticamente a partir de\ntus registros de calendario y cronología.',
+              'TH': 'ยังไม่มีเป้าหมาย แตะ + เพื่อเพิ่ม\nความคืบหน้าจะคำนวณโดยอัตโนมัติจาก\nบันทึกปฏิทินและไทม์ไลน์ของคุณ',
+            },
           ),
         ),
       )
@@ -342,7 +384,14 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              BiInline(en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+              BiInline(
+                en: '$percent% Complete', ko: '$percent% 진행', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold,
+                translations: {
+                  'JA': '$percent% 完了', 'ZH': '$percent% 完成', 'FR': '$percent % Terminé', 'DE': '$percent % Erledigt',
+                  'RU': '$percent% Выполнено', 'AR': '$percent% مكتمل', 'HI': '$percent% पूर्ण', 'VI': '$percent% Hoàn thành',
+                  'ES': '$percent% Completado', 'TH': '$percent% เสร็จสิ้น',
+                },
+              ),
               if (summary != null)
                 Text('${summary.completedCount} / ${summary.totalCount}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
             ],
@@ -356,6 +405,18 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                 ko: '이 기간에 캘린더/타임라인 기록이 아직 없습니다.',
                 color: Colors.white24,
                 fontSize: 10.5,
+                translations: const {
+                  'JA': 'この期間のカレンダー/タイムライン記録がまだありません。',
+                  'ZH': '此期间暂无日历/时间线记录。',
+                  'FR': "Aucun enregistrement de calendrier/chronologie pour cette période pour l'instant.",
+                  'DE': 'Noch keine Kalender-/Zeitleistendaten für diesen Zeitraum.',
+                  'RU': 'Пока нет записей календаря/хронологии за этот период.',
+                  'AR': 'لا توجد سجلات تقويم/جدول زمني لهذه الفترة بعد.',
+                  'HI': 'इस अवधि के लिए अभी तक कोई कैलेंडर/समयरेखा रिकॉर्ड नहीं है।',
+                  'VI': 'Chưa có dữ liệu lịch/dòng thời gian cho giai đoạn này.',
+                  'ES': 'Aún no hay registros de calendario/cronología para este período.',
+                  'TH': 'ยังไม่มีบันทึกปฏิทิน/ไทม์ไลน์สำหรับช่วงเวลานี้',
+                },
               ),
             ),
         ],

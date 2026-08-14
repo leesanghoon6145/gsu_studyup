@@ -217,7 +217,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
                     TextButton.icon(
                       onPressed: addItem,
                       icon: const Icon(Icons.add, color: _brandGolden, size: 18),
-                      label: const BiInline(en: 'Add Item', ko: '항목 추가', color: _brandGolden, fontWeight: FontWeight.bold),
+                      label: BiInline(
+                        en: 'Add Item', ko: '항목 추가', color: _brandGolden, fontWeight: FontWeight.bold,
+                        translations: const {'JA': '項目を追加', 'ZH': '添加项目', 'FR': 'Ajouter un élément', 'DE': 'Element hinzufügen', 'RU': 'Добавить элемент', 'AR': 'إضافة عنصر', 'HI': 'आइटम जोड़ें', 'VI': 'Thêm mục', 'ES': 'Añadir elemento', 'TH': 'เพิ่มรายการ'},
+                      ),
                     ),
 
                     const SizedBox(height: 16),
@@ -278,7 +281,12 @@ class _RoutineScreenState extends State<RoutineScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: BiTitle(en: 'ROUTINE', ko: isApplyMode ? '루틴 선택해서 적용' : '루틴', enSize: 19, koSize: 13),
+        title: BiTitle(
+          en: 'ROUTINE', ko: isApplyMode ? '루틴 선택해서 적용' : '루틴', enSize: 19, koSize: 13,
+          translations: isApplyMode
+              ? {'JA': 'ルーティンを選んで適用', 'ZH': '选择常规并应用', 'FR': 'Choisir et appliquer une routine', 'DE': 'Routine auswählen und anwenden', 'RU': 'Выбрать и применить распорядок', 'AR': 'اختر وطبق الروتين', 'HI': 'दिनचर्या चुनें और लागू करें', 'VI': 'Chọn và áp dụng thói quen', 'ES': 'Elegir y aplicar rutina', 'TH': 'เลือกและใช้กิจวัตร'}
+              : {'JA': 'ルーティン', 'ZH': '常规', 'FR': 'Routine', 'DE': 'Routine', 'RU': 'Распорядок', 'AR': 'الروتين', 'HI': 'दिनचर्या', 'VI': 'Thói quen', 'ES': 'Rutina', 'TH': 'กิจวัตร'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -286,7 +294,21 @@ class _RoutineScreenState extends State<RoutineScreen> {
           ? Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: BiInline(en: 'No routines yet. Tap + to create one.', ko: '만들어둔 루틴이 없습니다. + 버튼으로 새 루틴을 만들어 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center),
+          child: BiInline(
+            en: 'No routines yet. Tap + to create one.', ko: '만들어둔 루틴이 없습니다. + 버튼으로 새 루틴을 만들어 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center,
+            translations: const {
+              'JA': 'まだルーティンがありません。+ボタンで作成してください。',
+              'ZH': '暂无常规。点击+号创建。',
+              'FR': "Aucune routine pour l'instant. Appuyez sur + pour en créer une.",
+              'DE': 'Noch keine Routinen. Tippen Sie auf +, um eine zu erstellen.',
+              'RU': 'Пока нет распорядков. Нажмите +, чтобы создать.',
+              'AR': 'لا يوجد روتين بعد. اضغط + للإنشاء.',
+              'HI': 'अभी तक कोई दिनचर्या नहीं है। + दबाकर बनाएं।',
+              'VI': 'Chưa có thói quen nào. Nhấn + để tạo.',
+              'ES': 'Aún no hay rutinas. Toca + para crear una.',
+              'TH': 'ยังไม่มีกิจวัตร แตะ + เพื่อสร้าง',
+            },
+          ),
         ),
       )
           : ListView.builder(
@@ -313,7 +335,14 @@ class _RoutineScreenState extends State<RoutineScreen> {
                     ),
                   ],
                 ),
-                BiInline(en: '${routine.items.length} items', ko: '${routine.items.length}개 항목', color: Colors.white38, fontSize: 12),
+                BiInline(
+                  en: '${routine.items.length} items', ko: '${routine.items.length}개 항목', color: Colors.white38, fontSize: 12,
+                  translations: {
+                    'JA': '${routine.items.length}項目', 'ZH': '${routine.items.length}个项目', 'FR': '${routine.items.length} éléments', 'DE': '${routine.items.length} Elemente',
+                    'RU': '${routine.items.length} элементов', 'AR': '${routine.items.length} عنصر', 'HI': '${routine.items.length} आइटम', 'VI': '${routine.items.length} mục',
+                    'ES': '${routine.items.length} elementos', 'TH': '${routine.items.length} รายการ',
+                  },
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -334,7 +363,10 @@ class _RoutineScreenState extends State<RoutineScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: _brandGolden),
                       onPressed: () => _applyRoutine(routine),
-                      child: const BiInline(en: 'Apply to Today', ko: '오늘 타임라인에 적용', color: _pageBg, fontWeight: FontWeight.bold),
+                      child: BiInline(
+                        en: 'Apply to Today', ko: '오늘 타임라인에 적용', color: _pageBg, fontWeight: FontWeight.bold,
+                        translations: const {'JA': '今日のタイムラインに適用', 'ZH': '应用到今日时间线', 'FR': "Appliquer à la chronologie du jour", 'DE': 'Auf heutige Zeitleiste anwenden', 'RU': 'Применить к хронологии сегодня', 'AR': 'تطبيق على الجدول الزمني لليوم', 'HI': 'आज की समयरेखा पर लागू करें', 'VI': 'Áp dụng vào dòng thời gian hôm nay', 'ES': 'Aplicar a la cronología de hoy', 'TH': 'ใช้กับไทม์ไลน์วันนี้'},
+                      ),
                     ),
                   ),
                 ],
