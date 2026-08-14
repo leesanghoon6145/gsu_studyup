@@ -106,14 +106,22 @@ class _ProjectScreenState extends State<ProjectScreen> {
                       children: [
                         Icon(isEdit ? Icons.edit_note_rounded : Icons.rocket_launch_rounded, color: _brandGolden, size: 22),
                         const SizedBox(width: 8),
-                        BiTitle(en: isEdit ? 'EDIT PROJECT' : 'ADD PROJECT', ko: isEdit ? '프로젝트 수정' : '프로젝트 추가', enSize: 16, koSize: 12.5),
+                        BiTitle(
+                          en: isEdit ? 'EDIT PROJECT' : 'ADD PROJECT', ko: isEdit ? '프로젝트 수정' : '프로젝트 추가', enSize: 16, koSize: 12.5,
+                          translations: isEdit
+                              ? {'JA': 'プロジェクトを編集', 'ZH': '编辑项目', 'FR': 'Modifier le projet', 'DE': 'Projekt bearbeiten', 'RU': 'Изменить проект', 'AR': 'تعديل المشروع', 'HI': 'परियोजना संपादित करें', 'VI': 'Sửa dự án', 'ES': 'Editar proyecto', 'TH': 'แก้ไขโครงการ'}
+                              : {'JA': 'プロジェクトを追加', 'ZH': '添加项目', 'FR': 'Ajouter un projet', 'DE': 'Projekt hinzufügen', 'RU': 'Добавить проект', 'AR': 'إضافة مشروع', 'HI': 'परियोजना जोड़ें', 'VI': 'Thêm dự án', 'ES': 'Añadir proyecto', 'TH': 'เพิ่มโครงการ'},
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     Container(height: 1, decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _brandGolden.withOpacity(0.5), Colors.transparent]))),
                     const SizedBox(height: 18),
 
-                    const BiInline(en: 'STATUS', ko: '상태', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'STATUS', ko: '상태', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': 'ステータス', 'ZH': '状态', 'FR': 'Statut', 'DE': 'Status', 'RU': 'Статус', 'AR': 'الحالة', 'HI': 'स्थिति', 'VI': 'Trạng thái', 'ES': 'Estado', 'TH': 'สถานะ'},
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: kProjectStatuses.entries.map((entry) {
@@ -522,10 +530,16 @@ class _ProjectScreenState extends State<ProjectScreen> {
                 children: [
                   BiInline(en: project.title, ko: '하위 작업', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
                   const SizedBox(height: 4),
-                  const BiInline(en: 'Newest first', ko: '최근 기록이 맨 위', color: Colors.white38, fontSize: 10.5),
+                  BiInline(
+                    en: 'Newest first', ko: '최근 기록이 맨 위', color: Colors.white38, fontSize: 10.5,
+                    translations: const {'JA': '新しい順', 'ZH': '最新优先', 'FR': 'Plus récent en premier', 'DE': 'Neueste zuerst', 'RU': 'Сначала новые', 'AR': 'الأحدث أولاً', 'HI': 'नवीनतम पहले', 'VI': 'Mới nhất trước', 'ES': 'Más reciente primero', 'TH': 'ล่าสุดก่อน'},
+                  ),
                   const SizedBox(height: 12),
                   if (tasks.isEmpty)
-                    const BiInline(en: 'No tasks yet', ko: '등록된 작업이 없습니다', color: Colors.white38, fontSize: 13)
+                    BiInline(
+                      en: 'No tasks yet', ko: '등록된 작업이 없습니다', color: Colors.white38, fontSize: 13,
+                      translations: const {'JA': 'まだ作業がありません', 'ZH': '暂无任务', 'FR': "Aucune tâche pour l'instant", 'DE': 'Noch keine Aufgaben', 'RU': 'Пока нет задач', 'AR': 'لا توجد مهام بعد', 'HI': 'अभी तक कोई कार्य नहीं', 'VI': 'Chưa có công việc', 'ES': 'Aún no hay tareas', 'TH': 'ยังไม่มีงาน'},
+                    )
                   else
                     ...tasks.map((t) => Container(
                       margin: const EdgeInsets.only(bottom: 4),
@@ -554,7 +568,10 @@ class _ProjectScreenState extends State<ProjectScreen> {
                   TextButton.icon(
                     onPressed: showAddTaskDialog,
                     icon: const Icon(Icons.add, color: _brandGolden, size: 18),
-                    label: const BiInline(en: 'Add Task', ko: '작업 추가', color: _brandGolden, fontWeight: FontWeight.bold),
+                    label: BiInline(
+                      en: 'Add Task', ko: '작업 추가', color: _brandGolden, fontWeight: FontWeight.bold,
+                      translations: const {'JA': '作業を追加', 'ZH': '添加任务', 'FR': 'Ajouter une tâche', 'DE': 'Aufgabe hinzufügen', 'RU': 'Добавить задачу', 'AR': 'إضافة مهمة', 'HI': 'कार्य जोड़ें', 'VI': 'Thêm công việc', 'ES': 'Añadir tarea', 'TH': 'เพิ่มงาน'},
+                    ),
                   ),
                 ],
               ),
@@ -574,12 +591,20 @@ class _ProjectScreenState extends State<ProjectScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'PROJECT', ko: '프로젝트', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'PROJECT', ko: '프로젝트', enSize: 19, koSize: 14,
+          translations: const {'JA': 'プロジェクト', 'ZH': '项目', 'FR': 'Projet', 'DE': 'Projekt', 'RU': 'Проект', 'AR': 'مشروع', 'HI': 'परियोजना', 'VI': 'Dự án', 'ES': 'Proyecto', 'TH': 'โครงการ'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
           : _projects.isEmpty
-          ? Center(child: BiInline(en: 'No projects yet', ko: '등록된 프로젝트가 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
+          ? Center(
+        child: BiInline(
+          en: 'No projects yet', ko: '등록된 프로젝트가 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
+          translations: const {'JA': 'まだプロジェクトがありません', 'ZH': '暂无项目', 'FR': "Aucun projet pour l'instant", 'DE': 'Noch keine Projekte', 'RU': 'Пока нет проектов', 'AR': 'لا توجد مشاريع بعد', 'HI': 'अभी तक कोई परियोजना नहीं', 'VI': 'Chưa có dự án nào', 'ES': 'Aún no hay proyectos', 'TH': 'ยังไม่มีโครงการ'},
+        ),
+      )
           : ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _projects.length,
@@ -636,7 +661,10 @@ class _ProjectScreenState extends State<ProjectScreen> {
             style: OutlinedButton.styleFrom(side: const BorderSide(color: _brandGolden), minimumSize: const Size(double.infinity, 0), padding: const EdgeInsets.symmetric(vertical: 10)),
             onPressed: () => _showTasksSheet(project),
             icon: const Icon(Icons.checklist, color: _brandGolden, size: 16),
-            label: const BiInline(en: 'View Tasks', ko: '할 일 보기', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+            label: BiInline(
+              en: 'View Tasks', ko: '할 일 보기', color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold,
+              translations: const {'JA': '作業を見る', 'ZH': '查看任务', 'FR': 'Voir les tâches', 'DE': 'Aufgaben ansehen', 'RU': 'Просмотр задач', 'AR': 'عرض المهام', 'HI': 'कार्य देखें', 'VI': 'Xem công việc', 'ES': 'Ver tareas', 'TH': 'ดูงาน'},
+            ),
           ),
         ],
       ),

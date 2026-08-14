@@ -98,6 +98,9 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                           ko: isEdit ? '약속 수정' : '약속 추가',
                           enSize: 16,
                           koSize: 12.5,
+                          translations: isEdit
+                              ? {'JA': '約束を編集', 'ZH': '编辑约会', 'FR': 'Modifier le rendez-vous', 'DE': 'Termin bearbeiten', 'RU': 'Изменить встречу', 'AR': 'تعديل الموعد', 'HI': 'नियुक्ति संपादित करें', 'VI': 'Sửa cuộc hẹn', 'ES': 'Editar cita', 'TH': 'แก้ไขนัดหมาย'}
+                              : {'JA': '約束を追加', 'ZH': '添加约会', 'FR': 'Ajouter un rendez-vous', 'DE': 'Termin hinzufügen', 'RU': 'Добавить встречу', 'AR': 'إضافة موعد', 'HI': 'नियुक्ति जोड़ें', 'VI': 'Thêm cuộc hẹn', 'ES': 'Añadir cita', 'TH': 'เพิ่มนัดหมาย'},
                         ),
                       ],
                     ),
@@ -282,7 +285,10 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'APPOINTMENT', ko: '약속', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'APPOINTMENT', ko: '약속', enSize: 19, koSize: 14,
+          translations: const {'JA': '約束', 'ZH': '约会', 'FR': 'Rendez-vous', 'DE': 'Termin', 'RU': 'Встреча', 'AR': 'موعد', 'HI': 'नियुक्ति', 'VI': 'Cuộc hẹn', 'ES': 'Cita', 'TH': 'นัดหมาย'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -293,7 +299,12 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
             const NotificationPermissionBanner(), // 🆕 [권한 안내 배너] 알림이 꺼져있으면 여기 안내가 뜸
             Expanded(
               child: _items.isEmpty
-                  ? Center(child: BiInline(en: 'No appointments yet', ko: '등록된 약속이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
+                  ? Center(
+                child: BiInline(
+                  en: 'No appointments yet', ko: '등록된 약속이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
+                  translations: const {'JA': 'まだ約束がありません', 'ZH': '暂无约会', 'FR': 'Aucun rendez-vous pour le moment', 'DE': 'Noch keine Termine', 'RU': 'Пока нет встреч', 'AR': 'لا توجد مواعيد بعد', 'HI': 'अभी तक कोई नियुक्ति नहीं', 'VI': 'Chưa có cuộc hẹn nào', 'ES': 'Aún no hay citas', 'TH': 'ยังไม่มีนัดหมาย'},
+                ),
+              )
                   : ListView.builder(
                 itemCount: _items.length,
                 itemBuilder: (context, index) => _buildTile(_items[index]),

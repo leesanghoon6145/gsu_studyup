@@ -8,6 +8,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_language_service.dart'; // 🆕 [10개국어 확장]
+import 'bilingual_text.dart'; // 🆕 [10개국어 확장] BiTitle 사용 (appLanguage도 이 파일에서 함께 제공됨)
 import 'calendar_screen.dart';
 import 'appointment_screen.dart';
 import 'project_screen.dart';
@@ -33,12 +35,40 @@ import 'monthly_report_screen.dart';
 import 'yearly_report_screen.dart';
 import 'statistics_screen.dart';
 
-class GeneralPlannerHomeScreen extends StatelessWidget {
+class GeneralPlannerHomeScreen extends StatefulWidget {
   const GeneralPlannerHomeScreen({super.key});
 
+  @override
+  State<GeneralPlannerHomeScreen> createState() => _GeneralPlannerHomeScreenState();
+}
+
+class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
   static const Color _brandGolden = Color(0xFFE5C158);
   static const Color _pageBg = Color(0xFF030712);
   static const Color _containerBg = Color(0xFF0D1527);
+
+  @override
+  void initState() {
+    super.initState();
+    // 🆕 [10개국어 확장] 홈 화면 진입 시 저장된 언어 설정을 불러옴
+    appLanguage.initialize().then((_) {
+      if (mounted) setState(() {});
+    });
+    // 🆕 [버그 수정] 마이페이지 등 "다른 화면"에서 언어를 바꿔도 이 화면이
+    // 실시간으로 알아채도록 리스너를 계속 붙여둠 (예전엔 이 화면에 처음
+    // 들어올 때 딱 한 번만 확인해서, 다른 곳에서 바꾸면 못 알아챘음)
+    appLanguage.addListener(_onLanguageChanged);
+  }
+
+  @override
+  void dispose() {
+    appLanguage.removeListener(_onLanguageChanged);
+    super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,13 +78,12 @@ class GeneralPlannerHomeScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('GENERAL PLANNER', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 22)),
-            Text('일반 플래너', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-          ],
-        ),
+        title: BiTitle(
+          en: 'GENERAL PLANNER', ko: '일반 플래너', enSize: 22, koSize: 15,
+          translations: const {'JA': '一般プランナー', 'ZH': '通用规划器', 'FR': 'Planificateur Général', 'DE': 'Allgemeiner Planer', 'RU': 'Общий планировщик', 'AR': 'المخطط العام', 'HI': 'सामान्य प्लानर', 'VI': 'Trình lập kế hoạch chung', 'ES': 'Planificador General', 'TH': 'ตัววางแผนทั่วไป'},
+        ), // 🆕 [빠짐 수정] 앱 최상단 제목 번역 누락 발견 및 추가
+        // 🆕 [정리] 자체 언어선택 아이콘 제거함 - 마이페이지의 12개국어 전환
+        // 기능을 그대로 재사용합니다 (저장 키를 공유하므로 자동으로 반영됨)
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -114,17 +143,60 @@ class GeneralPlannerHomeScreen extends StatelessWidget {
     );
   }
 
+  // 🆕 [10개국어 확장] 홈 화면의 모든 섹션제목/메뉴이름 번역표.
+  // 키는 영문 라벨(en) 그대로 사용 - 외국어 선택 시 이 표에서 찾아서 단독 표시.
+  static const Map<String, Map<String, String>> _t = {
+    // 섹션 제목 4개
+    'SCHEDULE': {'JA': 'スケジュール', 'ZH': '日程', 'FR': 'Planning', 'DE': 'Zeitplan', 'RU': 'Расписание', 'AR': 'الجدول', 'HI': 'शेड्यूल', 'VI': 'Lịch trình', 'ES': 'Horario', 'TH': 'ตารางเวลา'},
+    'TIMELINE': {'JA': 'タイムライン', 'ZH': '时间线', 'FR': 'Chronologie', 'DE': 'Zeitleiste', 'RU': 'Хронология', 'AR': 'الجدول الزمني', 'HI': 'समयरेखा', 'VI': 'Dòng thời gian', 'ES': 'Cronología', 'TH': 'ไทม์ไลน์'},
+    'GOAL': {'JA': '目標', 'ZH': '目标', 'FR': 'Objectif', 'DE': 'Ziel', 'RU': 'Цель', 'AR': 'الهدف', 'HI': 'लक्ष्य', 'VI': 'Mục tiêu', 'ES': 'Objetivo', 'TH': 'เป้าหมาย'},
+    'REPORT': {'JA': 'レポート', 'ZH': '报告', 'FR': 'Rapport', 'DE': 'Bericht', 'RU': 'Отчёт', 'AR': 'التقرير', 'HI': 'रिपोर्ट', 'VI': 'Báo cáo', 'ES': 'Informe', 'TH': 'รายงาน'},
+    // 일정 6개
+    'CALENDAR': {'JA': 'カレンダー', 'ZH': '日历', 'FR': 'Calendrier', 'DE': 'Kalender', 'RU': 'Календарь', 'AR': 'التقويم', 'HI': 'कैलेंडर', 'VI': 'Lịch', 'ES': 'Calendario', 'TH': 'ปฏิทิน'},
+    "TODAY'S SCHEDULE": {'JA': '今日の予定', 'ZH': '今日日程', 'FR': "Programme du jour", 'DE': 'Heutiger Zeitplan', 'RU': 'Расписание на сегодня', 'AR': 'جدول اليوم', 'HI': 'आज का शेड्यूल', 'VI': 'Lịch hôm nay', 'ES': 'Horario de hoy', 'TH': 'ตารางวันนี้'},
+    'APPOINTMENT': {'JA': '約束', 'ZH': '约会', 'FR': 'Rendez-vous', 'DE': 'Termin', 'RU': 'Встреча', 'AR': 'موعد', 'HI': 'नियुक्ति', 'VI': 'Cuộc hẹn', 'ES': 'Cita', 'TH': 'นัดหมาย'},
+    'PROJECT': {'JA': 'プロジェクト', 'ZH': '项目', 'FR': 'Projet', 'DE': 'Projekt', 'RU': 'Проект', 'AR': 'مشروع', 'HI': 'परियोजना', 'VI': 'Dự án', 'ES': 'Proyecto', 'TH': 'โครงการ'},
+    'REMINDER': {'JA': 'リマインダー', 'ZH': '提醒', 'FR': 'Rappel', 'DE': 'Erinnerung', 'RU': 'Напоминание', 'AR': 'تذكير', 'HI': 'रिमाइंडर', 'VI': 'Nhắc nhở', 'ES': 'Recordatorio', 'TH': 'การแจ้งเตือน'},
+    'SCHEDULE ANALYSIS': {'JA': 'スケジュール分析', 'ZH': '日程分析', 'FR': 'Analyse du planning', 'DE': 'Zeitplananalyse', 'RU': 'Анализ расписания', 'AR': 'تحليل الجدول', 'HI': 'शेड्यूल विश्लेषण', 'VI': 'Phân tích lịch trình', 'ES': 'Análisis de horario', 'TH': 'วิเคราะห์ตารางเวลา'},
+    // 타임라인 5개
+    "TODAY'S TIMELINE": {'JA': '今日のタイムライン', 'ZH': '今日时间线', 'FR': "Chronologie du jour", 'DE': 'Heutige Zeitleiste', 'RU': 'Хронология на сегодня', 'AR': 'الجدول الزمني لليوم', 'HI': 'आज की समयरेखा', 'VI': 'Dòng thời gian hôm nay', 'ES': 'Cronología de hoy', 'TH': 'ไทม์ไลน์วันนี้'},
+    'ROUTINE': {'JA': 'ルーティン', 'ZH': '常规', 'FR': 'Routine', 'DE': 'Routine', 'RU': 'Распорядок', 'AR': 'الروتين', 'HI': 'दिनचर्या', 'VI': 'Thói quen', 'ES': 'Rutina', 'TH': 'กิจวัตร'},
+    'TIMELINE HISTORY': {'JA': 'タイムライン履歴', 'ZH': '时间线记录', 'FR': "Historique de chronologie", 'DE': 'Zeitleisten-Verlauf', 'RU': 'История хронологии', 'AR': 'سجل الجدول الزمني', 'HI': 'समयरेखा इतिहास', 'VI': 'Lịch sử dòng thời gian', 'ES': 'Historial de cronología', 'TH': 'ประวัติไทม์ไลน์'},
+    'EXECUTION RECORD': {'JA': '実行記録', 'ZH': '执行记录', 'FR': "Journal d'exécution", 'DE': 'Ausführungsprotokoll', 'RU': 'Журнал выполнения', 'AR': 'سجل التنفيذ', 'HI': 'निष्पादन रिकॉर्ड', 'VI': 'Nhật ký thực hiện', 'ES': 'Registro de ejecución', 'TH': 'บันทึกการดำเนินการ'},
+    'TIMELINE ANALYSIS': {'JA': 'タイムライン分析', 'ZH': '时间线分析', 'FR': "Analyse de chronologie", 'DE': 'Zeitleistenanalyse', 'RU': 'Анализ хронологии', 'AR': 'تحليل الجدول الزمني', 'HI': 'समयरेखा विश्लेषण', 'VI': 'Phân tích dòng thời gian', 'ES': 'Análisis de cronología', 'TH': 'วิเคราะห์ไทม์ไลน์'},
+    // 목표 8개
+    'LIFE GOAL': {'JA': '人生の目標', 'ZH': '人生目标', 'FR': 'Objectif de vie', 'DE': 'Lebensziel', 'RU': 'Жизненная цель', 'AR': 'هدف الحياة', 'HI': 'जीवन लक्ष्य', 'VI': 'Mục tiêu cuộc đời', 'ES': 'Objetivo de vida', 'TH': 'เป้าหมายชีวิต'},
+    'YEARLY GOAL': {'JA': '年間目標', 'ZH': '年度目标', 'FR': 'Objectif annuel', 'DE': 'Jahresziel', 'RU': 'Годовая цель', 'AR': 'الهدف السنوي', 'HI': 'वार्षिक लक्ष्य', 'VI': 'Mục tiêu năm', 'ES': 'Objetivo anual', 'TH': 'เป้าหมายรายปี'},
+    'MONTHLY GOAL': {'JA': '月間目標', 'ZH': '月度目标', 'FR': 'Objectif mensuel', 'DE': 'Monatsziel', 'RU': 'Месячная цель', 'AR': 'الهدف الشهري', 'HI': 'मासिक लक्ष्य', 'VI': 'Mục tiêu tháng', 'ES': 'Objetivo mensual', 'TH': 'เป้าหมายรายเดือน'},
+    'WEEKLY GOAL': {'JA': '週間目標', 'ZH': '每周目标', 'FR': 'Objectif hebdomadaire', 'DE': 'Wochenziel', 'RU': 'Недельная цель', 'AR': 'الهدف الأسبوعي', 'HI': 'साप्ताहिक लक्ष्य', 'VI': 'Mục tiêu tuần', 'ES': 'Objetivo semanal', 'TH': 'เป้าหมายรายสัปดาห์'},
+    'TODAY GOAL': {'JA': '今日の目標', 'ZH': '今日目标', 'FR': "Objectif du jour", 'DE': 'Tagesziel', 'RU': 'Цель на сегодня', 'AR': 'هدف اليوم', 'HI': 'आज का लक्ष्य', 'VI': 'Mục tiêu hôm nay', 'ES': 'Objetivo de hoy', 'TH': 'เป้าหมายวันนี้'},
+    'TODO': {'JA': 'やること', 'ZH': '待办事项', 'FR': 'À faire', 'DE': 'Aufgaben', 'RU': 'Задачи', 'AR': 'المهام', 'HI': 'कार्य सूची', 'VI': 'Việc cần làm', 'ES': 'Tareas', 'TH': 'สิ่งที่ต้องทำ'},
+    'PROGRESS': {'JA': '進捗', 'ZH': '进度', 'FR': 'Progrès', 'DE': 'Fortschritt', 'RU': 'Прогресс', 'AR': 'التقدم', 'HI': 'प्रगति', 'VI': 'Tiến độ', 'ES': 'Progreso', 'TH': 'ความคืบหน้า'},
+    'ACHIEVEMENT': {'JA': '達成', 'ZH': '成就', 'FR': 'Réussite', 'DE': 'Erfolg', 'RU': 'Достижение', 'AR': 'الإنجاز', 'HI': 'उपलब्धि', 'VI': 'Thành tựu', 'ES': 'Logro', 'TH': 'ความสำเร็จ'},
+    // 리포트 5개
+    'DAILY REPORT': {'JA': '日次レポート', 'ZH': '日报', 'FR': 'Rapport quotidien', 'DE': 'Täglicher Bericht', 'RU': 'Дневной отчёт', 'AR': 'التقرير اليومي', 'HI': 'दैनिक रिपोर्ट', 'VI': 'Báo cáo hàng ngày', 'ES': 'Informe diario', 'TH': 'รายงานรายวัน'},
+    'WEEKLY REPORT': {'JA': '週次レポート', 'ZH': '周报', 'FR': 'Rapport hebdomadaire', 'DE': 'Wochenbericht', 'RU': 'Недельный отчёт', 'AR': 'التقرير الأسبوعي', 'HI': 'साप्ताहिक रिपोर्ट', 'VI': 'Báo cáo hàng tuần', 'ES': 'Informe semanal', 'TH': 'รายงานรายสัปดาห์'},
+    'MONTHLY REPORT': {'JA': '月次レポート', 'ZH': '月报', 'FR': 'Rapport mensuel', 'DE': 'Monatsbericht', 'RU': 'Месячный отчёт', 'AR': 'التقرير الشهري', 'HI': 'मासिक रिपोर्ट', 'VI': 'Báo cáo hàng tháng', 'ES': 'Informe mensual', 'TH': 'รายงานรายเดือน'},
+    'YEARLY REPORT': {'JA': '年次レポート', 'ZH': '年报', 'FR': 'Rapport annuel', 'DE': 'Jahresbericht', 'RU': 'Годовой отчёт', 'AR': 'التقرير السنوي', 'HI': 'वार्षिक रिपोर्ट', 'VI': 'Báo cáo hàng năm', 'ES': 'Informe anual', 'TH': 'รายงานรายปี'},
+    'STATISTICS': {'JA': '統計', 'ZH': '统计', 'FR': 'Statistiques', 'DE': 'Statistik', 'RU': 'Статистика', 'AR': 'الإحصائيات', 'HI': 'सांख्यिकी', 'VI': 'Thống kê', 'ES': 'Estadísticas', 'TH': 'สถิติ'},
+  };
+
   void _navigate(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
   void _showComingSoon(BuildContext context, String label) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label 화면은 준비 중입니다. (Coming Soon)', style: GoogleFonts.notoSansKr())),
+      SnackBar(content: Text('$label screen is coming soon. ($label 화면은 준비 중입니다.)', style: GoogleFonts.notoSansKr())),
     );
   }
 
   Widget _buildSectionTitle(String en, String ko) {
+    // 🆕 [10개국어 확장] 외국어 선택 시 번역표에서 찾아 단독 표시, 없으면 영어로 대체
+    if (!appLanguage.isDefault) {
+      final translated = _t[en]?[appLanguage.current] ?? en;
+      return Text(translated, style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15));
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -162,7 +234,8 @@ class GeneralPlannerHomeScreen extends StatelessWidget {
             Text(entry.emoji, style: const TextStyle(fontSize: 22)),
             const SizedBox(width: 8),
             Expanded(
-              child: Column(
+              child: appLanguage.isDefault
+                  ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -179,6 +252,13 @@ class GeneralPlannerHomeScreen extends StatelessWidget {
                     style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5),
                   ),
                 ],
+              )
+              // 🆕 [10개국어 확장] 외국어 선택 시 번역표에서 찾아 한 줄로 단독 표시
+                  : Text(
+                _t[entry.enLabel]?[appLanguage.current] ?? entry.enLabel,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSansKr(color: const Color(0xFFFFF6D6), fontWeight: FontWeight.bold, fontSize: 12.5),
               ),
             ),
           ],

@@ -14,14 +14,23 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_language_service.dart'; // 🆕 [10개국어 확장] 언어 상태 서비스
+export 'app_language_service.dart'; // 🆕 [에러 수정] 이 파일을 import하는 모든 화면이 appLanguage/AppLanguageService를 자동으로 쓸 수 있게 함
 
 // 🆕 화면 상단 AppBar 제목처럼 "영문 큰 글씨 + 한글 작은 글씨" 2줄 구조
-class BiTitle extends StatelessWidget {
+//
+// [10개국어 확장 - 하위호환 보장] 기존처럼 en/ko만 넣으면 그대로 예전과
+// 100% 동일하게 작동합니다(코드 한 글자도 안 고쳐도 됨). 외국어 10개국어
+// 번역을 추가하고 싶은 곳만 선택적으로 translations 맵을 넣어주면 됩니다.
+// 아직 번역을 안 넣은 화면은, 외국어를 선택해도 영어로 대체 표시되어
+// 화면이 깨지지 않습니다(점진적으로 번역을 채워나갈 수 있는 안전장치).
+class BiTitle extends StatefulWidget {
   final String en;
   final String ko;
   final Color color;
   final double enSize;
   final double koSize;
+  final Map<String, String>? translations; // 🆕 {'JA': '...', 'ZH': '...', ...} 선택사항
 
   const BiTitle({
     super.key,
@@ -30,22 +39,51 @@ class BiTitle extends StatelessWidget {
     this.color = const Color(0xFFE5C158),
     this.enSize = 18,
     this.koSize = 13,
+    this.translations,
   });
 
   @override
+  State<BiTitle> createState() => _BiTitleState();
+}
+
+class _BiTitleState extends State<BiTitle> {
+  @override
+  void initState() {
+    super.initState();
+    appLanguage.addListener(_onLanguageChanged); // 🆕 언어가 바뀌면 이 위젯만 즉시 다시 그려짐
+  }
+
+  @override
+  void dispose() {
+    appLanguage.removeListener(_onLanguageChanged);
+    super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(en, style: GoogleFonts.gowunBatang(color: color, fontWeight: FontWeight.bold, fontSize: enSize)),
-        Text(ko, style: GoogleFonts.notoSansKr(color: color, fontWeight: FontWeight.bold, fontSize: koSize)),
-      ],
-    );
+    // 🆕 기본값(영+한)이면 예전과 완전히 동일하게 2줄로 표시
+    if (appLanguage.isDefault) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(widget.en, style: GoogleFonts.gowunBatang(color: widget.color, fontWeight: FontWeight.bold, fontSize: widget.enSize)),
+          Text(widget.ko, style: GoogleFonts.notoSansKr(color: widget.color, fontWeight: FontWeight.bold, fontSize: widget.koSize)),
+        ],
+      );
+    }
+    // 🆕 외국어 선택 시: 번역이 있으면 그 언어만, 없으면 영어로 대체(화면 안 깨짐)
+    final String displayText = widget.translations?[appLanguage.current] ?? widget.en;
+    return Text(displayText, style: GoogleFonts.gowunBatang(color: widget.color, fontWeight: FontWeight.bold, fontSize: widget.enSize));
   }
 }
 
 // 🆕 버튼/라벨/섹션제목처럼 한 줄로 "EN (KO)" 형태로 보여주는 인라인 텍스트
-class BiInline extends StatelessWidget {
+// [10개국어 확장] BiTitle과 동일한 하위호환 원칙 적용.
+class BiInline extends StatefulWidget {
   final String en;
   final String ko;
   final Color color;
@@ -53,6 +91,7 @@ class BiInline extends StatelessWidget {
   final FontWeight fontWeight;
   final TextAlign textAlign;
   final int? maxLines;
+  final Map<String, String>? translations; // 🆕 선택사항
 
   const BiInline({
     super.key,
@@ -63,22 +102,70 @@ class BiInline extends StatelessWidget {
     this.fontWeight = FontWeight.normal,
     this.textAlign = TextAlign.start,
     this.maxLines,
+    this.translations,
   });
 
   @override
+  State<BiInline> createState() => _BiInlineState();
+}
+
+class _BiInlineState extends State<BiInline> {
+  @override
+  void initState() {
+    super.initState();
+    appLanguage.addListener(_onLanguageChanged);
+  }
+
+  @override
+  void dispose() {
+    appLanguage.removeListener(_onLanguageChanged);
+    super.dispose();
+  }
+
+  void _onLanguageChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final String displayText = appLanguage.isDefault ? '${widget.en} (${widget.ko})' : (widget.translations?[appLanguage.current] ?? widget.en);
     return Text(
-      '$en ($ko)',
-      textAlign: textAlign,
-      maxLines: maxLines,
-      overflow: maxLines != null ? TextOverflow.ellipsis : null,
-      style: GoogleFonts.notoSansKr(color: color, fontWeight: fontWeight, fontSize: fontSize),
+      displayText,
+      textAlign: widget.textAlign,
+      maxLines: widget.maxLines,
+      overflow: widget.maxLines != null ? TextOverflow.ellipsis : null,
+      style: GoogleFonts.notoSansKr(color: widget.color, fontWeight: widget.fontWeight, fontSize: widget.fontSize),
     );
   }
 }
 
-// 🆕 TextField의 hintText처럼 순수 문자열이 필요한 자리에 쓰는 함수형 헬퍼
-String biHint(String en, String ko) => '$en ($ko)';
+// 🆕 [10개국어 확장] 여러 화면에서 반복되는 공통 버튼 단어 번역사전.
+// "Delete"/"Cancel"/"Save" 등은 앱 전체에서 수십 번 나오므로, 파일마다
+// 따로 번역을 넣지 않고 여기 한 곳에서만 관리합니다.
+const Map<String, Map<String, String>> commonButtonTranslations = {
+  'Delete': {'JA': '削除', 'ZH': '删除', 'FR': 'Supprimer', 'DE': 'Löschen', 'RU': 'Удалить', 'AR': 'حذف', 'HI': 'हटाएं', 'VI': 'Xóa', 'ES': 'Eliminar', 'TH': 'ลบ'},
+  'Cancel': {'JA': 'キャンセル', 'ZH': '取消', 'FR': 'Annuler', 'DE': 'Abbrechen', 'RU': 'Отмена', 'AR': 'إلغاء', 'HI': 'रद्द करें', 'VI': 'Hủy', 'ES': 'Cancelar', 'TH': 'ยกเลิก'},
+  'Save': {'JA': '保存', 'ZH': '保存', 'FR': 'Enregistrer', 'DE': 'Speichern', 'RU': 'Сохранить', 'AR': 'حفظ', 'HI': 'सहेजें', 'VI': 'Lưu', 'ES': 'Guardar', 'TH': 'บันทึก'},
+  'Update': {'JA': '更新', 'ZH': '更新', 'FR': 'Mettre à jour', 'DE': 'Aktualisieren', 'RU': 'Обновить', 'AR': 'تحديث', 'HI': 'अपडेट करें', 'VI': 'Cập nhật', 'ES': 'Actualizar', 'TH': 'อัปเดต'},
+  'Copy': {'JA': 'コピー', 'ZH': '复制', 'FR': 'Copier', 'DE': 'Kopieren', 'RU': 'Копировать', 'AR': 'نسخ', 'HI': 'कॉपी करें', 'VI': 'Sao chép', 'ES': 'Copiar', 'TH': 'คัดลอก'},
+  'Add': {'JA': '追加', 'ZH': '添加', 'FR': 'Ajouter', 'DE': 'Hinzufügen', 'RU': 'Добавить', 'AR': 'إضافة', 'HI': 'जोड़ें', 'VI': 'Thêm', 'ES': 'Añadir', 'TH': 'เพิ่ม'},
+  'Reset': {'JA': 'リセット', 'ZH': '重置', 'FR': 'Réinitialiser', 'DE': 'Zurücksetzen', 'RU': 'Сбросить', 'AR': 'إعادة تعيين', 'HI': 'रीसेट करें', 'VI': 'Đặt lại', 'ES': 'Restablecer', 'TH': 'รีเซ็ต'},
+  'Confirm': {'JA': '確認', 'ZH': '确认', 'FR': 'Confirmer', 'DE': 'Bestätigen', 'RU': 'Подтвердить', 'AR': 'تأكيد', 'HI': 'पुष्टि करें', 'VI': 'Xác nhận', 'ES': 'Confirmar', 'TH': 'ยืนยัน'},
+  'No data': {'JA': 'データなし', 'ZH': '暂无数据', 'FR': 'Aucune donnée', 'DE': 'Keine Daten', 'RU': 'Нет данных', 'AR': 'لا توجد بيانات', 'HI': 'कोई डेटा नहीं', 'VI': 'Không có dữ liệu', 'ES': 'Sin datos', 'TH': 'ไม่มีข้อมูล'},
+  'Keep': {'JA': '維持', 'ZH': '保留', 'FR': 'Conserver', 'DE': 'Beibehalten', 'RU': 'Оставить', 'AR': 'الاحتفاظ', 'HI': 'रखें', 'VI': 'Giữ nguyên', 'ES': 'Mantener', 'TH': 'เก็บไว้'},
+  'Undo': {'JA': '元に戻す', 'ZH': '撤销', 'FR': 'Annuler', 'DE': 'Rückgängig', 'RU': 'Отменить', 'AR': 'تراجع', 'HI': 'पूर्ववत करें', 'VI': 'Hoàn tác', 'ES': 'Deshacer', 'TH': 'เลิกทำ'},
+  'Got it': {'JA': '了解しました', 'ZH': '知道了', 'FR': "J'ai compris", 'DE': 'Verstanden', 'RU': 'Понятно', 'AR': 'حسناً', 'HI': 'समझ गया', 'VI': 'Đã hiểu', 'ES': 'Entendido', 'TH': 'เข้าใจแล้ว'},
+};
+
+// 🆕 [10개국어 확장] 공용 사전에서 찾아서 없으면 영어 그대로 반환하는 헬퍼
+String tButton(String enKey) => commonButtonTranslations[enKey]?[appLanguage.current] ?? enKey;
+
+String biHint(String en, String ko, {Map<String, String>? translations}) {
+  if (!appLanguage.isDefault) {
+    return translations?[appLanguage.current] ?? en;
+  }
+  return '$en ($ko)';
+}
 
 // 🆕 SnackBar 문구용 헬퍼 - 바로 ScaffoldMessenger에 넘겨서 사용
 void biSnack(BuildContext context, String en, String ko, {Color? backgroundColor}) {
@@ -145,7 +232,7 @@ class LuxuryDialogFrame extends StatelessWidget {
 }
 
 // 🆕 [고급 팝업 헤더] 아이콘 + 영/한 제목 + 진한 골드 구분선
-Widget luxuryDialogHeader({required IconData icon, required String en, required String ko}) {
+Widget luxuryDialogHeader({required IconData icon, required String en, required String ko, Map<String, String>? translations}) {
   const Color brandGolden = Color(0xFFE5C158);
   return Column(
     mainAxisSize: MainAxisSize.min,
@@ -155,7 +242,7 @@ Widget luxuryDialogHeader({required IconData icon, required String en, required 
         children: [
           Icon(icon, color: brandGolden, size: 22),
           const SizedBox(width: 8),
-          BiTitle(en: en, ko: ko, enSize: 16, koSize: 12.5),
+          BiTitle(en: en, ko: ko, enSize: 16, koSize: 12.5, translations: translations),
         ],
       ),
       const SizedBox(height: 10),
@@ -180,6 +267,7 @@ Widget luxuryBottomActions({
 }) {
   const Color brandGolden = Color(0xFFE5C158);
   const Color pageBg = Color(0xFF030712);
+  final bool isDefaultLang = appLanguage.isDefault; // 🆕 [10개국어 확장]
 
   return Row(
     children: [
@@ -188,10 +276,12 @@ Widget luxuryBottomActions({
           child: OutlinedButton(
             style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFDC2626)), padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             onPressed: onDelete,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
+            child: isDefaultLang
+                ? Column(mainAxisSize: MainAxisSize.min, children: [
               Text('Delete', style: GoogleFonts.gowunBatang(color: const Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold)),
               Text('삭제', style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold)),
-            ]),
+            ])
+                : Text(tButton('Delete'), style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
           ),
         ),
         const SizedBox(width: 8),
@@ -200,10 +290,12 @@ Widget luxuryBottomActions({
         child: OutlinedButton(
           style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
           onPressed: onCancel,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: isDefaultLang
+              ? Column(mainAxisSize: MainAxisSize.min, children: [
             Text('Cancel', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
             Text('취소', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
-          ]),
+          ])
+              : Text(tButton('Cancel'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
         ),
       ),
       const SizedBox(width: 8),
@@ -211,10 +303,12 @@ Widget luxuryBottomActions({
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: brandGolden, padding: const EdgeInsets.symmetric(vertical: 11), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 4, shadowColor: brandGolden.withOpacity(0.5)),
           onPressed: onSave,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: isDefaultLang
+              ? Column(mainAxisSize: MainAxisSize.min, children: [
             Text(isEdit ? 'Update' : 'Save', style: GoogleFonts.gowunBatang(color: pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
             Text(isEdit ? '수정완료' : '저장', style: GoogleFonts.notoSansKr(color: pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
-          ]),
+          ])
+              : Text(tButton(isEdit ? 'Update' : 'Save'), style: GoogleFonts.notoSansKr(color: pageBg, fontSize: 11, fontWeight: FontWeight.bold)),
         ),
       ),
     ],

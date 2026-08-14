@@ -172,6 +172,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ko: isEditMode ? '일정 수정' : '일정 추가',
                           enSize: 17,
                           koSize: 12.5,
+                          translations: isEditMode
+                              ? {'JA': '予定を編集', 'ZH': '编辑日程', 'FR': 'Modifier le programme', 'DE': 'Termin bearbeiten', 'RU': 'Изменить событие', 'AR': 'تعديل الموعد', 'HI': 'शेड्यूल संपादित करें', 'VI': 'Sửa lịch trình', 'ES': 'Editar horario', 'TH': 'แก้ไขตารางเวลา'}
+                              : {'JA': '予定を追加', 'ZH': '添加日程', 'FR': 'Ajouter un programme', 'DE': 'Termin hinzufügen', 'RU': 'Добавить событие', 'AR': 'إضافة موعد', 'HI': 'शेड्यूल जोड़ें', 'VI': 'Thêm lịch trình', 'ES': 'Añadir horario', 'TH': 'เพิ่มตารางเวลา'},
                         ),
                       ],
                     ),
@@ -187,7 +190,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     const SizedBox(height: 18),
 
                     // 카테고리 선택
-                    const BiInline(en: 'CATEGORY', ko: '분류', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'CATEGORY', ko: '분류', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': 'カテゴリー', 'ZH': '分类', 'FR': 'Catégorie', 'DE': 'Kategorie', 'RU': 'Категория', 'AR': 'الفئة', 'HI': 'श्रेणी', 'VI': 'Danh mục', 'ES': 'Categoría', 'TH': 'หมวดหมู่'},
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: kScheduleCategories.map((cat) {
@@ -261,13 +267,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               onPressed: () => Navigator.of(context).pop('delete'),
-                              child: Column(
+                              // 🆕 [10개국어 확장] 기본값=2줄(영+한), 외국어 선택시=1줄 단독 표시
+                              child: appLanguage.isDefault
+                                  ? Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text('Delete', style: GoogleFonts.gowunBatang(color: const Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold)),
                                   Text('삭제', style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold)),
                                 ],
-                              ),
+                              )
+                                  : Text(tButton('Delete'), style: GoogleFonts.notoSansKr(color: const Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -280,13 +289,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                             onPressed: () => Navigator.of(context).pop(null),
-                            child: Column(
+                            child: appLanguage.isDefault
+                                ? Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text('Cancel', style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
                                 Text('취소', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
                               ],
-                            ),
+                            )
+                                : Text(tButton('Cancel'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -303,13 +314,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               if (titleController.text.trim().isEmpty) return;
                               Navigator.of(context).pop('save');
                             },
-                            child: Column(
+                            child: appLanguage.isDefault
+                                ? Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(isEditMode ? 'Update' : 'Save', style: GoogleFonts.gowunBatang(color: _pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
                                 Text(isEditMode ? '수정완료' : '저장', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 10.5, fontWeight: FontWeight.bold)),
                               ],
-                            ),
+                            )
+                                : Text(tButton(isEditMode ? 'Update' : 'Save'), style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -402,7 +415,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const BiTitle(en: 'CALENDAR', ko: '캘린더', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'CALENDAR', ko: '캘린더', enSize: 19, koSize: 14,
+          translations: const {'JA': 'カレンダー', 'ZH': '日历', 'FR': 'Calendrier', 'DE': 'Kalender', 'RU': 'Календарь', 'AR': 'التقويم', 'HI': 'कैलेंडर', 'VI': 'Lịch', 'ES': 'Calendario', 'TH': 'ปฏิทิน'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -583,6 +599,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
             color: _brandGolden,
             fontWeight: FontWeight.bold,
             fontSize: 15,
+            translations: {
+              'JA': '${_selectedDate.month}月${_selectedDate.day}日の予定',
+              'ZH': '${_selectedDate.month}月${_selectedDate.day}日日程',
+              'FR': 'Programme du ${_selectedDate.day}/${_selectedDate.month}',
+              'DE': 'Termine am ${_selectedDate.day}.${_selectedDate.month}.',
+              'RU': 'Расписание на ${_selectedDate.day}.${_selectedDate.month}',
+              'AR': 'جدول ${_selectedDate.day}/${_selectedDate.month}',
+              'HI': '${_selectedDate.day}/${_selectedDate.month} शेड्यूल',
+              'VI': 'Lịch trình ${_selectedDate.day}/${_selectedDate.month}',
+              'ES': 'Horario del ${_selectedDate.day}/${_selectedDate.month}',
+              'TH': 'ตารางวันที่ ${_selectedDate.day}/${_selectedDate.month}',
+            },
           ),
           // 🆕 [국경일 표시] 선택한 날짜가 공휴일이면 이름을 함께 표시
           if (KoreaHolidays.nameOf(_selectedDate) != null) ...[
@@ -627,7 +655,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Center(
-                  child: BiInline(en: 'No schedules yet', ko: '등록된 일정이 없습니다', color: Colors.white38, fontSize: 13),
+                  child: BiInline(
+                    en: 'No schedules yet', ko: '등록된 일정이 없습니다', color: Colors.white38, fontSize: 13,
+                    translations: const {'JA': 'まだ予定がありません', 'ZH': '暂无日程', 'FR': 'Aucun programme pour le moment', 'DE': 'Noch keine Termine', 'RU': 'Пока нет событий', 'AR': 'لا توجد مواعيد بعد', 'HI': 'अभी तक कोई शेड्यूल नहीं', 'VI': 'Chưa có lịch trình', 'ES': 'Aún no hay horarios', 'TH': 'ยังไม่มีตารางเวลา'},
+                  ),
                 ),
               );
             }
@@ -671,7 +702,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 style: TextStyle(color: item.isCompleted ? Colors.white38 : Colors.white, decoration: item.isCompleted ? TextDecoration.lineThrough : null, fontWeight: FontWeight.w600),
               ),
             ),
-            BiInline(en: 'Appt', ko: '약속', color: Colors.white38, fontSize: 10),
+            BiInline(
+              en: 'Appt', ko: '약속', color: Colors.white38, fontSize: 10,
+              translations: const {'JA': '約束', 'ZH': '约会', 'FR': 'RDV', 'DE': 'Termin', 'RU': 'Встреча', 'AR': 'موعد', 'HI': 'नियुक्ति', 'VI': 'Hẹn', 'ES': 'Cita', 'TH': 'นัด'},
+            ),
           ],
         ),
       ),

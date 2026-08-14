@@ -100,7 +100,12 @@ class _ReminderScreenState extends State<ReminderScreen> {
                       children: [
                         Icon(isEdit ? Icons.edit_notifications_rounded : Icons.notifications_active_rounded, color: _brandGolden, size: 22),
                         const SizedBox(width: 8),
-                        BiTitle(en: isEdit ? 'EDIT REMINDER' : 'ADD REMINDER', ko: isEdit ? '알림 수정' : '알림 추가', enSize: 16, koSize: 12.5),
+                        BiTitle(
+                          en: isEdit ? 'EDIT REMINDER' : 'ADD REMINDER', ko: isEdit ? '알림 수정' : '알림 추가', enSize: 16, koSize: 12.5,
+                          translations: isEdit
+                              ? {'JA': 'リマインダーを編集', 'ZH': '编辑提醒', 'FR': 'Modifier le rappel', 'DE': 'Erinnerung bearbeiten', 'RU': 'Изменить напоминание', 'AR': 'تعديل التذكير', 'HI': 'रिमाइंडर संपादित करें', 'VI': 'Sửa nhắc nhở', 'ES': 'Editar recordatorio', 'TH': 'แก้ไขการแจ้งเตือน'}
+                              : {'JA': 'リマインダーを追加', 'ZH': '添加提醒', 'FR': 'Ajouter un rappel', 'DE': 'Erinnerung hinzufügen', 'RU': 'Добавить напоминание', 'AR': 'إضافة تذكير', 'HI': 'रिमाइंडर जोड़ें', 'VI': 'Thêm nhắc nhở', 'ES': 'Añadir recordatorio', 'TH': 'เพิ่มการแจ้งเตือน'},
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -145,7 +150,10 @@ class _ReminderScreenState extends State<ReminderScreen> {
                     ),
                     const SizedBox(height: 18),
 
-                    const BiInline(en: 'REPEAT', ko: '반복', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'REPEAT', ko: '반복', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': '繰り返し', 'ZH': '重复', 'FR': 'Répéter', 'DE': 'Wiederholen', 'RU': 'Повтор', 'AR': 'تكرار', 'HI': 'दोहराएं', 'VI': 'Lặp lại', 'ES': 'Repetir', 'TH': 'ทำซ้ำ'},
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: kRepeatOptions.entries.map((entry) {
@@ -295,7 +303,10 @@ class _ReminderScreenState extends State<ReminderScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'REMINDER', ko: '알림', enSize: 19, koSize: 14),
+        title: BiTitle(
+          en: 'REMINDER', ko: '알림', enSize: 19, koSize: 14,
+          translations: const {'JA': 'リマインダー', 'ZH': '提醒', 'FR': 'Rappel', 'DE': 'Erinnerung', 'RU': 'Напоминание', 'AR': 'تذكير', 'HI': 'रिमाइंडर', 'VI': 'Nhắc nhở', 'ES': 'Recordatorio', 'TH': 'การแจ้งเตือน'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -307,7 +318,12 @@ class _ReminderScreenState extends State<ReminderScreen> {
             const NotificationTestButton(), // 🆕 [진단 도구] 10초 테스트 알림 버튼
             Expanded(
               child: _items.isEmpty
-                  ? Center(child: BiInline(en: 'No reminders yet', ko: '등록된 알림이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center))
+                  ? Center(
+                child: BiInline(
+                  en: 'No reminders yet', ko: '등록된 알림이 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
+                  translations: const {'JA': 'まだリマインダーがありません', 'ZH': '暂无提醒', 'FR': 'Aucun rappel pour le moment', 'DE': 'Noch keine Erinnerungen', 'RU': 'Пока нет напоминаний', 'AR': 'لا توجد تذكيرات بعد', 'HI': 'अभी तक कोई रिमाइंडर नहीं', 'VI': 'Chưa có nhắc nhở nào', 'ES': 'Aún no hay recordatorios', 'TH': 'ยังไม่มีการแจ้งเตือน'},
+                ),
+              )
                   : ListView.builder(
                 itemCount: _items.length,
                 itemBuilder: (context, index) => _buildTile(_items[index]),

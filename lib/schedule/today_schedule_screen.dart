@@ -87,7 +87,10 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
                   children: [
                     luxuryDialogHeader(icon: isEdit ? Icons.edit_calendar_rounded : Icons.event_available_rounded, en: isEdit ? 'EDIT SCHEDULE' : 'ADD SCHEDULE', ko: isEdit ? '일정 수정' : '일정 추가'),
 
-                    const BiInline(en: 'CATEGORY', ko: '분류', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+                    BiInline(
+                      en: 'CATEGORY', ko: '분류', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                      translations: const {'JA': 'カテゴリー', 'ZH': '分类', 'FR': 'Catégorie', 'DE': 'Kategorie', 'RU': 'Категория', 'AR': 'الفئة', 'HI': 'श्रेणी', 'VI': 'Danh mục', 'ES': 'Categoría', 'TH': 'หมวดหมู่'},
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: kScheduleCategories.map((cat) {
@@ -211,7 +214,10 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: "TODAY'S SCHEDULE", ko: '오늘의 일정', enSize: 16, koSize: 13),
+        title: BiTitle(
+          en: "TODAY'S SCHEDULE", ko: '오늘의 일정', enSize: 16, koSize: 13,
+          translations: const {'JA': '今日の予定', 'ZH': '今日日程', 'FR': 'Programme du jour', 'DE': 'Heutiger Zeitplan', 'RU': 'Расписание на сегодня', 'AR': 'جدول اليوم', 'HI': 'आज का शेड्यूल', 'VI': 'Lịch hôm nay', 'ES': 'Horario de hoy', 'TH': 'ตารางวันนี้'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -230,7 +236,21 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Center(
-                  child: BiInline(en: 'No schedules for today.\nTap + to add one.', ko: '오늘 등록된 일정이 없습니다.\n+ 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center),
+                  child: BiInline(
+                    en: 'No schedules for today.\nTap + to add one.', ko: '오늘 등록된 일정이 없습니다.\n+ 버튼으로 추가해 보세요.', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
+                    translations: const {
+                      'JA': '今日の予定がありません。\n+ボタンで追加してください。',
+                      'ZH': '今天没有日程。\n点击+号添加。',
+                      'FR': "Aucun programme aujourd'hui.\nAppuyez sur + pour en ajouter.",
+                      'DE': 'Keine Termine heute.\nTippen Sie auf +, um einen hinzuzufügen.',
+                      'RU': 'На сегодня нет событий.\nНажмите +, чтобы добавить.',
+                      'AR': 'لا توجد مواعيد اليوم.\nاضغط + للإضافة.',
+                      'HI': 'आज कोई शेड्यूल नहीं है।\nजोड़ने के लिए + टैप करें।',
+                      'VI': 'Không có lịch trình hôm nay.\nNhấn + để thêm.',
+                      'ES': 'No hay horarios hoy.\nToca + para añadir uno.',
+                      'TH': 'ไม่มีตารางเวลาวันนี้\nแตะ + เพื่อเพิ่ม',
+                    },
+                  ),
                 ),
               )
             else
@@ -260,7 +280,10 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const BiInline(en: "Today's Completion", ko: '오늘의 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+              BiInline(
+                en: "Today's Completion", ko: '오늘의 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                translations: const {'JA': '今日の達成率', 'ZH': '今日完成率', 'FR': "Taux d'achèvement du jour", 'DE': 'Heutige Fertigstellungsrate', 'RU': 'Процент выполнения сегодня', 'AR': 'نسبة الإنجاز اليوم', 'HI': 'आज की पूर्णता दर', 'VI': 'Tỷ lệ hoàn thành hôm nay', 'ES': 'Finalización de hoy', 'TH': 'อัตราความสำเร็จวันนี้'},
+              ),
               Text('$done / $total', style: const TextStyle(color: _brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
           ),

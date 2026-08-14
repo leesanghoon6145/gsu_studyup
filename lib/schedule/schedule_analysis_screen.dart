@@ -94,7 +94,10 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
-        title: const BiTitle(en: 'SCHEDULE ANALYSIS', ko: '일정 분석', enSize: 17, koSize: 13),
+        title: BiTitle(
+          en: 'SCHEDULE ANALYSIS', ko: '일정 분석', enSize: 17, koSize: 13,
+          translations: const {'JA': 'スケジュール分析', 'ZH': '日程分析', 'FR': 'Analyse du planning', 'DE': 'Zeitplananalyse', 'RU': 'Анализ расписания', 'AR': 'تحليل الجدول', 'HI': 'शेड्यूल विश्लेषण', 'VI': 'Phân tích lịch trình', 'ES': 'Análisis de horario', 'TH': 'วิเคราะห์ตารางเวลา'},
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
@@ -102,7 +105,10 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
           ? Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: BiInline(en: 'No schedule data yet', ko: '아직 분석할 일정 데이터가 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center),
+          child: BiInline(
+            en: 'No schedule data yet', ko: '아직 분석할 일정 데이터가 없습니다', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
+            translations: const {'JA': 'まだ分析する予定データがありません', 'ZH': '暂无可分析的日程数据', 'FR': 'Aucune donnée de programme à analyser', 'DE': 'Noch keine Termindaten zur Analyse', 'RU': 'Пока нет данных расписания для анализа', 'AR': 'لا توجد بيانات جدول للتحليل بعد', 'HI': 'अभी विश्लेषण के लिए कोई शेड्यूल डेटा नहीं', 'VI': 'Chưa có dữ liệu lịch trình để phân tích', 'ES': 'Aún no hay datos de horario para analizar', 'TH': 'ยังไม่มีข้อมูลตารางเวลาให้วิเคราะห์'},
+          ),
         ),
       )
           : ListView(
@@ -127,10 +133,27 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const BiInline(en: 'Overall Completion', ko: '전체 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: 'Overall Completion', ko: '전체 완료율', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': '全体達成率', 'ZH': '总完成率', 'FR': "Taux d'achèvement global", 'DE': 'Gesamtfertigstellung', 'RU': 'Общий процент выполнения', 'AR': 'نسبة الإنجاز الكلية', 'HI': 'कुल पूर्णता दर', 'VI': 'Tỷ lệ hoàn thành tổng thể', 'ES': 'Finalización general', 'TH': 'อัตราความสำเร็จโดยรวม'},
+          ),
           const SizedBox(height: 8),
           Text('$percent%', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 36, fontWeight: FontWeight.bold)),
-          BiInline(en: 'Completed $_completedCount / Total $_totalCount', ko: '완료 $_completedCount건 / 전체 $_totalCount건', color: Colors.white38, fontSize: 12),
+          BiInline(
+            en: 'Completed $_completedCount / Total $_totalCount', ko: '완료 $_completedCount건 / 전체 $_totalCount건', color: Colors.white38, fontSize: 12,
+            translations: {
+              'JA': '完了 $_completedCount / 全体 $_totalCount',
+              'ZH': '完成 $_completedCount / 总计 $_totalCount',
+              'FR': 'Terminé $_completedCount / Total $_totalCount',
+              'DE': 'Erledigt $_completedCount / Gesamt $_totalCount',
+              'RU': 'Выполнено $_completedCount / Всего $_totalCount',
+              'AR': 'مكتمل $_completedCount / الإجمالي $_totalCount',
+              'HI': 'पूर्ण $_completedCount / कुल $_totalCount',
+              'VI': 'Hoàn thành $_completedCount / Tổng $_totalCount',
+              'ES': 'Completado $_completedCount / Total $_totalCount',
+              'TH': 'เสร็จ $_completedCount / ทั้งหมด $_totalCount',
+            },
+          ),
         ],
       ),
     );
@@ -147,10 +170,13 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const BiInline(en: 'By Category', ko: '분류별 비중', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+          BiInline(
+            en: 'By Category', ko: '분류별 비중', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+            translations: const {'JA': 'カテゴリー別', 'ZH': '按分类', 'FR': 'Par catégorie', 'DE': 'Nach Kategorie', 'RU': 'По категориям', 'AR': 'حسب الفئة', 'HI': 'श्रेणी अनुसार', 'VI': 'Theo danh mục', 'ES': 'Por categoría', 'TH': 'ตามหมวดหมู่'},
+          ),
           const SizedBox(height: 14),
           if (total == 0)
-            BiInline(en: 'No data', ko: '데이터 없음', color: Colors.white38, fontSize: 12)
+            BiInline(en: 'No data', ko: '데이터 없음', color: Colors.white38, fontSize: 12, translations: commonButtonTranslations['No data'])
           else ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -198,19 +224,25 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInsightRow('Upcoming Incomplete', '다가오는 미완료 일정', '$_upcomingIncompleteCount건'),
+          _buildInsightRow(
+            'Upcoming Incomplete', '다가오는 미완료 일정', '$_upcomingIncompleteCount건',
+            translations: const {'JA': '今後の未完了予定', 'ZH': '即将到来的未完成日程', 'FR': 'Programmes incomplets à venir', 'DE': 'Bevorstehende unerledigte Termine', 'RU': 'Предстоящие невыполненные события', 'AR': 'المواعيد القادمة غير المكتملة', 'HI': 'आगामी अपूर्ण शेड्यूल', 'VI': 'Lịch trình sắp tới chưa hoàn thành', 'ES': 'Próximos horarios incompletos', 'TH': 'ตารางเวลาที่ยังไม่เสร็จที่จะมาถึง'},
+          ),
           const SizedBox(height: 10),
-          _buildInsightRow('Busiest Weekday', '가장 일정이 많은 요일', _busiestWeekday != null ? '$_busiestWeekday요일' : '데이터 없음'),
+          _buildInsightRow(
+            'Busiest Weekday', '가장 일정이 많은 요일', _busiestWeekday != null ? '$_busiestWeekday요일' : '데이터 없음',
+            translations: const {'JA': '最も忙しい曜日', 'ZH': '最繁忙的星期', 'FR': 'Jour le plus chargé', 'DE': 'Geschäftigster Wochentag', 'RU': 'Самый загруженный день недели', 'AR': 'أكثر أيام الأسبوع ازدحامًا', 'HI': 'सबसे व्यस्त दिन', 'VI': 'Ngày bận rộn nhất', 'ES': 'Día más ocupado', 'TH': 'วันที่ยุ่งที่สุด'},
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildInsightRow(String en, String ko, String value) {
+  Widget _buildInsightRow(String en, String ko, String value, {Map<String, String>? translations}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(child: BiInline(en: en, ko: ko, color: Colors.white70, fontSize: 13)),
+        Expanded(child: BiInline(en: en, ko: ko, color: Colors.white70, fontSize: 13, translations: translations)),
         Text(value, style: const TextStyle(color: _brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
       ],
     );
