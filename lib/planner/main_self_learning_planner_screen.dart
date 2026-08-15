@@ -24,6 +24,11 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
   late DateTime _todayDate;
   late DateTime _selectedDate;
 
+  // 🆕 [2026-08-14] 계획 탭 ↔ 실행 탭이 같은 일정 데이터(gke_global_schedules)를 공유하므로,
+  // 한쪽에서 수정한 뒤 다른 탭으로 돌아오면 최신 데이터로 새로고침되도록 GlobalKey로 연결함.
+  final GlobalKey<PlanningScreenState> _planningKey = GlobalKey<PlanningScreenState>();
+  final GlobalKey<LearningScreenState> _learningKey = GlobalKey<LearningScreenState>();
+
   final List<String> _todayMainSchedules = [];
 
   // ============================================================================
@@ -38,7 +43,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
   static const Map<String, Map<String, String>> _uiText = {
     'plannerTitle': {'KO': '자기주도 플래너', 'EN': 'Self-Directed Planner', 'JA': '自己主導プランナー', 'ZH': '自主学习规划', 'FR': 'Planificateur autonome', 'DE': 'Selbstgesteuerter Planer', 'RU': 'Планировщик самообучения', 'AR': 'مخطط التعلم الذاتي', 'HI': 'स्व-निर्देशित प्लानर', 'VI': 'Kế hoạch tự học', 'ES': 'Planificador autónomo', 'TH': 'แผนการเรียนด้วยตนเอง'},
     'tabPlanning': {'KO': '계획', 'EN': 'Planning', 'JA': '計画', 'ZH': '计划', 'FR': 'Planification', 'DE': 'Planung', 'RU': 'План', 'AR': 'التخطيط', 'HI': 'योजना', 'VI': 'Lập kế hoạch', 'ES': 'Planificación', 'TH': 'วางแผน'},
-    'tabLearning': {'KO': '실행', 'EN': 'Learning', 'JA': '実行', 'ZH': '执行', 'FR': 'Exécution', 'DE': 'Ausführung', 'RU': 'Выполнение', 'AR': 'التنفيذ', 'HI': 'निष्पादन', 'VI': 'Thực hiện', 'ES': 'Ejecución', 'TH': 'ลงมือทำ'},
+    'tabLearning': {'KO': '알람실행', 'EN': 'Alarm', 'JA': 'アラーム実行', 'ZH': '闹钟执行', 'FR': 'Alarme', 'DE': 'Alarm', 'RU': 'Будильник', 'AR': 'المنبه', 'HI': 'अलार्म', 'VI': 'Báo thức', 'ES': 'Alarma', 'TH': 'ปลุก'},
     'tabReport': {'KO': '리포트', 'EN': 'Report', 'JA': 'レポート', 'ZH': '报告', 'FR': 'Rapport', 'DE': 'Bericht', 'RU': 'Отчёт', 'AR': 'التقرير', 'HI': 'रिपोर्ट', 'VI': 'Báo cáo', 'ES': 'Informe', 'TH': 'รายงาน'},
   };
 
@@ -111,6 +116,19 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
     final now = DateTime.now();
     _todayDate = DateTime(now.year, now.month, now.day);
     _selectedDate = _todayDate; // 접속 시 자동으로 오늘 날짜에 선택 표시
+
+    // 🆕 [2026-08-14] 계획(0)/실행(1) 탭이 같은 일정 데이터를 공유하므로, 탭을 전환해서 그
+    // 화면으로 돌아올 때마다 최신 데이터로 새로고침함 (한쪽에서 추가한 일정이 다른 쪽에도
+    // 바로 보이도록).
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        if (_tabController.index == 0) {
+          _planningKey.currentState?.refreshFromExternalChanges();
+        } else if (_tabController.index == 1) {
+          _learningKey.currentState?.refreshSchedules();
+        }
+      }
+    });
   }
 
   @override
@@ -167,15 +185,17 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
             const SizedBox(height: 4), // 📏 로고와 타이틀 사이 여백
 
             // 🆕 [12개국] 기본값 = 영문(위)+한글(아래) 2단, 10개국 선택 시 = 단일 언어
-            // 🚨 규격 크기 23 칼준수 유지 (한글 라인 기준)
+            // 🆕 [버그 수정 2026-08-10] 지시사항: "자기주도 플래너" 글씨가 너무 진하지 않게,
+            // 영문 글자크기 15 / 한글 글자크기 14로 조정. 기존 한글 fontSize 23 / FontWeight.w900
+            // (가장 굵은 값)을 fontSize 14 / FontWeight.w600(중간 굵기)으로 낮춤.
             SizedBox(
               width: 210,
               child: _biTitle(
                 'plannerTitle',
                 textAlign: TextAlign.center,
-                enStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 15, fontWeight: FontWeight.bold),
-                koStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 23, fontWeight: FontWeight.w900), // 🚨 선배님 지시: 글자 크기 23 유지
-                foreignStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 21, fontWeight: FontWeight.w900),
+                enStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 15, fontWeight: FontWeight.w600),
+                koStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 14, fontWeight: FontWeight.w600),
+                foreignStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ], // end of title children
@@ -190,6 +210,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
         children: [
           // 1단계: 필수 파라미터와 함께 구동되는  계획 레이어
           PlanningScreen(
+            key: _planningKey,
             selectedDate: _selectedDate,
             currentWeekday: currentWeekdayStr,
             mainSchedules: _todayMainSchedules,
@@ -200,7 +221,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
             },
           ),
           // 2단계:  실행 레이어
-          const LearningScreen(),
+          LearningScreen(key: _learningKey),
           // 3단계:  리포트 레이어
           const ReportScreen(),
         ],

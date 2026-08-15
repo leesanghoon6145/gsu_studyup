@@ -16,6 +16,13 @@
 // 시각 알람 권한이 필요합니다. 아래 코드에서 앱 실행 중 권한을 요청하지만,
 // 사용자가 권한을 거부하면 알림이 울리지 않을 수 있습니다. 실기기에서
 // 최초 실행 시 권한 요청 팝업이 뜨면 반드시 허용해 주세요.
+//
+// ✅ [2026-08-15 수정] 예약 모드를 AndroidScheduleMode.alarmClock 에서
+// AndroidScheduleMode.exactAllowWhileIdle 로 변경했습니다. 실제 기기에서
+// alarmClock 모드는 예약 로그상 "성공"으로 찍히는데도 실제 알림이 발동하지
+// 않는 문제가 있었습니다. 반면 학생용 timer2_services.dart는 처음부터
+// exactAllowWhileIdle 모드를 쓰고 있고 실기기에서 안정적으로 작동 중이므로,
+// 검증된 방식으로 통일했습니다. (다른 로직은 전혀 변경하지 않았습니다)
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -125,7 +132,8 @@ class NotificationService {
       );
 
       try {
-        // 🆕 [1차 시도] 정확한 시각에 울리는 예약 (정확한 알람 권한이 있어야 함)
+        // ✅ [2026-08-15 수정] alarmClock -> exactAllowWhileIdle 로 변경.
+        // 학생용 timer2_services.dart와 동일한, 실기기에서 검증된 예약 모드로 통일함.
         await _plugin.zonedSchedule(
           _notifId(id),
           title,
@@ -241,10 +249,10 @@ class _NotificationPermissionBannerState extends State<NotificationPermissionBan
 
 // ============================================================================
 // 🆕 [진단 도구] NotificationTestButton
-// "폰 설정을 확인해달라"는 안내만 반복하지 않고, 앱 안에서 직접 10초 뒤
-// 테스트 알림을 예약해볼 수 있는 버튼. 10초 안에 알림이 오면 코드는 정상이고
+// "폰 설정을 확인해달라"는 안내만 반복하지 않고, 앱 안에서 직접 30초 뒤
+// 테스트 알림을 예약해볼 수 있는 버튼. 30초 안에 알림이 오면 코드는 정상이고
 // 순수하게 폰 설정(배터리 최적화, 정확한 알람 권한) 문제라는 게 확실해지고,
-// 10초가 지나도 안 오면 다른 원인을 찾아야 한다는 것도 명확해집니다.
+// 30초가 지나도 안 오면 다른 원인을 찾아야 한다는 것도 명확해집니다.
 // ============================================================================
 class NotificationTestButton extends StatefulWidget {
   const NotificationTestButton({super.key});
@@ -272,7 +280,7 @@ class _NotificationTestButtonState extends State<NotificationTestButton> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('30초 후 테스트 알림이 울립니다. 앱을 백그라운드로 보내고 기다려보세요.')),
+        const SnackBar(content: Text('Test notification in 30s - send the app to background and wait. (30초 후 테스트 알림이 울립니다. 앱을 백그라운드로 보내고 기다려보세요.)')),
       );
     }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
+import 'three_color_pencil_icon.dart'; // 🆕 [2026-08-15] 앱 전체 통일 3색+연필 수정 아이콘
 
 /// ============================================================================
 /// [GKE StudyUp] 일간 뷰 - 오늘 주요 일정(Todo) 목록 전담 위젯 섹션
@@ -176,7 +177,8 @@ class DailyTodoListSection extends StatelessWidget {
                         overflow: TextOverflow.ellipsis
                     )
                 ),
-                Icon(Icons.remove_red_eye, color: goldColor.withOpacity(0.7), size: 18),
+                // 🆕 [아이콘 통일 2026-08-15] 앱 전체 표준인 3색(빨/노/파)+연필 아이콘으로 통일함.
+                const ThreeColorPencilIcon(size: 14),
               ],
             ),
           ),

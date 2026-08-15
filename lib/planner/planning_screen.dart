@@ -8,6 +8,7 @@ import 'widgets/study_timeline_section.dart'; // [주석] 새로 분가한 학�
 import 'widgets/planner_calendar_view.dart'; // [주석] 새로 분가한 플래너 달력 그리드 위젯 임포트
 import 'widgets/daily_todo_list_section.dart'; // [주석] 새로 분가한 하루 주요 일정 섹션 임포트
 import 'widgets/study_timelines.dart';
+import 'widgets/three_color_pencil_icon.dart'; // 🆕 [2026-08-15] 앱 전체 통일 3색+연필 수정 아이콘
 import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
 /// ============================================================================
 /// [GKE StudyUp] 자기주도 학습 플래너 - 학습 계획 스크린 (planning_screen.dart)
@@ -20,18 +21,18 @@ class PlanningScreen extends StatefulWidget {
   final Function(DateTime) onDateTap;
 
   const PlanningScreen({
-    Key? key,
+    super.key,
     required this.selectedDate,
     required this.currentWeekday,
     required this.mainSchedules,
     required this.onDateTap,
-  }) : super(key: key);
+  });
 
   @override
-  State<PlanningScreen> createState() => _PlanningScreenState();
+  State<PlanningScreen> createState() => PlanningScreenState();
 }
 
-class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+class PlanningScreenState extends State<PlanningScreen> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true; // 👑 [주석] 탭 전환 시 화면 유지 및 버벅임 방지
 
@@ -341,8 +342,13 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   // 🆕 [C범위] 팝업 안에서 "$month월 $day일" 형태로 쓰던 부분을 언어별로 자연스럽게 표기
+  // 🆕 [버그 수정 2026-08-13] 원장님 지시: "07월03일" 형태로 통일 - 월/일 모두 2자리 0채움,
+  // "월"과 숫자 사이 공백 없음. 이 헬퍼를 쓰는 모든 곳(연간 주요일정 리스트, 각종 팝업 등)에
+  // 공통 적용됨.
   static String _monthDayText(int month, int day) {
-    return DkeLang.current == 'KO' ? '$month월 $day일' : '$month/$day';
+    final String mm = month.toString().padLeft(2, '0');
+    final String dd = day.toString().padLeft(2, '0');
+    return DkeLang.current == 'KO' ? '$mm월$dd일' : '$mm/$dd';
   }
 
   static const Map<String, List<String>> _weekdaySunFirst = {
@@ -363,6 +369,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   };
   static List<String> _weekdaysSunFirst() => _weekdaySunFirst[DkeLang.current] ?? _weekdaySunFirst['EN']!;
   static List<String> _weekdaysMonFirst() => _weekdayMonFirst[DkeLang.current] ?? _weekdayMonFirst['EN']!;
+
+  // 🆕 [버그 수정 2026-08-16] "08/09 Sunday/일요일"처럼 요일 전체 이름이 필요한 곳(개인 시간표
+  // 편집 페이지 상단 표시)에서 사용하는 고정 배열. 일요일부터 시작(index 0=일요일).
+  static const List<String> _weekdayFullEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  static const List<String> _weekdayFullKo = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
   void _checkAndExpandYears(int currentYear) {
     String targetStr = '$currentYear년';
@@ -874,7 +885,7 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
 
       final List<Map<String, dynamic>> serializableSchedules = _globalSchedules.map((item) {
         final Map<String, dynamic> copy = Map.from(item);
-        if (copy['color'] is Color) { copy['color'] = (copy['color'] as Color).value; }
+        if (copy['color'] is Color) { copy['color'] = (copy['color'] as Color).toARGB32(); }
         return copy;
       }).toList();
       await prefs.setString('gke_global_schedules', jsonEncode(serializableSchedules));
@@ -882,6 +893,14 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     } catch (e) {
       debugPrint('[GKE StudyUp] Error serializing master data: $e');
     }
+  }
+
+  // 🆕 [2026-08-14] 실행 탭에서 새 일정을 추가/수정하면 gke_global_schedules가 바뀌는데,
+  // 계획 탭은 AutomaticKeepAliveClientMixin 때문에 탭을 다시 봐도 자동으로 새로고침되지 않음.
+  // main_self_learning_planner_screen.dart가 계획 탭으로 돌아올 때 이 공개 메서드를 호출해서
+  // 최신 데이터를 다시 불러오게 함.
+  Future<void> refreshFromExternalChanges() async {
+    await _loadMasterData();
   }
 
   Future<void> _loadMasterData() async {
@@ -2169,16 +2188,30 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
   }
 
   // ============================================================================
-  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 - 주간 탭에서 요일 하나를 탭하면 열리는 팝업.
+  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 - 주간 탭에서 요일 하나를 탭하면 열리는 시트.
   // 그 요일의 전체 일정을 스크롤로 모두 보여주고, 추가/수정/삭제가 가능하며, 저장은
   // gke_custom_schedules(SharedPreferences)에 그대로 반영되어 학사 타이머 화면과 실시간 연동됨.
+  // 🆕 [버그 수정 2026-08-13] 기존엔 이 시트 안에서 항목을 탭하면 showDialog()로 별도의 팝업을
+  // "중첩"해서 띄우는 구조였음. 그런데 바텀시트(로컬 네비게이터 기준)와 다이얼로그(기본은 최상위
+  // 네비게이터 기준)의 정렬을 useRootNavigator: false/true 양쪽 다 시도해도 계속 "화면이 흐려지기만
+  // 하고 아무것도 안 뜸" 증상이 재현됨(앱 전체 구조에 숨겨진 네비게이터가 있을 가능성). 근본적으로
+  // 다이얼로그를 "중첩"하는 구조 자체를 없애고, 같은 시트 안에서 "목록 화면" ↔ "입력 화면"을
+  // 전환하는 방식으로 다시 설계함 — 이러면 네비게이터가 꼬일 여지 자체가 없어서 100% 안전함.
+  // ============================================================================
+  // ============================================================================
+  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 - 주간 탭에서 요일 하나를 탭하면 열리는 시트.
+  // 그 요일의 전체 일정을 스크롤로 모두 보여주고, 추가/수정/삭제가 가능하며, 저장은
+  // gke_custom_schedules(SharedPreferences)에 그대로 반영되어 학사 타이머 화면과 실시간 연동됨.
+  // 🆕 [버그 수정 2026-08-15] 바텀시트 안에서 화면을 전환하는 방식(목록↔입력폼)에서 "먹통" 문제가
+  // 여러 차례 재발해서, 근본적으로 재설계함. 이제 바텀시트는 목록 표시 역할만 하고(이 부분은 계속
+  // 정상 작동해왔음), 추가/수정은 바텀시트 밖 완전히 별도의 새 페이지(전체 화면 Navigator.push)로
+  // 분리함. 실행 탭의 알람 설정과 동일한 방식으로 통일함.
   // ============================================================================
   void _showPersonalDayScheduleSheet(DateTime date, int dayIdxSunFirst, String weekdayEnKey) async {
-    // 🆕 [버그 수정 2026-08-12] 기존엔 await 없이 그냥 호출만 하고 바로 시트를 열었기 때문에,
-    // 다른 화면(학사 타이머 등)에서 방금 수정한 데이터가 이 시트의 첫 렌더링에 반영되지 않는
-    // 경쟁 상태(race condition)가 있었음. 이제 로드가 끝날 때까지 확실히 기다린 뒤에 시트를 염.
     await _loadPersonalTimetableCache();
     if (!mounted) return;
+
+    final String cacheKey = 'PERSONAL_$weekdayEnKey';
 
     showModalBottomSheet(
       context: context,
@@ -2191,251 +2224,152 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           builder: (BuildContext modalContext, StateSetter setModalState) {
             final List<Map<String, String>> items = _getPersonalScheduleFor(weekdayEnKey);
             final String dayLabelKo = _weekdaysSunFirst()[dayIdxSunFirst];
-            final String dayLabelEn = (_weekdaySunFirst['EN'] ?? const ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[dayIdxSunFirst];
+            final String dayLabelEn = (_weekdaySunFirst['EN'] ?? const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'])[dayIdxSunFirst];
 
-            return DraggableScrollableSheet(
-              initialChildSize: 0.75,
-              minChildSize: 0.4,
-              maxChildSize: 0.92,
-              expand: false,
-              builder: (context, scrollController) {
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${date.month}/${date.day} ($dayLabelKo/$dayLabelEn) ${_t('weekTimelineWord')}',
-                              overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                              style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              _showPersonalItemEditDialog(
-                                weekdayEnKey: weekdayEnKey,
-                                onSaved: () { setModalState(() {}); },
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5), color: goldColor.withValues(alpha: 0.08)),
-                              child: Icon(Icons.add, color: goldColor, size: 20),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(color: Color(0xFF1E293B), height: 20),
-                      Expanded(
-                        child: items.isEmpty
-                            ? Center(child: Text(_t('academicTimelineEmptyState'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)))
-                            : ListView.builder(
-                          controller: scrollController,
-                          itemCount: items.length,
-                          itemBuilder: (context, idx) {
-                            final Map<String, String> item = items[idx];
-                            final bool isTimePassedNow = () {
-                              final int? start = _parsePersonalStartMinutes(item['time'] ?? '');
-                              if (start == null) return false;
-                              final now = DateTime.now();
-                              return start <= (now.hour * 60 + now.minute);
-                            }();
-                            return GestureDetector(
-                              onTap: () {
-                                _showPersonalItemEditDialog(
-                                  weekdayEnKey: weekdayEnKey,
-                                  index: idx,
-                                  initialTime: item['time'],
-                                  initialTask: item['task'],
-                                  onSaved: () { setModalState(() {}); },
-                                );
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0F172A),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: slate800),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: 92,
-                                      child: Text(
-                                        item['time'] ?? '',
-                                        overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                                        style: GoogleFonts.notoSerif(fontSize: 12, color: isTimePassedNow ? slate500 : goldColor, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    Container(width: 3, height: 28, margin: const EdgeInsets.symmetric(horizontal: 10), color: isTimePassedNow ? slate500 : goldColor),
-                                    Expanded(
-                                      child: Text(
-                                        item['task'] ?? '',
-                                        style: GoogleFonts.notoSansKr(fontSize: 13, color: isTimePassedNow ? slate400 : Colors.white, fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                    _buildEditActionIcon(size: 14),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // 🆕 [2026-08-03] 개인 시간표 항목 1개 추가/수정/삭제 다이얼로그.
-  // 저장/삭제 즉시 gke_custom_schedules에 반영되어 학사 타이머 화면과 실시간 연동됨.
-  void _showPersonalItemEditDialog({
-    required String weekdayEnKey,
-    int? index,
-    String? initialTime,
-    String? initialTask,
-    required VoidCallback onSaved,
-  }) {
-    final TextEditingController timeController = TextEditingController(text: initialTime ?? '');
-    final TextEditingController taskController = TextEditingController(text: initialTask ?? '');
-    final String cacheKey = 'PERSONAL_$weekdayEnKey';
-
-    // 🆕 [버그 수정 2026-08-12] 이 다이얼로그는 "주간 → 요일 탭" 시 열리는 바텀시트(모달) 안에서
-    // 호출됨. showDialog()는 기본적으로 최상위(root) 네비게이터를 기준으로 열리는데, 바텀시트는
-    // 🆕 [버그 수정 2026-08-13] useRootNavigator: false(로컬 네비게이터 통일) 방식으로도 여전히
-    // 화면이 흐려지기만 하고 다이얼로그가 안 보이는 증상이 남아있어서, 더 확실한 방법으로 교체함.
-    // 앱 전체 구조상 이 화면보다 더 안쪽에 숨겨진 네비게이터가 있을 수 있어 "로컬" 기준은 상황에 따라
-    // 여전히 어긋날 수 있음. 대신 시트(_showPersonalDayScheduleSheet)와 이 다이얼로그 둘 다
-    // useRootNavigator: true로 명시해서 항상 앱의 최상위 네비게이터 하나로 통일시킴 - 중첩된 바텀시트
-    // 안에서 다이얼로그를 띄울 때 가장 안전하고 표준적인 해법.
-    showDialog(
-      context: context,
-      useRootNavigator: true,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF020617),
-          shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
-          title: Text(
-            index == null ? _biStr('popupAddNewEntryTitle') : _biStr('popupEditModeTitle'),
-            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-            style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: '09:00 - 10:00', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
-                    filled: true, fillColor: const Color(0xFF0F172A),
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(_biStr('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: taskController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: _biStr('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
-                    filled: true, fillColor: const Color(0xFF0F172A),
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (index != null)
-                  Flexible(
-                    child: TextButton(
-                      onPressed: () {
-                        setState(() {
-                          final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
-                          list.removeAt(index);
-                          _personalTimetableCache[cacheKey] = list;
-                        });
-                        _savePersonalTimetableCache();
-                        onSaved();
-                        Navigator.of(dialogContext).pop();
-                      },
-                      child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ),
-                  )
-                else
-                  const SizedBox.shrink(),
-                Row(
-                  children: [
-                    Flexible(
-                      child: TextButton(
-                        onPressed: () { Navigator.of(dialogContext).pop(); },
-                        child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: goldColor),
-                        onPressed: () {
-                          final String newTime = timeController.text.trim();
-                          final String newTask = taskController.text.trim();
-                          if (newTime.isEmpty || newTask.isEmpty) return;
-
-                          setState(() {
-                            final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
-                            final Map<String, String> newItem = {'time': newTime, 'task': newTask};
-                            if (index == null) {
-                              // 🆕 시간순 자동 배치 - 시작 시각 기준으로 올바른 위치에 삽입
-                              final int? newStart = _parsePersonalStartMinutes(newTime);
-                              int insertAt = list.length;
-                              if (newStart != null) {
-                                insertAt = list.indexWhere((e) {
-                                  final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
-                                  return existingStart != null && existingStart > newStart;
-                                });
-                                if (insertAt == -1) insertAt = list.length;
-                              }
-                              list.insert(insertAt, newItem);
-                            } else {
-                              list[index] = newItem;
-                            }
-                            _personalTimetableCache[cacheKey] = list;
+            Future<void> openEditPage({int? index}) async {
+              final Map<String, String>? item = index != null ? items[index] : null;
+              // 🆕 [버그 수정 2026-08-16] 정확한 원인 확정: 이 바텀시트는 useRootNavigator: true로
+              // 열었는데, 여기서 pop()/push()는 rootNavigator를 명시하지 않아서 기본값(가장 가까운
+              // 네비게이터)을 썼음. 이 앱에 중첩된 네비게이터가 있으면 시트가 열려있는 네비게이터와
+              // 다른 네비게이터를 건드리게 되어, 시트는 실제로 안 닫힌 채 남고 새 페이지는 그 뒤에
+              // 깔려서 "빈 화면"처럼 보이던 것. pop/push 모두 rootNavigator: true로 명시해서
+              // 바텀시트를 연 것과 정확히 같은 네비게이터를 쓰도록 통일함.
+              Navigator.of(context, rootNavigator: true).pop();
+              await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(
+                builder: (_) => _PersonalItemEditPage(
+                  // 🆕 [버그 수정 2026-08-16] 원장님 지시: "08/09 Sunday/일요일" 형식으로 변경.
+                  // 월/일을 2자리 0채움으로 앞에 붙이고, 요일도 약자(Sun/일) 대신 전체 이름
+                  // (Sunday/일요일)으로 표시함.
+                  weekdayLabel: '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')} '
+                      '${(_weekdayFullEn)[dayIdxSunFirst]}/${(_weekdayFullKo)[dayIdxSunFirst]}',
+                  initialTime: item?['time'],
+                  initialTask: item?['task'],
+                  isNew: index == null,
+                  goldColor: goldColor, slate400: slate400, slate500: slate500, slate800: slate800, examColor: examColor,
+                  biStrFunc: _biStr,
+                  onSave: (String newTime, String newTask) async {
+                    setState(() {
+                      final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
+                      final Map<String, String> newItem = {'time': newTime, 'task': newTask};
+                      if (index == null) {
+                        final int? newStart = _parsePersonalStartMinutes(newTime);
+                        int insertAt = list.length;
+                        if (newStart != null) {
+                          insertAt = list.indexWhere((e) {
+                            final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
+                            return existingStart != null && existingStart > newStart;
                           });
-                          _savePersonalTimetableCache();
-                          onSaved();
-                          Navigator.of(dialogContext).pop();
+                          if (insertAt == -1) insertAt = list.length;
+                        }
+                        list.insert(insertAt, newItem);
+                      } else {
+                        list[index] = newItem;
+                      }
+                      _personalTimetableCache[cacheKey] = list;
+                    });
+                    await _savePersonalTimetableCache();
+                  },
+                  onDelete: index == null
+                      ? null
+                      : () async {
+                    setState(() {
+                      final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
+                      list.removeAt(index);
+                      _personalTimetableCache[cacheKey] = list;
+                    });
+                    await _savePersonalTimetableCache();
+                  },
+                ),
+              ));
+              if (mounted) _showPersonalDayScheduleSheet(date, dayIdxSunFirst, weekdayEnKey);
+            }
+
+            return SizedBox(
+              height: MediaQuery.of(modalContext).size.height * 0.75,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${date.month}/${date.day} ($dayLabelKo/$dayLabelEn) ${_t('weekTimelineWord')}',
+                            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                            style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => openEditPage(),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5), color: goldColor.withValues(alpha: 0.08)),
+                            child: Icon(Icons.add, color: goldColor, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: Color(0xFF1E293B), height: 20),
+                    Expanded(
+                      child: items.isEmpty
+                          ? Center(child: Text(_t('academicTimelineEmptyState'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)))
+                          : ListView.builder(
+                        itemCount: items.length,
+                        itemBuilder: (context, idx) {
+                          final Map<String, String> item = items[idx];
+                          return GestureDetector(
+                            onTap: () => openEditPage(index: idx),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: slate800),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 92,
+                                    child: Text(
+                                      item['time'] ?? '',
+                                      overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                                      style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Container(width: 3, height: 28, margin: const EdgeInsets.symmetric(horizontal: 10), color: goldColor),
+                                  Expanded(
+                                    child: Text(
+                                      item['task'] ?? '',
+                                      style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                  _buildEditActionIcon(size: 14),
+                                ],
+                              ),
+                            ),
+                          );
                         },
-                        child: Text(_biStr('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ],
+              ),
+            );
+          },
         );
       },
-    );
+    ).then((_) => _loadPersonalTimetableCache());
   }
+
+  // ============================================================================
+  // 🆕 [버그 수정 2026-08-15] 개인 시간표 항목 추가/수정 전용 독립 페이지. 바텀시트 안이 아니라
+  // 완전한 별도 화면(전체 화면 Navigator.push)으로 열림 - 실행 탭의 알람 편집 페이지와 동일한
+  // 설계 방식을 그대로 따름.
+  // ============================================================================
 
   // [주석] 일정 추가 클릭 시 호출되는 팝업: 학교, 회사, 학원, 시험, 개인 항목 중 "개인"을 학교 아래로 줄 바꿔 배치
   // 🆕 [12개국] 카테고리 내부 값(tempCategory)은 기존 로직/색상 매핑 호환을 위해 한국어 키를 그대로 유지하고,
@@ -2622,17 +2556,11 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
     );
   }
 
-  // 🆕 [2026-08-02] 일간/주간/월간/연간 리스트 항목 공통 "탭하여 수정" 표시 아이콘.
-  // 기존 눈(remove_red_eye) 아이콘 대신 3선(메뉴) + 연필 조합으로 통일 표시함.
+  // 🆕 [2026-08-15] 일간/주간/월간/연간 리스트 항목 공통 "탭하여 수정" 표시 아이콘.
+  // 원장님 지시: 눈(remove_red_eye)이나 메뉴+연필 조합이 아니라, 앱 전체 표준인
+  // 3색(빨/노/파) 막대 + 연필 오버레이 아이콘(ThreeColorPencilIcon)으로 완전 통일함.
   Widget _buildEditActionIcon({double size = 14}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.menu, color: goldColor.withValues(alpha: 0.45), size: size),
-        SizedBox(width: size * 0.18),
-        Icon(Icons.edit, color: goldColor.withValues(alpha: 0.85), size: size),
-      ],
-    );
+    return ThreeColorPencilIcon(size: size);
   }
 
   Widget _buildReadOnlyStaticTargetItem(String targetText) {
@@ -3173,7 +3101,9 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
           children: [
             Text(timeLabel, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor)),
             const SizedBox(width: 8),
-            Text('|', style: TextStyle(color: leftBarColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            // 🆕 [버그 수정 2026-08-13] 폰트 글자 "|"는 두께 조절이 부정확해서, 두께를 정확히
+            // 지정할 수 있는 실제 사각형 막대로 교체함 (기존 대비 약 3배 두껍게: width 4).
+            Container(width: 4, height: 16, color: leftBarColor),
             const SizedBox(width: 8),
             Expanded(
               child: Text(eventTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.left, overflow: TextOverflow.ellipsis),
@@ -3391,6 +3321,159 @@ class _PlanningScreenState extends State<PlanningScreen> with SingleTickerProvid
               );
             }).toList(),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 🆕 [버그 수정 2026-08-15] 주간 탭 - 개인 시간표 항목 추가/수정 전용 독립 페이지.
+// 바텀시트 안이 아니라 완전한 별도 화면(전체 화면 Navigator.push)으로 열림.
+// ============================================================================
+class _PersonalItemEditPage extends StatefulWidget {
+  final String weekdayLabel;
+  final String? initialTime;
+  final String? initialTask;
+  final bool isNew;
+  final Color goldColor;
+  final Color slate400;
+  final Color slate500;
+  final Color slate800;
+  final Color examColor;
+  final String Function(String) biStrFunc;
+  final Future<void> Function(String time, String task) onSave;
+  final Future<void> Function()? onDelete;
+
+  const _PersonalItemEditPage({
+    super.key,
+    required this.weekdayLabel,
+    this.initialTime,
+    this.initialTask,
+    required this.isNew,
+    required this.goldColor,
+    required this.slate400,
+    required this.slate500,
+    required this.slate800,
+    required this.examColor,
+    required this.biStrFunc,
+    required this.onSave,
+    this.onDelete,
+  });
+
+  @override
+  State<_PersonalItemEditPage> createState() => _PersonalItemEditPageState();
+}
+
+class _PersonalItemEditPageState extends State<_PersonalItemEditPage> {
+  late final TextEditingController _timeController;
+  late final TextEditingController _taskController;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timeController = TextEditingController(text: widget.initialTime ?? '');
+    _taskController = TextEditingController(text: widget.initialTask ?? '');
+  }
+
+  @override
+  void dispose() {
+    _timeController.dispose();
+    _taskController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    final String time = _timeController.text.trim();
+    final String task = _taskController.text.trim();
+    if (time.isEmpty || task.isEmpty) return;
+    setState(() => _saving = true);
+    await widget.onSave(time, task);
+    if (mounted) Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  Future<void> _handleDelete() async {
+    if (widget.onDelete == null) return;
+    setState(() => _saving = true);
+    await widget.onDelete!();
+    if (mounted) Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF020617),
+        elevation: 0,
+        leading: IconButton(icon: Icon(Icons.arrow_back, color: widget.goldColor), onPressed: () => Navigator.of(context, rootNavigator: true).pop()),
+        title: Text(
+          widget.weekdayLabel,
+          overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.biStrFunc('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: '09:00 - 10:00', hintStyle: GoogleFonts.notoSansKr(color: widget.slate500, fontSize: 12),
+                filled: true, fillColor: const Color(0xFF0F172A),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.goldColor)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(widget.biStrFunc('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _taskController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: widget.biStrFunc('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: widget.slate500, fontSize: 12),
+                filled: true, fillColor: const Color(0xFF0F172A),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.goldColor)),
+              ),
+            ),
+            const SizedBox(height: 28),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (widget.onDelete != null)
+                  Flexible(
+                    child: TextButton(
+                      onPressed: _saving ? null : _handleDelete,
+                      child: Text(widget.biStrFunc('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: TextStyle(color: widget.examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                Row(
+                  children: [
+                    Flexible(
+                      child: TextButton(
+                        onPressed: _saving ? null : () => Navigator.of(context, rootNavigator: true).pop(),
+                        child: Text(widget.biStrFunc('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: widget.slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: widget.goldColor),
+                        onPressed: _saving ? null : _handleSave,
+                        child: Text(widget.biStrFunc('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

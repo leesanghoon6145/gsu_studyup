@@ -2,13 +2,17 @@
 // 🆕 [일반 플래너] AppointmentScreen (약속)
 // 약속(누구와, 언제, 어디서) 목록을 시간순으로 보여줍니다. 캘린더 화면과
 // 동일한 고급 팝업 디자인(골드 글로우 테두리)과 영한 병기 규칙을 적용했습니다.
+//
+// ✅ [수정 완료] 저장된 약속을 실제 푸시 알림(NotificationService)으로 발송하는
+// 기능을 연결했습니다. 시간이 설정된 약속만 추가/수정 시 scheduleAt(), 삭제 시
+// cancel() 호출. (다른 로직/디자인/다국어는 전혀 변경하지 않았습니다)
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'appointment_data_service.dart';
 import 'bilingual_text.dart';
-import 'notification_service.dart'; // 🆕 [권한 안내 배너]
+import 'notification_service.dart'; // 🆕 [권한 안내 배너 + 알림 예약/취소]
 
 class AppointmentScreen extends StatefulWidget {
   const AppointmentScreen({super.key});
@@ -222,6 +226,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
 
     if (action == 'delete' && existing != null) {
       await AppointmentDataService.delete(existing.id);
+      await NotificationService.cancel(existing.id); // 🆕 [알림 연동] 삭제 시 예약된 알람도 취소
       await _load();
       return;
     }
@@ -242,6 +247,18 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           isCompleted: existing.isCompleted,
         );
         await AppointmentDataService.update(updated);
+        // 🆕 [알림 연동] 시간이 설정되어 있으면 알람 재예약, 시간이 없으면 취소
+        if (updated.time.isNotEmpty) {
+          await NotificationService.scheduleAt(
+            id: updated.id,
+            title: updated.title,
+            body: updated.location.isNotEmpty ? '${updated.withPerson} · ${updated.location}' : updated.withPerson,
+            date: updated.date,
+            time: updated.time,
+          );
+        } else {
+          await NotificationService.cancel(updated.id);
+        }
       } else {
         final newItem = AppointmentItem(
           id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -253,6 +270,16 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           memo: memoCtrl.text.trim(),
         );
         await AppointmentDataService.add(newItem);
+        // 🆕 [알림 연동] 시간이 설정된 약속만 알람 예약
+        if (newItem.time.isNotEmpty) {
+          await NotificationService.scheduleAt(
+            id: newItem.id,
+            title: newItem.title,
+            body: newItem.location.isNotEmpty ? '${newItem.withPerson} · ${newItem.location}' : newItem.withPerson,
+            date: newItem.date,
+            time: newItem.time,
+          );
+        }
       }
       await _load();
     }

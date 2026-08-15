@@ -3,15 +3,16 @@
 // 알림 목록을 관리합니다(추가/수정/삭제/켜짐끄짐 토글). 반복 유형(한번/매일/매주)
 // 선택 가능. 캘린더/약속/프로젝트와 동일한 골드 글로우 팝업 디자인 + 영한 병기.
 //
-// ⚠️ [참고] 저장된 알림을 실제 푸시 알림으로 발송하는 기능은 아직 연결되지
-// 않았습니다 (reminder_data_service.dart 상단 주석 참고).
+// ✅ [수정 완료] 저장된 알림을 실제 푸시 알림(NotificationService)으로 발송하는
+// 기능을 연결했습니다. 추가/수정 시 scheduleAt(), 삭제/끄기 시 cancel() 호출.
+// (다른 로직/디자인/다국어는 전혀 변경하지 않았습니다)
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'reminder_data_service.dart';
 import 'bilingual_text.dart';
-import 'notification_service.dart'; // 🆕 [권한 안내 배너]
+import 'notification_service.dart'; // 🆕 [권한 안내 배너 + 알림 예약/취소]
 
 class _RepeatOption {
   final String enLabel;
@@ -58,6 +59,19 @@ class _ReminderScreenState extends State<ReminderScreen> {
   Future<void> _toggleEnabled(ReminderItem item) async {
     item.isEnabled = !item.isEnabled;
     await ReminderDataService.update(item);
+    // 🆕 [알림 연동] 켜짐/꺼짐에 따라 실제 알람도 예약/취소
+    if (item.isEnabled) {
+      await NotificationService.scheduleAt(
+        id: item.id,
+        title: item.title,
+        body: item.memo.isNotEmpty ? item.memo : item.title,
+        date: item.date,
+        time: item.time,
+        repeatType: item.repeatType,
+      );
+    } else {
+      await NotificationService.cancel(item.id);
+    }
     await _load();
   }
 
@@ -242,6 +256,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
 
     if (action == 'delete' && existing != null) {
       await ReminderDataService.delete(existing.id);
+      await NotificationService.cancel(existing.id); // 🆕 [알림 연동] 삭제 시 예약된 알람도 취소
       await _load();
       return;
     }
@@ -261,6 +276,19 @@ class _ReminderScreenState extends State<ReminderScreen> {
           memo: memoCtrl.text.trim(),
         );
         await ReminderDataService.update(updated);
+        // 🆕 [알림 연동] 수정된 내용으로 알람 재예약 (켜져 있을 때만, 꺼져있으면 취소)
+        if (updated.isEnabled) {
+          await NotificationService.scheduleAt(
+            id: updated.id,
+            title: updated.title,
+            body: updated.memo.isNotEmpty ? updated.memo : updated.title,
+            date: updated.date,
+            time: updated.time,
+            repeatType: updated.repeatType,
+          );
+        } else {
+          await NotificationService.cancel(updated.id);
+        }
       } else {
         final newItem = ReminderItem(
           id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -271,6 +299,15 @@ class _ReminderScreenState extends State<ReminderScreen> {
           memo: memoCtrl.text.trim(),
         );
         await ReminderDataService.add(newItem);
+        // 🆕 [알림 연동] 새로 추가된 알림을 실제 알람으로 예약
+        await NotificationService.scheduleAt(
+          id: newItem.id,
+          title: newItem.title,
+          body: newItem.memo.isNotEmpty ? newItem.memo : newItem.title,
+          date: newItem.date,
+          time: newItem.time,
+          repeatType: newItem.repeatType,
+        );
       }
       await _load();
     }
@@ -315,7 +352,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
         child: Column(
           children: [
             const NotificationPermissionBanner(), // 🆕 [권한 안내 배너] 알림이 꺼져있으면 여기 안내가 뜸
-            const NotificationTestButton(), // 🆕 [진단 도구] 10초 테스트 알림 버튼
+            const NotificationTestButton(), // 🆕 [진단 도구] 30초 테스트 알림 버튼
             Expanded(
               child: _items.isEmpty
                   ? Center(
