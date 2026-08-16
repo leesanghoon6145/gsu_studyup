@@ -13,6 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'appointment_data_service.dart';
 import 'bilingual_text.dart';
 import 'notification_service.dart'; // 🆕 [권한 안내 배너 + 알림 예약/취소]
+import 'reminder_watcher_service.dart'; // 🆕 [2026-08-16 우회로] 예약 자동발동 실패 문제로 직접 감시하는 방식 추가
 
 class AppointmentScreen extends StatefulWidget {
   const AppointmentScreen({super.key});
@@ -33,6 +34,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
   void initState() {
     super.initState();
     _load();
+    ReminderWatcherService.instance.start(); // 🆕 [2026-08-16 우회로] 예약 자동발동 대신 직접 감시 시작 (리마인더 화면과 공유되는 싱글턴이라 중복 시작 안전함)
   }
 
   Future<void> _load() async {

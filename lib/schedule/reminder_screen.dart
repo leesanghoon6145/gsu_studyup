@@ -10,9 +10,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [2026-08-16 추가] 알람 안내 팝업 확인여부/시간선택 저장용
 import 'reminder_data_service.dart';
 import 'bilingual_text.dart';
 import 'notification_service.dart'; // 🆕 [권한 안내 배너 + 알림 예약/취소]
+import 'reminder_watcher_service.dart'; // 🆕 [2026-08-16 우회로] 예약 자동발동 실패 문제로 직접 감시하는 방식 추가
 
 class _RepeatOption {
   final String enLabel;
@@ -44,6 +46,129 @@ class _ReminderScreenState extends State<ReminderScreen> {
   void initState() {
     super.initState();
     _load();
+    ReminderWatcherService.instance.start(); // 🆕 [2026-08-16 우회로] 예약 자동발동 대신 직접 감시 시작
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showAlarmOnboardingIfNeeded()); // 🆕 [2026-08-16 추가] 첫 진입 시 알람 안내 팝업
+  }
+
+  // 🆕 [2026-08-16 추가] 리마인더 화면에 처음 들어왔을 때 딱 한 번, 반복
+  // 알람의 특성(직접 앱에서 꺼야 함)을 정중하게 안내하고, 안전 정지 시간을
+  // 사용자가 직접 고르게 하는 팝업. 한 번 확인하면 다시 안 뜹니다.
+  static const String _onboardingShownKey = 'gke_alarm_onboarding_shown_v1';
+
+  Future<void> _showAlarmOnboardingIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool alreadyShown = prefs.getBool(_onboardingShownKey) ?? false;
+    if (alreadyShown) return;
+    if (!mounted) return;
+
+    int selectedMinutes = 1;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false, // 🆕 반드시 아래 버튼으로 확인해야 닫힘 (뒤로가기/바깥 탭으로 못 닫음)
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return PopScope(
+            canPop: false, // 🆕 뒤로가기 버튼으로도 못 닫게 함
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+                  border: Border.all(color: _brandGolden.withOpacity(0.45), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(color: _brandGolden.withOpacity(0.18), blurRadius: 34, spreadRadius: 1),
+                    const BoxShadow(color: Colors.black, blurRadius: 24, offset: Offset(0, 10)),
+                  ],
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.notifications_active_rounded, color: _brandGolden, size: 24),
+                          const SizedBox(width: 8),
+                          Text('학습 알람 안내', style: GoogleFonts.notoSansKr(color: _brandGolden, fontSize: 16, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Container(height: 1, decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _brandGolden.withOpacity(0.5), Colors.transparent]))),
+                      const SizedBox(height: 18),
+                      Text(
+                        '설정하신 시각이 되면, 학습 알람이 정성껏 울려드립니다.\n\n'
+                            '이 알람은 스스로 멈추지 않고 계속 이어지며, 화면에 나타나는 붉은색 "지금 울리는 알람 끄기" 버튼을 눌러주셔야 비로소 멈춥니다. 알림창을 통해서는 꺼지지 않으니, 이 점 미리 헤아려주시기 바랍니다.\n\n'
+                            '혹시 곧바로 손이 닿지 않는 상황을 대비하여, 알람이 스스로 멈추는 시간을 아래에서 미리 정해두실 수 있습니다.',
+                        style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.6),
+                      ),
+                      const SizedBox(height: 20),
+                      Text('안전 정지 시간', style: GoogleFonts.notoSansKr(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() => selectedMinutes = 1),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: selectedMinutes == 1 ? _brandGolden.withOpacity(0.18) : _pageBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: selectedMinutes == 1 ? _brandGolden : Colors.white12, width: selectedMinutes == 1 ? 1.4 : 1),
+                                ),
+                                child: Text('1분 후', style: GoogleFonts.notoSansKr(color: selectedMinutes == 1 ? Colors.white : Colors.white54, fontSize: 13, fontWeight: selectedMinutes == 1 ? FontWeight.bold : FontWeight.normal)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() => selectedMinutes = 5),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: selectedMinutes == 5 ? _brandGolden.withOpacity(0.18) : _pageBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: selectedMinutes == 5 ? _brandGolden : Colors.white12, width: selectedMinutes == 5 ? 1.4 : 1),
+                                ),
+                                child: Text('5분 후', style: GoogleFonts.notoSansKr(color: selectedMinutes == 5 ? Colors.white : Colors.white54, fontSize: 13, fontWeight: selectedMinutes == 5 ? FontWeight.bold : FontWeight.normal)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: _brandGolden, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 4, shadowColor: _brandGolden.withOpacity(0.5)),
+                          onPressed: () async {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setInt(NotificationService.prefsAlarmRingMinutesKey, selectedMinutes);
+                            await prefs.setBool(_onboardingShownKey, true);
+                            if (context.mounted) Navigator.of(context).pop();
+                          },
+                          child: Text('안내를 확인했습니다', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 13.5, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -351,8 +476,10 @@ class _ReminderScreenState extends State<ReminderScreen> {
         padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
         child: Column(
           children: [
+            const RingingAlarmStopBanner(), // 🆕 [2026-08-16 추가] 지금 울리는 알람을 확실하게 끄는 버튼, 울릴 때만 보임
             const NotificationPermissionBanner(), // 🆕 [권한 안내 배너] 알림이 꺼져있으면 여기 안내가 뜸
-            const NotificationTestButton(), // 🆕 [진단 도구] 30초 테스트 알림 버튼
+            // ✅ [2026-08-16 제거] 진단용 테스트 버튼(30초 예약 테스트, 즉시 알림, 60초 영어전용 테스트)은
+            // 원인 파악용이었고 실제 해결책(우회로 감시자 + 안내 팝업)이 완성되어 더 이상 필요 없어져서 제거함.
             Expanded(
               child: _items.isEmpty
                   ? Center(

@@ -71,6 +71,9 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
   // [주석] 주간 뷰 가로 스크롤 주차 리스트
   int _selectedWeekIndex = 0;
+  // 🆕 [버그 수정 2026-08-16] 원장님 지시: 요일 탭하면 팝업이 아니라 화면에 바로 아래로
+  // 펼쳐지도록 함(아코디언 방식). null이면 전부 접힘, 0~6이면 그 요일(일=0~토=6)만 펼쳐짐.
+  int? _expandedWeekdayIdx;
   final List<String> _scrollableWeeks = ['1주차', '2주차', '3주차', '4주차', '5주차'];
 
   // 🆕 [2026-08-02] 주간(Week) 탭 전용 - "실제 캘린더 주(일~토)" 시작일(일요일) 상태 변수
@@ -1671,47 +1674,122 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
             final String mainTaskTitle = displayItem != null ? (displayItem['task'] ?? '') : _t('selfStudyDefaultTrack');
             final String mainTaskSubLabel = displayItem != null ? (displayItem['time'] ?? '') : _t('academicTimelineEmptyState');
 
-            return GestureDetector(
-              onTap: () { _showPersonalDayScheduleSheet(actualDate, i, weekdayEnKey); },
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF020617),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: isToday ? goldColor : slate800, width: isToday ? 1.5 : 1),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 58,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(color: isSunday ? examColor : goldColor.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(6)),
-                            child: Text('${actualDate.month}/${actualDate.day}($dayLabel)', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
+            return Column(
+              children: [
+                GestureDetector(
+                  // 🆕 [버그 수정 2026-08-16] 팝업을 여는 대신 이 요일을 펼치거나 접음.
+                  onTap: () { setState(() { _expandedWeekdayIdx = (_expandedWeekdayIdx == i) ? null : i; }); },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF020617),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isToday ? goldColor : slate800, width: isToday ? 1.5 : 1),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 58,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(color: isSunday ? examColor : goldColor.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(6)),
+                                child: Text('${actualDate.month}/${actualDate.day}($dayLabel)', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSunday ? Colors.white : goldColor, fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(dayLabelEn, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.gowunBatang(fontSize: 10, color: isSunday ? examColor : slate400, fontWeight: FontWeight.bold)),
+                            ],
                           ),
-                          const SizedBox(height: 3),
-                          Text(dayLabelEn, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.gowunBatang(fontSize: 10, color: isSunday ? examColor : slate400, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(mainTaskTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                              Text(mainTaskSubLabel, style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500), overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        Icon(_expandedWeekdayIdx == i ? Icons.expand_less : Icons.expand_more, color: goldColor, size: 20),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(mainTaskTitle, style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
-                          Text(mainTaskSubLabel, style: GoogleFonts.notoSansKr(fontSize: 12, color: slate500), overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                    _buildEditActionIcon(size: 14),
-                  ],
+                  ),
                 ),
-              ),
+                // 🆕 [버그 수정 2026-08-16] 펼쳐진 요일의 시간표를 화면에 바로(팝업 없이) 나열함.
+                // 항목을 탭했을 때만 편집 팝업 1개가 뜸(_showPersonalEditPopup) - 목록 자체는
+                // 절대 팝업으로 띄우지 않음.
+                if (_expandedWeekdayIdx == i)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(_t('weekTimelineWord'), style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                if (!mounted) return;
+                                _showPersonalEditPopup(actualDate, i, weekdayEnKey, 'PERSONAL_$weekdayEnKey', dayLabel, dayLabelEn);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5)),
+                                child: Icon(Icons.add, color: goldColor, size: 16),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (personalItems.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12.0),
+                            child: Text(_t('academicTimelineEmptyState'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)),
+                          )
+                        else
+                          ...personalItems.asMap().entries.map((pEntry) {
+                            final int pIdx = pEntry.key;
+                            final Map<String, String> pItem = pEntry.value;
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                if (!mounted) return;
+                                _showPersonalEditPopup(
+                                  actualDate,
+                                  i,
+                                  weekdayEnKey,
+                                  'PERSONAL_$weekdayEnKey',
+                                  dayLabel,
+                                  dayLabelEn,
+                                  index: pIdx,
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(6), border: Border.all(color: slate800)),
+                                child: Row(
+                                  children: [
+                                    SizedBox(width: 82, child: Text(pItem['time'] ?? '', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold))),
+                                    Expanded(child: Text(pItem['task'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white))),
+                                    _buildEditActionIcon(size: 13),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+              ],
             );
           }).toList(),
         ] else ...[
@@ -2187,183 +2265,319 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     );
   }
 
-  // ============================================================================
-  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 - 주간 탭에서 요일 하나를 탭하면 열리는 시트.
-  // 그 요일의 전체 일정을 스크롤로 모두 보여주고, 추가/수정/삭제가 가능하며, 저장은
-  // gke_custom_schedules(SharedPreferences)에 그대로 반영되어 학사 타이머 화면과 실시간 연동됨.
-  // 🆕 [버그 수정 2026-08-13] 기존엔 이 시트 안에서 항목을 탭하면 showDialog()로 별도의 팝업을
-  // "중첩"해서 띄우는 구조였음. 그런데 바텀시트(로컬 네비게이터 기준)와 다이얼로그(기본은 최상위
-  // 네비게이터 기준)의 정렬을 useRootNavigator: false/true 양쪽 다 시도해도 계속 "화면이 흐려지기만
-  // 하고 아무것도 안 뜸" 증상이 재현됨(앱 전체 구조에 숨겨진 네비게이터가 있을 가능성). 근본적으로
-  // 다이얼로그를 "중첩"하는 구조 자체를 없애고, 같은 시트 안에서 "목록 화면" ↔ "입력 화면"을
-  // 전환하는 방식으로 다시 설계함 — 이러면 네비게이터가 꼬일 여지 자체가 없어서 100% 안전함.
-  // ============================================================================
-  // ============================================================================
-  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표 - 주간 탭에서 요일 하나를 탭하면 열리는 시트.
-  // 그 요일의 전체 일정을 스크롤로 모두 보여주고, 추가/수정/삭제가 가능하며, 저장은
-  // gke_custom_schedules(SharedPreferences)에 그대로 반영되어 학사 타이머 화면과 실시간 연동됨.
-  // 🆕 [버그 수정 2026-08-15] 바텀시트 안에서 화면을 전환하는 방식(목록↔입력폼)에서 "먹통" 문제가
-  // 여러 차례 재발해서, 근본적으로 재설계함. 이제 바텀시트는 목록 표시 역할만 하고(이 부분은 계속
-  // 정상 작동해왔음), 추가/수정은 바텀시트 밖 완전히 별도의 새 페이지(전체 화면 Navigator.push)로
-  // 분리함. 실행 탭의 알람 설정과 동일한 방식으로 통일함.
-  // ============================================================================
-  void _showPersonalDayScheduleSheet(DateTime date, int dayIdxSunFirst, String weekdayEnKey) async {
-    await _loadPersonalTimetableCache();
+
+  // 🆕 [버그 수정 2026-08-16] 원장님 지시: 요일 목록 자체는 절대 팝업/시트로 띄우지 않고
+  // 화면에 아코디언으로 바로 펼쳐서 보여줌(_buildWeekView 안에서 처리). 항목을 탭했을 때만
+  // 아래 _showPersonalEditPopup 팝업 1개가 뜸 - "목록 팝업 → 편집 팝업" 순환 구조를 완전히
+  // 없애서 더 단순하고 안전해짐.
+
+  void _showPersonalEditPopup(
+      DateTime date,
+      int dayIdxSunFirst,
+      String weekdayEnKey,
+      String cacheKey,
+      String dayLabelKo,
+      String dayLabelEn, {
+        int? index,
+      }) {
     if (!mounted) return;
 
-    final String cacheKey = 'PERSONAL_$weekdayEnKey';
+    final List<Map<String, String>> items =
+    List<Map<String, String>>.from(
+      _personalTimetableCache[cacheKey] ?? <Map<String, String>>[],
+    );
 
-    showModalBottomSheet(
+    // 수정 대상 index가 실제 범위를 벗어나면 안전하게 중단
+    if (index != null && (index < 0 || index >= items.length)) {
+      debugPrint(
+        '[GKE StudyUp] 개인 시간표 수정 오류: '
+            'index=$index, items.length=${items.length}, cacheKey=$cacheKey',
+      );
+      return;
+    }
+
+    final Map<String, String>? item =
+    index != null ? items[index] : null;
+
+    final TextEditingController timeController =
+    TextEditingController(
+      text: item?['time'] ?? '',
+    );
+
+    final TextEditingController taskController =
+    TextEditingController(
+      text: item?['task'] ?? '',
+    );
+
+    showDialog<void>(
       context: context,
-      useRootNavigator: true,
-      backgroundColor: const Color(0xFF020617),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (BuildContext bc) {
-        return StatefulBuilder(
-          builder: (BuildContext modalContext, StateSetter setModalState) {
-            final List<Map<String, String>> items = _getPersonalScheduleFor(weekdayEnKey);
-            final String dayLabelKo = _weekdaysSunFirst()[dayIdxSunFirst];
-            final String dayLabelEn = (_weekdaySunFirst['EN'] ?? const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'])[dayIdxSunFirst];
-
-            Future<void> openEditPage({int? index}) async {
-              final Map<String, String>? item = index != null ? items[index] : null;
-              // 🆕 [버그 수정 2026-08-16] 정확한 원인 확정: 이 바텀시트는 useRootNavigator: true로
-              // 열었는데, 여기서 pop()/push()는 rootNavigator를 명시하지 않아서 기본값(가장 가까운
-              // 네비게이터)을 썼음. 이 앱에 중첩된 네비게이터가 있으면 시트가 열려있는 네비게이터와
-              // 다른 네비게이터를 건드리게 되어, 시트는 실제로 안 닫힌 채 남고 새 페이지는 그 뒤에
-              // 깔려서 "빈 화면"처럼 보이던 것. pop/push 모두 rootNavigator: true로 명시해서
-              // 바텀시트를 연 것과 정확히 같은 네비게이터를 쓰도록 통일함.
-              Navigator.of(context, rootNavigator: true).pop();
-              await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(
-                builder: (_) => _PersonalItemEditPage(
-                  // 🆕 [버그 수정 2026-08-16] 원장님 지시: "08/09 Sunday/일요일" 형식으로 변경.
-                  // 월/일을 2자리 0채움으로 앞에 붙이고, 요일도 약자(Sun/일) 대신 전체 이름
-                  // (Sunday/일요일)으로 표시함.
-                  weekdayLabel: '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')} '
-                      '${(_weekdayFullEn)[dayIdxSunFirst]}/${(_weekdayFullKo)[dayIdxSunFirst]}',
-                  initialTime: item?['time'],
-                  initialTask: item?['task'],
-                  isNew: index == null,
-                  goldColor: goldColor, slate400: slate400, slate500: slate500, slate800: slate800, examColor: examColor,
-                  biStrFunc: _biStr,
-                  onSave: (String newTime, String newTask) async {
-                    setState(() {
-                      final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
-                      final Map<String, String> newItem = {'time': newTime, 'task': newTask};
-                      if (index == null) {
-                        final int? newStart = _parsePersonalStartMinutes(newTime);
-                        int insertAt = list.length;
-                        if (newStart != null) {
-                          insertAt = list.indexWhere((e) {
-                            final int? existingStart = _parsePersonalStartMinutes(e['time'] ?? '');
-                            return existingStart != null && existingStart > newStart;
-                          });
-                          if (insertAt == -1) insertAt = list.length;
-                        }
-                        list.insert(insertAt, newItem);
-                      } else {
-                        list[index] = newItem;
-                      }
-                      _personalTimetableCache[cacheKey] = list;
-                    });
-                    await _savePersonalTimetableCache();
-                  },
-                  onDelete: index == null
-                      ? null
-                      : () async {
-                    setState(() {
-                      final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
-                      list.removeAt(index);
-                      _personalTimetableCache[cacheKey] = list;
-                    });
-                    await _savePersonalTimetableCache();
-                  },
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF020617),
+          shape: RoundedRectangleBorder(
+            side: BorderSide(
+              color: goldColor,
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: Text(
+            index == null
+                ? _biStr('popupAddNewEntryTitle')
+                : _biStr('popupEditModeTitle'),
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            maxLines: 1,
+            style: GoogleFonts.notoSansKr(
+              fontSize: 15,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _biStr('labelTime'),
+                  style: GoogleFonts.notoSerif(
+                    fontSize: 11,
+                    color: goldColor,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ));
-              if (mounted) _showPersonalDayScheduleSheet(date, dayIdxSunFirst, weekdayEnKey);
-            }
+                const SizedBox(height: 4),
 
-            return SizedBox(
-              height: MediaQuery.of(modalContext).size.height * 0.75,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${date.month}/${date.day} ($dayLabelKo/$dayLabelEn) ${_t('weekTimelineWord')}',
-                            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                            style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => openEditPage(),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5), color: goldColor.withValues(alpha: 0.08)),
-                            child: Icon(Icons.add, color: goldColor, size: 20),
-                          ),
-                        ),
-                      ],
+                TextField(
+                  controller: timeController,
+                  style: GoogleFonts.notoSansKr(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '09:00 - 10:00',
+                    hintStyle: GoogleFonts.notoSansKr(
+                      color: slate500,
+                      fontSize: 12,
                     ),
-                    const Divider(color: Color(0xFF1E293B), height: 20),
-                    Expanded(
-                      child: items.isEmpty
-                          ? Center(child: Text(_t('academicTimelineEmptyState'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)))
-                          : ListView.builder(
-                        itemCount: items.length,
-                        itemBuilder: (context, idx) {
-                          final Map<String, String> item = items[idx];
-                          return GestureDetector(
-                            onTap: () => openEditPage(index: idx),
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: slate800),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: 92,
-                                    child: Text(
-                                      item['time'] ?? '',
-                                      overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                                      style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  Container(width: 3, height: 28, margin: const EdgeInsets.symmetric(horizontal: 10), color: goldColor),
-                                  Expanded(
-                                    child: Text(
-                                      item['task'] ?? '',
-                                      style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
-                                    ),
-                                  ),
-                                  _buildEditActionIcon(size: 14),
-                                ],
-                              ),
-                            ),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: slate800),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: goldColor),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                Text(
+                  _biStr('labelTitleField'),
+                  style: GoogleFonts.notoSerif(
+                    fontSize: 11,
+                    color: goldColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+
+                TextField(
+                  controller: taskController,
+                  style: GoogleFonts.notoSansKr(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: _biStr('hintScheduleTitle'),
+                    hintStyle: GoogleFonts.notoSansKr(
+                      color: slate500,
+                      fontSize: 12,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: slate800),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: goldColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // 삭제 버튼 — UI를 즉시 닫고 저장은 백그라운드로 처리해 버벅임 제거
+                if (index != null)
+                  Flexible(
+                    child: TextButton(
+                      onPressed: () {
+                        final int deleteIndex = index;
+
+                        final List<Map<String, String>> list =
+                        List<Map<String, String>>.from(
+                          _personalTimetableCache[cacheKey] ??
+                              <Map<String, String>>[],
+                        );
+
+                        if (deleteIndex < 0 ||
+                            deleteIndex >= list.length) {
+                          Navigator.of(dialogContext).pop();
+                          return;
+                        }
+
+                        list.removeAt(deleteIndex);
+                        setState(() {
+                          _personalTimetableCache[cacheKey] = list;
+                        });
+
+                        // 팝업을 먼저 닫아 체감 반응을 즉시 만들고, 저장은 비동기로 진행
+                        Navigator.of(dialogContext).pop();
+                        _savePersonalTimetableCache();
+                      },
+                      child: Text(
+                        _biStr('btnDelete'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: examColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 닫기
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: Text(
+                        _biStr('btnClose'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: slate400,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 4),
+
+                    // 저장 — UI를 즉시 닫고 저장은 백그라운드로 처리해 버벅임 제거
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: goldColor,
+                      ),
+                      onPressed: () {
+                        final String newTime =
+                        timeController.text.trim();
+
+                        final String newTask =
+                        taskController.text.trim();
+
+                        if (newTime.isEmpty ||
+                            newTask.isEmpty) {
+                          return;
+                        }
+
+                        final List<Map<String, String>> list =
+                        List<Map<String, String>>.from(
+                          _personalTimetableCache[cacheKey] ??
+                              <Map<String, String>>[],
+                        );
+
+                        final Map<String, String> newItem = {
+                          'time': newTime,
+                          'task': newTask,
+                        };
+
+                        if (index == null) {
+                          // 새 항목 추가
+                          final int? newStart =
+                          _parsePersonalStartMinutes(newTime);
+
+                          int insertAt = list.length;
+
+                          if (newStart != null) {
+                            insertAt = list.indexWhere((e) {
+                              final int? existingStart =
+                              _parsePersonalStartMinutes(
+                                e['time'] ?? '',
+                              );
+
+                              return existingStart != null &&
+                                  existingStart > newStart;
+                            });
+
+                            if (insertAt == -1) {
+                              insertAt = list.length;
+                            }
+                          }
+
+                          list.insert(
+                            insertAt,
+                            newItem,
                           );
-                        },
+                        } else {
+                          // 기존 항목 수정
+                          if (index >= 0 &&
+                              index < list.length) {
+                            list[index] = newItem;
+                          } else {
+                            return;
+                          }
+                        }
+
+                        setState(() {
+                          _personalTimetableCache[cacheKey] =
+                              list;
+                        });
+
+                        // 팝업을 먼저 닫아 체감 반응을 즉시 만들고, 저장은 비동기로 진행
+                        Navigator.of(dialogContext).pop();
+                        _savePersonalTimetableCache();
+                      },
+                      child: Text(
+                        _biStr('btnSave'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          fontSize: 12,
+                          color: const Color(0xFF020617),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ],
         );
       },
-    ).then((_) => _loadPersonalTimetableCache());
+    );
   }
+
 
   // ============================================================================
   // 🆕 [버그 수정 2026-08-15] 개인 시간표 항목 추가/수정 전용 독립 페이지. 바텀시트 안이 아니라
@@ -3321,159 +3535,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
               );
             }).toList(),
         ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// 🆕 [버그 수정 2026-08-15] 주간 탭 - 개인 시간표 항목 추가/수정 전용 독립 페이지.
-// 바텀시트 안이 아니라 완전한 별도 화면(전체 화면 Navigator.push)으로 열림.
-// ============================================================================
-class _PersonalItemEditPage extends StatefulWidget {
-  final String weekdayLabel;
-  final String? initialTime;
-  final String? initialTask;
-  final bool isNew;
-  final Color goldColor;
-  final Color slate400;
-  final Color slate500;
-  final Color slate800;
-  final Color examColor;
-  final String Function(String) biStrFunc;
-  final Future<void> Function(String time, String task) onSave;
-  final Future<void> Function()? onDelete;
-
-  const _PersonalItemEditPage({
-    super.key,
-    required this.weekdayLabel,
-    this.initialTime,
-    this.initialTask,
-    required this.isNew,
-    required this.goldColor,
-    required this.slate400,
-    required this.slate500,
-    required this.slate800,
-    required this.examColor,
-    required this.biStrFunc,
-    required this.onSave,
-    this.onDelete,
-  });
-
-  @override
-  State<_PersonalItemEditPage> createState() => _PersonalItemEditPageState();
-}
-
-class _PersonalItemEditPageState extends State<_PersonalItemEditPage> {
-  late final TextEditingController _timeController;
-  late final TextEditingController _taskController;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _timeController = TextEditingController(text: widget.initialTime ?? '');
-    _taskController = TextEditingController(text: widget.initialTask ?? '');
-  }
-
-  @override
-  void dispose() {
-    _timeController.dispose();
-    _taskController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleSave() async {
-    final String time = _timeController.text.trim();
-    final String task = _taskController.text.trim();
-    if (time.isEmpty || task.isEmpty) return;
-    setState(() => _saving = true);
-    await widget.onSave(time, task);
-    if (mounted) Navigator.of(context, rootNavigator: true).pop();
-  }
-
-  Future<void> _handleDelete() async {
-    if (widget.onDelete == null) return;
-    setState(() => _saving = true);
-    await widget.onDelete!();
-    if (mounted) Navigator.of(context, rootNavigator: true).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF020617),
-        elevation: 0,
-        leading: IconButton(icon: Icon(Icons.arrow_back, color: widget.goldColor), onPressed: () => Navigator.of(context, rootNavigator: true).pop()),
-        title: Text(
-          widget.weekdayLabel,
-          overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.biStrFunc('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: '09:00 - 10:00', hintStyle: GoogleFonts.notoSansKr(color: widget.slate500, fontSize: 12),
-                filled: true, fillColor: const Color(0xFF0F172A),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.goldColor)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(widget.biStrFunc('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _taskController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: widget.biStrFunc('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: widget.slate500, fontSize: 12),
-                filled: true, fillColor: const Color(0xFF0F172A),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.goldColor)),
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (widget.onDelete != null)
-                  Flexible(
-                    child: TextButton(
-                      onPressed: _saving ? null : _handleDelete,
-                      child: Text(widget.biStrFunc('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: TextStyle(color: widget.examColor, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ),
-                  )
-                else
-                  const SizedBox.shrink(),
-                Row(
-                  children: [
-                    Flexible(
-                      child: TextButton(
-                        onPressed: _saving ? null : () => Navigator.of(context, rootNavigator: true).pop(),
-                        child: Text(widget.biStrFunc('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: widget.slate400, fontSize: 13, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: widget.goldColor),
-                        onPressed: _saving ? null : _handleSave,
-                        child: Text(widget.biStrFunc('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

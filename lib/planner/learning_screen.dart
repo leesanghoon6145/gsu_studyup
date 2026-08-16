@@ -156,6 +156,8 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
   bool _loaded = false;
   late DateTime _displayedMonth;
   late DateTime _selectedDate;
+  // 🆕 [버그 수정 2026-08-16] 날짜 탭하면 팝업이 아니라 화면에 바로 펼쳐지도록 함. null이면 접힘.
+  DateTime? _expandedAlarmDate;
 
   // ============================================================================
   // 🆕 [12개국 언어 시스템] - 나머지 화면들과 동일한 방식(기본=영+한 2단, 10개국 선택 시 단독)
@@ -235,6 +237,11 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
     'ES': ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], 'TH': ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'],
   };
   static List<String> _weekdaysSunFirst() => _weekdaySunFirst[DkeLang.current] ?? _weekdaySunFirst['EN']!;
+
+  // 🆕 [버그 수정 2026-08-16] "08/16 Sunday/일요일 알람설정"처럼 요일 전체 이름이 필요한 곳에서
+  // 사용하는 고정 배열. DateTime.weekday는 1=월요일 ~ 7=일요일 순서라 그 순서에 맞춤.
+  static const List<String> _weekdayFullEn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  static const List<String> _weekdayFullKo = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
 
   @override
   void initState() {
@@ -375,6 +382,9 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
           ),
           const SizedBox(height: 12),
           _buildCalendarCard(),
+          // 🆕 [버그 수정 2026-08-16] 원장님 지시: 날짜를 탭하면 팝업이 아니라 달력 바로 아래에
+          // 그 날짜의 일정이 펼쳐지도록 함. 항목을 탭했을 때만 편집 팝업 1개가 뜸.
+          if (_expandedAlarmDate != null) _buildExpandedDatePanel(_expandedAlarmDate!),
           const SizedBox(height: 20),
           _biTitle(
             'upcomingList',
@@ -393,8 +403,9 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
               final DateTime dt = _itemDateTime(item);
               final Color catColor = item['color'] is Color ? item['color'] as Color : _categoryColorFor(null);
               final bool alarmOn = item['alarmOn'] == true;
+              final int gIdx = _globalSchedules.indexOf(item);
               return GestureDetector(
-                onTap: () => _showDateAlarmSheet(DateTime(dt.year, dt.month, dt.day)),
+                onTap: () => _showAlarmEditPopup(DateTime(dt.year, dt.month, dt.day), globalIdx: gIdx),
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 4),
                   padding: const EdgeInsets.all(12),
@@ -416,6 +427,74 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
                       ),
                       if (alarmOn) Icon(Icons.notifications_active, color: goldColor, size: 16),
                       const ThreeColorPencilIcon(size: 14),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [버그 수정 2026-08-16] 달력에서 날짜를 탭하면 팝업 대신 여기에 바로 펼쳐짐.
+  // 항목을 탭했을 때만 편집 팝업(_showAlarmEditPopup) 1개가 뜸.
+  Widget _buildExpandedDatePanel(DateTime date) {
+    final List<int> dateIdxs = [];
+    for (int i = 0; i < _globalSchedules.length; i++) {
+      final s = _globalSchedules[i];
+      if (s['year'] == date.year && s['month'] == date.month && s['day'] == date.day) dateIdxs.add(i);
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: const Color(0xFF020617), borderRadius: BorderRadius.circular(12), border: Border.all(color: goldColor.withValues(alpha: 0.5))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')} '
+                    '${_weekdayFullEn[date.weekday - 1]}/${_weekdayFullKo[date.weekday - 1]}',
+                overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold),
+              ),
+              GestureDetector(
+                onTap: () => _showAlarmEditPopup(date, globalIdx: null),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5)),
+                  child: Icon(Icons.add, color: goldColor, size: 16),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (dateIdxs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Text(_t('noAlarmToday'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)),
+            )
+          else
+            ...dateIdxs.map((gIdx) {
+              final item = _globalSchedules[gIdx];
+              final Color catColor = item['color'] is Color ? item['color'] as Color : _categoryColorFor(item['category'] as String?);
+              final bool alarmOnFlag = item['alarmOn'] == true;
+              return GestureDetector(
+                onTap: () => _showAlarmEditPopup(date, globalIdx: gIdx),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(6), border: Border.all(color: slate800)),
+                  child: Row(
+                    children: [
+                      Container(width: 12, height: 12, decoration: BoxDecoration(color: catColor, borderRadius: BorderRadius.circular(3))),
+                      const SizedBox(width: 8),
+                      SizedBox(width: 56, child: Text(item['time'] ?? '', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold))),
+                      Expanded(child: Text(item['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white), overflow: TextOverflow.ellipsis)),
+                      if (alarmOnFlag) Icon(Icons.notifications_active, color: goldColor, size: 14),
                     ],
                   ),
                 ),
@@ -487,8 +566,11 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
                 onTap: () {
                   if (isBlurred) return;
                   final DateTime tapped = DateTime(_displayedMonth.year, _displayedMonth.month, displayDayNum);
-                  setState(() => _selectedDate = tapped);
-                  _showDateAlarmSheet(tapped);
+                  setState(() {
+                    _selectedDate = tapped;
+                    // 🆕 [버그 수정 2026-08-16] 팝업을 여는 대신 이 날짜를 펼치거나 접음.
+                    _expandedAlarmDate = (_expandedAlarmDate != null && _expandedAlarmDate!.year == tapped.year && _expandedAlarmDate!.month == tapped.month && _expandedAlarmDate!.day == tapped.day) ? null : tapped;
+                  });
                 },
                 child: Container(
                   decoration: BoxDecoration(
@@ -520,399 +602,208 @@ class LearningScreenState extends State<LearningScreen> with AutomaticKeepAliveC
     );
   }
 
-  // ============================================================================
-  // 🆕 날짜를 탭하면 뜨는 알람 설정 시트. 목록 화면 ↔ 입력 화면을 같은 시트 안에서 전환하는
-  // 구조(오늘 주간 탭에서 검증된 안정적인 방식)를 그대로 따라서 만듦 - 별도 팝업 중첩 없음.
-  // ============================================================================
-  // ============================================================================
-  // 🆕 [버그 수정 2026-08-15] 네 번째로 재발한 "바텀시트 안에서 화면 전환 시 먹통" 문제를
-  // 근본적으로 없애기 위해 완전히 재설계함. 바텀시트는 이제 "목록 표시" 역할만 하고(이 부분은
-  // 계속 정상 작동해왔음), 편집/추가는 바텀시트 안이 아니라 완전히 별도의 새 페이지(전체 화면
-  // Navigator.push)로 분리함. 전체 화면 이동은 이 앱에서 이미 안정적으로 작동하는 가장 기본적인
-  // 네비게이션 방식이라, 바텀시트 내부 상태 전환에서 반복되던 문제를 원천적으로 피해감.
-  // ============================================================================
-  void _showDateAlarmSheet(DateTime date) {
-    showModalBottomSheet(
+  // 🆕 [버그 수정 2026-08-16] 원장님 지시: 날짜 목록 자체는 절대 팝업으로 띄우지 않고
+  // 달력 바로 아래에 펼쳐서 보여줌(_buildExpandedDatePanel). 항목을 탭했을 때만
+  // 아래 _showAlarmEditPopup 팝업 1개가 뜸 - "목록 팝업 → 편집 팝업" 순환 구조를 완전히
+  // 없애서 더 단순하고 안전해짐.
+  void _showAlarmEditPopup(DateTime date, {int? globalIdx}) {
+    final Map<String, dynamic>? item = globalIdx != null ? _globalSchedules[globalIdx] : null;
+    final TextEditingController timeController = TextEditingController(text: item?['time'] as String? ?? '');
+    final TextEditingController titleController = TextEditingController(text: item?['title'] as String? ?? '');
+    String selectedCategory = item?['category'] as String? ?? '학교';
+    bool alarmOn = item?['alarmOn'] == true;
+
+    showDialog(
       context: context,
-      useRootNavigator: true,
-      backgroundColor: const Color(0xFF020617),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (BuildContext bc) {
+      builder: (BuildContext dialogContext) {
         return StatefulBuilder(
-          builder: (BuildContext modalContext, StateSetter setModalState) {
-            List<int> globalIndicesForDate() {
-              final List<int> idxs = [];
-              for (int i = 0; i < _globalSchedules.length; i++) {
-                final s = _globalSchedules[i];
-                if (s['year'] == date.year && s['month'] == date.month && s['day'] == date.day) idxs.add(i);
-              }
-              return idxs;
-            }
-
-            Future<void> openEditPage({int? globalIdx}) async {
-              final Map<String, dynamic>? item = globalIdx != null ? _globalSchedules[globalIdx] : null;
-              // 🆕 [버그 수정 2026-08-15] 정확한 원인 확정: 바텀시트가 열려있는 상태에서 그 위로
-              // Navigator.push()로 새 페이지를 얹으면 이 앱에서 화면이 사라지는 문제가 있었음
-              // (showDialog만 쓰는 "주요일정"은 문제없이 작동한다는 점에서 확인됨). 그래서 새 화면으로
-              // 넘어가기 "전에" 먼저 이 바텀시트를 완전히 닫고, 편집이 끝나면 목록을 다시 열어줌.
-              Navigator.of(context).pop();
-              await Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => _AlarmEditPage(
-                  date: date,
-                  initialTime: item?['time'] as String?,
-                  initialTitle: item?['title'] as String?,
-                  initialCategory: item?['category'] as String?,
-                  initialAlarmOn: item?['alarmOn'] == true,
-                  isNew: globalIdx == null,
-                  goldColor: goldColor, slate400: slate400, slate500: slate500, slate800: slate800,
-                  categoryColorFor: _categoryColorFor,
-                  tFunc: _t, biStrFunc: _biStr,
-                  onSave: (String time, String title, String category, bool alarmOn) async {
-                    // 🆕 [버그 수정 2026-08-15] scheduleId를 setState 콜백 "밖"에서 먼저 계산해둠.
-                    // 콜백 안에서만 대입하면 Dart 정적 분석이 "사용 전 대입 여부"를 클로저 내부까지
-                    // 추적하지 못해 "must be assigned before it can be used" 컴파일 오류가 남.
-                    final String scheduleId = (globalIdx == null)
-                        ? _genScheduleId()
-                        : ((_globalSchedules[globalIdx]['id'] as String?) ?? _genScheduleId());
-
-                    setState(() {
-                      if (globalIdx == null) {
-                        _globalSchedules.add({
-                          'id': scheduleId,
-                          'year': date.year, 'month': date.month, 'day': date.day,
-                          'time': time, 'title': title,
-                          'category': category,
-                          'color': _categoryColorFor(category),
-                          'memo': '',
-                          'alarmOn': alarmOn,
-                        });
-                      } else {
-                        _globalSchedules[globalIdx]['id'] = scheduleId;
-                        _globalSchedules[globalIdx]['time'] = time;
-                        _globalSchedules[globalIdx]['title'] = title;
-                        _globalSchedules[globalIdx]['category'] = category;
-                        _globalSchedules[globalIdx]['color'] = _categoryColorFor(category);
-                        _globalSchedules[globalIdx]['alarmOn'] = alarmOn;
-                      }
-                    });
-                    await _saveSchedules();
-
-                    final List<String> tp = time.split(':');
-                    int hh = 0, mm = 0;
-                    try { hh = int.parse(tp[0]); mm = tp.length > 1 ? int.parse(tp[1]) : 0; } catch (_) {}
-                    final DateTime alarmDateTime = DateTime(date.year, date.month, date.day, hh, mm);
-
-                    if (alarmOn) {
-                      await PlannerAlarmService.scheduleAlarm(
-                        scheduleId: scheduleId,
-                        dateTime: alarmDateTime,
-                        title: title,
-                        body: '${date.month}/${date.day} ${_t('alarmSettingTitle')}',
-                      );
-                    } else {
-                      await PlannerAlarmService.cancelAlarm(scheduleId);
-                    }
-                  },
-                  onDelete: globalIdx == null
-                      ? null
-                      : () async {
-                    final String? scheduleId = _globalSchedules[globalIdx]['id'] as String?;
-                    setState(() => _globalSchedules.removeAt(globalIdx));
-                    await _saveSchedules();
-                    if (scheduleId != null) await PlannerAlarmService.cancelAlarm(scheduleId);
-                  },
-                ),
-              ));
-              if (mounted) _showDateAlarmSheet(date);
-            }
-
-            final List<int> dateIdxs = globalIndicesForDate();
-
-            return SizedBox(
-              height: MediaQuery.of(modalContext).size.height * 0.75,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+          builder: (BuildContext sbContext, StateSetter setPopState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF020617),
+              shape: RoundedRectangleBorder(side: BorderSide(color: goldColor, width: 1.5), borderRadius: BorderRadius.circular(12)),
+              title: Text(
+                _t('alarmSettingTitle'),
+                overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                style: GoogleFonts.notoSansKr(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Text(_biStr('labelCategorySelect'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6, runSpacing: 6,
                       children: [
-                        Expanded(
-                          child: Text(
-                            '${date.month}/${date.day} ${_t('alarmSettingTitle')}',
-                            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-                            style: GoogleFonts.notoSansKr(fontSize: 15, color: goldColor, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => openEditPage(),
+                        {'value': '학교', 'labelKey': 'catSchool'},
+                        {'value': '학원', 'labelKey': 'catAcademy'},
+                        {'value': '시험', 'labelKey': 'catExam'},
+                        {'value': '개인', 'labelKey': 'catPersonal'},
+                      ].map((cat) {
+                        final bool isSel = selectedCategory == cat['value'];
+                        return GestureDetector(
+                          onTap: () => setPopState(() => selectedCategory = cat['value']!),
                           child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: goldColor, width: 1.5), color: goldColor.withValues(alpha: 0.08)),
-                            child: Icon(Icons.add, color: goldColor, size: 20),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(color: Color(0xFF1E293B), height: 20),
-                    Expanded(
-                      child: dateIdxs.isEmpty
-                          ? Center(child: Text(_t('noAlarmToday'), style: GoogleFonts.notoSansKr(color: slate500, fontSize: 12)))
-                          : ListView.builder(
-                        itemCount: dateIdxs.length,
-                        itemBuilder: (context, i) {
-                          final int gIdx = dateIdxs[i];
-                          final item = _globalSchedules[gIdx];
-                          final Color catColor = item['color'] is Color ? item['color'] as Color : _categoryColorFor(item['category'] as String?);
-                          final bool alarmOnFlag = item['alarmOn'] == true;
-                          return GestureDetector(
-                            onTap: () => openEditPage(globalIdx: gIdx),
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
-                              child: Row(
-                                children: [
-                                  Container(width: 14, height: 14, decoration: BoxDecoration(color: catColor, borderRadius: BorderRadius.circular(3))),
-                                  const SizedBox(width: 10),
-                                  SizedBox(width: 60, child: Text(item['time'] ?? '', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSerif(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold))),
-                                  Expanded(child: Text(item['title'] ?? '', style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-                                  if (alarmOnFlag) Icon(Icons.notifications_active, color: goldColor, size: 16),
-                                  const ThreeColorPencilIcon(size: 14),
-                                ],
-                              ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSel ? _categoryColorFor(cat['value']) : const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: isSel ? _categoryColorFor(cat['value']) : slate800),
                             ),
-                          );
-                        },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(width: 10, height: 10, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: _categoryColorFor(cat['value']), borderRadius: BorderRadius.circular(2))),
+                                Text(_biStr(cat['labelKey']!), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSel ? const Color(0xFF020617) : Colors.white)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(_biStr('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: titleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: _biStr('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                        filled: true, fillColor: const Color(0xFF0F172A),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(_biStr('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: '09:00', hintStyle: GoogleFonts.notoSansKr(color: slate500, fontSize: 12),
+                        filled: true, fillColor: const Color(0xFF0F172A),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: goldColor)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8), border: Border.all(color: slate800)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.notifications_active_outlined, color: goldColor, size: 18),
+                              const SizedBox(width: 8),
+                              Text(_biStr('alarmOnLabel'), style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white)),
+                            ],
+                          ),
+                          Switch(
+                            value: alarmOn,
+                            activeColor: goldColor,
+                            onChanged: (v) => setPopState(() => alarmOn = v),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            );
-          },
-        );
-      },
-    ).then((_) => _loadSchedules());
-  }
-}
-
-// ============================================================================
-// 🆕 [버그 수정 2026-08-15] 알람 추가/수정 전용 독립 페이지. 바텀시트 안이 아니라 완전한 별도
-// 화면(전체 화면 Navigator.push)으로 열림 - 바텀시트 내부 상태 전환에서 반복되던 먹통 문제를
-// 피하기 위한 설계.
-// ============================================================================
-class _AlarmEditPage extends StatefulWidget {
-  final DateTime date;
-  final String? initialTime;
-  final String? initialTitle;
-  final String? initialCategory;
-  final bool initialAlarmOn;
-  final bool isNew;
-  final Color goldColor;
-  final Color slate400;
-  final Color slate500;
-  final Color slate800;
-  final Color Function(String?) categoryColorFor;
-  final String Function(String) tFunc;
-  final String Function(String) biStrFunc;
-  final Future<void> Function(String time, String title, String category, bool alarmOn) onSave;
-  final Future<void> Function()? onDelete;
-
-  const _AlarmEditPage({
-    super.key,
-    required this.date,
-    this.initialTime,
-    this.initialTitle,
-    this.initialCategory,
-    this.initialAlarmOn = false,
-    required this.isNew,
-    required this.goldColor,
-    required this.slate400,
-    required this.slate500,
-    required this.slate800,
-    required this.categoryColorFor,
-    required this.tFunc,
-    required this.biStrFunc,
-    required this.onSave,
-    this.onDelete,
-  });
-
-  @override
-  State<_AlarmEditPage> createState() => _AlarmEditPageState();
-}
-
-class _AlarmEditPageState extends State<_AlarmEditPage> {
-  late final TextEditingController _timeController;
-  late final TextEditingController _titleController;
-  late String _selectedCategory;
-  late bool _alarmOn;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _timeController = TextEditingController(text: widget.initialTime ?? '');
-    _titleController = TextEditingController(text: widget.initialTitle ?? '');
-    _selectedCategory = widget.initialCategory ?? '학교';
-    _alarmOn = widget.initialAlarmOn;
-  }
-
-  @override
-  void dispose() {
-    _timeController.dispose();
-    _titleController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleSave() async {
-    final String time = _timeController.text.trim();
-    final String title = _titleController.text.trim();
-    if (time.isEmpty || title.isEmpty) return;
-    setState(() => _saving = true);
-    await widget.onSave(time, title, _selectedCategory, _alarmOn);
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  Future<void> _handleDelete() async {
-    if (widget.onDelete == null) return;
-    setState(() => _saving = true);
-    await widget.onDelete!();
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF020617),
-        elevation: 0,
-        leading: IconButton(icon: Icon(Icons.arrow_back, color: widget.goldColor), onPressed: () => Navigator.of(context).pop()),
-        title: Text(
-          '${widget.date.month}/${widget.date.day} ${widget.tFunc('alarmSettingTitle')}',
-          overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
-          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.biStrFunc('labelCategorySelect'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6, runSpacing: 6,
-              children: [
-                {'value': '학교', 'labelKey': 'catSchool'},
-                {'value': '학원', 'labelKey': 'catAcademy'},
-                {'value': '시험', 'labelKey': 'catExam'},
-                {'value': '개인', 'labelKey': 'catPersonal'},
-              ].map((cat) {
-                final bool isSel = _selectedCategory == cat['value'];
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedCategory = cat['value']!),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSel ? widget.categoryColorFor(cat['value']) : const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: isSel ? widget.categoryColorFor(cat['value']) : widget.slate800),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(width: 10, height: 10, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: widget.categoryColorFor(cat['value']), borderRadius: BorderRadius.circular(2))),
-                        Text(widget.biStrFunc(cat['labelKey']!), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 11, color: isSel ? const Color(0xFF020617) : Colors.white)),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            Text(widget.biStrFunc('labelTitleField'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _titleController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: widget.biStrFunc('hintScheduleTitle'), hintStyle: GoogleFonts.notoSansKr(color: widget.slate500, fontSize: 12),
-                filled: true, fillColor: const Color(0xFF0F172A),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.goldColor)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(widget.biStrFunc('labelTime'), style: GoogleFonts.notoSerif(fontSize: 11, color: widget.goldColor, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _timeController, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: '09:00', hintStyle: GoogleFonts.notoSansKr(color: widget.slate500, fontSize: 12),
-                filled: true, fillColor: const Color(0xFF0F172A),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.slate800)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: widget.goldColor)),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8), border: Border.all(color: widget.slate800)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.notifications_active_outlined, color: widget.goldColor, size: 18),
-                      const SizedBox(width: 8),
-                      Text(widget.biStrFunc('alarmOnLabel'), style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white)),
-                    ],
-                  ),
-                  Switch(
-                    value: _alarmOn,
-                    activeColor: widget.goldColor,
-                    onChanged: (v) => setState(() => _alarmOn = v),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (widget.onDelete != null)
-                  Flexible(
-                    child: TextButton(
-                      onPressed: _saving ? null : _handleDelete,
-                      child: Text(widget.biStrFunc('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.bold)),
-                    ),
-                  )
-                else
-                  const SizedBox.shrink(),
+              actions: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(
-                      child: TextButton(
-                        onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                        child: Text(widget.biStrFunc('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: widget.slate400, fontSize: 13, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: widget.goldColor),
-                        onPressed: _saving ? null : _handleSave,
-                        child: Text(widget.biStrFunc('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
-                      ),
+                    if (globalIdx != null)
+                      Flexible(
+                        child: TextButton(
+                          onPressed: () async {
+                            final String? scheduleId = _globalSchedules[globalIdx]['id'] as String?;
+                            setState(() => _globalSchedules.removeAt(globalIdx));
+                            await _saveSchedules();
+                            if (scheduleId != null) await PlannerAlarmService.cancelAlarm(scheduleId);
+                            Navigator.of(dialogContext).pop();
+                          },
+                          child: Text(_biStr('btnDelete'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: examColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.of(dialogContext).pop();
+                            },
+                            child: Text(_biStr('btnClose'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: slate400, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: goldColor),
+                            onPressed: () async {
+                              final String time = timeController.text.trim();
+                              final String title = titleController.text.trim();
+                              if (time.isEmpty || title.isEmpty) return;
+
+                              final String scheduleId = (globalIdx == null)
+                                  ? _genScheduleId()
+                                  : ((_globalSchedules[globalIdx]['id'] as String?) ?? _genScheduleId());
+
+                              setState(() {
+                                if (globalIdx == null) {
+                                  _globalSchedules.add({
+                                    'id': scheduleId,
+                                    'year': date.year, 'month': date.month, 'day': date.day,
+                                    'time': time, 'title': title,
+                                    'category': selectedCategory,
+                                    'color': _categoryColorFor(selectedCategory),
+                                    'memo': '',
+                                    'alarmOn': alarmOn,
+                                  });
+                                } else {
+                                  _globalSchedules[globalIdx]['id'] = scheduleId;
+                                  _globalSchedules[globalIdx]['time'] = time;
+                                  _globalSchedules[globalIdx]['title'] = title;
+                                  _globalSchedules[globalIdx]['category'] = selectedCategory;
+                                  _globalSchedules[globalIdx]['color'] = _categoryColorFor(selectedCategory);
+                                  _globalSchedules[globalIdx]['alarmOn'] = alarmOn;
+                                }
+                              });
+                              await _saveSchedules();
+
+                              final List<String> tp = time.split(':');
+                              int hh = 0, mm = 0;
+                              try { hh = int.parse(tp[0]); mm = tp.length > 1 ? int.parse(tp[1]) : 0; } catch (_) {}
+                              final DateTime alarmDateTime = DateTime(date.year, date.month, date.day, hh, mm);
+
+                              if (alarmOn) {
+                                await PlannerAlarmService.scheduleAlarm(
+                                  scheduleId: scheduleId,
+                                  dateTime: alarmDateTime,
+                                  title: title,
+                                  body: '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')} ${_t('alarmSettingTitle')}',
+                                );
+                              } else {
+                                await PlannerAlarmService.cancelAlarm(scheduleId);
+                              }
+
+                              Navigator.of(dialogContext).pop();
+                            },
+                            child: Text(_biStr('btnSave'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: const Color(0xFF020617), fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
+
 }
