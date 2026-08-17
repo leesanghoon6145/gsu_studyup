@@ -39,7 +39,7 @@ dependencies:
   fl_chart: ^0.66.0
   shared_preferences: ^2.5.5
   flutter_local_notifications: ^18.0.1  # ✅ [2026-08-15 원복] 21.0.0으로 올렸다가 API 대규모 변경(initialize/zonedSchedule 시그니처 전면 named-param 방식으로 변경)으로 timer2_services.dart, learning_screen.dart 등 손대면 안 되는 파일까지 깨져서 원래 버전으로 되돌림
-
+  flutter_timezone: ^3.0.1          # ← 여기 (42번 줄 자리)
 dev_dependencies:
   flutter_test:
     sdk: flutter
