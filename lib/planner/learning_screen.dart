@@ -348,6 +348,12 @@ class PlannerAlarmService {
     }
   }
 
+  // 🆕 [2026-08-17] 원장님 지시: "팝업이 즉시 안 뜨고 나갔다 들어와야 뜸" 문제 수정.
+  // 1초마다 "지금 울리고 있나?" 물어보는(polling) 방식 대신, 상태가 "바뀌는 바로 그 순간"에
+  // 알려주는 ValueNotifier로 전환함. fireLoopingAlarm/stopAlarmSound가 호출되는 즉시 값이
+  // 바뀌고, 이걸 구독하는 화면은 폴링 간격 없이 그 즉시 반응함.
+  static final ValueNotifier<bool> ringingNotifier = ValueNotifier<bool>(false);
+
   static Future<void> fireLoopingAlarm({
     required String title,
     required String body,
@@ -375,6 +381,7 @@ class PlannerAlarmService {
       );
       await _plugin.show(notifId, title, body, details);
       await _startLoopingSound();
+      ringingNotifier.value = true; // 🆕 이 줄이 실행되는 즉시 구독 중인 화면이 반응함
       debugPrint('[PlannerAlarmService] ✅ fireLoopingAlarm 표시+재생 시작 (notifId=$notifId)');
 
       _autoStopTimer?.cancel();
@@ -413,6 +420,7 @@ class PlannerAlarmService {
     }
     _autoStopTimer?.cancel();
     _autoStopTimer = null;
+    ringingNotifier.value = false; // 🆕 꺼지는 순간도 즉시 반영
   }
 }
 
@@ -537,62 +545,49 @@ class PlannerAlarmWatcherService {
 // 🆕 [2026-08-17] PlannerRingingAlarmStopBanner — 지금 울리는 알람을 확실하게 끄는 버튼.
 // 안드로이드 알림창의 "알람 끄기" 버튼이 일부 삼성 기기에서 알림 자체가 사라지며 같이 없어지는
 // 문제가 있어서, 앱 화면 안에 직접 만든 확실한 끄기 수단입니다. 울리고 있을 때만 나타납니다.
+// 🆕 [버그 수정 2026-08-17] 1초 폴링 대신 ValueListenableBuilder로 상태 변화에 즉시 반응하고,
+// AnimatedSwitcher로 부드럽게 나타나고 사라지도록 함(기존엔 뚝 튀어나오듯 버벅였음).
 // ============================================================================
-class PlannerRingingAlarmStopBanner extends StatefulWidget {
+class PlannerRingingAlarmStopBanner extends StatelessWidget {
   const PlannerRingingAlarmStopBanner({super.key});
 
   @override
-  State<PlannerRingingAlarmStopBanner> createState() => _PlannerRingingAlarmStopBannerState();
-}
-
-class _PlannerRingingAlarmStopBannerState extends State<PlannerRingingAlarmStopBanner> {
-  bool _ringing = false;
-  Timer? _pollTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _check();
-    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) => _check());
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _check() async {
-    final bool ringing = await PlannerAlarmService.isAlarmRinging();
-    if (mounted && ringing != _ringing) {
-      setState(() => _ringing = ringing);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (!_ringing) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () async {
-          await PlannerAlarmService.stopAlarmSound();
-        },
-        icon: const Icon(Icons.notifications_off_rounded, size: 22),
-        label: Text(
-          '지금 울리는 알람 끄기',
-          style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFDC2626),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 6,
-        ),
-      ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: PlannerAlarmService.ringingNotifier,
+      builder: (context, ringing, _) {
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 280),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SizeTransition(sizeFactor: animation, child: child),
+          ),
+          child: !ringing
+              ? const SizedBox.shrink(key: ValueKey('hidden'))
+              : Container(
+            key: const ValueKey('shown'),
+            margin: const EdgeInsets.only(bottom: 12),
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                await PlannerAlarmService.stopAlarmSound();
+              },
+              icon: const Icon(Icons.notifications_off_rounded, size: 22),
+              label: Text(
+                '지금 울리는 알람 끄기',
+                style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 6,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -628,11 +623,11 @@ class LearningScreenState extends State<LearningScreen>
   late DateTime _displayedMonth;
   late DateTime _selectedDate;
   DateTime? _expandedAlarmDate;
-  // 🆕 [2026-08-17] 알람이 울리는 순간 자동으로 끄기 팝업을 띄우기 위한 감시용 상태.
+  // 🆕 [2026-08-17] 알람이 울리는 순간 자동으로 끄기 팝업을 띄우기 위한 상태.
   // 이 화면(LearningScreenState)은 AutomaticKeepAliveClientMixin으로 항상 살아있으므로,
-  // 다른 탭(계획/리포트)에 있어도 이 타이머는 계속 돌고, showDialog()는 기본적으로 앱 전체
-  // 최상위(root) 네비게이터를 쓰기 때문에 팝업이 어느 화면에 있든 최상단에 뜸.
-  Timer? _alarmRingCheckTimer;
+  // 다른 탭(계획/리포트)에 있어도 PlannerAlarmService.ringingNotifier 구독은 계속 살아있고,
+  // showDialog()는 기본적으로 앱 전체 최상위(root) 네비게이터를 쓰기 때문에 팝업이 어느
+  // 화면에 있든 최상단에 즉시 뜸.
   bool _alarmDialogShowing = false;
 
   // ─── 12개국 언어 ───────────────────────────────────────────
@@ -1026,24 +1021,33 @@ class LearningScreenState extends State<LearningScreen>
     PlannerAlarmService.initialize();
     // 🆕 [2026-08-17] 예약 자동발동이 실기기에서 실패하는 문제의 우회로 - 직접 감시 시작
     PlannerAlarmWatcherService.instance.start();
-    // 🆕 [2026-08-17] 원장님 지시: "알람 울림과 동시에 끄는 팝업" - 1초마다 지금 알람이
-    // 울리고 있는지 확인해서, 울리는 순간 자동으로 끄기 팝업을 띄움. 이 화면이 항상 살아있고
-    // showDialog가 최상위 네비게이터를 쓰므로, 계획/리포트 탭에 있어도 팝업이 뜸.
-    _alarmRingCheckTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      final bool ringing = await PlannerAlarmService.isAlarmRinging();
-      if (ringing && !_alarmDialogShowing && mounted) {
-        _showRingingAlarmDialog();
-      }
-    });
+    // 🆕 [버그 수정 2026-08-17] "팝업이 즉시 안 뜨고 나갔다 들어와야 뜸" 문제 수정.
+    // 1초 폴링(Timer.periodic) 대신, 알람이 실제로 울리기/꺼지기 시작하는 바로 그 순간 값이
+    // 바뀌는 ValueNotifier를 구독함 - 폴링 간격에 따른 지연이 없어서 즉시 반응함.
+    PlannerAlarmService.ringingNotifier.addListener(_onAlarmRingingChanged);
+    // 화면이 처음 만들어질 때 이미 알람이 울리고 있는 상태였다면(예: 다른 탭에 있다가 왔는데
+    // 이미 울리는 중이었던 경우) 첫 프레임이 그려진 직후 바로 팝업을 띄움.
+    if (PlannerAlarmService.ringingNotifier.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showRingingAlarmDialog();
+      });
+    }
     final now = DateTime.now();
     _displayedMonth = DateTime(now.year, now.month, 1);
     _selectedDate = DateTime(now.year, now.month, now.day);
     _loadSchedules();
   }
 
+  // 🆕 [버그 수정 2026-08-17] ValueNotifier 값이 바뀌는 즉시 호출되는 콜백
+  void _onAlarmRingingChanged() {
+    if (PlannerAlarmService.ringingNotifier.value && !_alarmDialogShowing && mounted) {
+      _showRingingAlarmDialog();
+    }
+  }
+
   @override
   void dispose() {
-    _alarmRingCheckTimer?.cancel();
+    PlannerAlarmService.ringingNotifier.removeListener(_onAlarmRingingChanged);
     super.dispose();
   }
 

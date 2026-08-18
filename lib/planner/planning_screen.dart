@@ -205,6 +205,8 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     'labelAllDay': {'KO': '종일 설정됨', 'EN': 'All day', 'JA': '終日設定', 'ZH': '全天', 'FR': 'Toute la journée', 'DE': 'Ganztägig', 'RU': 'Весь день', 'AR': 'طوال اليوم', 'HI': 'पूरा दिन', 'VI': 'Cả ngày', 'ES': 'Todo el día', 'TH': 'ทั้งวัน'},
     'starCollected': {'KO': '별 수집 완료', 'EN': 'Star Collected', 'JA': '星収集完了', 'ZH': '星星收集完成', 'FR': 'Étoile collectée', 'DE': 'Stern gesammelt', 'RU': 'Звезда собрана', 'AR': 'تم جمع النجمة', 'HI': 'स्टार एकत्रित', 'VI': 'Đã thu thập sao', 'ES': 'Estrella recolectada', 'TH': 'เก็บดาวแล้ว'},
     'starCollectAction': {'KO': '미션 완료! 별 수집하기', 'EN': 'Complete! Collect Star', 'JA': 'ミッション完了！星を集める', 'ZH': '任务完成！收集星星', 'FR': 'Mission accomplie ! Collecter l\'étoile', 'DE': 'Erledigt! Stern sammeln', 'RU': 'Готово! Собрать звезду', 'AR': 'اكتملت! اجمع النجمة', 'HI': 'पूर्ण! स्टार एकत्र करें', 'VI': 'Hoàn thành! Thu thập sao', 'ES': '¡Completado! Recolectar estrella', 'TH': 'สำเร็จ! เก็บดาว'},
+    'scheduleCompletedLabel': {'KO': '실행 완료됨', 'EN': 'Completed', 'JA': '実行完了', 'ZH': '已执行完成', 'FR': 'Terminé', 'DE': 'Abgeschlossen', 'RU': 'Выполнено', 'AR': 'مكتمل', 'HI': 'पूर्ण हुआ', 'VI': 'Đã hoàn thành', 'ES': 'Completado', 'TH': 'ดำเนินการเสร็จแล้ว'},
+    'scheduleCompleteAction': {'KO': '이 일정 실행 완료 체크', 'EN': 'Mark as Completed', 'JA': 'この日程を実行完了にする', 'ZH': '标记为已执行', 'FR': 'Marquer comme terminé', 'DE': 'Als erledigt markieren', 'RU': 'Отметить как выполненное', 'AR': 'وضع علامة مكتمل', 'HI': 'पूर्ण के रूप में चिह्नित करें', 'VI': 'Đánh dấu đã hoàn thành', 'ES': 'Marcar como completado', 'TH': 'ทำเครื่องหมายว่าดำเนินการแล้ว'},
     'labelCategorySelect': {'KO': '일정 분류', 'EN': 'Category', 'JA': '日程分類', 'ZH': '日程分类', 'FR': 'Catégorie du programme', 'DE': 'Terminkategorie', 'RU': 'Категория расписания', 'AR': 'تصنيف الجدول', 'HI': 'कार्यक्रम श्रेणी', 'VI': 'Phân loại lịch', 'ES': 'Categoría del horario', 'TH': 'หมวดหมู่ตาราง'},
     'hintScheduleTitle': {'KO': '간단한 일정 제목을 입력하세요', 'EN': 'Enter a brief schedule title', 'JA': '簡単な日程タイトルを入力してください', 'ZH': '请输入简短的日程标题', 'FR': 'Saisissez un titre de programme', 'DE': 'Kurzen Termintitel eingeben', 'RU': 'Введите краткое название', 'AR': 'أدخل عنوانًا موجزًا للجدول', 'HI': 'संक्षिप्त कार्यक्रम शीर्षक दर्ज करें', 'VI': 'Nhập tiêu đề lịch ngắn gọn', 'ES': 'Ingrese un título breve del horario', 'TH': 'กรอกชื่อตารางแบบสั้น'},
     'hintScheduleDetail': {'KO': '상세 일정 내용(메모)을 입력하세요', 'EN': 'Enter schedule details (memo)', 'JA': '詳細な日程内容(メモ)を入力してください', 'ZH': '请输入详细日程内容(备注)', 'FR': 'Saisissez les détails (mémo)', 'DE': 'Termindetails (Notiz) eingeben', 'RU': 'Введите подробности (заметка)', 'AR': 'أدخل تفاصيل الجدول (ملاحظة)', 'HI': 'विवरण दर्ज करें (ज्ञापन)', 'VI': 'Nhập chi tiết lịch (ghi chú)', 'ES': 'Ingrese los detalles (nota)', 'TH': 'กรอกรายละเอียด (บันทึกช่วยจำ)'},
@@ -228,20 +230,14 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     'labelSubjectTitle': {'KO': '제목 입력', 'EN': 'Enter Title', 'JA': 'タイトル入力', 'ZH': '输入标题', 'FR': 'Saisir le titre', 'DE': 'Titel eingeben', 'RU': 'Введите название', 'AR': 'أدخل العنوان', 'HI': 'शीर्षक दर्ज करें', 'VI': 'Nhập tiêu đề', 'ES': 'Ingrese el título', 'TH': 'กรอกชื่อเรื่อง'},
     'hintTimeInput': {'KO': '시간 입력', 'EN': 'Enter Time', 'JA': '時間入力', 'ZH': '输入时间', 'FR': 'Saisir l\'heure', 'DE': 'Zeit eingeben', 'RU': 'Введите время', 'AR': 'أدخل الوقت', 'HI': 'समय दर्ज करें', 'VI': 'Nhập thời gian', 'ES': 'Ingrese la hora', 'TH': 'กรอกเวลา'},
     'hintMemoInput': {'KO': '상세 메모 입력', 'EN': 'Enter Memo', 'JA': '詳細メモ入力', 'ZH': '输入详细备注', 'FR': 'Saisir un mémo', 'DE': 'Notiz eingeben', 'RU': 'Введите заметку', 'AR': 'أدخل ملاحظة', 'HI': 'ज्ञापन दर्ज करें', 'VI': 'Nhập ghi chú', 'ES': 'Ingrese una nota', 'TH': 'กรอกบันทึกช่วยจำ'},
-
-    // 🆕 [A/B범위] 연간·월간 뷰 잔존 문자열 보간부 신규 카탈로그
     'yearTargetAnalysisRail': {'KO': '목표 분석 레일', 'EN': 'Target Analysis Rail', 'JA': '目標分析レール', 'ZH': '目标分析轨道', 'FR': 'Rail d\'analyse des objectifs', 'DE': 'Zielanalyse-Leiste', 'RU': 'Панель анализа целей', 'AR': 'مسار تحليل الأهداف', 'HI': 'लक्ष्य विश्लेषण रेल', 'VI': 'Thanh phân tích mục tiêu', 'ES': 'Panel de análisis de objetivos', 'TH': 'แถบวิเคราะห์เป้าหมาย'},
     'registeredScheduleCount': {'KO': '등록 스케줄 건수', 'EN': 'Registered Schedules', 'JA': '登録スケジュール件数', 'ZH': '已登记日程数', 'FR': 'Programmes enregistrés', 'DE': 'Registrierte Termine', 'RU': 'Зарегистрировано расписаний', 'AR': 'عدد الجداول المسجلة', 'HI': 'पंजीकृत शेड्यूल संख्या', 'VI': 'Số lịch đã đăng ký', 'ES': 'Horarios registrados', 'TH': 'จำนวนตารางที่ลงทะเบียน'},
     'yearChecklistPopupTimeLabel': {'KO': '전반 마스터 리전', 'EN': 'Full-Year Master Region', 'JA': '通年マスターリージョン', 'ZH': '全年主控区域', 'FR': 'Région maîtresse annuelle', 'DE': 'Ganzjahres-Masterbereich', 'RU': 'Годовой мастер-регион', 'AR': 'المنطقة الرئيسية السنوية', 'HI': 'वार्षिक मास्टर क्षेत्र', 'VI': 'Khu vực chủ đạo cả năm', 'ES': 'Región maestra anual', 'TH': 'พื้นที่หลักตลอดปี'},
     'yearChecklistPopupMemo': {'KO': '국내 및 글로벌 상용화 목표 달성을 위한 연간 전개 스케줄 목표치입니다.', 'EN': 'An annual rollout target for domestic and global commercialization goals.', 'JA': '国内及びグローバル商用化目標達成のための年間展開スケジュール目標値です。', 'ZH': '为实现国内及全球商业化目标而制定的年度推进计划目标。', 'FR': 'Un objectif de déploiement annuel pour la commercialisation nationale et mondiale.', 'DE': 'Ein jährliches Rollout-Ziel für nationale und globale Kommerzialisierungsziele.', 'RU': 'Годовая цель развёртывания для внутренней и глобальной коммерциализации.', 'AR': 'هدف نشر سنوي لتحقيق أهداف التسويق التجاري المحلية والعالمية.', 'HI': 'घरेलू और वैश्विक व्यावसायीकरण लक्ष्यों हेतु वार्षिक विस्तार लक्ष्य।', 'VI': 'Mục tiêu triển khai hằng năm cho các mục tiêu thương mại hóa trong nước và toàn cầu.', 'ES': 'Un objetivo de implementación anual para metas de comercialización nacional y global.', 'TH': 'เป้าหมายการขยายผลรายปีเพื่อการค้าทั้งในและต่างประเทศ'},
     'monthChecklistPopupMemo': {'KO': '이번 달 핵심 학습 마스터 팩 안에 포함된 세부 목표 항목입니다.', 'EN': 'A detailed target item included in this month\'s Core Study Master Pack.', 'JA': '今月のコア学習マスターパックに含まれる詳細目標項目です。', 'ZH': '本月核心学习方案包中包含的具体目标项。', 'FR': 'Un objectif détaillé inclus dans le pack maître d\'étude de ce mois-ci.', 'DE': 'Ein detailliertes Ziel im diesmonatigen Kernlern-Masterpaket.', 'RU': 'Подробная цель, входящая в основной учебный пакет этого месяца.', 'AR': 'عنصر هدف مفصل ضمن حزمة الدراسة الأساسية لهذا الشهر.', 'HI': 'इस महीने के मुख्य अध्ययन पैक में शामिल एक विस्तृत लक्ष्य आइटम।', 'VI': 'Mục tiêu chi tiết nằm trong gói học tập cốt lõi của tháng này.', 'ES': 'Un objetivo detallado incluido en el paquete maestro de estudio de este mes.', 'TH': 'รายการเป้าหมายโดยละเอียดในแพ็กเรียนหลักของเดือนนี้'},
     'academicTimelineEmptyState': {'KO': '해당 타임라인에 등록된 상세 일정 내역이 없습니다.', 'EN': 'No detailed schedule registered for this timeline.', 'JA': 'このタイムラインに登録された詳細日程がありません。', 'ZH': '该时间线暂无已登记的详细日程。', 'FR': 'Aucun programme détaillé enregistré pour cette chronologie.', 'DE': 'Kein detaillierter Termin für diese Zeitleiste registriert.', 'RU': 'Для этой хронологии не зарегистрировано подробное расписание.', 'AR': 'لا يوجد جدول تفصيلي مسجل لهذا الجدول الزمني.', 'HI': 'इस समयरेखा के लिए कोई विस्तृत शेड्यूल दर्ज नहीं है।', 'VI': 'Chưa có lịch chi tiết nào được đăng ký cho dòng thời gian này.', 'ES': 'No hay horario detallado registrado para esta cronología.', 'TH': 'ไม่มีตารางโดยละเอียดที่ลงทะเบียนไว้สำหรับไทม์ไลน์นี้'},
-
-    // 🆕 [2026-08-02] 주간(Week) 탭 - 실제 캘린더 주 전환에 따른 신규 문구
     'weekGoToday': {'KO': '오늘로 이동', 'EN': 'Go to Today', 'JA': '今日に移動', 'ZH': '回到今天', 'FR': 'Aller à aujourd\'hui', 'DE': 'Zu heute springen', 'RU': 'Перейти к сегодня', 'AR': 'الانتقال لليوم', 'HI': 'आज पर जाएं', 'VI': 'Về hôm nay', 'ES': 'Ir a hoy', 'TH': 'ไปที่วันนี้'},
     'weekEmptyMain': {'KO': '이번 주에 등록된 주요 일정이 없습니다.', 'EN': 'No main schedule registered for this week.', 'JA': '今週登録された主要日程がありません。', 'ZH': '本周暂无已登记的主要日程。', 'FR': 'Aucun programme principal cette semaine.', 'DE': 'Kein Hauptplan für diese Woche registriert.', 'RU': 'На эту неделю основное расписание не добавлено.', 'AR': 'لا يوجد جدول رئيسي مسجل لهذا الأسبوع.', 'HI': 'इस सप्ताह के लिए कोई मुख्य कार्यक्रम दर्ज नहीं है।', 'VI': 'Chưa có lịch chính nào được đăng ký cho tuần này.', 'ES': 'No hay horario principal registrado para esta semana.', 'TH': 'ไม่มีตารางหลักที่ลงทะเบียนไว้สำหรับสัปดาห์นี้'},
-
-    // 🆕 [2026-08-10 연동/버그수정] 신규 문구
     'addMonthlyTargetTitle': {'KO': '월간 목표 추가', 'EN': 'Add Monthly Target', 'JA': '月間目標を追加', 'ZH': '添加月度目标', 'FR': 'Ajouter un objectif mensuel', 'DE': 'Monatsziel hinzufügen', 'RU': 'Добавить месячную цель', 'AR': 'إضافة هدف شهري', 'HI': 'मासिक लक्ष्य जोड़ें', 'VI': 'Thêm mục tiêu hằng tháng', 'ES': 'Añadir objetivo mensual', 'TH': 'เพิ่มเป้าหมายรายเดือน'},
     'addNewTimeSlotBtn': {'KO': '새 학습 시간대 추가', 'EN': 'Add Time Slot', 'JA': '新規学習時間帯を追加', 'ZH': '添加新学习时段', 'FR': 'Ajouter un créneau', 'DE': 'Neuen Zeitraum hinzufügen', 'RU': 'Добавить интервал', 'AR': 'إضافة فترة جديدة', 'HI': 'नया समय स्लॉट जोड़ें', 'VI': 'Thêm khung giờ mới', 'ES': 'Añadir bloque de horario', 'TH': 'เพิ่มช่วงเวลาใหม่'},
     'emptyDayTimelineState': {'KO': '이 날짜에 등록된 학습 타임라인이 없습니다. 주간 탭에서 요일별 시간표를 먼저 등록해보세요.', 'EN': 'No study timeline registered for this date. Try registering a weekday schedule in the Week tab first.', 'JA': 'この日付に登録された学習タイムラインがありません。まず週間タブで曜日別時間表を登録してください。', 'ZH': '该日期暂无已登记的学习时间线。请先在周视图中登记该星期的课程表。', 'FR': 'Aucune chronologie d\'étude enregistrée pour cette date. Essayez d\'abord d\'enregistrer un horaire dans l\'onglet Semaine.', 'DE': 'Für dieses Datum ist keine Lernzeitleiste registriert. Registrieren Sie zuerst einen Wochentagsplan im Wochen-Tab.', 'RU': 'Для этой даты не зарегистрирована учебная хронология. Сначала зарегистрируйте расписание на вкладке Неделя.', 'AR': 'لا يوجد جدول زمني للدراسة مسجل لهذا التاريخ. جرّب تسجيل جدول أسبوعي أولاً في تبويب الأسبوع.', 'HI': 'इस तारीख के लिए कोई अध्ययन समयरेखा दर्ज नहीं है। पहले सप्ताह टैब में साप्ताहिक शेड्यूल दर्ज करें।', 'VI': 'Chưa có dòng thời gian học tập nào cho ngày này. Hãy đăng ký lịch theo ngày trong tuần trước ở tab Tuần.', 'ES': 'No hay cronología de estudio registrada para esta fecha. Intenta registrar primero un horario semanal en la pestaña Semana.', 'TH': 'ไม่มีไทม์ไลน์การเรียนที่ลงทะเบียนไว้สำหรับวันนี้ ลองลงทะเบียนตารางประจำวันในแท็บสัปดาห์ก่อน'},
@@ -253,7 +249,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? key;
   }
 
-  // 🆕 [12개국 - 한 줄 문구] 기본값 = "EN / KO", 10개국 선택 시 = 단일 언어
   static String _biStr(String key) {
     final map = _uiText[key];
     if (map == null) return key;
@@ -263,7 +258,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return '${map['EN'] ?? ''} / ${map['KO'] ?? ''}';
   }
 
-  // 🆕 [12개국 - 제목형 2단] 기본값 = 영문(위) + 한글(아래) 2줄, 10개국 선택 시 = 단일 언어 1줄
   static Widget _biTitle(
       String key, {
         required TextStyle enStyle,
@@ -292,10 +286,8 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
   static Map<String, String> _uiTextLookup(String key) => _uiText[key] ?? {'EN': key, 'KO': key};
 
-  // 🆕 [2026-07-30] 월/영문 축약 리스트 (가로 한 줄 EN/KO 표시용)
   static const List<String> _monthAbbrEn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // 🆕 [2026-07-30] 동적 텍스트를 "EN / KO" 가로 한 줄로 합쳐 표시 (월 선택 칩용)
   static Widget _biCompoundInline({
     required String enText,
     required String koText,
@@ -308,7 +300,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return Text('$enText / $koText', style: style, overflow: TextOverflow.fade, softWrap: false, maxLines: 1);
   }
 
-  // 🆕 [2026-07-30] 동적 텍스트를 영문(위)/한글(아래) 2줄로 쌓아서 표시 (주 선택 칩, 토글 버튼용)
   static Widget _biCompoundStack({
     required String enText,
     required String koText,
@@ -344,10 +335,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return DkeLang.current == 'KO' ? '$weekNum주차' : '${_t('gradeWeekPrefix')} $weekNum';
   }
 
-  // 🆕 [C범위] 팝업 안에서 "$month월 $day일" 형태로 쓰던 부분을 언어별로 자연스럽게 표기
-  // 🆕 [버그 수정 2026-08-13] 원장님 지시: "07월03일" 형태로 통일 - 월/일 모두 2자리 0채움,
-  // "월"과 숫자 사이 공백 없음. 이 헬퍼를 쓰는 모든 곳(연간 주요일정 리스트, 각종 팝업 등)에
-  // 공통 적용됨.
   static String _monthDayText(int month, int day) {
     final String mm = month.toString().padLeft(2, '0');
     final String dd = day.toString().padLeft(2, '0');
@@ -373,8 +360,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
   static List<String> _weekdaysSunFirst() => _weekdaySunFirst[DkeLang.current] ?? _weekdaySunFirst['EN']!;
   static List<String> _weekdaysMonFirst() => _weekdayMonFirst[DkeLang.current] ?? _weekdayMonFirst['EN']!;
 
-  // 🆕 [버그 수정 2026-08-16] "08/09 Sunday/일요일"처럼 요일 전체 이름이 필요한 곳(개인 시간표
-  // 편집 페이지 상단 표시)에서 사용하는 고정 배열. 일요일부터 시작(index 0=일요일).
   static const List<String> _weekdayFullEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   static const List<String> _weekdayFullKo = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
@@ -388,22 +373,15 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     }
   }
 
-  // 🆕 [2026-08-02] 주어진 날짜가 속한 "실제 캘린더 주"의 일요일(주 시작일)을 계산
-  // DateTime.weekday: 월=1 ... 일=7 이므로, 일요일까지 거슬러 올라갈 일수는 (weekday % 7)
   DateTime _computeWeekStart(DateTime date) {
     final DateTime dayOnly = DateTime(date.year, date.month, date.day);
     return dayOnly.subtract(Duration(days: dayOnly.weekday % 7));
   }
 
-  // 🆕 [2026-08-02] 두 날짜가 같은 실제 캘린더 주(일~토)에 속하는지 비교
   bool _isSameRealWeek(DateTime a, DateTime b) {
     return _computeWeekStart(a).isAtSameMomentAs(_computeWeekStart(b));
   }
 
-  // 🆕 [2026-08-03] 주어진 주 시작일(일요일)이 "그 달" 기준으로 몇 번째 주(Week N)인지 계산.
-  // 연중 통산 주차는 실용성이 없다는 피드백에 따라 월 기준으로 매달 리셋되도록 변경함.
-  // 기준 달은 그 주의 토요일(마지막 날)이 속한 달로 삼음 - 예) 7/26~8/1 주는 토요일(8/1)이
-  // 8월이므로 "8월 1주차"가 되고, 8/2~8/8 주는 "8월 2주차"가 됨.
   int _computeWeekOfMonth(DateTime weekStart) {
     final DateTime weekEnd = weekStart.add(const Duration(days: 6));
     final DateTime firstOfRefMonth = DateTime(weekEnd.year, weekEnd.month, 1);
@@ -416,29 +394,21 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  // 🆕 [2026-08-02] 주간 탭 - 가로 스크롤 칩에 표시할 실제 주(일요일 시작일) 목록.
-  // 오늘이 속한 실제 주를 기준으로 이전 6주 ~ 이후 12주, 총 19개 주를 생성함 (기존 칩 UI와 동일한
-  // 가로 스크롤 방식으로 동작하되, 내용만 "1~5주차" 가상 라벨 대신 실제 날짜 범위로 표시됨).
   List<DateTime> get _weekChipWindow {
     final DateTime baseWeekStart = _computeWeekStart(DateTime.now());
     return List.generate(19, (i) => baseWeekStart.add(Duration(days: 7 * (i - 6))));
   }
 
-  // 🆕 [2026-08-03] "이번 주가 화면 중앙에 오는 시작 스크롤 위치"를 계산해서 ScrollController를
-  // 그 위치로 생성함. context가 있어야 MediaQuery로 실제 화면 폭을 읽을 수 있으므로, build 단계에서
-  // (State가 mounted된 이후) 딱 한 번만 호출됨. 이후 재호출되어도 _weekChipScrollControllerReady
-  // 플래그로 막혀 다시 생성되지 않음 — 즉 사용자가 이후에 직접 스크롤한 위치는 건드리지 않음.
   void _ensureWeekChipScrollControllerReady() {
     if (_weekChipScrollControllerReady) return;
 
     final double screenWidth = MediaQuery.of(context).size.width;
-    // 주간 화면 바깥 ListView의 좌우 padding(16+16=32)을 뺀 값이 칩 리스트의 실제 가로 폭
     final double viewportWidthApprox = (screenWidth - 32.0).clamp(0.0, double.infinity);
 
     final List<DateTime> window = _weekChipWindow;
     final int todayIndex = window.indexWhere((w) => _isSameRealWeek(w, DateTime.now()));
 
-    const double estimatedChipWidth = 108.0; // 패딩(32) + 텍스트(~66) + 우측 마진(10) 근사치
+    const double estimatedChipWidth = 108.0;
     final double totalEstimatedWidth = window.length * estimatedChipWidth;
 
     double initialOffset = 0.0;
@@ -454,15 +424,13 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     _weekChipScrollControllerReady = true;
   }
 
-  // 🆕 [2026-08-03] 연간 탭 - "현재 연도 칩이 화면에 바로 보이는 시작 스크롤 위치"를 계산해서
-  // ScrollController를 그 위치로 생성함. 주간 칩과 완전히 동일한 원리.
   void _ensureYearChipScrollControllerReady() {
     if (_yearChipScrollControllerReady) return;
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final double viewportWidthApprox = (screenWidth - 32.0).clamp(0.0, double.infinity);
 
-    const double estimatedYearChipWidth = 92.0; // 패딩(32) + 텍스트(~50) + 우측 마진(10) 근사치
+    const double estimatedYearChipWidth = 92.0;
     final double totalEstimatedWidth = _scrollableYears.length * estimatedYearChipWidth;
 
     double initialOffset = 0.0;
@@ -476,15 +444,13 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     _yearChipScrollControllerReady = true;
   }
 
-  // 🆕 [2026-08-03] 월간 탭 - "현재 월 칩이 화면 중앙에 바로 보이는 시작 스크롤 위치"를 계산.
-  // 주간/연간 칩과 완전히 동일한 원리.
   void _ensureMonthChipScrollControllerReady() {
     if (_monthChipScrollControllerReady) return;
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final double viewportWidthApprox = (screenWidth - 32.0).clamp(0.0, double.infinity);
 
-    const double estimatedMonthChipWidth = 80.0; // 패딩(36) + 텍스트(~36) + 우측 마진(8) 근사치
+    const double estimatedMonthChipWidth = 80.0;
     final double totalEstimatedWidth = 12 * estimatedMonthChipWidth;
 
     final double targetOffset = (_selectedMonthIndex * estimatedMonthChipWidth) - (viewportWidthApprox / 2) + (estimatedMonthChipWidth / 2);
@@ -503,7 +469,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     final DateTime today = DateTime.now();
     _selectedDayDate = DateTime(today.year, today.month, today.day);
 
-    // 🆕 [2026-08-02] 진입 시 항상 오늘이 속한 실제 캘린더 주(일~토)로 초기화
     _weekViewRangeStart = _computeWeekStart(today);
 
     _scrollableYears = ['2026년', '2027년', '2028년', '2029년', '2030년'];
@@ -520,8 +485,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         _saveState();
-        // 🆕 [2026-08-03] 주간 탭(인덱스 2) 진입 시마다 학사 타이머 [개인] 시간표 재조회 - 서로 다른
-        // 화면에서 수정한 내용이 최신 상태로 반영되도록 함
         if (_tabController.index == 2) { _loadPersonalTimetableCache(); }
       }
     });
@@ -557,8 +520,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
     _sortGlobalSchedules();
 
-    // 🆕 [버그 수정 2026-08-10] 개인 시간표를 먼저 불러온 뒤에 오늘 날짜 타임라인을 동기화해야
-    // "가짜 10개 항목" 대신 실제 개인 시간표 데이터를 정확히 참조할 수 있음(순서 중요).
     _loadPersonalTimetableCache().then((_) {
       _initStorageAndLoad().then((_) {
         _syncDailyTimelineForDate(_selectedDayDate);
@@ -626,11 +587,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
           {'time': '22:00 ~ 23:00', 'title': 'CLOSING SUMMARY & STAR COLLECT\n[오늘 시험 범위 최종 마감 및 별 수집]', 'memo': '자정 전 완벽 리커버리', 'category': '기타', 'custom_book': '', 'is_starred': false},
         ];
       } else {
-        // 🆕 [버그 수정 2026-08-10] 기존엔 모든 요일에 동일한 가짜 10개 항목(_weeklyTemplateMaster)이
-        // 자동으로 채워져서, 사용자가 실제로 1개를 추가해도 "이미 있던 가짜 10개"까지 함께 보여
-        // "1개 넣었는데 10개가 생겼다"처럼 보이는 문제가 있었음. 이제 그 가짜 데이터를 완전히 제거하고,
-        // 대신 주간 탭과 동일한 "진짜 개인 시간표"(gke_custom_schedules)를 그대로 복사해와서 시작함.
-        // 개인 시간표에 그 요일 데이터가 없으면 빈 목록으로 시작함(가짜 데이터로 채우지 않음).
         if (!_personalTimetableLoaded) {
           await _loadPersonalTimetableCache();
         }
@@ -722,8 +678,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
       setState(() {
         if (savedTabIndex != null) { _tabController.index = savedTabIndex; }
-        // 🆕 [2026-08-03] 연도 선택은 저장된 이전 값으로 복원하지 않음 - 항상 실시간 현재 연도가
-        // 기본으로 표시되도록 함 (initState에서 이미 오늘 날짜 기준으로 계산됨, 주간 탭과 동일한 원칙)
         if (savedMonthIndex != null && savedMonthIndex < 12) { _selectedMonthIndex = savedMonthIndex; }
         if (savedWeekIndex != null && savedWeekIndex < _scrollableWeeks.length) { _selectedWeekIndex = savedWeekIndex; }
 
@@ -742,8 +696,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     }
   }
 
-  // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표를 gke_custom_schedules에서 읽어옴.
-  // 그 화면과 동일한 원본 데이터를 그대로 읽는 것이므로, 그쪽에서 수정한 내용이 여기에도 반영됨.
   Future<void> _loadPersonalTimetableCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -771,9 +723,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     }
   }
 
-  // 🆕 [2026-08-03] 개인 시간표 수정분을 gke_custom_schedules에 저장. 학사 타이머 화면이 쓰는
-  // 다른 트랙(NORMAL_PERIOD_*, EXAM_PREP_* 등) 데이터를 덮어쓰지 않도록, 기존 전체 맵을 먼저
-  // 불러온 뒤 PERSONAL_ 로 시작하는 부분만 갱신해서 다시 저장함.
   Future<void> _savePersonalTimetableCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -795,13 +744,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return _personalTimetableCache['PERSONAL_$weekdayEnKey'] ?? [];
   }
 
-  // 🆕 [양방향 연동 2026-08-12] 일간 "일정 타임라인 상세"에서 추가/수정/삭제한 시간+제목을
-  // 그 날짜가 속한 요일의 주간 반복 개인 시간표(gke_custom_schedules, PERSONAL_요일)에도 그대로
-  // 반영함. 원장님 확인: "일간에서 추가/수정하면 그 요일의 주간 반복 시간표까지 같이 바뀌어야 함".
-  // - 별 수집 여부/카테고리/메모는 개인 시간표 쪽에 그런 항목이 없으므로 시간+제목만 동기화함.
-  // - 추가: oldTime/oldTitle을 null로 두고 newTime/newTitle만 전달
-  // - 수정: oldTime/oldTitle(수정 전 값)과 newTime/newTitle(수정 후 값)을 모두 전달
-  // - 삭제: newTime/newTitle을 null로 두고 oldTime/oldTitle(삭제되는 값)만 전달
   void _syncDayTimeChangeToPersonalTimetable({
     required String weekdayEnKey,
     String? oldTime,
@@ -813,12 +755,10 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     final List<Map<String, String>> list = List<Map<String, String>>.from(_personalTimetableCache[cacheKey] ?? []);
 
     if (newTime == null && newTitle == null) {
-      // 삭제: 수정 전 시간+제목이 정확히 일치하는 항목을 찾아 제거
       if (oldTime != null && oldTitle != null) {
         list.removeWhere((e) => e['time'] == oldTime && e['task'] == oldTitle);
       }
     } else if (oldTime == null && oldTitle == null) {
-      // 추가: 시작 시각 기준으로 올바른 위치에 시간순 삽입 (개인 시간표 편집 다이얼로그와 동일한 규칙)
       final int? newStart = _parsePersonalStartMinutes(newTime!);
       int insertAt = list.length;
       if (newStart != null) {
@@ -830,7 +770,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
       }
       list.insert(insertAt, {'time': newTime, 'task': newTitle ?? ''});
     } else {
-      // 수정: 수정 전 값과 일치하는 항목을 찾아서 새 값으로 교체 (못 찾으면 새로 추가)
       final int idx = list.indexWhere((e) => e['time'] == oldTime && e['task'] == oldTitle);
       if (idx != -1) {
         list[idx] = {'time': newTime!, 'task': newTitle ?? ''};
@@ -843,7 +782,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     _savePersonalTimetableCache();
   }
 
-  // 🆕 "09:00 - 10:00" 형식에서 시작 시각만 분(分) 단위로 파싱 (학사 타이머와 동일한 파싱 규칙)
   int? _parsePersonalStartMinutes(String timeStr) {
     try {
       final parts = timeStr.split(RegExp(r'[-~–]'));
@@ -856,10 +794,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     }
   }
 
-  // 🆕 [2026-08-03] 요일별로 보여줄 항목 1개를 선택하는 로직.
-  // - 이미 지나간 요일: 그 요일의 마지막(가장 늦은) 항목 = "마지막 학습"
-  // - 오늘 및 다가올 요일: 모두 "현재 시각" 기준으로 매칭되는 항목(진행 중이거나 가장 최근 시작된 항목)을
-  //   동일하게 보여줌 — 아직 하나도 시작 전이면 그 요일의 첫 항목으로 자연스럽게 대체됨.
   Map<String, String>? _pickPersonalScheduleDisplayItem(List<Map<String, String>> items, {required bool isPastDay}) {
     if (items.isEmpty) return null;
     if (isPastDay) {
@@ -898,10 +832,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     }
   }
 
-  // 🆕 [2026-08-14] 실행 탭에서 새 일정을 추가/수정하면 gke_global_schedules가 바뀌는데,
-  // 계획 탭은 AutomaticKeepAliveClientMixin 때문에 탭을 다시 봐도 자동으로 새로고침되지 않음.
-  // main_self_learning_planner_screen.dart가 계획 탭으로 돌아올 때 이 공개 메서드를 호출해서
-  // 최신 데이터를 다시 불러오게 함.
   Future<void> refreshFromExternalChanges() async {
     await _loadMasterData();
   }
@@ -971,10 +901,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     });
   }
 
-  // 🆕 [버그 수정 2026-08-10] 새 일정에 고유 ID를 부여하기 위한 헬퍼.
-  // 기존엔 ID가 없어서 삭제 시 "제목+월+일"이 같은 항목을 통째로 지웠는데, 같은 날 같은 제목의
-  // 일정이 두 개 이상이면 둘 다 삭제되는 위험이 있었음. 이제 매번 고유한 ID를 부여해서 정확히
-  // 그 항목 하나만 지울 수 있게 함.
   String _generateUniqueScheduleId() {
     return 'sch_${DateTime.now().microsecondsSinceEpoch}_${_globalSchedules.length}';
   }
@@ -1086,7 +1012,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
-        // 🆕 [버그 수정 2026-08-10] 연간 탭의 "+"만 [일정]/[목표] 둘 다 선택 가능 (allowTargetOption: true).
         _buildDynamicSectionHeader('sectionYearlyTarget', () { _showAddScheduleBottomSheet(context, '목표', allowTargetOption: true); }),
         const SizedBox(height: 12),
         SizedBox(
@@ -1206,9 +1131,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
             final List<Map<String, dynamic>> currentMonthSchedules = isViewingCurrentYear
                 ? filteredYearSchedules.where((s) => s['month'] == currentRealMonth).toList()
                 : <Map<String, dynamic>>[];
-            // 🆕 [버그 수정 2026-08-13] 원장님 지시: 최근순 정렬 - 현재 시점에서 가장 최근 일정이
-            // 맨 위로 오도록 함. _globalSchedules 자체는 다른 화면(주간 등)에서 오름차순을 그대로
-            // 써야 하므로 건드리지 않고, 이 리스트를 화면에 뿌릴 때만 .reversed로 뒤집음.
             final List<Map<String, dynamic>> itemsToShow = (_isYearScheduleExpanded ? filteredYearSchedules : currentMonthSchedules).reversed.toList();
             final String collapsedTitle = isViewingCurrentYear
                 ? '${_yearNumText(currentYearKey)} ${_monthNumText(currentRealMonth)} ${_t('yearMainScheduleWord')}'
@@ -1270,8 +1192,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
-        // 🆕 [버그 수정 2026-08-10] 월간 탭의 "+"는 [일정]만 추가 (allowTargetOption: false, 기본값).
-        // 월간 목표(학습 리스트) 추가는 아래 별도의 작은 "+" 버튼으로 분리함.
         _buildDynamicSectionHeader('sectionMonthlyMgmt', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 15),
         Container(
@@ -1409,8 +1329,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
                     Expanded(
                       child: Text('${_monthNumText(targetMonth)} ${_t('monthMasterPack')}', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
                     ),
-                    // 🆕 [버그 수정 2026-08-10] 월간 목표(학습 리스트) 전용 추가 버튼 신설.
-                    // 지금까지는 이 리스트에 새 항목을 추가할 방법이 전혀 없었음.
                     GestureDetector(
                       onTap: () => _showAddMonthlyTargetDialog(targetMonth),
                       child: Container(
@@ -1501,16 +1419,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     );
   }
 
-  // ============================================================================
-  // 🆕 [2026-08-02] 주간(Week) 탭 전면 재설계
-  // - "1~5주차 순환 템플릿" 방식의 가상 주차 개념을 버리고, 실제 일~토 캘린더 주 기준으로 전환.
-  // - 진입 시 항상 오늘이 속한 실제 주가 기본 선택됨 (initState의 _weekViewRangeStart 참고).
-  // - ◀ ▶ 로 실제 주 단위 이동, "오늘로 이동" 버튼으로 즉시 복귀.
-  // - [학습 타임라인] 서브탭: 요일별 실제 개인 시간표(gke_custom_schedules)를 그대로 보여줌 — 일간
-  //   탭의 "일정 타임라인 상세"와 완전히 동일한 원본 데이터를 공유함.
-  // - [주요 일정] 서브탭: 더 이상 정적 문구가 아니라, 실제 _globalSchedules 중 이 주 범위(일~토)에 속하는
-  //   항목만 필터링해서 보여주고, 탭하면 기존 수정/삭제 팝업과 연결됨(typeKey: 'WEEK_MAIN').
-  // ============================================================================
   Widget _buildWeekView() {
     _ensureWeekChipScrollControllerReady();
     final DateTime weekStart = _weekViewRangeStart;
@@ -1520,7 +1428,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
     final String weekRangeLabel = '${weekStart.month}/${weekStart.day} ~ ${weekEndInclusive.month}/${weekEndInclusive.day}';
 
-    // 🆕 실제 주 범위(일~토)에 속하는 진짜 일정만 필터링
     List<Map<String, dynamic>> weekMainSchedules = _globalSchedules.where((s) {
       final DateTime d = DateTime(s['year'] as int, s['month'] as int, s['day'] as int);
       return !d.isBefore(weekStart) && !d.isAfter(weekEndInclusive);
@@ -1536,13 +1443,8 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
-        // 🆕 [버그 수정 2026-08-10] 주간 탭의 "+"도 [일정]만 추가 (allowTargetOption: false, 기본값).
         _buildDynamicSectionHeader('sectionWeeklyAnalytics', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
-
-        // 🆕 [2026-08-03] 사용자 요청으로 별도 "Week / 주" 라벨 줄은 삭제하고, 대신 각 칩 안에
-        // "Week N"(연중 몇 번째 주인지)을 날짜범위 바로 위에 한 쌍으로 묶어서 표시함 - 선택 시
-        // 두 줄이 함께 골드 배경 안에 들어감. 2줄 표시를 위해 칩 높이를 50→56으로 소폭 확대함.
         SizedBox(
           height: 56,
           child: ListView.builder(
@@ -1657,7 +1559,7 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
           Text('$weekRangeLabel ${_t('weekdayTemplateOverview')}', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: slate400)),
           const SizedBox(height: 10),
           ...weekDates.asMap().entries.map((entry) {
-            int i = entry.key; // 0=일 ... 6=토
+            int i = entry.key;
             DateTime actualDate = entry.value;
             String dayLabel = weekdays[i];
             String dayLabelEn = (_weekdaySunFirst['EN'] ?? const ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[i];
@@ -1666,7 +1568,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
             bool isPastDay = DateTime(actualDate.year, actualDate.month, actualDate.day)
                 .isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
 
-            // 🆕 [2026-08-03] 학사 타이머 [개인] 시간표에서 이 요일의 실제 데이터를 가져옴
             final String weekdayEnKey = _weekdayEnKeysSunFirst[i];
             final List<Map<String, String>> personalItems = _getPersonalScheduleFor(weekdayEnKey);
             final Map<String, String>? displayItem = _pickPersonalScheduleDisplayItem(personalItems, isPastDay: isPastDay);
@@ -1677,7 +1578,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
             return Column(
               children: [
                 GestureDetector(
-                  // 🆕 [버그 수정 2026-08-16] 팝업을 여는 대신 이 요일을 펼치거나 접음.
                   onTap: () { setState(() { _expandedWeekdayIdx = (_expandedWeekdayIdx == i) ? null : i; }); },
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 4),
@@ -1719,9 +1619,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
                     ),
                   ),
                 ),
-                // 🆕 [버그 수정 2026-08-16] 펼쳐진 요일의 시간표를 화면에 바로(팝업 없이) 나열함.
-                // 항목을 탭했을 때만 편집 팝업 1개가 뜸(_showPersonalEditPopup) - 목록 자체는
-                // 절대 팝업으로 띄우지 않음.
                 if (_expandedWeekdayIdx == i)
                   Container(
                     margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
@@ -1793,7 +1690,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
             );
           }).toList(),
         ] else ...[
-          // 🆕 실제 데이터(_globalSchedules) 기반 "주요 일정" 목록 — 탭하면 수정/삭제 가능
           if (weekMainSchedules.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 30.0),
@@ -1802,7 +1698,7 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
           else
             ...weekMainSchedules.map((schedule) {
               final DateTime scheduleDate = DateTime(schedule['year'] as int, schedule['month'] as int, schedule['day'] as int);
-              final int weekdayArrIdx = scheduleDate.weekday % 7; // 0=일 ... 6=토 (weekdaysSunFirst 인덱스와 일치)
+              final int weekdayArrIdx = scheduleDate.weekday % 7;
               final String dateBadge = '${scheduleDate.month}/${scheduleDate.day}(${weekdays[weekdayArrIdx]})';
               final String dateBadgeEn = (_weekdaySunFirst['EN'] ?? const ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[weekdayArrIdx];
 
@@ -1854,14 +1750,11 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     List<Map<String, dynamic>> targetDaySchedules = _globalSchedules
         .where((s) => s['year'] == _selectedDayDate.year && s['month'] == _selectedDayDate.month && s['day'] == _selectedDayDate.day)
         .toList();
-    // 🆕 [버그 수정 2026-08-10] DailyTodoListSection 위젯은 자체적으로 정렬하지 않으므로,
-    // 기존 인라인 코드가 하던 "시간 순 정렬"을 여기서 미리 적용해서 동일한 표시 순서를 유지함.
     targetDaySchedules.sort((a, b) => (a['time'] ?? '').toString().compareTo((b['time'] ?? '').toString()));
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       children: [
-        // 🆕 [버그 수정 2026-08-10] 일간 탭의 "+"도 [일정]만 추가 (allowTargetOption: false, 기본값).
         _buildDynamicSectionHeader('sectionDailyScheduler', () { _showAddScheduleBottomSheet(context, '일정'); }),
         const SizedBox(height: 12),
         PlannerCalendarView(
@@ -1978,16 +1871,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
           ],
         ),
         const SizedBox(height: 16),
-        // 🆕 [버그 수정 2026-08-10] 토글 값(_isTimeViewSelected)을 실제로 반영해서 화면을 분기함.
-        // 기존엔 이 값과 무관하게 항상 "오늘 주요 일정"만 보여줬음 — [일정 타임라인 상세] 화면 자체가
-        // 열릴 방법이 없었던 근본 원인.
-        // 🆕 [버그 수정 2026-08-10] "일정 타임라인 상세"는 지금까지 한 번도 화면에 정상적으로
-        // 노출된 적이 없던(고장나있던) 기능이므로, 이미 만들어져 있던 전용 위젯(StudyTimelineSection)을
-        // 그대로 연결해서 중복 코드 없이 사용함. 반대로 "오늘 주요 일정"은 지금까지 실제로 화면에
-        // 정상 노출되어 왔던 기능이라, 디자인을 임의로 바꾸지 않기 위해 기존과 동일한 인라인 렌더링을
-        // (색상 바 + 시간 + 제목/메모 + 통일 아이콘) 그대로 유지함 — DailyTodoListSection 위젯은
-        // 디자인(사각형 색상 표기+카테고리 괄호 병기)이 달라서 여기 연결하면 원치 않는 디자인 변경이
-        // 되므로 사용하지 않음(그 위젯은 다른 화면 전용으로 남겨둠).
         _isTimeViewSelected
             ? StudyTimelineSection(
           fixedDayTimelines: _fixedDayTimelines,
@@ -2059,9 +1942,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     );
   }
 
-  // 🆕 [버그 수정 2026-08-10] 일간 "일정 타임라인 상세"에 새 시간대를 직접 추가하는 다이얼로그.
-  // 여기서 추가한 항목은 그날짜만의 기록(_fixedDayTimelines/_dailyExecutionInstanceMap)에 저장되며,
-  // 개인 시간표(주간 탭)와는 독립적으로 그날만 반영됨(그날 하루만 특별한 일정을 넣고 싶을 때 사용).
   void _showAddDayTimeSlotDialog() {
     final TextEditingController timeController = TextEditingController();
     final TextEditingController titleController = TextEditingController();
@@ -2147,7 +2027,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
                           'is_starred': false,
                         });
                         _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
-                        // 🆕 [양방향 연동 2026-08-12] 그 날짜가 속한 요일의 주간 반복 시간표에도 동일하게 추가
                         final String weekdayEnKey = _weekdayEnKeysSunFirst[_selectedDayDate.weekday % 7];
                         _syncDayTimeChangeToPersonalTimetable(weekdayEnKey: weekdayEnKey, newTime: finalTime, newTitle: finalTitle);
                       });
@@ -2709,8 +2588,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
     );
   }
 
-  // 🆕 [버그 수정 2026-08-10] 월간 "학습 리스트"에 사용자가 직접 새 목표 항목을 추가하는 다이얼로그.
-  // 내장 항목(labelKey)과 구분하기 위해 사용자가 추가한 항목은 원문 그대로 customText에 저장함.
   void _showAddMonthlyTargetDialog(int monthKey) {
     final TextEditingController controller = TextEditingController();
     showDialog(
@@ -2795,6 +2672,11 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
       context: context,
       builder: (BuildContext dialogContext) {
         bool isStarred = targetItem['is_starred'] ?? false;
+        // 🆕 [2026-08-17] 리포트(실행률) 연동을 위한 "완료 체크" - 연간/월간/주간/일간의 주요일정
+        // (학교/학원/시험/개인)에 적용됨. targetItem은 _globalSchedules와 동일한 Map 참조이므로
+        // 이 안에서 직접 값을 바꾸면 _globalSchedules에도 그대로 반영됨.
+        bool isCompleted = targetItem['completed'] ?? false;
+        final bool isMainScheduleType = typeKey == 'YEAR' || typeKey == 'MONTH' || typeKey == 'WEEK_MAIN' || typeKey == 'DAY_MAIN';
 
         return StatefulBuilder(
           builder: (BuildContext viewContext, StateSetter setViewState) {
@@ -2848,6 +2730,31 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
                             final String dateKey = "${_selectedDayDate.year}-${_selectedDayDate.month.toString().padLeft(2, '0')}-${_selectedDayDate.day.toString().padLeft(2, '0')}";
                             _dailyExecutionInstanceMap[dateKey] = _fixedDayTimelines;
                             _calculateMonthlyProgress();
+                            _saveMasterData();
+                          },
+                        ),
+                      ),
+                    ],
+                    // 🆕 [2026-08-17] 주요일정(학교/학원/시험/개인) 완료 체크 - 리포트 탭의
+                    // "실행률" 계산에 그대로 쓰임.
+                    if (isMainScheduleType) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: isCompleted ? slate500 : goldColor, width: 1.5),
+                            backgroundColor: isCompleted ? Colors.transparent : goldColor.withValues(alpha: 0.08),
+                          ),
+                          icon: Icon(isCompleted ? Icons.check_circle : Icons.check_circle_outline, color: goldColor, size: 18),
+                          label: Text(
+                            isCompleted ? _biStr('scheduleCompletedLabel') : _biStr('scheduleCompleteAction'),
+                            overflow: TextOverflow.fade, softWrap: false, maxLines: 1,
+                            style: GoogleFonts.notoSansKr(fontSize: 12, color: isCompleted ? slate400 : goldColor, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () {
+                            setViewState(() { isCompleted = !isCompleted; });
+                            setState(() { targetItem['completed'] = isCompleted; });
                             _saveMasterData();
                           },
                         ),
@@ -3457,8 +3364,6 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
                             String finalTime = timeController.text.trim().isEmpty ? _currentTimeString() : timeController.text.trim();
 
                             setState(() {
-                              // 🆕 [2026-08-03] 버그 수정: 'year'가 2026으로 고정되어 있던 문제.
-                              // 연간 탭에서 선택 중인 연도(기본값=실제 오늘 연도)를 그대로 사용하도록 수정.
                               final int resolvedYear = int.tryParse(_scrollableYears[_selectedYearIndex].replaceAll('년', '')) ?? DateTime.now().year;
                               _globalSchedules.add({
                                 'id': _generateUniqueScheduleId(),

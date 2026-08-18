@@ -28,6 +28,9 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
   // 한쪽에서 수정한 뒤 다른 탭으로 돌아오면 최신 데이터로 새로고침되도록 GlobalKey로 연결함.
   final GlobalKey<PlanningScreenState> _planningKey = GlobalKey<PlanningScreenState>();
   final GlobalKey<LearningScreenState> _learningKey = GlobalKey<LearningScreenState>();
+  // 🆕 [버그 수정 2026-08-18] 리포트 탭도 같은 데이터를 읽으므로 동일한 방식으로 새로고침 연결.
+  // 지금까지 이 연결이 없어서 계획 탭에서 "완료 체크"를 눌러도 리포트에 반영이 안 됐음.
+  final GlobalKey<ReportScreenState> _reportKey = GlobalKey<ReportScreenState>();
 
   final List<String> _todayMainSchedules = [];
 
@@ -126,6 +129,9 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
           _planningKey.currentState?.refreshFromExternalChanges();
         } else if (_tabController.index == 1) {
           _learningKey.currentState?.refreshSchedules();
+        } else if (_tabController.index == 2) {
+          // 🆕 [버그 수정 2026-08-18] 리포트 탭으로 돌아올 때마다 최신 완료 체크 상태를 다시 읽어옴
+          _reportKey.currentState?.refreshFromExternalChanges();
         }
       }
     });
@@ -188,14 +194,15 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
             // 🆕 [버그 수정 2026-08-10] 지시사항: "자기주도 플래너" 글씨가 너무 진하지 않게,
             // 영문 글자크기 15 / 한글 글자크기 14로 조정. 기존 한글 fontSize 23 / FontWeight.w900
             // (가장 굵은 값)을 fontSize 14 / FontWeight.w600(중간 굵기)으로 낮춤.
+            // 🆕 [2026-08-18] 원장님 지시: 타이틀 글자 크기 3만큼 확대 (영문 15→18, 한글 14→17)
             SizedBox(
               width: 210,
               child: _biTitle(
                 'plannerTitle',
                 textAlign: TextAlign.center,
-                enStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 15, fontWeight: FontWeight.w600),
-                koStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 14, fontWeight: FontWeight.w600),
-                foreignStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 14, fontWeight: FontWeight.w600),
+                enStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 18, fontWeight: FontWeight.w600),
+                koStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 17, fontWeight: FontWeight.w600),
+                foreignStyle: GoogleFonts.notoSans(color: brandGolden, fontSize: 17, fontWeight: FontWeight.w600),
               ),
             ),
           ], // end of title children
@@ -223,7 +230,7 @@ class _MainSelfLearningPlannerScreenState extends State<MainSelfLearningPlannerS
           // 2단계:  실행 레이어
           LearningScreen(key: _learningKey),
           // 3단계:  리포트 레이어
-          const ReportScreen(),
+          ReportScreen(key: _reportKey),
         ],
       ),
 
