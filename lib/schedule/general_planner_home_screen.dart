@@ -4,6 +4,13 @@
 // 모두 실제로 연결된 최종 버전입니다. "약속/프로젝트/알림/일정분석"만 아직
 // 준비 중이며, 나머지 모든 메뉴는 실제 데이터를 저장/불러오는 화면입니다.
 // 디자인 톤: 기존 home_dashboard_screen.dart와 동일한 다크네이비+골드 테마.
+//
+// ✅ [2026-08-16 수정] 알람 감시자(ReminderWatcherService)가 리마인더/약속
+// 화면에 들어가야만 시작되는 문제를 발견했습니다. 사용자가 그 화면들에
+// 안 들어가면 감시자가 아예 안 켜져서 "매일"/"매주" 알람이 통째로 안
+// 울리는 원인이 됐습니다. 그래서 앱의 진입점인 이 홈 화면에서부터 감시자를
+// 시작하도록 옮겼습니다(리마인더/약속 화면에서도 계속 start()를 호출하지만,
+// 싱글턴이라 중복 시작은 안전하게 무시됩니다).
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -14,6 +21,7 @@ import 'calendar_screen.dart';
 import 'appointment_screen.dart';
 import 'project_screen.dart';
 import 'reminder_screen.dart';
+import 'reminder_watcher_service.dart'; // 🆕 [2026-08-16 추가] 홈 화면에서부터 알람 감시자를 시작하기 위함
 import 'schedule_analysis_screen.dart';
 import 'today_schedule_screen.dart';
 import 'today_timeline_screen.dart';
@@ -58,6 +66,9 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     // 실시간으로 알아채도록 리스너를 계속 붙여둠 (예전엔 이 화면에 처음
     // 들어올 때 딱 한 번만 확인해서, 다른 곳에서 바꾸면 못 알아챘음)
     appLanguage.addListener(_onLanguageChanged);
+    // ✅ [2026-08-16 추가] 알람 감시자를 홈 화면 진입 시점부터 시작. 리마인더나
+    // 약속 화면에 안 들어가도 "매일"/"매주" 알람이 계속 감시되도록 하기 위함.
+    ReminderWatcherService.instance.start();
   }
 
   @override

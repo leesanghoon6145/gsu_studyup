@@ -416,6 +416,75 @@ class _RingingAlarmStopBannerState extends State<RingingAlarmStopBanner> {
     }
   }
 
+  // ✅ [2026-08-16 추가] 버튼을 누르면 바로 꺼지지 않고, "정말 끄시겠습니까?"
+  // 확인 팝업이 먼저 뜨고, 거기서 다시 한번 확인해야 최종적으로 꺼집니다.
+  // 잠결에 무심코 눌러서 알람이 꺼지는 것을 방지하기 위함입니다.
+  Future<void> _confirmAndStop(BuildContext context) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // 바깥을 눌러도 안 닫힘 (반드시 아래 버튼 중 하나를 눌러야 함)
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+            border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.5), width: 1.2),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFFDC2626).withOpacity(0.18), blurRadius: 30, spreadRadius: 1),
+              const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.notifications_active_rounded, color: Color(0xFFDC2626), size: 30),
+              const SizedBox(height: 12),
+              const Text(
+                '정말 알람을 끄시겠습니까?',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '알람을 끄면 소리가 즉시 멈춥니다.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12.5, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('취소', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('알람 끄기', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await NotificationService.stopAlarmSound();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_ringing) return const SizedBox.shrink();
@@ -424,9 +493,7 @@ class _RingingAlarmStopBannerState extends State<RingingAlarmStopBanner> {
       margin: const EdgeInsets.only(bottom: 12),
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () async {
-          await NotificationService.stopAlarmSound();
-        },
+        onPressed: () => _confirmAndStop(context),
         icon: const Icon(Icons.notifications_off_rounded, size: 22),
         label: const Text(
           '지금 울리는 알람 끄기 (Stop Ringing Alarm)',

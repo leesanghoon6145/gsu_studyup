@@ -27,6 +27,33 @@ const Map<String, _RepeatOption> kRepeatOptions = {
   '매주': _RepeatOption('Weekly'),
 };
 
+// ✅ [2026-08-16 추가] 요일 다중선택 UI에 쓰이는 라벨 (DateTime.weekday 기준: 월=1~일=7)
+const Map<int, String> _kWeekdayLabels = {
+  1: '월',
+  2: '화',
+  3: '수',
+  4: '목',
+  5: '금',
+  6: '토',
+  7: '일',
+};
+
+// ✅ [2026-08-16 추가] 저장된 weekdays 문자열("2,5" 등)을 편집 화면 초기값으로
+// 변환. 비어있으면(예전 데이터) date의 요일 하나만 담아서 예전 방식대로 보여줌.
+Set<int> _parseWeekdaysForEdit(String weekdays, String fallbackDate) {
+  if (weekdays.trim().isEmpty) {
+    final DateTime? d = DateTime.tryParse(fallbackDate);
+    return d != null ? {d.weekday} : {DateTime.now().weekday};
+  }
+  final parsed = weekdays
+      .split(',')
+      .map((s) => int.tryParse(s.trim()))
+      .where((v) => v != null && v >= 1 && v <= 7)
+      .map((v) => v!)
+      .toSet();
+  return parsed.isEmpty ? {DateTime.now().weekday} : parsed;
+}
+
 class ReminderScreen extends StatefulWidget {
   const ReminderScreen({super.key});
 
@@ -209,6 +236,12 @@ class _ReminderScreenState extends State<ReminderScreen> {
         ? TimeOfDay(hour: int.parse(existing.time.split(':')[0]), minute: int.parse(existing.time.split(':')[1]))
         : TimeOfDay.now();
     String selectedRepeat = existing?.repeatType ?? '한번';
+    // ✅ [2026-08-16 추가] '매주' 선택 시 여러 요일(월화수목금토일)을 고를 수 있는 상태.
+    // 기존 항목을 수정하는 경우, 저장된 weekdays를 파싱해서 미리 체크해둠.
+    // weekdays가 비어있으면(예전 데이터) 원래 날짜의 요일 하나만 자동으로 체크됨.
+    Set<int> selectedWeekdays = existing != null
+        ? _parseWeekdaysForEdit(existing.weekdays, existing.date)
+        : {selectedDate.weekday};
 
     final String? action = await showDialog<String>(
       context: context,
@@ -324,6 +357,53 @@ class _ReminderScreenState extends State<ReminderScreen> {
                         );
                       }).toList(),
                     ),
+
+                    // ✅ [2026-08-16 추가] '매주' 선택 시에만 나타나는 요일 다중선택.
+                    // 예: 화요일 + 금요일처럼 여러 요일을 함께 고를 수 있음.
+                    if (selectedRepeat == '매주') ...[
+                      const SizedBox(height: 14),
+                      BiInline(
+                        en: 'REPEAT ON', ko: '반복 요일', color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 12,
+                        translations: const {'JA': '繰り返す曜日', 'ZH': '重复星期', 'FR': 'Jours de répétition', 'DE': 'Wiederholungstage', 'RU': 'Дни повтора', 'AR': 'أيام التكرار', 'HI': 'दोहराने के दिन', 'VI': 'Ngày lặp lại', 'ES': 'Días de repetición', 'TH': 'วันที่ทำซ้ำ'},
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: _kWeekdayLabels.entries.map((entry) {
+                          final int wd = entry.key;
+                          final bool isSel = selectedWeekdays.contains(wd);
+                          return Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: GestureDetector(
+                                onTap: () => setDialogState(() {
+                                  if (isSel) {
+                                    // 마지막 하나 남은 요일은 해제 못 하게 함 (최소 1개는 있어야 함)
+                                    if (selectedWeekdays.length > 1) selectedWeekdays.remove(wd);
+                                  } else {
+                                    selectedWeekdays.add(wd);
+                                  }
+                                }),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: isSel ? _brandGolden.withOpacity(0.18) : _pageBg,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: isSel ? _brandGolden : Colors.white12, width: isSel ? 1.4 : 1),
+                                  ),
+                                  child: Text(
+                                    entry.value,
+                                    style: GoogleFonts.notoSansKr(color: isSel ? Colors.white : Colors.white54, fontSize: 12, fontWeight: isSel ? FontWeight.bold : FontWeight.normal),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+
                     const SizedBox(height: 18),
 
                     _buildField(icon: Icons.notes_rounded, controller: memoCtrl, hintEn: 'Memo', hintKo: '선택 사항', maxLines: 2),
@@ -389,6 +469,8 @@ class _ReminderScreenState extends State<ReminderScreen> {
     if (action == 'save' && titleCtrl.text.trim().isNotEmpty) {
       final dateKey = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
       final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+      // ✅ [2026-08-16 추가] '매주'일 때만 선택한 요일들을 "2,5" 형태 문자열로 저장. 그 외에는 빈 문자열.
+      final String weekdaysStr = selectedRepeat == '매주' ? (selectedWeekdays.toList()..sort()).join(',') : '';
 
       if (isEdit) {
         final updated = ReminderItem(
@@ -399,6 +481,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
           repeatType: selectedRepeat,
           isEnabled: existing.isEnabled,
           memo: memoCtrl.text.trim(),
+          weekdays: weekdaysStr,
         );
         await ReminderDataService.update(updated);
         // 🆕 [알림 연동] 수정된 내용으로 알람 재예약 (켜져 있을 때만, 꺼져있으면 취소)
@@ -422,6 +505,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
           time: timeStr,
           repeatType: selectedRepeat,
           memo: memoCtrl.text.trim(),
+          weekdays: weekdaysStr,
         );
         await ReminderDataService.add(newItem);
         // 🆕 [알림 연동] 새로 추가된 알림을 실제 알람으로 예약

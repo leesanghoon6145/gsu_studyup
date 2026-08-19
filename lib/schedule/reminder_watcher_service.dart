@@ -93,6 +93,34 @@ class ReminderWatcherService {
     await prefs.setBool(fireKey, true);
   }
 
+  // ✅ [2026-08-16 추가] 목표 시각이 지난 뒤에도 이 시간(분) 안에만 앱을
+  // 열면 놓치지 않고 울리도록 하는 여유 시간. 예전에는 "정확히 그 분"에만
+  // 앱이 켜져 있어야 울렸는데, 그 순간에 앱이 안 켜져 있으면 그날은 그냥
+  // 지나가버리는 문제가 있어서 추가함.
+  static const int _graceMinutes = 15;
+
+  bool _withinGraceWindow(DateTime now, DateTime target) {
+    if (now.isBefore(target)) return false;
+    return now.difference(target).inMinutes < _graceMinutes;
+  }
+
+  // ✅ [2026-08-16 추가] "2,5" 같은 콤마 구분 문자열을 {2, 5} 형태의 Set으로
+  // 변환합니다. weekdays가 비어있으면(예전에 요일 다중선택 기능이 없을 때
+  // 저장된 데이터) fallbackDate의 요일 하나만 담아서 예전 방식대로 동작하게
+  // 합니다.
+  Set<int> _parseWeekdays(String weekdays, {required String fallbackDate}) {
+    if (weekdays.trim().isEmpty) {
+      final DateTime? d = DateTime.tryParse(fallbackDate);
+      return d != null ? {d.weekday} : {};
+    }
+    return weekdays
+        .split(',')
+        .map((s) => int.tryParse(s.trim()))
+        .where((v) => v != null && v >= 1 && v <= 7)
+        .map((v) => v!)
+        .toSet();
+  }
+
   Future<void> _checkReminders() async {
     final items = await ReminderDataService.loadAll();
     final now = DateTime.now();
@@ -108,15 +136,28 @@ class ReminderWatcherService {
       final int mm = int.tryParse(timeParts[1]) ?? -1;
       if (hh < 0 || mm < 0) continue;
 
-      bool isDueNow;
+      // ✅ [2026-08-16 변경] "정확히 그 분"이 아니라, "그 시각 이후 15분
+      // 이내"까지 넉넉하게 확인합니다. 매일/매주 반복은 오늘 날짜 기준으로
+      // 목표 시각을 계산하고, 1회성은 저장된 날짜와 오늘이 같을 때만 확인.
+      bool isDueNow = false;
       if (item.repeatType == '매일') {
-        isDueNow = now.hour == hh && now.minute == mm;
+        final DateTime target = DateTime(now.year, now.month, now.day, hh, mm);
+        isDueNow = _withinGraceWindow(now, target);
       } else if (item.repeatType == '매주') {
-        final itemDate = DateTime.tryParse(item.date);
-        isDueNow = itemDate != null && itemDate.weekday == now.weekday && now.hour == hh && now.minute == mm;
+        // ✅ [2026-08-16 변경] 여러 요일(예: 화요일+금요일) 중 오늘이 하나라도
+        // 포함되면 발동. weekdays가 비어있으면(예전 데이터) date의 요일
+        // 하나만 쓰던 예전 방식으로 자동 대체함(하위 호환).
+        final Set<int> targetWeekdays = _parseWeekdays(item.weekdays, fallbackDate: item.date);
+        if (targetWeekdays.contains(now.weekday)) {
+          final DateTime target = DateTime(now.year, now.month, now.day, hh, mm);
+          isDueNow = _withinGraceWindow(now, target);
+        }
       } else {
-        // 한번(1회성): 날짜 + 시간 둘 다 정확히 일치해야 함
-        isDueNow = item.date == todayKey && now.hour == hh && now.minute == mm;
+        // 한번(1회성): 날짜는 정확히 오늘이어야 하고, 시각은 여유 시간 이내
+        if (item.date == todayKey) {
+          final DateTime target = DateTime(now.year, now.month, now.day, hh, mm);
+          isDueNow = _withinGraceWindow(now, target);
+        }
       }
 
       if (!isDueNow) continue;
@@ -152,8 +193,13 @@ class ReminderWatcherService {
       final int mm = int.tryParse(timeParts[1]) ?? -1;
       if (hh < 0 || mm < 0) continue;
 
-      // 🆕 약속은 반복 개념이 없으므로(1회성) 날짜+시간 둘 다 일치해야 함
-      final bool isDueNow = item.date == todayKey && now.hour == hh && now.minute == mm;
+      // ✅ [2026-08-16 변경] 약속도 동일하게 "정확한 그 분"이 아니라
+      // 목표 시각 이후 15분 이내까지 넉넉하게 확인 (여전히 반복 없이 1회성)
+      bool isDueNow = false;
+      if (item.date == todayKey) {
+        final DateTime target = DateTime(now.year, now.month, now.day, hh, mm);
+        isDueNow = _withinGraceWindow(now, target);
+      }
       if (!isDueNow) continue;
 
       final String fireKey = '$_prefsKeyPrefix appointment_${item.id}_$todayKey';

@@ -5,6 +5,13 @@
 // 🆕 [실제 알림 연동 완료] 이제 add/update/delete 시 notification_service.dart를
 // 통해 실제 푸시 알림이 예약/취소됩니다. 기존 타이머 알림(Timer2Service)과는
 // 완전히 별도의 독립된 알림 채널을 사용하므로 서로 영향을 주지 않습니다.
+//
+// ✅ [2026-08-16 추가] "매주" 반복 시 여러 요일(예: 화요일+금요일)을 선택할
+// 수 있도록 weekdays 필드를 추가했습니다. Dart의 DateTime.weekday 값
+// (월=1, 화=2, 수=3, 목=4, 금=5, 토=6, 일=7)을 콤마로 이어붙인 문자열로
+// 저장합니다(예: "2,5"). 예전에 저장된 데이터(이 필드가 없음)와의 호환을
+// 위해, 비어있으면 저장된 date의 요일 하나만 쓰는 것으로 자동 처리됩니다
+// (reminder_watcher_service.dart에서 처리).
 // ============================================================================
 
 import 'dart:convert';
@@ -20,6 +27,7 @@ class ReminderItem {
   bool isEnabled;
   final String memo;
   String createdAt; // 🆕 [정렬 수정] 최근 입력이 목록 맨 위로 오도록 하는 기준 시각
+  final String weekdays; // 🆕 [2026-08-16 추가] '매주' 반복 시 선택한 요일들. DateTime.weekday(월=1~일=7) 값을 콤마로 이어붙임 (예: "2,5" = 화,금). 비어있으면 date의 요일 하나만 사용(예전 데이터 호환).
 
   ReminderItem({
     required this.id,
@@ -30,6 +38,7 @@ class ReminderItem {
     this.isEnabled = true,
     this.memo = '',
     String? createdAt,
+    this.weekdays = '',
   }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +50,7 @@ class ReminderItem {
     'isEnabled': isEnabled,
     'memo': memo,
     'createdAt': createdAt,
+    'weekdays': weekdays,
   };
 
   factory ReminderItem.fromJson(Map<String, dynamic> json) => ReminderItem(
@@ -52,6 +62,7 @@ class ReminderItem {
     isEnabled: json['isEnabled'] as bool? ?? true,
     memo: json['memo'] as String? ?? '',
     createdAt: json['createdAt'] as String?,
+    weekdays: json['weekdays'] as String? ?? '', // 🆕 예전 데이터는 이 필드가 없어서 빈 문자열로 자동 대체됨
   );
 }
 

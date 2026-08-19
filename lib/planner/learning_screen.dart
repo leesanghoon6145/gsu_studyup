@@ -9,6 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:audioplayers/audioplayers.dart'; // 🆕 [2026-08-17] 반복 알람 소리 재생용 (일반 플래너와 동일 패키지, 이미 pubspec에 있음)
 import '../global_lang.dart';
 import 'widgets/three_color_pencil_icon.dart';
+import 'planner_alarm_foreground_task.dart'; // 🆕 [2026-08-18] 알람 켜서 저장할 때만 권한 요청
 
 // ============================================================================
 // [GKE StudyUp] 자기주도 플래너 — 실행 탭 전용 알람 서비스
@@ -483,19 +484,30 @@ class PlannerAlarmWatcherService {
   }
 
   Future<void> _checkSchedules() async {
+    final DateTime now = DateTime.now();
+    final String nowStamp =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+
     final prefs = await SharedPreferences.getInstance();
     final String? raw = prefs.getString('gke_global_schedules');
-    if (raw == null || raw.isEmpty) return;
+    if (raw == null || raw.isEmpty) {
+      debugPrint('[PlannerAlarmWatcherService] 틱 $nowStamp — 저장된 일정 없음');
+      return;
+    }
 
     List<dynamic> decoded;
     try {
       decoded = jsonDecode(raw) as List<dynamic>;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PlannerAlarmWatcherService] 틱 $nowStamp — 일정 JSON 파싱 실패: $e');
       return;
     }
 
-    final DateTime now = DateTime.now();
     final String todayKey = _todayKey(now);
+    final int alarmOnCount = decoded.where((e) => (e as Map)['alarmOn'] == true).length;
+    // 🆕 [진단용 2026-08-17] 매 틱마다 "지금 몇 시고, 알람 켜진 항목이 몇 개인지" 반드시 로그로
+    // 남김 - 감시자가 실제로 30초마다 돌고 있는지 로그만으로 100% 확인 가능하게 함.
+    debugPrint('[PlannerAlarmWatcherService] 틱 $nowStamp — 전체 ${decoded.length}건 중 알람ON ${alarmOnCount}건');
 
     for (final dynamic rawItem in decoded) {
       final Map<String, dynamic> item = Map<String, dynamic>.from(rawItem as Map);
@@ -503,10 +515,18 @@ class PlannerAlarmWatcherService {
 
       final String timeStr = (item['time'] ?? '').toString();
       final List<String> tp = timeStr.split(':');
-      if (tp.length != 2) continue;
+      if (tp.length != 2) {
+        debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" 시간 형식 이상함: "$timeStr"');
+        continue;
+      }
       final int hh = int.tryParse(tp[0]) ?? -1;
       final int mm = int.tryParse(tp[1]) ?? -1;
-      if (hh < 0 || mm < 0) continue;
+      if (hh < 0 || mm < 0) {
+        debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" 시간 파싱 실패: "$timeStr"');
+        continue;
+      }
+      // 🆕 [진단용] 알람ON인 모든 항목에 대해, 지금 시각과 얼마나 맞는지 항상 로그로 남김
+      debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" 목표=$hh:$mm 반복=${item['alarmRepeat']} / 지금=${now.hour}:${now.minute}');
       if (now.hour != hh || now.minute != mm) continue; // 지금 이 순간(분 단위)이 아니면 스킵
 
       final String repeat = (item['alarmRepeat'] ?? 'once').toString();
@@ -523,12 +543,21 @@ class PlannerAlarmWatcherService {
         // once: 등록된 그 날짜여야만 발동
         isDueToday = item['year'] == now.year && item['month'] == now.month && item['day'] == now.day;
       }
-      if (!isDueToday) continue;
+      if (!isDueToday) {
+        debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" 시간은 맞는데 날짜/요일 조건 불충족');
+        continue;
+      }
 
       final String scheduleId = (item['id'] ?? '').toString();
-      if (scheduleId.isEmpty) continue;
+      if (scheduleId.isEmpty) {
+        debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" id 없음, 스킵');
+        continue;
+      }
       final String fireKey = '$_prefsKeyPrefix${scheduleId}_$todayKey';
-      if (await _alreadyFired(fireKey)) continue;
+      if (await _alreadyFired(fireKey)) {
+        debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" 오늘 이미 발동 기록됨(fireKey=$fireKey)');
+        continue;
+      }
 
       debugPrint('[PlannerAlarmWatcherService] 🔔 발동: ${item['title']} ($todayKey $timeStr)');
       await PlannerAlarmService.fireLoopingAlarm(
@@ -2047,6 +2076,11 @@ class LearningScreenState extends State<LearningScreen>
                             await _saveSchedules();
 
                             if (alarmOn) {
+                              // 🆕 [버그 수정 2026-08-18] 원장님 지시: 앱 켤 때가 아니라, 학생이
+                              // "알람 켜기"를 켜고 저장하는 바로 이 순간에만 알림/배터리 권한
+                              // 팝업이 뜨도록 함. 이미 허용된 상태라면 조용히 넘어가고 다시
+                              // 안 물어봄(내부에서 상태 확인 후 필요할 때만 요청함).
+                              await initAndStartPlannerAlarmForegroundService();
                               await PlannerAlarmService.schedule(
                                 scheduleId: scheduleId,
                                 date: date,

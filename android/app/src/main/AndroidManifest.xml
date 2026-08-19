@@ -5,6 +5,16 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <!-- 🆕 [2026-08-18] 자기주도 플래너 알람이 화면 꺼진 뒤에도 확실히 울리도록, 포그라운드
+         서비스(flutter_foreground_task)를 쓰기 위한 필수 권한. dataSync 타입 = "주기적으로
+         데이터를 확인하는 작업"이라는 뜻으로, 지금 하는 "30초마다 알람 시각인지 확인"에 정확히
+         맞는 타입임(안드로이드 14+ 는 타입 명시가 필수). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- 🆕 사용자에게 "배터리 최적화 제외해달라"고 요청하는 팝업을 코드에서 띄우기 위한 권한.
+         이 권한 자체가 자동으로 뭘 해주는 건 아니고, 사용자에게 물어볼 수 있게만 해줌. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+
     <application
         android:label="gsu_studyup"
         android:name="${applicationName}"
@@ -23,9 +33,9 @@
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"
+                />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -36,6 +46,15 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- 🆕 [2026-08-18] flutter_foreground_task 플러그인이 실제로 백그라운드에서 동작하기
+             위한 서비스 선언. android:stopWithTask="false"로 해서, 최근 앱 목록에서 앱을
+             스와이프로 지워도(완전 종료해도) 알람 감시가 최대한 계속되도록 함. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
