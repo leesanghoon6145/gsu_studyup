@@ -1596,7 +1596,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 style: GoogleFonts.notoSansKr(
                   color: _ThemeColors.brandGolden,
                   fontWeight: FontWeight.bold,
-                  fontSize: 23,
+                  fontSize: 17,
                 ),
               ),
               const SizedBox(height: 10),
@@ -1707,7 +1707,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     final List<String> years = ["2026년", "2027년", "2028년", "2029년", "2030년"];
     final List<String> months = List.generate(12, (i) => "${i + 1}월");
     final List<String> weeks = ["1주차", "2주차", "3주차", "4주차", "5주차"];
-    final List<String> bigUnits = ["대단원 1", "대단원 2", "대단원 3", "대단원 4"];
+    final List<String> bigUnits = List.generate(12, (i) => "대단원 ${i + 1}");
     final List<String> midUnits = ["중단원 1", "중단원 2", "중단원 3", "중단원 4"];
     final List<String> semesters = ["1학기", "2학기"];
 
@@ -2174,7 +2174,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_t('dailyTotalStudyTime'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(_t('dailyTotalStudyTime'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
           const SizedBox(height: 10),
           Container(
             height: 100,
@@ -2211,7 +2211,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_t('dailyTotalStudyTime'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(_t('dailyTotalStudyTime'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -2456,7 +2456,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                           if (drawScoreHeight > hMax) drawScoreHeight = hMax;
 
                           return Container(
-                            width: 24,
+                            width: 32,
                             margin: const EdgeInsets.symmetric(horizontal: 2.0),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
@@ -2471,7 +2471,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                         bottom: 0,
                                         child: Container(
                                           height: drawScoreHeight,
-                                          width: 14,
+                                          width: 20,
                                           decoration: BoxDecoration(
                                             color: barColor,
                                             borderRadius: const BorderRadius.vertical(top: Radius.circular(2.0)),
@@ -2666,6 +2666,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                 if (drawScoreHeight < 4) drawScoreHeight = 4;
                                 if (drawAvgHeight < 2) drawAvgHeight = 2;
                                 if (drawScoreHeight > hMaxDashboard) drawScoreHeight = hMaxDashboard;
+                                if (drawAvgHeight > hMaxDashboard) drawAvgHeight = hMaxDashboard; // 🆕 [버그 수정] 평균 막대도 상한 제한 - 주간/월간/연간에서 X축 아래로 삐져나오던 오버플로우 해결
 
                                 return Container(
                                   width: 53,
@@ -2798,9 +2799,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                             children: [
                               Text(
                                 "${item["subject"].toString().replaceAll('\n', ' ')}  $percent%",
-                                overflow: TextOverflow.fade,
-                                softWrap: false,
-                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: true,
+                                maxLines: 2, // 🆕 [요청] 과목명이 길면 2줄까지 허용해서 오버플로우 방지
                                 style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                               ),
                               Text(

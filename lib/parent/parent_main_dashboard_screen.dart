@@ -2,10 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// 3가지 준비된 위젯 파일을 정확하게 연결합니다.
 import 'parent_live_status_widget.dart';
 import 'parent_detailed_analysis_widget.dart';
 import 'parent_evaluation_analysis_widget.dart';
+import '../services/parent_data_service.dart';
+import '../services/diagnosis_service.dart'; // 🆕 [요청] 300자 이상 AI 진단문 + 재사용 규칙 서비스
 
 class ParentMainDashboardScreen extends StatefulWidget {
   final String parentEmail;
@@ -14,36 +15,17 @@ class ParentMainDashboardScreen extends StatefulWidget {
   const ParentMainDashboardScreen({
     Key? key,
     required this.parentEmail,
-    this.childName = "홍길동",
+    this.childName = "학습자",
   }) : super(key: key);
 
   @override
   _ParentMainDashboardScreenState createState() => _ParentMainDashboardScreenState();
 }
 
-class _ParentExamRecord {
-  final String id;
-  final String type;
-  final int grade;
-  final int semester;
-  final String subject;
-  final String unit;
-  final double score;
-
-  _ParentExamRecord({
-    this.id = "",
-    required this.type,
-    required this.grade,
-    required this.semester,
-    required this.subject,
-    required this.unit,
-    required this.score,
-  });
-}
-
 class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> with TickerProviderStateMixin {
   int _currentIndex = 0;
   bool _isVipMember = false;
+  bool _isLoading = true;
 
   static const Color luxuryDarkBg = Color(0xFF030712);
   static const Color premiumCardBg = Color(0xFF0D1527);
@@ -51,10 +33,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
 
   bool _isMonitoringActive = false;
   int _monitoringCountdown = 60;
-  num _currentElapsedTime = 36;
-  int _totalCollectedStars = 387;
+  int _totalCollectedStars = 0;
 
-  // 자녀 폰에 전송 성공한 최근 표준시 시각 레이블을 기록하는 상태값
   String _lastSentTimeText = "";
 
   String _selectedEvaluationType = "주평가";
@@ -62,53 +42,152 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   String _selectedMidUnit = "중단원 1";
   int _selectedSemesterFilter = 1;
 
+  // 🆕 [버그 수정] 주평가 전용 년/월/주차 상태 신설 - 기존엔 단원평가용 변수(_selectedBigUnit/
+  // _selectedMidUnit)를 그대로 빌려쓰고 있어서 월/주차 선택이 서로 충돌하고 필터링도 안 됐음.
+  // 오늘 날짜를 기준으로 자동 초기화(member_achievement_screen.dart의 주차 계산과 동일한 방식).
+  static String _computeCurrentWeekOfMonth() {
+    final DateTime now = DateTime.now();
+    final DateTime firstOfMonth = DateTime(now.year, now.month, 1);
+    final int sundayIndex = firstOfMonth.weekday % 7; // 0=일, 1=월, ... 6=토
+    final int weekNum = ((now.day - 1 + sundayIndex) ~/ 7) + 1;
+    return "$weekNum주차";
+  }
+
+  String _selectedYear = "${DateTime.now().year}년";
+  String _selectedMonth = "${DateTime.now().month}월";
+  String _selectedWeek = _computeCurrentWeekOfMonth();
+
   late TabController _timeTabController;
 
-  List<_ParentExamRecord> _mirroredExamRecords = [];
+  // 🆕 [실데이터 연동] 아래 필드들은 전부 ParentDataService를 통해 채워집니다.
+  String _realChildName = "학습자";
+  List<ParentSessionRecord> _todaySessions = [];
+  List<ParentSessionRecord> _allSessions = [];
+  List<ParentExamRecord> _examRecords = [];
+  List<Map<String, dynamic>> _subjectAggregates = [];
 
-  final String _embeddedStrictFeedbackReport =
-      "[종합 진단 피드백]\n\n"
-      "금일 진행된 이규현 학습자의 주도적 학업 세션은 메타인지적 관점에서 매우 유의미한 행동 변화를 나타냈습니다. "
-      "스스로 설정한 타임라인 내부에서 인지적 과부하를 능동적으로 제어하며, 고난도 교과 문항에 대한 학업적 몰입 밀도를 극대하여 유지하였습니다. "
-      "과목 간 시간 분배의 균형 수치 또한 안정권에 안착했으나, 학습 초기 단계에서 정합성을 검증하는 프로세스에 다소 과도한 시간이 할당되는 지체 현상이 식별되었습니다. "
-      "이는 후반부 응용 심화 추론 단계에서의 정밀도 스펙트럼을 저해하는 요인이 될 수 있으므로, 초기 몰입 속도를 가속화하려는 의도적인 피드백 조율이 요구됩니다. "
-      "전반적인 교과 이해도는 최상위권 진입에 하등의 무리가 없는 고도화된 수준이나, 오답 변별 과정에서 자아참조효과에 지나치게 의존하는 경향은 향후 객관적 진단 데이터와의 크로스 매핑을 통해 보완되어야 할 지점입니다.";
-
-  final String _embeddedDetailedAnalysisLog =
-      "[상세분석기록]\n\n"
-      "• 상세내용: 개념 및 심화, 문제풀이 25문항 수행 완료\n"
-      "• 오답노트: 학업 정합성 기준 분석 정리 마침\n"
-      "• 이 해 도: 80% (단원 인지 평정 수치 기준)\n"
-      "• 난 이 도: 보통\n"
-      "• 집 중 도: 높음\n"
-      "• 학습컨디션: 좋음\n"
-      "• 차기 목표: 함수 영역 심화 추론 문항 돌파\n\n"
-      "[심층 교육 제언]\n"
-      "차기 목표로 설정된 함수 심화 파트는 고도의 논리적 추론이 수반되는 영역이나, 현재 보여준 오답 정리 정밀도와 개념 분석력이라면 충분히 안정적으로 돌파해 낼 수 있습니다.";
-
-  // 🛠️ [에러 원천 차단] Getter 문법을 제거하고 안정적인 표준 리스트 변수로 전면 리팩터링했습니다.
-  final List<Map<String, dynamic>> _parentMasterTimeData = [
-    {"subject": "수학", "score": 0.85, "averageScore": 0.65, "hasDaily": true, "hasWeekly": true, "hasMonthly": true, "hasYearly": true, "baseMinutes": 120},
-    {"subject": "영어", "score": 0.72, "averageScore": 0.70, "hasDaily": true, "hasWeekly": true, "hasMonthly": true, "hasYearly": true, "baseMinutes": 90},
-    {"subject": "국어", "score": 0.90, "averageScore": 0.58, "hasDaily": false, "hasWeekly": true, "hasMonthly": true, "hasYearly": true, "baseMinutes": 80},
-    {"subject": "과학", "score": 0.65, "averageScore": 0.60, "hasDaily": false, "hasWeekly": true, "hasMonthly": true, "hasYearly": true, "baseMinutes": 70},
-  ];
+  int _todayTotalMinutes = 0;
+  int _yesterdayTotalMinutes = 0;
+  int _weeklyAvgMinutesPerDay = 0;
+  String? _strongestSubject;
+  String? _weakestSubject;
 
   @override
   void initState() {
     super.initState();
     _timeTabController = TabController(length: 4, vsync: this);
     _timeTabController.addListener(() { if (!_timeTabController.indexIsChanging) setState(() {}); });
-    _loadMockedStudentRecords();
+    _loadRealData();
   }
 
-  void _loadMockedStudentRecords() {
-    _mirroredExamRecords = [
-      _ParentExamRecord(id: "1", type: "주평가", grade: 2, semester: 1, subject: "수학", unit: "대단원 1", score: 95),
-      _ParentExamRecord(id: "2", type: "주평가", grade: 2, semester: 1, subject: "영어", unit: "대단원 1", score: 70),
-      _ParentExamRecord(id: "3", type: "단원평가", grade: 2, semester: 1, subject: "국어", unit: "대단원 2", score: 85),
-      _ParentExamRecord(id: "4", type: "중간고사", grade: 2, semester: 1, subject: "과학", unit: "1학기", score: 90),
-    ];
+  // 🆕 [실데이터 연동] ParentDataService를 통해 학생의 실제 학습 데이터를 불러옵니다.
+  Future<void> _loadRealData() async {
+    try {
+      final String? realName = await ParentDataService.getStudentName();
+      final List<ParentSessionRecord> today = await ParentDataService.loadTodaySessions();
+      final List<ParentSessionRecord> all = await ParentDataService.loadAllSessions();
+      final List<ParentExamRecord> exams = await ParentDataService.loadExamRecords();
+      final List<Map<String, dynamic>> aggregates = await ParentDataService.loadSubjectAggregates();
+      final int todayStars = await ParentDataService.getTodayStars();
+
+      final DateTime now = DateTime.now();
+      final DateTime todayStart = DateTime(now.year, now.month, now.day);
+      final DateTime yesterdayStart = todayStart.subtract(const Duration(days: 1));
+
+      final int todayMinutes = ParentDataService.totalMinutesForDay(all, todayStart);
+      final int yesterdayMinutes = ParentDataService.totalMinutesForDay(all, yesterdayStart);
+
+      // 최근 7일(오늘 제외) 총 학습분 / 7 = 일 평균
+      int weeklyTotal = 0;
+      for (int i = 1; i <= 7; i++) {
+        weeklyTotal += ParentDataService.totalMinutesForDay(all, todayStart.subtract(Duration(days: i)));
+      }
+      final int weeklyAvg = (weeklyTotal / 7).round();
+
+      final Map<String, double> subjectAvgScores = ParentDataService.computeSubjectAverageScores(exams);
+      String? strongest;
+      String? weakest;
+      if (subjectAvgScores.isNotEmpty) {
+        final sorted = subjectAvgScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+        strongest = "${sorted.first.key} (평균 ${sorted.first.value.toStringAsFixed(0)}점)";
+        weakest = "${sorted.last.key} (평균 ${sorted.last.value.toStringAsFixed(0)}점)";
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _realChildName = realName ?? widget.childName;
+        _todaySessions = today;
+        _allSessions = all;
+        _examRecords = exams;
+        _subjectAggregates = aggregates;
+        _totalCollectedStars = todayStars;
+        _todayTotalMinutes = todayMinutes;
+        _yesterdayTotalMinutes = yesterdayMinutes;
+        _weeklyAvgMinutesPerDay = weeklyAvg;
+        _strongestSubject = strongest;
+        _weakestSubject = weakest;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("[ParentDashboard] 실데이터 로딩 실패: $e");
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // 🆕 [실데이터 연동] 오늘 세션 목록 + 실제 AI 종합 총평(150~200자, DiagnosisService)을 함께 보여줍니다.
+  Future<String> _buildSummaryReportText() async {
+    if (_todaySessions.isEmpty) {
+      return "오늘 아직 기록된 학습 세션이 없습니다. 자녀가 학습을 마치고 기록을 저장하면 이곳에 요약이 표시됩니다.";
+    }
+    final buffer = StringBuffer();
+    buffer.writeln("[종합 리포트]\n");
+    for (int i = 0; i < _todaySessions.length; i++) {
+      final rec = _todaySessions[i];
+      buffer.writeln("제${i + 1}교시 · ${rec.subject} · ${rec.durationMinutes}분 집중완료");
+      if (rec.recordType == '평가' && rec.score != null) {
+        buffer.writeln("  점수: ${rec.score}점");
+      }
+    }
+    buffer.writeln("\n오늘 총 학습시간: $_todayTotalMinutes분");
+
+    // 🆕 [요청] 오늘 학습한 과목 전체를 종합한 150~200자 AI 총평을 별도 문단으로 추가
+    final int subjectCount = _todaySessions.map((r) => r.subject).toSet().length;
+    final String dailySummary = await DiagnosisService.getDailySummary(
+      personKey: 'student_$_realChildName',
+      subjectCount: subjectCount,
+      totalMinutes: _todayTotalMinutes,
+    );
+    buffer.writeln("\n[오늘의 종합 분석]");
+    buffer.writeln(dailySummary);
+
+    return buffer.toString();
+  }
+
+  // 🆕 [버그 수정] 기존엔 가장 최근 세션 1건만 보여줬음 -> 오늘 학습한 모든 세션을
+  // 제1교시, 제2교시... 순서대로 전부 나열하도록 수정 (요청사항)
+  String _buildDetailedAnalysisText() {
+    if (_todaySessions.isEmpty) {
+      return "오늘 상세 분석할 학습 기록이 아직 없습니다.";
+    }
+    final buffer = StringBuffer();
+    buffer.writeln("[상세분석기록 - 오늘 학습한 모든 세션]\n");
+    for (int i = 0; i < _todaySessions.length; i++) {
+      final rec = _todaySessions[i];
+      buffer.writeln("■ 제${i + 1}교시 · ${rec.subject} (${rec.recordType})");
+      buffer.writeln("  상세내용: ${rec.details.isNotEmpty ? rec.details : '기록 없음'}");
+      if (rec.recordType == '평가' && rec.score != null) buffer.writeln("  점수: ${rec.score}점");
+      if (rec.understanding != null) buffer.writeln("  이해도: ${rec.understanding}%");
+      if (rec.difficulty != null) buffer.writeln("  난이도: ${rec.difficulty}");
+      if (rec.concentration != null) buffer.writeln("  집중도: ${rec.concentration}");
+      if (rec.condition != null) buffer.writeln("  학습컨디션: ${rec.condition}");
+      if (rec.incorrectNote != null) buffer.writeln("  오답정리: ${rec.incorrectNote}");
+      if (rec.nextGoal.isNotEmpty) buffer.writeln("  다음목표: ${rec.nextGoal}");
+      buffer.writeln();
+    }
+    return buffer.toString();
   }
 
   void _showReportPopup(BuildContext context, String mainTitle, String content) {
@@ -202,6 +281,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: luxuryDarkBg,
+        body: const Center(child: CircularProgressIndicator(color: brandGolden)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: luxuryDarkBg,
       appBar: AppBar(
@@ -274,10 +360,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          // [연결 1] 실시간 현황 컴포넌트 위젯
           ParentLiveStatusWidget(
-            childName: widget.childName,
-            currentElapsedTime: _currentElapsedTime,
+            childName: _realChildName,
+            lastSessionSubject: _todaySessions.isNotEmpty ? _todaySessions.last.subject : null,
+            lastSessionDurationMinutes: _todaySessions.isNotEmpty ? _todaySessions.last.durationMinutes : 0,
             totalCollectedStars: _totalCollectedStars,
             isMonitoringActive: _isMonitoringActive,
             monitoringCountdown: _monitoringCountdown,
@@ -344,28 +430,38 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             },
           ),
 
-          // [연결 2] 상세기록 컴포넌트 위젯 (🛠️ 안정적인 매핑 완수)
           ParentDetailedAnalysisWidget(
-            childName: widget.childName,
+            childName: _realChildName,
             premiumCardBg: premiumCardBg,
             brandGolden: brandGolden,
             luxuryDarkBg: luxuryDarkBg,
             buildCustomSectionTitle: _buildCustomSectionTitle,
-            onShowReportPopup: () => _showReportPopup(context, "오늘 종합 리포트 조회", _embeddedStrictFeedbackReport),
-            onShowDetailedAnalysisPopup: () => _showReportPopup(context, "오늘 상세 분석기록 조회", _embeddedDetailedAnalysisLog),
-            parentMasterTimeData: _parentMasterTimeData,
+            onShowReportPopup: () async {
+              final String content = await _buildSummaryReportText();
+              if (!mounted) return;
+              _showReportPopup(context, "오늘 종합 리포트 조회", content);
+            },
+            onShowDetailedAnalysisPopup: () => _showReportPopup(context, "오늘 상세 분석기록 조회", _buildDetailedAnalysisText()),
+            todaySessions: _todaySessions,
+            todayTotalMinutes: _todayTotalMinutes,
+            yesterdayTotalMinutes: _yesterdayTotalMinutes,
+            weeklyAvgMinutesPerDay: _weeklyAvgMinutesPerDay,
+            strongestSubject: _strongestSubject,
+            weakestSubject: _weakestSubject,
           ),
 
-          // [연결 3] 평가분석 컴포넌트 위젯 (🛠️ 변수 규격 일치 완료)
           ParentEvaluationAnalysisWidget(
-            childName: widget.childName,
+            childName: _realChildName,
             selectedEvaluationType: _selectedEvaluationType,
             selectedBigUnit: _selectedBigUnit,
             selectedMidUnit: _selectedMidUnit,
             selectedSemesterFilter: _selectedSemesterFilter,
+            selectedYear: _selectedYear,
+            selectedMonth: _selectedMonth,
+            selectedWeek: _selectedWeek,
             timeTabController: _timeTabController,
-            mirroredExamRecords: _mirroredExamRecords,
-            parentMasterTimeData: _parentMasterTimeData,
+            mirroredExamRecords: _examRecords,
+            parentMasterTimeData: _subjectAggregates,
             premiumCardBg: premiumCardBg,
             brandGolden: brandGolden,
             luxuryDarkBg: luxuryDarkBg,
@@ -374,18 +470,29 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             onBigUnitChanged: (unit) => setState(() => _selectedBigUnit = unit),
             onMidUnitChanged: (unit) => setState(() => _selectedMidUnit = unit),
             onSemesterFilterChanged: (filter) => setState(() => _selectedSemesterFilter = filter),
-            onShowDetailAnalysisReport: () {
-              _showReportPopup(
+            onYearChanged: (year) => setState(() => _selectedYear = year),
+            onMonthChanged: (month) => setState(() => _selectedMonth = month),
+            onWeekChanged: (week) => setState(() => _selectedWeek = week),
+            onShowDetailAnalysisReport: () async {
+              // 🆕 [요청] 300자 이상 상세 진단 + 같은 사람에게 3개월 내 재사용 금지 + 생성된 문구는
+              // 반드시 저장 후 유사한 사람(같은 점수 구간)에게 재사용. DiagnosisService가 전담 관리.
+              if (_examRecords.isEmpty) {
+                _showReportPopup(
                   context,
                   "👑 오늘의 교육성취 정밀 진단서",
-                  "[학습 분석 보고 요약]\n\n"
-                      "금일 분석된 자녀의 성적 메트릭스는 메타인지적 관점에서 매우 유의미한 학업적 성취를 나타냈습니다. "
-                      "지정된 교과 평가 내부에서 인지적 과부하를 능동적으로 제어하며, "
-                      "고난도 문항에 대한 학업적 몰입 밀도를 최상위권 수준으로 유지하였습니다.\n\n"
-                      "교과 단원별 균형 수치 또한 안정권에 안착했으나, 특정 문항 단계에서 정합성을 검증하는 프로세스에 다소 과도한 시간이 할당되는 지체 현상이 식별되었습니다. "
-                      "전반적인 교과 이해도는 매우 고도화된 수준이나, 오답 변별 과정에서 자아참조효과에 지나치게 의존하는 경향은 향후 정밀 데이터 분석을 통해 보완되어야 할 지점입니다. "
-                      "가정 내에서도 자녀의 학업적 도약을 위해 따뜻한 격려를 전해주시길 권장합니다."
+                  "아직 기록된 평가 데이터가 없습니다. 평가가 기록되면 정밀 분석 리포트가 제공됩니다.",
+                );
+                return;
+              }
+              final lastExam = _examRecords.last;
+              final String content = await DiagnosisService.getAnalysis(
+                personKey: 'student_$_realChildName',
+                type: lastExam.type,
+                subject: lastExam.subject,
+                score: lastExam.score,
               );
+              if (!mounted) return;
+              _showReportPopup(context, "👑 오늘의 교육성취 정밀 진단서", content);
             },
           ),
         ],

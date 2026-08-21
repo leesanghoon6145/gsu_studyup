@@ -4,7 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 class ParentLiveStatusWidget extends StatefulWidget {
   final String childName;
-  final num currentElapsedTime;
+  // 🆕 [실데이터 연동] "현재 진행 중"을 실제로 감지할 방법이 없어(부모 화면은 별도 프로세스이므로),
+  // 가장 최근 학습 세션 정보로 대체 표시합니다. 값이 없으면 lastSessionSubject가 null입니다.
+  final String? lastSessionSubject;
+  final int lastSessionDurationMinutes;
   final int totalCollectedStars;
   final bool isMonitoringActive;
   final int monitoringCountdown;
@@ -20,7 +23,8 @@ class ParentLiveStatusWidget extends StatefulWidget {
   const ParentLiveStatusWidget({
     Key? key,
     required this.childName,
-    required this.currentElapsedTime,
+    required this.lastSessionSubject,
+    required this.lastSessionDurationMinutes,
     required this.totalCollectedStars,
     required this.isMonitoringActive,
     required this.monitoringCountdown,
@@ -73,7 +77,9 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
             child: Column(
               children: [
                 Text(
-                  "${widget.childName}님이 현재 \"수학\" 과목 집중 진행 중",
+                  widget.lastSessionSubject != null
+                      ? "${widget.childName}님의 가장 최근 학습: \"${widget.lastSessionSubject}\""
+                      : "${widget.childName}님의 학습 기록이 아직 없습니다",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.notoSansKr(
                     color: Colors.white,
@@ -82,15 +88,16 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  "현재 과목 초 집중 '${widget.currentElapsedTime}분'째 진행중",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
-                    color: widget.brandGolden,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.bold,
+                if (widget.lastSessionSubject != null)
+                  Text(
+                    "최근 세션 집중시간 '${widget.lastSessionDurationMinutes}분'",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(
+                      color: widget.brandGolden,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -123,11 +130,6 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               ],
             ),
           ),
-
-          // ============================================================================
-          // 🗺️ 명당 128번 줄: 지시하신 이모지 박스 바로 밑 고급형 [자녀 실시간 타이머 보기] 버튼
-          // ============================================================================
-          // ============================================================================
 
           widget.buildCustomSectionTitle("Encourage Self-Directed Learning", "자기주도 학습 응원하기", fontSize: 14.0),
           const SizedBox(height: 12),
@@ -268,7 +270,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
 }
 
 // ============================================================================
-// 🪐 [새로 동기화된 독립 스크린] 타이머1.jpg 완벽 고증 매커니즘 전체 화면
+// 🪐 FullMirrorTimerScreen — 실데이터와 무관한 데모용 미러 타이머 화면이라 원본 그대로 유지
 // ============================================================================
 class FullMirrorTimerScreen extends StatefulWidget {
   final Color brandGolden;
@@ -282,12 +284,11 @@ class FullMirrorTimerScreen extends StatefulWidget {
 class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
   Timer? _runningTimer;
   int _totalSeconds = 0;
-  final int _maxLoopSecs = 30; // 30초 실험 배속 모드 고정 주축
+  final int _maxLoopSecs = 30;
 
   @override
   void initState() {
     super.initState();
-    // ⚡ 엔진 기동: 1초마다 실시간 미러링 작동 연산 시작
     _runningTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -299,11 +300,10 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
 
   @override
   void dispose() {
-    _runningTimer?.cancel(); // 자원 해제 단속
+    _runningTimer?.cancel();
     super.dispose();
   }
 
-  // 고딕체 디지털 시계 포맷기
   String _formatToClock(int secs) {
     int h = secs ~/ 3600;
     int m = (secs % 3600) ~/ 60;
@@ -317,19 +317,16 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
     int currentSec = _totalSeconds % _maxLoopSecs;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030712), // 우주 블랙 테마 베이스
+      backgroundColor: const Color(0xFF030712),
       body: Stack(
         children: [
-          // 🖼️ [완벽 교정] 선배님이 정확히 지시하신 진짜 "assets/images/timer.png" 이미지 단일 배경화
           Positioned.fill(
             child: Image.asset(
-              'assets/images/timer.png', // 지시하신 정품 타이머 배경 불러오기 완료!
+              'assets/images/timer.png',
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(color: const Color(0xFF020617)),
             ),
           ),
-
-          // 🪐 타이머1.jpg 100% 쌍둥이 실물 크기 컴포넌트 탑재 구역
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
@@ -337,8 +334,6 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 25),
-
-                  // GKE STUDYUP 대형 아치 서두 로고 오버레이
                   Text(
                     "GKE\nSTUDYUP",
                     textAlign: TextAlign.center,
@@ -351,20 +346,16 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-
-                  // 🪶 [명칭 고증] 고전책 자막 바로 아래 crown_wings.png 정밀 소환
                   Image.asset(
-                    'assets/images/crown_wings.png', // 정품 왕관 날개 장식 호출 완료!
+                    'assets/images/crown_wings.png',
                     width: 150,
                     height: 40,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) => const Icon(Icons.wb_twighlight, color: Color(0xFFE5C158), size: 35),
                   ),
                   const SizedBox(height: 6),
-
-                  // 📐 수능 및 디데이 계판 레이아웃 일치화
                   Text(
-                    "— 2027 대학수능 —", // 설정 적용 가능 구조 보존
+                    "— 2027 대학수능 —",
                     style: GoogleFonts.nanumMyeongjo(
                       color: Colors.white70,
                       fontSize: 13,
@@ -382,12 +373,8 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ⭐ 거대 황금 별 중앙 심볼 장식
                   const Icon(Icons.star_rounded, color: Color(0xFFE5C158), size: 105),
                   const SizedBox(height: 15),
-
-                  // 🧪 배속 실험 모드 가동 상태 자막 (고딕체 단속)
                   Text(
                     "★ 배속 실험 모드 가동 : $currentSec / 30 Secs",
                     style: const TextStyle(
@@ -398,8 +385,6 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-
-                  // 🕒 [타이머 핵심] 100% 쌍둥이 초대형 고딕 실시간 작동 디지털 계판
                   Text(
                     _formatToClock(_totalSeconds),
                     style: const TextStyle(
@@ -411,15 +396,13 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-
-                  // 🔊 과목 선택 자동 나타남 구역 연동
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.volume_up_rounded, color: Color(0xFFFCD34D), size: 18),
                       const SizedBox(width: 6),
                       Text(
-                        "Native Language (국어)", // 과목 연동 시스템 데이터 바인딩
+                        "Native Language (국어)",
                         style: GoogleFonts.gowunBatang(
                           color: const Color(0xFFFCD34D),
                           fontSize: 15,
@@ -429,8 +412,6 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // 실시간 집중 모드 및 목표 시간 배치선 (설정 연동 구조)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -439,14 +420,12 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                         style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        "목표 시간: 30분", // 설정값 매핑 단속
+                        "목표 시간: 30분",
                         style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-
-                  // 🌈 [하이라이트 명품 스펙] 빨주노초파남보 레인보우 프로그레스 게이지 바
                   Container(
                     width: double.infinity,
                     height: 18,
@@ -458,18 +437,18 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                       borderRadius: BorderRadius.circular(4),
                       child: FractionallySizedBox(
                         alignment: Alignment.centerLeft,
-                        widthFactor: progressRatio, // 실시간 퍼센트에 맞춰 빨주노초파남보가 미려하게 차오름
+                        widthFactor: progressRatio,
                         child: Container(
                           decoration: const BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                Color(0xFFFF0000), // 빨
-                                Color(0xFFFF7F00), // 주
-                                Color(0xFFFFFF00), // 노
-                                Color(0xFF00FF00), // 초
-                                Color(0xFF0000FF), // 파
-                                Color(0xFF4B0082), // 남
-                                Color(0xFF8B00FF), // 보
+                                Color(0xFFFF0000),
+                                Color(0xFFFF7F00),
+                                Color(0xFFFFFF00),
+                                Color(0xFF00FF00),
+                                Color(0xFF0000FF),
+                                Color(0xFF4B0082),
+                                Color(0xFF8B00FF),
                               ],
                             ),
                           ),
@@ -478,8 +457,6 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-
-                  // 진행 바 하단 초 및 퍼센트 실시간 수치 표출
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -493,10 +470,7 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                       ),
                     ],
                   ),
-
-                  const Spacer(), // 공간을 하단 우측으로 완벽 밀착 유도하는 완충 쿠션
-
-                  // 👑 [선배님 핵심 지시 완벽 수용] 그만 보고 싶을 때 탈출하는 우측 하단 프리미엄 뒤로가기 버튼
+                  const Spacer(),
                   Align(
                     alignment: Alignment.bottomRight,
                     child: Padding(
@@ -510,7 +484,7 @@ class _FullMirrorTimerScreenState extends State<FullMirrorTimerScreen> {
                         ),
                         child: TextButton.icon(
                           onPressed: () {
-                            Navigator.pop(context); // 현재 타이머 전체화면 스크린을 닫고 메인으로 안전 복귀!
+                            Navigator.pop(context);
                           },
                           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 12),
                           label: Text(
