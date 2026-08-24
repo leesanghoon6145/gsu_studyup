@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../star_economy.dart';
 import 'user_profile_service.dart';
+import 'grade_management_service.dart'; // 🆕 [성적 관리] 게이트웨이 연결용
 
 // ============================================================================
 // 👑 [부모 화면 데이터 창구] ParentDataService
@@ -262,6 +263,11 @@ class ParentDataService {
   // 오늘 적립된 별 개수
   static Future<int> getTodayStars() => DkeStars.getTodayStars();
 
+  // 🆕 [성적 관리] 학생이 grade_management_screen.dart에서 입력한 성적 기록을
+  // 학부모 화면이 이 창구를 통해서만 읽도록 연결. 내부 구현(GradeManagementService)이
+  // 나중에 서버 기반으로 바뀌어도 학부모 화면 쪽 코드는 그대로 유지됩니다.
+  static Future<List<GradeRecord>> loadGradeManagementRecords() => GradeManagementService.loadAll();
+  static Future<List<SubjectConfig>> loadGradeSubjectConfigs() => GradeManagementService.loadAllConfigs();
   // 특정 날짜(자정 기준) 하루 총 학습분 계산 헬퍼
   static int totalMinutesForDay(List<ParentSessionRecord> sessions, DateTime dayStart) {
     final DateTime dayEnd = dayStart.add(const Duration(days: 1));

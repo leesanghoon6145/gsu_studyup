@@ -5,8 +5,130 @@ import 'package:google_fonts/google_fonts.dart';
 import 'parent_live_status_widget.dart';
 import 'parent_detailed_analysis_widget.dart';
 import 'parent_evaluation_analysis_widget.dart';
+import 'parent_grade_management_widget.dart'; // 🆕 [성적 관리] 학부모 조회 전용 4번째 탭
 import '../services/parent_data_service.dart';
 import '../services/diagnosis_service.dart'; // 🆕 [요청] 300자 이상 AI 진단문 + 재사용 규칙 서비스
+import '../global_lang.dart';
+
+// ---------------------------------------------------------------------------
+// 🆕 [다국어] DkeLang 연동: 기본모드(KO/EN)는 한글+영문 동시 표시,
+// 10개국어(JA/ZH/FR/DE/RU/AR/HI/VI/ES/TH) 선택 시 해당 언어만 단독 표시.
+// 실제 데이터 비교 로직(예: rec.recordType == '평가')은 절대 건드리지 않고,
+// 화면에 보여줄 때만 이 파일 안의 번역 사전을 거쳐 표시합니다.
+// ---------------------------------------------------------------------------
+String _t(Map<String, String> map) {
+  return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '';
+}
+
+String _bi(Map<String, String> map) {
+  if (DkeLang.isForeignSelected) return _t(map);
+  return "${map['KO']}/${map['EN']}";
+}
+
+String _biLong(Map<String, String> map) {
+  if (DkeLang.isForeignSelected) return _t(map);
+  return "${map['KO']}\n${map['EN']}";
+}
+
+bool get _isNumberFirstLang => DkeLang.current == 'KO';
+
+const Map<String, String> kVipLinkMap = {'KO': '회원 연동', 'EN': 'Link Account', 'JA': '会員連携', 'ZH': '会员关联', 'FR': 'Lier le compte', 'DE': 'Konto verknüpfen', 'RU': 'Связать аккаунт', 'AR': 'ربط الحساب', 'HI': 'खाता लिंक करें', 'VI': 'Liên kết TK', 'ES': 'Vincular cuenta', 'TH': 'เชื่อมบัญชี'};
+const Map<String, String> kVipBadgeMap = {'KO': '👑 VIP', 'EN': '👑 VIP', 'JA': '👑 VIP', 'ZH': '👑 VIP', 'FR': '👑 VIP', 'DE': '👑 VIP', 'RU': '👑 VIP', 'AR': '👑 VIP', 'HI': '👑 VIP', 'VI': '👑 VIP', 'ES': '👑 VIP', 'TH': '👑 VIP'};
+
+const Map<String, String> kEmojiSentMap = {
+  'KO': '자녀의 타이머 세션 상단에 격려 팝업 발송 완료 ☆', 'EN': 'Encouragement popup sent to the top of your child\'s timer session ☆',
+  'JA': 'お子様のタイマーセッション上部に応援ポップアップを送信しました ☆', 'ZH': '已在孩子的计时会话顶部发送鼓励弹窗 ☆',
+  'FR': 'Pop-up d\'encouragement envoyé en haut de la session minuteur de votre enfant ☆', 'DE': 'Ermutigungs-Popup oben in der Timer-Sitzung Ihres Kindes gesendet ☆',
+  'RU': 'Всплывающее сообщение поддержки отправлено в начало сеанса таймера ребёнка ☆', 'AR': 'تم إرسال نافذة تشجيع أعلى جلسة المؤقت لطفلك ☆',
+  'HI': 'आपके बच्चे के टाइमर सत्र के शीर्ष पर प्रोत्साहन पॉपअप भेजा गया ☆', 'VI': 'Đã gửi thông báo động viên lên đầu phiên hẹn giờ của con ☆',
+  'ES': 'Ventana de ánimo enviada a la parte superior de la sesión del temporizador de su hijo/a ☆', 'TH': 'ส่งป๊อปอัปให้กำลังใจไปด้านบนของเซสชันจับเวลาของบุตรหลานแล้ว ☆',
+};
+const Map<String, String> kForceInterventionMap = {
+  'KO': '👑 [강제 개입] 자녀 타이머 점유 완료 (답장차단 모달 제어 중)', 'EN': '👑 [Override] Child\'s timer taken over (reply-blocking modal active)',
+  'JA': '👑 [強制介入] お子様のタイマーを占有しました（返信ブロックモーダル制御中）', 'ZH': '👑 [强制介入] 已占用孩子的计时器（回复屏蔽弹窗控制中）',
+  'FR': '👑 [Intervention forcée] Minuteur de l\'enfant repris (fenêtre modale de blocage active)', 'DE': '👑 [Zwangseingriff] Timer des Kindes übernommen (Antwortsperr-Modal aktiv)',
+  'RU': '👑 [Принудительное вмешательство] Таймер ребёнка перехвачен (модальное окно блокировки ответа активно)', 'AR': '👑 [تدخل إجباري] تم الاستحواذ على مؤقت الطفل (نافذة حظر الرد نشطة)',
+  'HI': '👑 [जबरन हस्तक्षेप] बच्चे का टाइमर अधिग्रहित (उत्तर-अवरोधक मोडल सक्रिय)', 'VI': '👑 [Can thiệp bắt buộc] Đã chiếm quyền hẹn giờ của con (hộp thoại chặn phản hồi đang hoạt động)',
+  'ES': '👑 [Intervención forzada] Temporizador del hijo/a tomado (modal de bloqueo de respuesta activo)', 'TH': '👑 [แทรกแซงบังคับ] เข้าควบคุมตัวจับเวลาของบุตรหลานแล้ว (โมดัลบล็อกการตอบกลับทำงานอยู่)',
+};
+const Map<String, String> kMessageContentLabelMap = {'KO': '내용', 'EN': 'Message', 'JA': '内容', 'ZH': '内容', 'FR': 'Message', 'DE': 'Nachricht', 'RU': 'Сообщение', 'AR': 'الرسالة', 'HI': 'संदेश', 'VI': 'Nội dung', 'ES': 'Mensaje', 'TH': 'ข้อความ'};
+
+const Map<String, String> kMonitorTimeoutMap = {
+  'KO': '1분 경과로 인한 automatic 블로킹 활성화 (종료됨)', 'EN': 'Automatic blocking activated after 1 minute elapsed (ended)',
+  'JA': '1分経過による自動ブロックが有効化されました（終了）', 'ZH': '经过1分钟后自动屏蔽已启用（已结束）',
+  'FR': 'Blocage automatique activé après 1 minute (terminé)', 'DE': 'Automatische Blockierung nach 1 Minute aktiviert (beendet)',
+  'RU': 'Автоматическая блокировка активирована через 1 минуту (завершено)', 'AR': 'تم تفعيل الحظر التلقائي بعد مرور دقيقة واحدة (انتهى)',
+  'HI': '1 मिनट बीतने पर स्वचालित ब्लॉकिंग सक्रिय (समाप्त)', 'VI': 'Đã kích hoạt chặn tự động sau 1 phút (đã kết thúc)',
+  'ES': 'Bloqueo automático activado tras 1 minuto (finalizado)', 'TH': 'เปิดใช้งานการบล็อกอัตโนมัติหลังผ่านไป 1 นาที (สิ้นสุดแล้ว)',
+};
+
+const Map<String, String> kNoSessionTodayMap = {
+  'KO': '오늘 아직 기록된 학습 세션이 없습니다. 자녀가 학습을 마치고 기록을 저장하면 이곳에 요약이 표시됩니다.',
+  'EN': "No study sessions recorded yet today. Once your child finishes studying and saves a record, a summary will appear here.",
+  'JA': '本日はまだ記録された学習セッションがありません。お子様が学習を終えて記録を保存すると、ここに要約が表示されます。',
+  'ZH': '今天尚无学习会话记录。孩子完成学习并保存记录后，摘要将显示在此处。',
+  'FR': "Aucune session d'étude enregistrée aujourd'hui. Un résumé apparaîtra ici une fois que votre enfant aura terminé et enregistré une session.",
+  'DE': 'Heute wurden noch keine Lernsitzungen aufgezeichnet. Sobald Ihr Kind eine Sitzung speichert, erscheint hier eine Zusammenfassung.',
+  'RU': 'Сегодня пока не записано ни одного учебного занятия. После того как ребёнок закончит и сохранит запись, здесь появится сводка.',
+  'AR': 'لا توجد جلسات دراسية مسجلة اليوم بعد. بمجرد أن ينتهي طفلك من الدراسة ويحفظ سجلاً، سيظهر الملخص هنا.',
+  'HI': 'आज तक कोई अध्ययन सत्र दर्ज नहीं हुआ है। जैसे ही आपका बच्चा पढ़ाई पूरी कर रिकॉर्ड सहेजेगा, सारांश यहाँ दिखाई देगा।',
+  'VI': 'Hôm nay chưa có phiên học nào được ghi lại. Khi con bạn học xong và lưu hồ sơ, bản tóm tắt sẽ hiển thị tại đây.',
+  'ES': 'Aún no se ha registrado ninguna sesión de estudio hoy. Cuando su hijo/a termine y guarde un registro, aparecerá aquí un resumen.',
+  'TH': 'วันนี้ยังไม่มีการบันทึกเซสชันการเรียน เมื่อบุตรหลานเรียนเสร็จและบันทึกข้อมูลแล้ว บทสรุปจะแสดงที่นี่',
+};
+const Map<String, String> kReportHeaderMap = {'KO': '[종합 리포트]', 'EN': '[Overall Report]', 'JA': '[総合レポート]', 'ZH': '[综合报告]', 'FR': '[Rapport global]', 'DE': '[Gesamtbericht]', 'RU': '[Общий отчёт]', 'AR': '[التقرير الشامل]', 'HI': '[समग्र रिपोर्ट]', 'VI': '[Báo cáo tổng hợp]', 'ES': '[Informe general]', 'TH': '[รายงานสรุป]'};
+const Map<String, String> kPeriodWordMap = {'KO': '교시', 'EN': 'Period', 'JA': '時限', 'ZH': '节', 'FR': 'Séance', 'DE': 'Einheit', 'RU': 'Занятие', 'AR': 'حصة', 'HI': 'पीरियड', 'VI': 'Tiết', 'ES': 'Sesión', 'TH': 'คาบ'};
+const Map<String, String> kFocusCompletedMap = {'KO': '분 집중완료', 'EN': 'min focused', 'JA': '分 集中完了', 'ZH': '分钟 专注完成', 'FR': 'min de concentration terminées', 'DE': 'Min. fokussiert', 'RU': 'мин сосредоточенности', 'AR': 'دقيقة تركيز مكتمل', 'HI': 'मिनट फोकस पूर्ण', 'VI': 'phút tập trung hoàn thành', 'ES': 'min de concentración', 'TH': 'นาที โฟกัสสำเร็จ'};
+const Map<String, String> kScoreLabelMap = {'KO': '점수', 'EN': 'Score', 'JA': '点数', 'ZH': '分数', 'FR': 'Score', 'DE': 'Punktzahl', 'RU': 'Балл', 'AR': 'الدرجة', 'HI': 'स्कोर', 'VI': 'Điểm', 'ES': 'Puntuación', 'TH': 'คะแนน'};
+const Map<String, String> kTodayTotalTimeMap = {'KO': '오늘 총 학습시간', 'EN': "Today's Total Study Time", 'JA': '本日の総学習時間', 'ZH': '今日总学习时间', 'FR': "Temps d'étude total aujourd'hui", 'DE': 'Heutige Gesamtlernzeit', 'RU': 'Общее время учёбы сегодня', 'AR': 'إجمالي وقت الدراسة اليوم', 'HI': 'आज कुल अध्ययन समय', 'VI': 'Tổng thời gian học hôm nay', 'ES': 'Tiempo total de estudio de hoy', 'TH': 'เวลาเรียนรวมวันนี้'};
+const Map<String, String> kMinutesUnitMap = {'KO': '분', 'EN': 'min', 'JA': '分', 'ZH': '分钟', 'FR': 'min', 'DE': 'Min.', 'RU': 'мин', 'AR': 'دقيقة', 'HI': 'मिनट', 'VI': 'phút', 'ES': 'min', 'TH': 'นาที'};
+const Map<String, String> kTodaySummaryHeaderMap = {'KO': '[오늘의 종합 분석]', 'EN': "[Today's Overall Analysis]", 'JA': '[本日の総合分析]', 'ZH': '[今日综合分析]', 'FR': "[Analyse globale du jour]", 'DE': '[Heutige Gesamtanalyse]', 'RU': '[Общий анализ за сегодня]', 'AR': '[التحليل الشامل لليوم]', 'HI': '[आज का समग्र विश्लेषण]', 'VI': '[Phân tích tổng hợp hôm nay]', 'ES': '[Análisis general de hoy]', 'TH': '[การวิเคราะห์โดยรวมวันนี้]'};
+
+const Map<String, String> kNoDetailTodayMap = {
+  'KO': '오늘 상세 분석할 학습 기록이 아직 없습니다.', 'EN': "No study records available for detailed analysis today.",
+  'JA': '本日、詳細分析できる学習記録がまだありません。', 'ZH': '今天尚无可供详细分析的学习记录。',
+  'FR': "Aucun enregistrement d'étude disponible pour une analyse détaillée aujourd'hui.", 'DE': 'Heute liegen noch keine Lernaufzeichnungen für eine detaillierte Analyse vor.',
+  'RU': 'Сегодня пока нет учебных записей для подробного анализа.', 'AR': 'لا توجد سجلات دراسية متاحة للتحليل التفصيلي اليوم.',
+  'HI': 'आज विस्तृत विश्लेषण के लिए कोई अध्ययन रिकॉर्ड उपलब्ध नहीं है।', 'VI': 'Hôm nay chưa có hồ sơ học tập nào để phân tích chi tiết.',
+  'ES': 'Hoy no hay registros de estudio disponibles para un análisis detallado.', 'TH': 'วันนี้ยังไม่มีบันทึกการเรียนสำหรับการวิเคราะห์เชิงลึก',
+};
+const Map<String, String> kDetailHeaderMap = {'KO': '[상세분석기록 - 오늘 학습한 모든 세션]', 'EN': '[Detailed Records - All Sessions Today]', 'JA': '[詳細分析記録 - 本日の全セッション]', 'ZH': '[详细分析记录 - 今日全部会话]', 'FR': "[Analyse détaillée - Toutes les sessions du jour]", 'DE': '[Detaillierte Aufzeichnung - Alle heutigen Sitzungen]', 'RU': '[Подробная запись - все занятия за сегодня]', 'AR': '[سجل تفصيلي - جميع جلسات اليوم]', 'HI': '[विस्तृत रिकॉर्ड - आज के सभी सत्र]', 'VI': '[Hồ sơ chi tiết - Tất cả phiên học hôm nay]', 'ES': '[Registro detallado - Todas las sesiones de hoy]', 'TH': '[บันทึกเชิงลึก - ทุกเซสชันวันนี้]'};
+const Map<String, String> kDetailContentLabelMap = {'KO': '상세내용', 'EN': 'Details', 'JA': '詳細内容', 'ZH': '详细内容', 'FR': 'Détails', 'DE': 'Details', 'RU': 'Подробности', 'AR': 'التفاصيل', 'HI': 'विवरण', 'VI': 'Chi tiết', 'ES': 'Detalles', 'TH': 'รายละเอียด'};
+const Map<String, String> kNoRecordMap = {'KO': '기록 없음', 'EN': 'No record', 'JA': '記録なし', 'ZH': '无记录', 'FR': 'Aucun enregistrement', 'DE': 'Keine Aufzeichnung', 'RU': 'Нет записи', 'AR': 'لا يوجد سجل', 'HI': 'कोई रिकॉर्ड नहीं', 'VI': 'Không có', 'ES': 'Sin registro', 'TH': 'ไม่มีบันทึก'};
+const Map<String, String> kUnderstandingLabelMap = {'KO': '이해도', 'EN': 'Understanding', 'JA': '理解度', 'ZH': '理解度', 'FR': 'Compréhension', 'DE': 'Verständnis', 'RU': 'Понимание', 'AR': 'مستوى الفهم', 'HI': 'समझ', 'VI': 'Mức hiểu', 'ES': 'Comprensión', 'TH': 'ความเข้าใจ'};
+const Map<String, String> kDifficultyLabelMap = {'KO': '난이도', 'EN': 'Difficulty', 'JA': '難易度', 'ZH': '难度', 'FR': 'Difficulté', 'DE': 'Schwierigkeit', 'RU': 'Сложность', 'AR': 'الصعوبة', 'HI': 'कठिनाई', 'VI': 'Độ khó', 'ES': 'Dificultad', 'TH': 'ความยาก'};
+const Map<String, String> kConcentrationLabelMap = {'KO': '집중도', 'EN': 'Concentration', 'JA': '集中度', 'ZH': '专注度', 'FR': 'Concentration', 'DE': 'Konzentration', 'RU': 'Концентрация', 'AR': 'التركيز', 'HI': 'एकाग्रता', 'VI': 'Mức tập trung', 'ES': 'Concentración', 'TH': 'สมาธิ'};
+const Map<String, String> kConditionLabelMap = {'KO': '학습컨디션', 'EN': 'Condition', 'JA': '学習コンディション', 'ZH': '学习状态', 'FR': "État d'étude", 'DE': 'Lernzustand', 'RU': 'Состояние', 'AR': 'حالة الدراسة', 'HI': 'अध्ययन स्थिति', 'VI': 'Tình trạng học', 'ES': 'Estado de estudio', 'TH': 'สภาพการเรียน'};
+const Map<String, String> kIncorrectNoteLabelMap = {'KO': '오답정리', 'EN': 'Error Review', 'JA': '誤答整理', 'ZH': '错题整理', 'FR': "Révision des erreurs", 'DE': 'Fehlerüberprüfung', 'RU': 'Разбор ошибок', 'AR': 'مراجعة الأخطاء', 'HI': 'त्रुटि समीक्षा', 'VI': 'Xem lại lỗi sai', 'ES': 'Revisión de errores', 'TH': 'ทบทวนข้อผิดพลาด'};
+const Map<String, String> kNextGoalLabelMap = {'KO': '다음목표', 'EN': 'Next Goal', 'JA': '次の目標', 'ZH': '下一目标', 'FR': 'Prochain objectif', 'DE': 'Nächstes Ziel', 'RU': 'Следующая цель', 'AR': 'الهدف التالي', 'HI': 'अगला लक्ष्य', 'VI': 'Mục tiêu tiếp theo', 'ES': 'Próximo objetivo', 'TH': 'เป้าหมายถัดไป'};
+
+const Map<String, String> kRecordTypeLectureMap = {'KO': '강의', 'EN': 'Lecture', 'JA': '講義', 'ZH': '讲课', 'FR': 'Cours', 'DE': 'Vorlesung', 'RU': 'Лекция', 'AR': 'محاضرة', 'HI': 'व्याख्यान', 'VI': 'Bài giảng', 'ES': 'Clase', 'TH': 'บรรยาย'};
+const Map<String, String> kRecordTypeEvalMap = {'KO': '평가', 'EN': 'Evaluation', 'JA': '評価', 'ZH': '评估', 'FR': 'Évaluation', 'DE': 'Bewertung', 'RU': 'Оценка', 'AR': 'تقييم', 'HI': 'मूल्यांकन', 'VI': 'Đánh giá', 'ES': 'Evaluación', 'TH': 'การประเมิน'};
+String _recordTypeLabel(String koType) => _t(koType == '평가' ? kRecordTypeEvalMap : kRecordTypeLectureMap);
+
+const Map<String, String> kTodayOverallReportTitleMap = {'KO': '오늘 종합 리포트 조회', 'EN': "Today's Overall Report", 'JA': '本日の総合レポート照会', 'ZH': '今日综合报告查询', 'FR': "Rapport global du jour", 'DE': 'Heutiger Gesamtbericht', 'RU': 'Общий отчёт за сегодня', 'AR': 'عرض التقرير الشامل لليوم', 'HI': 'आज की समग्र रिपोर्ट', 'VI': 'Xem báo cáo tổng hợp hôm nay', 'ES': 'Informe general de hoy', 'TH': 'ดูรายงานสรุปวันนี้'};
+const Map<String, String> kTodayDetailReportTitleMap = {'KO': '오늘 상세 분석기록 조회', 'EN': "Today's Detailed Analysis", 'JA': '本日の詳細分析記録照会', 'ZH': '今日详细分析记录查询', 'FR': "Analyse détaillée du jour", 'DE': 'Heutige detaillierte Analyse', 'RU': 'Подробный анализ за сегодня', 'AR': 'عرض سجل التحليل التفصيلي لليوم', 'HI': 'आज का विस्तृत विश्लेषण रिकॉर्ड', 'VI': 'Xem hồ sơ phân tích chi tiết hôm nay', 'ES': 'Análisis detallado de hoy', 'TH': 'ดูบันทึกวิเคราะห์เชิงลึกวันนี้'};
+const Map<String, String> kDiagReportTitleMap = {'KO': '👑 오늘의 교육성취 정밀 진단서', 'EN': '👑 Today\'s Precision Achievement Report', 'JA': '👑 本日の教育成果精密診断書', 'ZH': '👑 今日教育成果精密诊断报告', 'FR': "👑 Rapport de diagnostic de réussite du jour", 'DE': '👑 Heutiger Leistungsdiagnosebericht', 'RU': '👑 Сегодняшний отчёт по диагностике успеваемости', 'AR': '👑 تقرير تشخيص التحصيل الدراسي لليوم', 'HI': '👑 आज की उपलब्धि निदान रिपोर्ट', 'VI': '👑 Báo cáo chẩn đoán thành tích hôm nay', 'ES': '👑 Informe de diagnóstico de logros de hoy', 'TH': '👑 รายงานวินิจฉัยผลสัมฤทธิ์วันนี้'};
+const Map<String, String> kNoExamDataMap = {
+  'KO': '아직 기록된 평가 데이터가 없습니다. 평가가 기록되면 정밀 분석 리포트가 제공됩니다.',
+  'EN': 'No evaluation data recorded yet. A detailed analysis report will be provided once evaluations are recorded.',
+  'JA': 'まだ記録された評価データがありません。評価が記録されると精密分析レポートが提供されます。',
+  'ZH': '尚无已记录的评估数据。评估记录后将提供精密分析报告。',
+  'FR': "Aucune donnée d'évaluation enregistrée pour le moment. Un rapport d'analyse détaillé sera fourni une fois les évaluations enregistrées.",
+  'DE': 'Es liegen noch keine Bewertungsdaten vor. Sobald Bewertungen erfasst sind, wird ein detaillierter Analysebericht bereitgestellt.',
+  'RU': 'Данные оценивания ещё не записаны. Подробный аналитический отчёт будет предоставлен после записи оценок.',
+  'AR': 'لا توجد بيانات تقييم مسجلة بعد. سيتم تقديم تقرير تحليل دقيق بمجرد تسجيل التقييمات.',
+  'HI': 'अभी तक कोई मूल्यांकन डेटा दर्ज नहीं है। मूल्यांकन दर्ज होते ही विस्तृत विश्लेषण रिपोर्ट प्रदान की जाएगी।',
+  'VI': 'Chưa có dữ liệu đánh giá nào được ghi lại. Báo cáo phân tích chi tiết sẽ được cung cấp khi có đánh giá được ghi nhận.',
+  'ES': 'Aún no se han registrado datos de evaluación. Se proporcionará un informe de análisis detallado una vez registradas las evaluaciones.',
+  'TH': 'ยังไม่มีข้อมูลการประเมินที่บันทึกไว้ รายงานวิเคราะห์เชิงลึกจะถูกจัดเตรียมเมื่อมีการบันทึกผลประเมิน',
+};
+
+const Map<String, String> kTabLiveStatusMap = {'KO': '실시간 현황', 'EN': 'Live Status', 'JA': 'リアルタイム状況', 'ZH': '实时状况', 'FR': 'État en direct', 'DE': 'Live-Status', 'RU': 'В реальном времени', 'AR': 'الحالة المباشرة', 'HI': 'लाइव स्थिति', 'VI': 'Trạng thái trực tiếp', 'ES': 'Estado en vivo', 'TH': 'สถานะเรียลไทม์'};
+const Map<String, String> kTabDetailedMap = {'KO': '상세 보기', 'EN': 'Detailed View', 'JA': '詳細表示', 'ZH': '详细查看', 'FR': 'Vue détaillée', 'DE': 'Detailansicht', 'RU': 'Подробный просмотр', 'AR': 'عرض تفصيلي', 'HI': 'विस्तृत दृश्य', 'VI': 'Xem chi tiết', 'ES': 'Vista detallada', 'TH': 'ดูรายละเอียด'};
+const Map<String, String> kTabEvaluationMap = {'KO': '평가 분석', 'EN': 'Evaluation Analysis', 'JA': '評価分析', 'ZH': '评估分析', 'FR': 'Analyse des évaluations', 'DE': 'Bewertungsanalyse', 'RU': 'Анализ оценок', 'AR': 'تحليل التقييم', 'HI': 'मूल्यांकन विश्लेषण', 'VI': 'Phân tích đánh giá', 'ES': 'Análisis de evaluación', 'TH': 'วิเคราะห์การประเมิน'};
+const Map<String, String> kTabGradeMap = {'KO': '성적 관리', 'EN': 'Grade Mgmt', 'JA': '成績管理', 'ZH': '成绩管理', 'FR': 'Gestion des notes', 'DE': 'Notenverwaltung', 'RU': 'Управление оценками', 'AR': 'إدارة الدرجات', 'HI': 'ग्रेड प्रबंधन', 'VI': 'Quản lý điểm', 'ES': 'Gestión de notas', 'TH': 'จัดการเกรด'};
+const Map<String, String> kAvgWordMap = {'KO': '평균', 'EN': 'Avg', 'JA': '平均', 'ZH': '平均', 'FR': 'Moy.', 'DE': 'Ø', 'RU': 'Средн.', 'AR': 'المعدل', 'HI': 'औसत', 'VI': 'TB', 'ES': 'Prom.', 'TH': 'เฉลี่ย'};
 
 class ParentMainDashboardScreen extends StatefulWidget {
   final String parentEmail;
@@ -109,8 +231,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       String? weakest;
       if (subjectAvgScores.isNotEmpty) {
         final sorted = subjectAvgScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-        strongest = "${sorted.first.key} (평균 ${sorted.first.value.toStringAsFixed(0)}점)";
-        weakest = "${sorted.last.key} (평균 ${sorted.last.value.toStringAsFixed(0)}점)";
+        strongest = "${sorted.first.key} (${_t(kAvgWordMap)} ${sorted.first.value.toStringAsFixed(0)})";
+        weakest = "${sorted.last.key} (${_t(kAvgWordMap)} ${sorted.last.value.toStringAsFixed(0)})";
       }
 
       if (!mounted) return;
@@ -140,18 +262,19 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   // 🆕 [실데이터 연동] 오늘 세션 목록 + 실제 AI 종합 총평(150~200자, DiagnosisService)을 함께 보여줍니다.
   Future<String> _buildSummaryReportText() async {
     if (_todaySessions.isEmpty) {
-      return "오늘 아직 기록된 학습 세션이 없습니다. 자녀가 학습을 마치고 기록을 저장하면 이곳에 요약이 표시됩니다.";
+      return _biLong(kNoSessionTodayMap);
     }
     final buffer = StringBuffer();
-    buffer.writeln("[종합 리포트]\n");
+    buffer.writeln("${_t(kReportHeaderMap)}\n");
     for (int i = 0; i < _todaySessions.length; i++) {
       final rec = _todaySessions[i];
-      buffer.writeln("제${i + 1}교시 · ${rec.subject} · ${rec.durationMinutes}분 집중완료");
+      final String periodLabel = _isNumberFirstLang ? "제${i + 1}${_t(kPeriodWordMap)}" : "${_t(kPeriodWordMap)} ${i + 1}";
+      buffer.writeln("$periodLabel · ${rec.subject} · ${rec.durationMinutes}${_t(kMinutesUnitMap)} ${_t(kFocusCompletedMap)}");
       if (rec.recordType == '평가' && rec.score != null) {
-        buffer.writeln("  점수: ${rec.score}점");
+        buffer.writeln("  ${_t(kScoreLabelMap)}: ${rec.score}");
       }
     }
-    buffer.writeln("\n오늘 총 학습시간: $_todayTotalMinutes분");
+    buffer.writeln("\n${_t(kTodayTotalTimeMap)}: $_todayTotalMinutes${_t(kMinutesUnitMap)}");
 
     // 🆕 [요청] 오늘 학습한 과목 전체를 종합한 150~200자 AI 총평을 별도 문단으로 추가
     final int subjectCount = _todaySessions.map((r) => r.subject).toSet().length;
@@ -160,7 +283,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       subjectCount: subjectCount,
       totalMinutes: _todayTotalMinutes,
     );
-    buffer.writeln("\n[오늘의 종합 분석]");
+    buffer.writeln("\n${_t(kTodaySummaryHeaderMap)}");
     buffer.writeln(dailySummary);
 
     return buffer.toString();
@@ -170,21 +293,22 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   // 제1교시, 제2교시... 순서대로 전부 나열하도록 수정 (요청사항)
   String _buildDetailedAnalysisText() {
     if (_todaySessions.isEmpty) {
-      return "오늘 상세 분석할 학습 기록이 아직 없습니다.";
+      return _t(kNoDetailTodayMap);
     }
     final buffer = StringBuffer();
-    buffer.writeln("[상세분석기록 - 오늘 학습한 모든 세션]\n");
+    buffer.writeln("${_t(kDetailHeaderMap)}\n");
     for (int i = 0; i < _todaySessions.length; i++) {
       final rec = _todaySessions[i];
-      buffer.writeln("■ 제${i + 1}교시 · ${rec.subject} (${rec.recordType})");
-      buffer.writeln("  상세내용: ${rec.details.isNotEmpty ? rec.details : '기록 없음'}");
-      if (rec.recordType == '평가' && rec.score != null) buffer.writeln("  점수: ${rec.score}점");
-      if (rec.understanding != null) buffer.writeln("  이해도: ${rec.understanding}%");
-      if (rec.difficulty != null) buffer.writeln("  난이도: ${rec.difficulty}");
-      if (rec.concentration != null) buffer.writeln("  집중도: ${rec.concentration}");
-      if (rec.condition != null) buffer.writeln("  학습컨디션: ${rec.condition}");
-      if (rec.incorrectNote != null) buffer.writeln("  오답정리: ${rec.incorrectNote}");
-      if (rec.nextGoal.isNotEmpty) buffer.writeln("  다음목표: ${rec.nextGoal}");
+      final String periodLabel = _isNumberFirstLang ? "제${i + 1}${_t(kPeriodWordMap)}" : "${_t(kPeriodWordMap)} ${i + 1}";
+      buffer.writeln("■ $periodLabel · ${rec.subject} (${_recordTypeLabel(rec.recordType)})");
+      buffer.writeln("  ${_t(kDetailContentLabelMap)}: ${rec.details.isNotEmpty ? rec.details : _t(kNoRecordMap)}");
+      if (rec.recordType == '평가' && rec.score != null) buffer.writeln("  ${_t(kScoreLabelMap)}: ${rec.score}");
+      if (rec.understanding != null) buffer.writeln("  ${_t(kUnderstandingLabelMap)}: ${rec.understanding}%");
+      if (rec.difficulty != null) buffer.writeln("  ${_t(kDifficultyLabelMap)}: ${rec.difficulty}");
+      if (rec.concentration != null) buffer.writeln("  ${_t(kConcentrationLabelMap)}: ${rec.concentration}");
+      if (rec.condition != null) buffer.writeln("  ${_t(kConditionLabelMap)}: ${rec.condition}");
+      if (rec.incorrectNote != null) buffer.writeln("  ${_t(kIncorrectNoteLabelMap)}: ${rec.incorrectNote}");
+      if (rec.nextGoal.isNotEmpty) buffer.writeln("  ${_t(kNextGoalLabelMap)}: ${rec.nextGoal}");
       buffer.writeln();
     }
     return buffer.toString();
@@ -244,14 +368,23 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       SnackBar(
         backgroundColor: const Color(0xFF1E1E2D),
         content: Text(
-          "1분 경과로 인한 automatic 블로킹 활성화 (종료됨)",
+          _t(kMonitorTimeoutMap),
           style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 
-  Widget _buildCustomSectionTitle(String engTitle, String korTitle, {required double fontSize}) {
+  // 🆕 [다국어] foreignTitle 파라미터 추가: 자식 위젯(parent_detailed_analysis_widget.dart 등)이
+  // 이미 10개국어 대응을 위해 이 파라미터를 요구하는 시그니처로 되어 있어 타입을 맞춰줍니다.
+  // 외국어(10개국) 선택 시에는 foreignTitle 한 줄만, 기본모드(KO/EN)는 기존처럼 영문+한글 2줄 표시.
+  Widget _buildCustomSectionTitle(String engTitle, String korTitle, {required double fontSize, String? foreignTitle}) {
+    if (DkeLang.isForeignSelected && foreignTitle != null && foreignTitle.isNotEmpty) {
+      return Text(
+        foreignTitle,
+        style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: fontSize, height: 1.3),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -342,7 +475,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                     border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
                   ),
                   child: Text(
-                    _isVipMember ? "👑 VIP" : "회원 연동",
+                    _isVipMember ? _t(kVipBadgeMap) : _bi(kVipLinkMap),
                     style: GoogleFonts.notoSansKr(
                       color: _isVipMember ? Colors.black : brandGolden,
                       fontSize: 11,
@@ -377,7 +510,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                 SnackBar(
                   backgroundColor: premiumCardBg,
                   content: Text(
-                    "자녀의 타이머 세션 상단에 격려 팝업 발송 완료 ☆\n($message)",
+                    "${_t(kEmojiSentMap)}\n($message)",
                     style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -401,7 +534,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                   ),
                   duration: const Duration(seconds: 4),
                   content: Text(
-                    "👑 [강제 개입] 자녀 타이머 점유 완료 (답장차단 모달 제어 중)\n내용: \"$customText\"",
+                    "${_t(kForceInterventionMap)}\n${_t(kMessageContentLabelMap)}: \"$customText\"",
                     style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
@@ -439,9 +572,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             onShowReportPopup: () async {
               final String content = await _buildSummaryReportText();
               if (!mounted) return;
-              _showReportPopup(context, "오늘 종합 리포트 조회", content);
+              _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
             },
-            onShowDetailedAnalysisPopup: () => _showReportPopup(context, "오늘 상세 분석기록 조회", _buildDetailedAnalysisText()),
+            onShowDetailedAnalysisPopup: () => _showReportPopup(context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisText()),
             todaySessions: _todaySessions,
             todayTotalMinutes: _todayTotalMinutes,
             yesterdayTotalMinutes: _yesterdayTotalMinutes,
@@ -479,8 +612,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
               if (_examRecords.isEmpty) {
                 _showReportPopup(
                   context,
-                  "👑 오늘의 교육성취 정밀 진단서",
-                  "아직 기록된 평가 데이터가 없습니다. 평가가 기록되면 정밀 분석 리포트가 제공됩니다.",
+                  _t(kDiagReportTitleMap),
+                  _t(kNoExamDataMap),
                 );
                 return;
               }
@@ -492,12 +625,22 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                 score: lastExam.score,
               );
               if (!mounted) return;
-              _showReportPopup(context, "👑 오늘의 교육성취 정밀 진단서", content);
+              _showReportPopup(context, _t(kDiagReportTitleMap), content);
             },
+          ),
+
+          // 🆕 [성적 관리] 4번째 탭 - 조회 전용 (Plan A: 같은 기기 SharedPreferences 직접 조회)
+          ParentGradeManagementWidget(
+            childName: _realChildName,
+            premiumCardBg: premiumCardBg,
+            brandGolden: brandGolden,
+            luxuryDarkBg: luxuryDarkBg,
+            buildCustomSectionTitle: _buildCustomSectionTitle,
           ),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed, // 🆕 [성적 관리] 4번째 탭 추가로 인해 명시 - 기본 shifting 애니메이션/색상 변경 방지, 기존 3탭과 동일한 스타일 유지
         currentIndex: _currentIndex,
         backgroundColor: premiumCardBg,
         selectedItemColor: brandGolden,
@@ -509,10 +652,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             _currentIndex = index;
           });
         },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.bolt_rounded), label: '실시간 현황'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_rounded), label: '상세 보기'),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics_rounded), label: '평가 분석'),
+        items: [
+          BottomNavigationBarItem(icon: const Icon(Icons.bolt_rounded), label: _bi(kTabLiveStatusMap)),
+          BottomNavigationBarItem(icon: const Icon(Icons.assignment_rounded), label: _bi(kTabDetailedMap)),
+          BottomNavigationBarItem(icon: const Icon(Icons.analytics_rounded), label: _bi(kTabEvaluationMap)),
+          BottomNavigationBarItem(icon: const Icon(Icons.grading_rounded), label: _bi(kTabGradeMap)), // 🆕 4번째 탭
         ],
       ),
     );

@@ -13,7 +13,8 @@ import 'planner/main_self_learning_planner_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gsu_studyup/square/academic_timeline/academic_timeline_screen.dart';
 import 'planner/widgets/study_timelines.dart'; // 🆕 [D-day 팝업 연동] 시험 D-day 응원/실전팁 팝업 데이터 참조
-import 'package:gsu_studyup/square/my_growth_path_screen.dart'; // 나의 성장로 화면 연동
+import 'package:gsu_studyup/square/my_growth_path_screen.dart'; // 나의 성장로 화면 연동 (메뉴에서는 제외, 파일은 보존)
+import 'package:gsu_studyup/square/grade_management_screen.dart'; // 🆕 [성적 관리] 신규 화면 연동
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -805,6 +806,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                           onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const MemberAchievementScreen())); },
                         ),
 
+                        // 🆕 [성적 관리] 신규 메뉴 - 개인성취도 다음, 친구 학습방 이전 순서로 배치
+                        _buildMenuButton(
+                          icon: Icons.grading_rounded, label: "성적 관리", subLabel: "Grade Management",
+                          onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const GradeManagementScreen())); },
+                        ),
+
                         _buildMenuButton(
                           icon: Icons.forum_rounded, label: "친구 학습방", subLabel: "Friends Study Room",
                           onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const FriendStudyRoomScreen())); },
@@ -813,10 +820,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                           icon: Icons.people_alt_rounded, label: "동시 접속자", subLabel: "Live Active Users",
                           onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const LiveActiveUsersScreen())); },
                         ),
-                        _buildMenuButton(
-                          icon: Icons.fort_rounded, label: "나의 성장로", subLabel: "My Growth Path",
-                          onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const MyGrowthPathScreen())); },
-                        ),
+                        // 🆕 [원장님 확정] "나의 성장로" 메뉴는 [성적 관리]로 대체되어 그리드에서 제거.
+                        // my_growth_path_screen.dart 파일 자체와 import는 추후 전체 정리 시점에 일괄 처리 예정이라 지금은 보존.
                         _buildMenuButton(
                           icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling",
                           onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const EducationalConsultationScreen())); },
