@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'home_dashboard_screen.dart';
@@ -10,38 +11,35 @@ import 'timer/timer_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🆕 [2026-08-18] 포그라운드 서비스(백그라운드 격리 공간)와 메인 화면 사이의 통신 통로를
-  // 가장 먼저 열어둠 - 공식 문서 권장 순서대로 runApp보다 앞에 위치시킴.
-  FlutterForegroundTask.initCommunicationPort();
+  // 웹에서는 포그라운드 태스크 초기화 건너뛰기
+  if (!kIsWeb) {
+    FlutterForegroundTask.initCommunicationPort();
+  }
 
   await DkeLang.initialize();
 
-  // 🔔 [알림 서비스 초기화]
-  await Timer2Service.initialize();
+  // 알림 서비스도 웹에서는 스킵
+  if (!kIsWeb) {
+    await Timer2Service.initialize();
 
-  // 🔔 알림을 탭했을 때 타이머1(TimerScreen) 화면으로 바로 이동
-  Timer2Service.onNotificationStartTapped = (data) {
-    Timer2Service.navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (context) => TimerScreen(
-          selectedSubject: data['task'] ?? '학습',
-          selectedDurationMinutes: (data['durationMinutes'] as num?)?.toInt() ?? 30,
-          dynamicTestTitle: data['examTitle'] ?? '',
-          targetExamDate: null,
-          targetExamEndDate: null,
-          prepPeriodStr: '',
-          needTimelineGen: false,
-          selectedSoundFile: '',
-          isFinalExamMode: data['examTitle'] == '기말고사',
+    Timer2Service.onNotificationStartTapped = (data) {
+      Timer2Service.navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => TimerScreen(
+            selectedSubject: data['task'] ?? '학습',
+            selectedDurationMinutes: (data['durationMinutes'] as num?)?.toInt() ?? 30,
+            dynamicTestTitle: data['examTitle'] ?? '',
+            targetExamDate: null,
+            targetExamEndDate: null,
+            prepPeriodStr: '',
+            needTimelineGen: false,
+            selectedSoundFile: '',
+            isFinalExamMode: data['examTitle'] == '기말고사',
+          ),
         ),
-      ),
-    );
-  };
-
-  // 🆕 [버그 수정 2026-08-18] 원장님 지시: 앱을 처음 켜자마자 낯선 권한 팝업이 뜨면
-  // 신규 사용자가 불안해서 삭제할 위험이 있음. 그래서 여기서 자동으로 시작하지 않고,
-  // 학생이 실제로 "알람실행" 탭에서 알람을 켜고 저장하는 그 순간에만 뜨도록
-  // learning_screen.dart의 저장 버튼 쪽으로 옮김(_showAlarmEditPopup 참고).
+      );
+    };
+  }
 
   runApp(const GsuStudyUpApp());
 }
