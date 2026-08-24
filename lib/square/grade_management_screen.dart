@@ -3,6 +3,16 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/grade_management_service.dart';
 import '../services/grade_diagnosis_service.dart';
 import '../services/user_profile_service.dart';
+import '../global_lang.dart';
+
+// 🆕 [요청] 학생 화면도 안내 팝업/종합 총평에 영문이 함께 보이도록 최소 다국어 처리 적용.
+// (전체 화면 다국어화는 범위 밖이며, 이번에 신고된 두 항목만 우선 반영했습니다.)
+String _bi(String ko, String en) => DkeLang.isForeignSelected ? en : "$ko\n$en";
+
+const String kStudentIntroPopupEn =
+    "Grade Management automatically calculates your report using the written scores, performance scores, subject unit counts, and total student count you entered.\n"
+    "Please note there may be discrepancies with the school's official report card.\n"
+    "For the most accurate analysis, please enter scores and headcounts as precisely as possible.";
 
 /// ============================================================================
 /// [GKE StudyUp] 성적 관리 화면 - 학생용
@@ -80,7 +90,7 @@ class _GradeManagementScreenState extends State<GradeManagementScreen> {
             children: [
               Text("성적관리 안내", style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 12),
-              Text(GradeManagementService.studentIntroPopupText, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6)),
+              Text(_bi(GradeManagementService.studentIntroPopupText, kStudentIntroPopupEn), style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6)),
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
@@ -123,12 +133,13 @@ class _GradeManagementScreenState extends State<GradeManagementScreen> {
     final String? name = await DkeUserProfile.getRealName();
     final double? achievementAvg = await GradeManagementService.readAchievementAverageScore();
     final String personKey = 'student_${name ?? "unknown"}_$_schoolLevel$_grade$_semester';
-    final String text = await GradeDiagnosisService.getOverallSummary(
+    final GradeSummaryResult result = await GradeDiagnosisService.getOverallSummary(
       personKey: personKey, combinedAverage: avg, achievementAverage: achievementAvg,
     );
     if (!mounted) return;
     setState(() {
-      _summaryText = text;
+      // 🆕 [요청] 종합 총평에 영문 병기 (기본모드: 한글+영문 / 10개국어 선택 시: 영문 대체)
+      _summaryText = DkeLang.isForeignSelected ? result.en : "${result.ko}\n\n${result.en}";
       _isSummaryLoading = false;
     });
   }
@@ -817,26 +828,29 @@ class _GradeManagementScreenState extends State<GradeManagementScreen> {
 
             Text("학년", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(
-              children: GradeManagementService.gradeRange.map((g) {
-                final bool isSel = _grade == g;
-                final String label = "$g학년";
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () { setState(() => _grade = g); _loadSummary(); },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                      decoration: BoxDecoration(
-                        color: isSel ? _ThemeColors.brandGolden : Colors.black38,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(isSel ? 0.9 : 0.3), width: 1.3),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: GradeManagementService.gradeRange.map((g) {
+                  final bool isSel = _grade == g;
+                  final String label = "$g학년";
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () { setState(() => _grade = g); _loadSummary(); },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: isSel ? _ThemeColors.brandGolden : Colors.black38,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _ThemeColors.brandGolden.withOpacity(isSel ? 0.9 : 0.3), width: 1.3),
+                        ),
+                        child: Text(label, style: GoogleFonts.notoSansKr(color: isSel ? Colors.black : Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
                       ),
-                      child: Text(label, style: GoogleFonts.notoSansKr(color: isSel ? Colors.black : Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
             const SizedBox(height: 18),
 
@@ -981,7 +995,7 @@ class _GradeManagementScreenState extends State<GradeManagementScreen> {
               child: _isSummaryLoading
                   ? const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: _ThemeColors.brandGolden)))
                   : Text(
-                _summaryText ?? "지필·수행 점수가 입력되면 지필+수행 종합 결과를 바탕으로 총평이 표시됩니다.",
+                _summaryText ?? _bi("지필·수행 점수가 입력되면 지필+수행 종합 결과를 바탕으로 총평이 표시됩니다.", "Once written and performance scores are entered, a summary based on the combined result will appear here."),
                 style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6),
               ),
             ),

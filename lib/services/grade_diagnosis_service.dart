@@ -10,7 +10,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///   않습니다. 대신 점수대(10점 버킷)가 비슷한 "다른" 학생에게는 저장된 문구를
 ///   재사용할 수 있게 하여, 매번 새로 만들지 않고도 문구가 겹치지 않도록 설계했습니다.
 /// - 전문용어는 반드시 괄호로 풀어서 설명합니다.
+/// - 🆕 [다국어 기본] 한 번 생성할 때 한국어+영문을 항상 짝(pair)으로 함께 만들어
+///   저장합니다. 화면에서는 기본모드(KO/EN) 시 두 언어를 함께 보여주고, 10개국어
+///   선택 시에는(전용 번역 문구뱅크가 아직 없어) 영문으로 대체 표시합니다.
 /// ============================================================================
+class GradeSummaryResult {
+  final String ko;
+  final String en;
+  const GradeSummaryResult({required this.ko, required this.en});
+}
+
 class GradeDiagnosisService {
   GradeDiagnosisService._();
 
@@ -25,7 +34,7 @@ class GradeDiagnosisService {
   /// 마지막에 보여준 문구를 별도 캐시(_currentKeyPrefix)에 저장해 둡니다.
   /// 점수대(버킷)가 바뀌지 않는 한 같은 문구를 계속 재사용하고, 점수대가 실제로
   /// 바뀌었을 때만 새 문구를 뽑아(또는 생성해) 캐시를 갱신합니다.
-  static Future<String> getOverallSummary({
+  static Future<GradeSummaryResult> getOverallSummary({
     required String personKey,
     required double combinedAverage,
     double? achievementAverage,
@@ -38,38 +47,41 @@ class GradeDiagnosisService {
     if (currentRaw != null && currentRaw.isNotEmpty) {
       try {
         final Map<String, dynamic> cached = jsonDecode(currentRaw);
-        if ((cached['bucket'] as num?)?.toInt() == bucket && cached['text'] is String) {
-          return cached['text'] as String;
+        if ((cached['bucket'] as num?)?.toInt() == bucket && cached['ko'] is String && cached['en'] is String) {
+          return GradeSummaryResult(ko: cached['ko'] as String, en: cached['en'] as String);
         }
       } catch (_) {}
     }
 
     final String bucketKey = '$_bucketKeyPrefix$bucket';
     final String seenKey = '$_seenKeyPrefix$personKey';
-    final List<String> bucketPhrases = prefs.getStringList(bucketKey) ?? [];
-    final List<String> seenPhrases = prefs.getStringList(seenKey) ?? [];
+    final List<String> bucketPairsRaw = prefs.getStringList(bucketKey) ?? [];
+    final List<String> seenPairsRaw = prefs.getStringList(seenKey) ?? [];
 
-    String result;
-    // 1) 같은 점수대에 이미 저장된 문구 중, 본인이 아직 받아본 적 없는 것이 있으면 재사용
-    final String? reusable = bucketPhrases.firstWhere((p) => !seenPhrases.contains(p), orElse: () => "");
-    if (reusable != null && reusable.isNotEmpty) {
-      result = reusable;
-      seenPhrases.add(result);
-      await prefs.setStringList(seenKey, seenPhrases);
+    String resultRaw;
+    // 1) 같은 점수대에 이미 저장된 문구(KO+EN 짝) 중, 본인이 아직 받아본 적 없는 것이 있으면 재사용
+    final String reusable = bucketPairsRaw.firstWhere((p) => !seenPairsRaw.contains(p), orElse: () => "");
+    if (reusable.isNotEmpty) {
+      resultRaw = reusable;
+      seenPairsRaw.add(resultRaw);
+      await prefs.setStringList(seenKey, seenPairsRaw);
     } else {
-      // 2) 없으면 새로 생성 후 버킷/본인기록 양쪽에 저장
-      result = _generate(combinedAverage, achievementAverage);
-      bucketPhrases.add(result);
-      seenPhrases.add(result);
-      await prefs.setStringList(bucketKey, bucketPhrases);
-      await prefs.setStringList(seenKey, seenPhrases);
+      // 2) 없으면 새로 생성(KO+EN 동시) 후 버킷/본인기록 양쪽에 저장
+      final GradeSummaryResult generated = _generate(combinedAverage, achievementAverage);
+      resultRaw = jsonEncode({'ko': generated.ko, 'en': generated.en});
+      bucketPairsRaw.add(resultRaw);
+      seenPairsRaw.add(resultRaw);
+      await prefs.setStringList(bucketKey, bucketPairsRaw);
+      await prefs.setStringList(seenKey, seenPairsRaw);
     }
 
-    await prefs.setString(currentKey, jsonEncode({'bucket': bucket, 'text': result}));
+    final Map<String, dynamic> decoded = jsonDecode(resultRaw);
+    final GradeSummaryResult result = GradeSummaryResult(ko: decoded['ko'] as String, en: decoded['en'] as String);
+    await prefs.setString(currentKey, jsonEncode({'bucket': bucket, 'ko': result.ko, 'en': result.en}));
     return result;
   }
 
-  static const Map<String, List<String>> _openings = {
+  static const Map<String, List<String>> _openingsKo = {
     'excellent': [
       '지필점수와 수행점수(수업 중 과제·발표·태도 등을 평가에 반영하는 항목)를 종합한 결과, 90점대 이상의 매우 우수한 성취 수준을 보이고 있습니다. ',
       '두 영역을 합산한 종합 반영점수가 최상위권에 안정적으로 자리 잡고 있어, 그동안의 학습 밀도가 실제 성과로 정확히 이어지고 있음을 보여줍니다. ',
@@ -92,7 +104,30 @@ class GradeDiagnosisService {
     ],
   };
 
-  static const Map<String, List<String>> _closings = {
+  static const Map<String, List<String>> _openingsEn = {
+    'excellent': [
+      'Combining written and performance scores (performance reflects coursework such as assignments, presentations, and class participation), the result shows an outstanding achievement level in the 90s. ',
+      'The combined reflected score sits solidly in the top tier, showing that sustained study effort is translating directly into real results. ',
+    ],
+    'good': [
+      'The combined written and performance score sits in the strong 80s range, showing solid conceptual understanding (the ability to explain core principles independently) paired with consistent execution. ',
+      'Overall achievement has been on a steady, stable trend, and with a bit more refinement, reaching the very top tier is well within reach. ',
+    ],
+    'mid': [
+      'The combined score sits in the 70s — the basics are in place, but a gap between the written and performance components suggests some rebalancing is needed. ',
+      'The combined written and performance result is in the mid tier; identifying and reinforcing specific weak spots could bring a meaningful rise in the short term. ',
+    ],
+    'low': [
+      'The combined score sits in the 60s, pointing to some gaps in foundational concepts that need attention at this stage. ',
+      'Looking at both written and performance scores together, achievement is running lower than expected for the current level, calling for a review of overall study habits. ',
+    ],
+    'critical': [
+      'The combined score is below 60, signaling that foundational concepts need to be rebuilt from the ground up. ',
+      'The combined written and performance result is low, so rather than rushing into more practice volume, it is time to methodically rebuild the fundamentals. ',
+    ],
+  };
+
+  static const Map<String, List<String>> _closingsKo = {
     'excellent': [
       '다만 현재 수준에 안주하지 않고, 오답 원인을 기록·분석하는 오답노트(틀린 이유를 되짚어 정리하는 습관)를 꾸준히 유지하면 흔들림 없는 최상위권을 지켜낼 수 있습니다.',
       '이 흐름을 유지하려면 수행평가 준비도 지필 못지않게 꼼꼼히 챙기는 균형 잡힌 습관을 계속 이어가시길 권합니다.',
@@ -115,8 +150,31 @@ class GradeDiagnosisService {
     ],
   };
 
+  static const Map<String, List<String>> _closingsEn = {
+    'excellent': [
+      'That said, keeping an error journal (recording and reviewing the reasons behind mistakes) will help protect this top-tier standing without complacency.',
+      'To keep this trend going, continue preparing for performance evaluations as carefully as for written exams, maintaining a well-balanced routine.',
+    ],
+    'good': [
+      'Checking for small point losses in performance evaluations, and reinforcing advanced application problems on the written side, should open up further room to improve.',
+      'Using metacognition (checking what you do and do not understand) to pinpoint weak units would be a good habit to build.',
+    ],
+    'mid': [
+      'Identifying whichever of written or performance is relatively weaker and concentrating study time there would be an effective strategy.',
+      'Keeping up a steady review routine covering core concepts should lead to a meaningful rebound on the next assessment.',
+    ],
+    'low': [
+      'Rather than rushing, calmly working back through the basic concept textbook from the start is recommended to build up study density.',
+      'Steadily preparing for performance evaluations and stacking up small wins should gradually restore both confidence and scores.',
+    ],
+    'critical': [
+      'Right now, the priority is understanding each basic concept solidly rather than increasing practice volume — building small wins one at a time matters most.',
+      'With some outside support, working step by step through the weakest foundational units should reveal real potential to turn things around.',
+    ],
+  };
+
   // 🆕 250자 전후 분량을 안정적으로 맞추기 위한 중간 문장(성적대별 공통 보완 코멘트)
-  static const Map<String, List<String>> _middles = {
+  static const Map<String, List<String>> _middlesKo = {
     'excellent': [
       ' 특히 시험 종류(중간고사·기말고사·모의고사)별로 편차 없이 고르게 좋은 흐름을 보이는 점이 인상적입니다.',
       ' 지필과 수행 두 영역의 반영비율이 달라져도 흔들리지 않을 만큼 기초가 탄탄하게 잡혀 있는 상태입니다.',
@@ -139,6 +197,29 @@ class GradeDiagnosisService {
     ],
   };
 
+  static const Map<String, List<String>> _middlesEn = {
+    'excellent': [
+      ' Notably, performance stays consistently strong across exam types (midterm, final, mock), which is impressive.',
+      ' The foundation is solid enough that changes to the written/performance weighting would not shake the results.',
+    ],
+    'good': [
+      ' Looking at scores by exam type, one particular type shows a bit of a dip worth addressing.',
+      ' Identifying whichever of written or performance is relatively weaker and reinforcing it would make results more consistent.',
+    ],
+    'mid': [
+      ' Consistency in performance-evaluation preparation in particular has a big impact on the combined score, so it is worth watching closely.',
+      ' Comparing scores by exam type reveals one clearly weaker area — starting there is recommended.',
+    ],
+    'low': [
+      ' Building the habit of giving equal attention to both written and performance components, rather than favoring one, matters here.',
+      ' Scores vary noticeably by exam type, so pinpointing the weaker areas and guiding practice there would help.',
+    ],
+    'critical': [
+      ' Both written and performance areas need reinforcement, so tackling them one at a time in order will be more effective.',
+      ' Rather than focusing on scores right now, the priority should be rebuilding study habits from the ground up.',
+    ],
+  };
+
   static String _tierFor(double avg) {
     if (avg >= 90) return 'excellent';
     if (avg >= 80) return 'good';
@@ -147,29 +228,33 @@ class GradeDiagnosisService {
     return 'critical';
   }
 
-  static String _generate(double combinedAverage, double? achievementAverage) {
+  static GradeSummaryResult _generate(double combinedAverage, double? achievementAverage) {
     final random = math.Random();
     final String tier = _tierFor(combinedAverage);
-    final List<String> openings = _openings[tier]!;
-    final List<String> closings = _closings[tier]!;
 
-    final List<String> middles = _middles[tier]!;
-    String text = openings[random.nextInt(openings.length)]
-        + middles[random.nextInt(middles.length)]
-        + closings[random.nextInt(closings.length)];
+    // 🆕 KO/EN이 서로 같은 뉘앙스를 유지하도록 동일한 인덱스를 뽑아 양쪽에 적용
+    final int openIdx = random.nextInt(_openingsKo[tier]!.length);
+    final int midIdx = random.nextInt(_middlesKo[tier]!.length);
+    final int closeIdx = random.nextInt(_closingsKo[tier]!.length);
+
+    String textKo = _openingsKo[tier]![openIdx] + _middlesKo[tier]![midIdx] + _closingsKo[tier]![closeIdx];
+    String textEn = _openingsEn[tier]![openIdx] + _middlesEn[tier]![midIdx] + _closingsEn[tier]![closeIdx];
 
     // 🆕 [요청] 성취도(gke_exam_records) 기록도 참고해서 한 문장 추가 (약 250자 전후 맞춤)
     if (achievementAverage != null) {
       final double gap = combinedAverage - achievementAverage;
       if (gap.abs() < 5) {
-        text += ' 평소 학습 기록에 나타난 성취도 흐름과도 비슷한 수준을 유지하고 있어, 실력이 안정적으로 자리 잡았다고 볼 수 있습니다.';
+        textKo += ' 평소 학습 기록에 나타난 성취도 흐름과도 비슷한 수준을 유지하고 있어, 실력이 안정적으로 자리 잡았다고 볼 수 있습니다.';
+        textEn += ' This is also in line with the trend seen in regular study records, suggesting the current level is fairly stable.';
       } else if (gap > 0) {
-        text += ' 평소 학습 기록보다 이번 성적관리 반영점수가 더 높게 나타나, 최근 집중도가 상승한 것으로 보입니다.';
+        textKo += ' 평소 학습 기록보다 이번 성적관리 반영점수가 더 높게 나타나, 최근 집중도가 상승한 것으로 보입니다.';
+        textEn += ' This is higher than the trend seen in regular study records, suggesting recent focus has improved.';
       } else {
-        text += ' 평소 학습 기록에 비해 이번 반영점수가 다소 낮게 나타나, 컨디션이나 준비 과정을 함께 점검해 볼 필요가 있습니다.';
+        textKo += ' 평소 학습 기록에 비해 이번 반영점수가 다소 낮게 나타나, 컨디션이나 준비 과정을 함께 점검해 볼 필요가 있습니다.';
+        textEn += ' This is a bit lower than the trend seen in regular study records, so it may help to check recent condition or preparation.';
       }
     }
 
-    return text;
+    return GradeSummaryResult(ko: textKo, en: textEn);
   }
 }

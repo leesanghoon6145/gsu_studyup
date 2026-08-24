@@ -347,12 +347,14 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
     // 🆕 [요청] 학생 화면과 동일한 personKey 규칙을 사용해 "동일한 문구"가 그대로 조회됩니다.
     final double? achievementAvg = await GradeManagementService.readAchievementAverageScore();
     final String personKey = 'student_${widget.childName}_$_schoolLevel$_grade$_semester';
-    final String text = await GradeDiagnosisService.getOverallSummary(
+    final GradeSummaryResult result = await GradeDiagnosisService.getOverallSummary(
       personKey: personKey, combinedAverage: avg, achievementAverage: achievementAvg,
     );
     if (!mounted) return;
     setState(() {
-      _summaryText = text;
+      // 🆕 [요청] 종합 총평에 영문 병기 - 기본모드(KO/EN)는 한글+영문, 10개국어 선택 시엔
+      // 전용 번역 문구뱅크가 아직 없어 영문으로 대체 표시합니다.
+      _summaryText = DkeLang.isForeignSelected ? result.en : "${result.ko}\n\n${result.en}";
       _isSummaryLoading = false;
     });
   }
@@ -641,15 +643,26 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
               ),
             )
           else ...[
-            Row(children: GradeManagementService.schoolLevels.map((lv) =>
-                _buildSelectorChip(schoolLevelLabel(lv), _schoolLevel == lv, () { setState(() => _schoolLevel = lv); _loadSummary(); })).toList()),
+            // 🆕 [요청] 학년(1학년/2학년/3학년 등) 칩이 다국어 표기로 길어져 오른쪽이 잘리는
+            // 문제를 막기 위해 세 칩 줄 모두 가로 스크롤로 감쌌습니다.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: GradeManagementService.schoolLevels.map((lv) =>
+                  _buildSelectorChip(schoolLevelLabel(lv), _schoolLevel == lv, () { setState(() => _schoolLevel = lv); _loadSummary(); })).toList()),
+            ),
             const SizedBox(height: 10),
-            Row(children: GradeManagementService.gradeRange.map((g) {
-              return _buildSelectorChip(gradeChipLabel(g), _grade == g, () { setState(() => _grade = g); _loadSummary(); });
-            }).toList()),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: GradeManagementService.gradeRange.map((g) {
+                return _buildSelectorChip(gradeChipLabel(g), _grade == g, () { setState(() => _grade = g); _loadSummary(); });
+              }).toList()),
+            ),
             const SizedBox(height: 10),
-            Row(children: [1, 2].map((s) =>
-                _buildSelectorChip(semesterChipLabel(s), _semester == s, () { setState(() => _semester = s); _loadSummary(); })).toList()),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [1, 2].map((s) =>
+                  _buildSelectorChip(semesterChipLabel(s), _semester == s, () { setState(() => _semester = s); _loadSummary(); })).toList()),
+            ),
             const SizedBox(height: 6),
             Text(
               reportCardTitle(_schoolLevel, _grade, _semester),
