@@ -394,7 +394,6 @@ class GradeDiagnosisService {
 
     // 🆕 모든 언어가 같은 뉘앙스를 유지하도록 동일한 인덱스를 뽑아 12개 언어에 동시 적용
     final int openIdx = random.nextInt(_openings[tier]!['KO']!.length);
-    final int midIdx = random.nextInt(_middles[tier]!['KO']!.length);
     final int closeIdx = random.nextInt(_closings[tier]!['KO']!.length);
 
     int? gapIdx;
@@ -403,9 +402,11 @@ class GradeDiagnosisService {
       gapIdx = gap.abs() < 5 ? 0 : (gap > 0 ? 1 : 2);
     }
 
+    // 🆕 [요청] 총평 분량을 200자 전후로 맞추기 위해 중간 보완 문장(_middles)은 빼고
+    // 도입부+마무리 문장만 조합합니다 (문구뱅크 자체는 유지 - 추후 재활용 가능).
     final Map<String, String> texts = {};
     for (final lang in _langCodes) {
-      String text = _openings[tier]![lang]![openIdx] + _middles[tier]![lang]![midIdx] + _closings[tier]![lang]![closeIdx];
+      String text = _openings[tier]![lang]![openIdx] + _closings[tier]![lang]![closeIdx];
       if (gapIdx != null) {
         text += _achievementGap[lang]![gapIdx];
       }

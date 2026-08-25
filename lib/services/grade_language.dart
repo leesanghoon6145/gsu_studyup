@@ -175,6 +175,23 @@ String noRecordsAtScopeText(String schoolLevel, int grade, int semester) {
 // 🆕 성적관리 안내 팝업 제목 - 학생/학부모 화면 공용
 const Map<String, String> kPopupTitleMap = {'KO': '성적관리 안내', 'EN': 'Grade Management Notice', 'JA': '成績管理のご案内', 'ZH': '成绩管理说明', 'FR': 'Avis de gestion des notes', 'DE': 'Hinweis zur Notenverwaltung', 'RU': 'Уведомление об управлении оценками', 'AR': 'إشعار إدارة الدرجات', 'HI': 'ग्रेड प्रबंधन सूचना', 'VI': 'Thông báo quản lý điểm', 'ES': 'Aviso de gestión de calificaciones', 'TH': 'ประกาศการจัดการเกรด'};
 
+// 🆕 [요청] 종합 총평은 최소 4개 과목(국/영/수/과 등) 이상 성적이 입력되어야 제공됩니다.
+// 조건 미충족 시 흐릿하게 표시할 안내 문구.
+const Map<String, String> kMinSubjectsNeededMap = {
+  'KO': '국어, 영어, 수학, 과학 등 최소 4개 과목 이상 성적이 기입되어야 리포트가 제공됩니다.',
+  'EN': 'A report is provided once at least 4 subjects (e.g. Korean, English, Math, Science) have scores entered.',
+  'JA': '国語・英語・数学・科学など最低4科目以上の成績が入力されるとレポートが提供されます。',
+  'ZH': '需录入语文、英语、数学、科学等至少4个科目的成绩后才会提供报告。',
+  'FR': "Un rapport est fourni une fois qu'au moins 4 matières (coréen, anglais, maths, sciences, etc.) ont des notes saisies.",
+  'DE': 'Ein Bericht wird bereitgestellt, sobald für mindestens 4 Fächer (z. B. Koreanisch, Englisch, Mathe, Naturwissenschaften) Noten eingegeben wurden.',
+  'RU': 'Отчёт предоставляется после ввода баллов минимум по 4 предметам (например, корейский, английский, математика, естествознание).',
+  'AR': 'يتم تقديم التقرير بمجرد إدخال درجات 4 مواد على الأقل (مثل الكورية والإنجليزية والرياضيات والعلوم).',
+  'HI': 'कम से कम 4 विषयों (जैसे कोरियाई, अंग्रेज़ी, गणित, विज्ञान) के अंक दर्ज होने पर रिपोर्ट उपलब्ध होगी।',
+  'VI': 'Báo cáo sẽ được cung cấp khi có điểm của ít nhất 4 môn (VD: Tiếng Hàn, Tiếng Anh, Toán, Khoa học).',
+  'ES': 'El informe se proporciona una vez que se hayan ingresado notas de al menos 4 materias (p. ej. coreano, inglés, matemáticas, ciencias).',
+  'TH': 'รายงานจะพร้อมใช้งานเมื่อกรอกคะแนนอย่างน้อย 4 วิชา (เช่น ภาษาเกาหลี ภาษาอังกฤษ คณิตศาสตร์ วิทยาศาสตร์)',
+};
+
 const Map<String, String> kRankDisclaimerMap = {
   'KO': "※ 학교에서 공식적으로 발표한 석차가 아닌, 본인이 예상으로 입력한 참고용 수치입니다.",
   'EN': "※ Not an official school-published rank — this is a self-estimated figure for reference only.",

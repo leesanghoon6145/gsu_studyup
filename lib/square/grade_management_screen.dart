@@ -277,15 +277,30 @@ class _GradeManagementScreenState extends State<GradeManagementScreen> {
     _loadSummary();
   }
 
+  bool _notEnoughSubjects = false;
+
   Future<void> _loadSummary() async {
     final filtered = _currentFiltered;
+    // 🆕 [요청] 국/영/수/과 등 최소 4개 "과목"에 성적이 입력되어야 총평을 제공합니다
+    // (중간/기말/모의고사 구분과 무관하게, 서로 다른 과목 수를 기준으로 판단)
+    final Set<String> subjectsWithScore = filtered.where((r) => r.computedAverage != null).map((r) => r.subject).toSet();
+    if (subjectsWithScore.length < 4) {
+      setState(() {
+        _summaryText = null;
+        _notEnoughSubjects = true;
+      });
+      return;
+    }
     final overall = GradeManagementService.computeOverallSummary(filtered, _schoolLevel, _allConfigs);
     final double? avg = overall["average"] as double?;
     if (avg == null) {
-      setState(() => _summaryText = null);
+      setState(() {
+        _summaryText = null;
+        _notEnoughSubjects = true;
+      });
       return;
     }
-    setState(() => _isSummaryLoading = true);
+    setState(() { _isSummaryLoading = true; _notEnoughSubjects = false; });
     final String? name = await DkeUserProfile.getRealName();
     final double? achievementAvg = await GradeManagementService.readAchievementAverageScore();
     final String personKey = 'student_${name ?? "unknown"}_$_schoolLevel$_grade$_semester';
@@ -1156,8 +1171,12 @@ class _GradeManagementScreenState extends State<GradeManagementScreen> {
               child: _isSummaryLoading
                   ? const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: _ThemeColors.brandGolden)))
                   : Text(
-                _summaryText ?? t(kSummaryPlaceholderMap),
-                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6),
+                // 🆕 [요청] 4개 과목 미만이면 흐릿한 안내 문구, 4개 이상이면 실제 총평 표시
+                _summaryText ?? (_notEnoughSubjects ? t(kMinSubjectsNeededMap) : t(kSummaryPlaceholderMap)),
+                style: GoogleFonts.notoSansKr(
+                  color: _summaryText != null ? Colors.white : Colors.white38,
+                  fontSize: 13, height: 1.6,
+                ),
               ),
             ),
           ],

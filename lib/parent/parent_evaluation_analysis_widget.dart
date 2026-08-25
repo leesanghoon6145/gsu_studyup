@@ -98,35 +98,35 @@ const Map<String, String> kSecSubjectRatioMap = {'FR': '[ Répartition par mati�
 
 // ---------------------------------------------------------------------------
 // 🆕 [12개국어] 연/월/주 칩 - 숫자+단어 어순은 grade_language.dart의 isNumberFirstLang 재사용
+// [요청] "2026년/2026" 같은 한글+영문 병기 대신, 현재 선택된 언어 하나로만 "2026 year" 형태로 표시
 // ---------------------------------------------------------------------------
-const Map<String, String> kYearWordMap = {'KO': '년', 'EN': '', 'JA': '年', 'ZH': '年', 'FR': '', 'DE': '', 'RU': '', 'AR': '', 'HI': '', 'VI': 'Năm ', 'ES': '', 'TH': 'ปี '};
-const Map<String, String> kMonthWordMap = {'KO': '월', 'EN': '', 'JA': '月', 'ZH': '月', 'FR': '', 'DE': '', 'RU': '', 'AR': '', 'HI': '', 'VI': 'Th.', 'ES': '', 'TH': 'เดือน '};
-const Map<String, String> kWeekWordMap = {'KO': '주차', 'EN': 'Wk', 'JA': '週目', 'ZH': '周', 'FR': 'Sem.', 'DE': 'Wo.', 'RU': 'Нед.', 'AR': 'أسبوع ', 'HI': 'सप्ताह ', 'VI': 'Tuần ', 'ES': 'Sem.', 'TH': 'สัปดาห์ '};
+const Map<String, String> kYearWordMap = {'KO': '년', 'EN': 'year', 'JA': '年', 'ZH': '年', 'FR': 'an', 'DE': 'Jahr', 'RU': 'год', 'AR': 'عام', 'HI': 'वर्ष', 'VI': 'năm', 'ES': 'año', 'TH': 'ปี'};
+const Map<String, String> kMonthWordMap = {'KO': '월', 'EN': '', 'JA': '月', 'ZH': '月', 'FR': '', 'DE': '', 'RU': '', 'AR': '', 'HI': '', 'VI': '', 'ES': '', 'TH': ''};
+const Map<String, String> kWeekWordMap = {'KO': '주차', 'EN': 'Week', 'JA': '週目', 'ZH': '周', 'FR': 'Semaine', 'DE': 'Woche', 'RU': 'Неделя', 'AR': 'أسبوع', 'HI': 'सप्ताह', 'VI': 'Tuần', 'ES': 'Semana', 'TH': 'สัปดาห์'};
 const Map<String, String> kBigUnitWordMap = {'KO': '대단원', 'EN': 'Unit', 'JA': '大単元', 'ZH': '大单元', 'FR': 'Unité', 'DE': 'Einheit', 'RU': 'Раздел', 'AR': 'الوحدة', 'HI': 'इकाई', 'VI': 'Chương', 'ES': 'Unidad', 'TH': 'หน่วยใหญ่'};
 const Map<String, String> kMidUnitWordMap = {'KO': '중단원', 'EN': 'Sub-unit', 'JA': '中単元', 'ZH': '中单元', 'FR': 'Sous-unité', 'DE': 'Untereinheit', 'RU': 'Подраздел', 'AR': 'الوحدة الفرعية', 'HI': 'उप-इकाई', 'VI': 'Chương nhỏ', 'ES': 'Subunidad', 'TH': 'หน่วยย่อย'};
 
+// 🆕 [요청] 월 표기는 KO/JA/ZH만 "N월/N月" 그대로 두고, 나머지 전 언어는
+// "07 Jul"처럼 2자리 숫자 + 영문 약어로 통일 (국제적으로 통용되는 날짜 표기 관례)
+const List<String> kEnMonthAbbrev = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 String yearChipLabel(int year) {
-  if (DkeLang.isForeignSelected) {
-    final w = kYearWordMap[DkeLang.current] ?? '';
-    return isNumberFirstLang ? "$year$w" : "$w$year";
-  }
-  return "$year${kYearWordMap['KO']}/$year";
+  // 🆕 [요청] "2026년/2026" 병기 대신 현재 언어로만 "2026 year"/"2026년" 형태로 단일 표시
+  final w = t(kYearWordMap);
+  return isNumberFirstLang ? "$year$w" : "$year $w";
 }
 
 String monthChipLabel(int month) {
-  if (DkeLang.isForeignSelected) {
-    final w = kMonthWordMap[DkeLang.current] ?? '';
-    return isNumberFirstLang ? "$month$w" : "$w$month";
+  if (['KO', 'JA', 'ZH'].contains(DkeLang.current)) {
+    return "$month${t(kMonthWordMap)}";
   }
-  return "$month${kMonthWordMap['KO']}/$month";
+  final String mm = month.toString().padLeft(2, '0');
+  return "$mm ${kEnMonthAbbrev[month - 1]}";
 }
 
 String weekChipLabel(int week) {
-  if (DkeLang.isForeignSelected) {
-    final w = kWeekWordMap[DkeLang.current] ?? '';
-    return isNumberFirstLang ? "$week$w" : "$w $week";
-  }
-  return "$week${kWeekWordMap['KO']}/${kWeekWordMap['EN']}$week";
+  final w = t(kWeekWordMap);
+  return isNumberFirstLang ? "$week$w" : "$w $week";
 }
 
 String bigUnitChipLabel(int n) {
@@ -204,11 +204,19 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              buildCustomSectionTitle("Academic Evaluation Matrix", "[ 평가 결과 ]", fontSize: 14.0, foreignTitle: t(kSecEvalResultMap)),
-              Text(
-                childRecordTitle(childName),
-                style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              Flexible(child: buildCustomSectionTitle("Academic Evaluation Matrix", "[ 평가 결과 ]", fontSize: 14.0, foreignTitle: t(kSecEvalResultMap))),
+              const SizedBox(width: 8),
+              // 🆕 [오버플로우 수정] 영문 등 긴 언어에서 이름이 길어지면 오른쪽 끝으로 말줄임 처리
+              Flexible(
+                child: Text(
+                  childRecordTitle(childName),
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
               ),
             ],
           ),
@@ -306,23 +314,29 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(t(kMidUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
-                  Row(
-                    children: ["중단원 1", "중단원 2", "중단원 3", "중단원 4"].map((v) {
-                      final int n = int.parse(v.replaceAll('중단원 ', ''));
-                      return Padding(padding: const EdgeInsets.only(right:4), child: _buildInlineFilterChip(midUnitChipLabel(n), selectedMidUnit == v, () => onMidUnitChanged(v)));
-                    }).toList(),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: ["중단원 1", "중단원 2", "중단원 3", "중단원 4"].map((v) {
+                        final int n = int.parse(v.replaceAll('중단원 ', ''));
+                        return Padding(padding: const EdgeInsets.only(right:4), child: _buildInlineFilterChip(midUnitChipLabel(n), selectedMidUnit == v, () => onMidUnitChanged(v)));
+                      }).toList(),
+                    ),
                   ),
                 ] else ...[
                   Text(t(kGradeThenSemesterHintMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 6),
-                  Row(
-                    children: ["1학년", "2학년", "3학년"].map((g) {
-                      final int n = int.parse(g.replaceAll('학년', ''));
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: _buildInlineFilterChip(gradeChipLabel(n), selectedBigUnit == g, () { onBigUnitChanged(g); onSemesterFilterChanged(1); }),
-                      );
-                    }).toList(),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: ["1학년", "2학년", "3학년"].map((g) {
+                        final int n = int.parse(g.replaceAll('학년', ''));
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: _buildInlineFilterChip(gradeChipLabel(n), selectedBigUnit == g, () { onBigUnitChanged(g); onSemesterFilterChanged(1); }),
+                        );
+                      }).toList(),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(t(kSemesterSelectLabelMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold)),
@@ -382,10 +396,17 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
             label: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  t(kTodayAnalysisReportBtnMap),
-                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                // 🆕 [오버플로우 수정] 영문 등 긴 언어에서 버튼 안 문구가 넘치지 않도록
+                // Expanded + 2줄 허용으로 감싸고, 화살표 아이콘은 고정 폭 유지
+                Expanded(
+                  child: Text(
+                    t(kTodayAnalysisReportBtnMap),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Icon(Icons.arrow_forward_ios_rounded, color: brandGolden, size: 12),
               ],
             ),

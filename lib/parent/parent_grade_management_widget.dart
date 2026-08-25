@@ -166,14 +166,28 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
     _loadSummary();
   }
 
+  bool _notEnoughSubjects = false;
+
   Future<void> _loadSummary() async {
+    // 🆕 [요청] 국/영/수/과 등 최소 4개 "과목"에 성적이 입력되어야 총평을 제공합니다
+    final Set<String> subjectsWithScore = _filtered.where((r) => r.computedAverage != null).map((r) => r.subject).toSet();
+    if (subjectsWithScore.length < 4) {
+      setState(() {
+        _summaryText = null;
+        _notEnoughSubjects = true;
+      });
+      return;
+    }
     final overall = GradeManagementService.computeOverallSummary(_filtered, _schoolLevel, _allConfigs);
     final double? avg = overall["average"] as double?;
     if (avg == null) {
-      setState(() => _summaryText = null);
+      setState(() {
+        _summaryText = null;
+        _notEnoughSubjects = true;
+      });
       return;
     }
-    setState(() => _isSummaryLoading = true);
+    setState(() { _isSummaryLoading = true; _notEnoughSubjects = false; });
     // 🆕 [요청] 학생 화면과 동일한 personKey 규칙을 사용해 "동일한 문구"가 그대로 조회됩니다.
     final double? achievementAvg = await GradeManagementService.readAchievementAverageScore();
     final String personKey = 'student_${widget.childName}_$_schoolLevel$_grade$_semester';
@@ -579,8 +593,12 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
               child: _isSummaryLoading
                   ? Center(child: Padding(padding: const EdgeInsets.all(12), child: CircularProgressIndicator(color: widget.brandGolden)))
                   : Text(
-                _summaryText ?? t(kSummaryPlaceholderMap),
-                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6),
+                // 🆕 [요청] 4개 과목 미만이면 흐릿한 안내 문구, 4개 이상이면 실제 총평 표시
+                _summaryText ?? (_notEnoughSubjects ? t(kMinSubjectsNeededMap) : t(kSummaryPlaceholderMap)),
+                style: GoogleFonts.notoSansKr(
+                  color: _summaryText != null ? Colors.white : Colors.white38,
+                  fontSize: 13, height: 1.6,
+                ),
               ),
             ),
             const SizedBox(height: 10),
