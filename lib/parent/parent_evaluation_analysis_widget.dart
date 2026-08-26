@@ -531,7 +531,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                       final rec = rawRecords[idx];
                       Color barColor = scoreColors[idx % scoreColors.length];
 
-                      double normalizedScore = (rec.score - 60).clamp(0, 40);
+                      double normalizedScore = (rec.score - 60).clamp(0.0, 40.0);
                       // 🆕 [요청] 100점일 때 점수 숫자가 위쪽 여백 부족으로 안 보이던 문제 수정 -
                       // 막대 최대 높이를 chartMaxHeight의 82%로 제한해서 점수 라벨이 들어갈 여유 공간을 확보
                       double finalBarHeight = (normalizedScore / 40) * (chartMaxHeight * 0.99);
