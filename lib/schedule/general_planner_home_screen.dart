@@ -29,6 +29,7 @@ import 'routine_screen.dart';
 import 'execution_record_screen.dart';
 import 'timeline_history_screen.dart';
 import 'timeline_analysis_screen.dart';
+import 'timer_calculator_screen.dart'; // 🆕 일반인용 독립 타이머·계산기
 import 'life_goal_screen.dart';
 import 'yearly_goal_screen.dart';
 import 'monthly_goal_screen.dart';
@@ -121,6 +122,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
               _MenuEntry('📜', 'TIMELINE HISTORY', '타임라인 기록', () => _navigate(context, const TimelineHistoryScreen())),
               _MenuEntry('✅', 'EXECUTION RECORD', '실행 기록', () => _navigate(context, const ExecutionRecordScreen())),
               _MenuEntry('📊', 'TIMELINE ANALYSIS', '타임라인 분석', () => _navigate(context, const TimelineAnalysisScreen())),
+              _MenuEntry('⏱️', 'TIMER CALCULATOR', '타이머 계산기', () => _navigate(context, const TimerCalculatorScreen())),
             ]),
             const SizedBox(height: 30),
 
@@ -175,6 +177,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     'TIMELINE HISTORY': {'JA': 'タイムライン履歴', 'ZH': '时间线记录', 'FR': "Historique de chronologie", 'DE': 'Zeitleisten-Verlauf', 'RU': 'История хронологии', 'AR': 'سجل الجدول الزمني', 'HI': 'समयरेखा इतिहास', 'VI': 'Lịch sử dòng thời gian', 'ES': 'Historial de cronología', 'TH': 'ประวัติไทม์ไลน์'},
     'EXECUTION RECORD': {'JA': '実行記録', 'ZH': '执行记录', 'FR': "Journal d'exécution", 'DE': 'Ausführungsprotokoll', 'RU': 'Журнал выполнения', 'AR': 'سجل التنفيذ', 'HI': 'निष्पादन रिकॉर्ड', 'VI': 'Nhật ký thực hiện', 'ES': 'Registro de ejecución', 'TH': 'บันทึกการดำเนินการ'},
     'TIMELINE ANALYSIS': {'JA': 'タイムライン分析', 'ZH': '时间线分析', 'FR': "Analyse de chronologie", 'DE': 'Zeitleistenanalyse', 'RU': 'Анализ хронологии', 'AR': 'تحليل الجدول الزمني', 'HI': 'समयरेखा विश्लेषण', 'VI': 'Phân tích dòng thời gian', 'ES': 'Análisis de cronología', 'TH': 'วิเคราะห์ไทม์ไลน์'},
+    'TIMER CALCULATOR': {'JA': 'タイマー・計算機', 'ZH': '计时器・计算器', 'FR': 'Minuteur · Calculatrice', 'DE': 'Timer · Rechner', 'RU': 'Таймер · Калькулятор', 'AR': 'المؤقت · الحاسبة', 'HI': 'टाइमर · कैलकुलेटर', 'VI': 'Hẹn giờ · Máy tính', 'ES': 'Temporizador · Calculadora', 'TH': 'ตัวจับเวลา · เครื่องคิดเลข'},
     // 목표 8개
     'LIFE GOAL': {'JA': '人生の目標', 'ZH': '人生目标', 'FR': 'Objectif de vie', 'DE': 'Lebensziel', 'RU': 'Жизненная цель', 'AR': 'هدف الحياة', 'HI': 'जीवन लक्ष्य', 'VI': 'Mục tiêu cuộc đời', 'ES': 'Objetivo de vida', 'TH': 'เป้าหมายชีวิต'},
     'YEARLY GOAL': {'JA': '年間目標', 'ZH': '年度目标', 'FR': 'Objectif annuel', 'DE': 'Jahresziel', 'RU': 'Годовая цель', 'AR': 'الهدف السنوي', 'HI': 'वार्षिक लक्ष्य', 'VI': 'Mục tiêu năm', 'ES': 'Objetivo anual', 'TH': 'เป้าหมายรายปี'},

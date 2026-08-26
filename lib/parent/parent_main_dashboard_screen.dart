@@ -194,6 +194,45 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   String? _strongestSubject;
   String? _weakestSubject;
 
+  // 🆕 [지난 일자 조회] 상세보기 화면에서 좌우 화살표로 이동할 조회 대상 날짜
+  DateTime _detailedViewDate = DateTime.now();
+
+  bool _isSameDate(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+  bool get _isViewingToday => _isSameDate(_detailedViewDate, DateTime.now());
+
+  List<ParentSessionRecord> get _sessionsForDetailedDate =>
+      _allSessions.where((r) => _isSameDate(r.timestamp, _detailedViewDate)).toList();
+
+  int get _detailedDayTotalMinutes {
+    final d = DateTime(_detailedViewDate.year, _detailedViewDate.month, _detailedViewDate.day);
+    return ParentDataService.totalMinutesForDay(_allSessions, d);
+  }
+
+  int get _detailedDayBeforeMinutes {
+    final d = DateTime(_detailedViewDate.year, _detailedViewDate.month, _detailedViewDate.day).subtract(const Duration(days: 1));
+    return ParentDataService.totalMinutesForDay(_allSessions, d);
+  }
+
+  // 🆕 조회 중인 날짜 이전 7일(해당 날짜 제외)의 학습분 평균 - 기존 "오늘 vs 1주 평균" 로직을
+  // 선택된 날짜 기준으로 그대로 이동
+  int get _detailedWeeklyAvgMinutes {
+    final base = DateTime(_detailedViewDate.year, _detailedViewDate.month, _detailedViewDate.day);
+    int total = 0;
+    for (int i = 1; i <= 7; i++) {
+      total += ParentDataService.totalMinutesForDay(_allSessions, base.subtract(Duration(days: i)));
+    }
+    return (total / 7).round();
+  }
+
+  void _goToPreviousDetailDay() {
+    setState(() => _detailedViewDate = _detailedViewDate.subtract(const Duration(days: 1)));
+  }
+
+  void _goToNextDetailDay() {
+    if (_isViewingToday) return; // 🆕 미래 날짜 조회 방지
+    setState(() => _detailedViewDate = _detailedViewDate.add(const Duration(days: 1)));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -575,10 +614,15 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
               _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
             },
             onShowDetailedAnalysisPopup: () => _showReportPopup(context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisText()),
-            todaySessions: _todaySessions,
-            todayTotalMinutes: _todayTotalMinutes,
-            yesterdayTotalMinutes: _yesterdayTotalMinutes,
-            weeklyAvgMinutesPerDay: _weeklyAvgMinutesPerDay,
+            // 🆕 [지난 일자 조회] 좌우 화살표로 하루씩 이동하며 조회
+            selectedDate: _detailedViewDate,
+            onPreviousDay: _goToPreviousDetailDay,
+            onNextDay: _goToNextDetailDay,
+            isViewingToday: _isViewingToday,
+            sessionsForDate: _sessionsForDetailedDate,
+            todayTotalMinutes: _detailedDayTotalMinutes,
+            yesterdayTotalMinutes: _detailedDayBeforeMinutes,
+            weeklyAvgMinutesPerDay: _detailedWeeklyAvgMinutes,
             strongestSubject: _strongestSubject,
             weakestSubject: _weakestSubject,
           ),

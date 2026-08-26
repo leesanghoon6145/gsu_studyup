@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../global_lang.dart';
 
 // ============================================================================
 // 👑 [AI 진단문 창구] DiagnosisService
 // -----------------------------------------------------------------------------
 // 원장님 지시사항 (반드시 지킬 것):
-// 1. 글자수 최소 300자 전후
+// 1. 글자수 최소 300자 전후 (한글 기준)
 // 2. 전문용어는 괄호 사용해서 부연설명
 // 3. 한 번 생성된 문구는 반드시 영구 저장 ("라이브러리")
 // 4. 같은 사람에게는 절대 같은 문구를 다시 보여주면 안 됨 (3개월 이내)
@@ -18,6 +19,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 // 실제로 반복될 확률이 매우 낮고, 그래도 반복되면 강제로 다른 조합을 골라냅니다.
 // 조합된 결과("comboId")는 SharedPreferences에 점수 구간별 "라이브러리"로 영구 저장되고,
 // 이 사람이 어떤 조합을 언제 봤는지는 별도 키("seen")로 기록해서 3개월 재사용 규칙을 지킵니다.
+// 🆕 [12개국어 전면 확장] 조합 하나를 생성할 때 12개 언어(KO/EN/JA/ZH/FR/DE/RU/AR/HI/VI/ES/TH)를
+// 전부 함께 만들어 같은 comboId 아래 저장합니다. 화면 표시는 DkeLang 설정에 따라
+// 기본모드(KO/EN 선택 시 한글+영문 동시)/10개국어 선택 시 해당 언어 단독으로 결정됩니다.
+// (원장님 지시 1번의 "300자 기준"은 한글 기준이며, 언어별 문자 밀도가 달라 다른 언어는
+// 자연스러운 분량으로 번역했습니다.)
 // ============================================================================
 
 class DiagnosisService {
@@ -26,12 +32,28 @@ class DiagnosisService {
   static const int minLength = 300;
   static const Duration reuseCooldown = Duration(days: 90); // 3개월
 
+  static const List<String> _langCodes = ['KO', 'EN', 'JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+
+  // 🆕 [12개국어] DkeLang 설정에 따라 표시 형식 결정 - 기본모드(KO/EN)는 한글+영문 동시,
+  // 10개국어 선택 시 해당 언어 단독
+  static String _display(Map<String, String> texts) {
+    if (DkeLang.isForeignSelected) return texts[DkeLang.current] ?? texts['EN'] ?? texts['KO'] ?? '';
+    return "${texts['KO'] ?? ''}\n\n${texts['EN'] ?? ''}";
+  }
+
+  // 🆕 [12개국어] 평가 종류(주평가/단원평가/중간고사/기말고사/모의고사) 표시용 번역
+  static const Map<String, Map<String, String>> _typeLabelMap = {
+    "주평가": {'KO': '주평가', 'EN': 'Weekly Evaluation', 'JA': '週評価', 'ZH': '周评价', 'FR': 'évaluation hebdomadaire', 'DE': 'wöchentliche Bewertung', 'RU': 'недельная оценка', 'AR': 'التقييم الأسبوعي', 'HI': 'साप्ताहिक मूल्यांकन', 'VI': 'đánh giá hàng tuần', 'ES': 'evaluación semanal', 'TH': 'การประเมินรายสัปดาห์'},
+    "단원평가": {'KO': '단원평가', 'EN': 'Unit Test', 'JA': '単元評価', 'ZH': '单元评价', 'FR': "évaluation d'unité", 'DE': 'Einheitstest', 'RU': 'проверка по разделу', 'AR': 'اختبار الوحدة', 'HI': 'इकाई परीक्षण', 'VI': 'kiểm tra chương', 'ES': 'examen de unidad', 'TH': 'การทดสอบหน่วย'},
+    "중간고사": {'KO': '중간고사', 'EN': 'Midterm Exam', 'JA': '中間試験', 'ZH': '期中考试', 'FR': 'examen de mi-parcours', 'DE': 'Zwischenprüfung', 'RU': 'промежуточный экзамен', 'AR': 'الاختبار النصفي', 'HI': 'मिडटर्म परीक्षा', 'VI': 'kỳ thi giữa kỳ', 'ES': 'examen parcial', 'TH': 'การสอบกลางภาค'},
+    "기말고사": {'KO': '기말고사', 'EN': 'Final Exam', 'JA': '期末試験', 'ZH': '期末考试', 'FR': 'examen final', 'DE': 'Abschlussprüfung', 'RU': 'итоговый экзамен', 'AR': 'الاختبار النهائي', 'HI': 'फाइनल परीक्षा', 'VI': 'kỳ thi cuối kỳ', 'ES': 'examen final', 'TH': 'การสอบปลายภาค'},
+    "모의고사": {'KO': '모의고사', 'EN': 'Mock Exam', 'JA': '模試', 'ZH': '模拟考试', 'FR': 'examen blanc', 'DE': 'Testexamen', 'RU': 'пробный экзамен', 'AR': 'الاختبار التجريبي', 'HI': 'मॉक परीक्षा', 'VI': 'kỳ thi thử', 'ES': 'examen simulado', 'TH': 'ข้อสอบจำลอง'},
+  };
+  static String _typeLabel(String koType, String lang) => _typeLabelMap[koType]?[lang] ?? _typeLabelMap[koType]?['EN'] ?? koType;
+
   // ── [신규] "오늘 종합 리포트"용 150~200자 짧은 총평 ─────────────────────────
-  // 위의 300자 진단(점수 1건 기준)과는 별개로, "오늘 학습한 모든 과목/시간"을
-  // 종합해서 짧게 총평하는 문구. 같은 라이브러리/3개월 재사용 규칙을 그대로 적용하되
-  // 저장 키 네임스페이스만 분리(dke_daily_*)해서 서로 섞이지 않게 합니다.
   static const int dailyMinLength = 150;
-  static const int dailyMaxLength = 260; // 원장님 요청의 핵심은 "최소 150자 이상" 보장 - 문장 중간 절단을 피하기 위해 상한은 여유있게 설정
+  static const int dailyMaxLength = 260;
 
   static String _dailyTierFor(int totalMinutes) {
     if (totalMinutes >= 180) return 'high';
@@ -40,50 +62,140 @@ class DiagnosisService {
     return 'low';
   }
 
-  static const Map<String, List<String>> _dailyOpenings = {
-    'high': [
-      '오늘 {subjectCount}개 과목에서 총 {totalMinutes}분에 달하는 학습 몰입이 확인되었습니다. 하루 동안 여러 과목을 오가며 꾸준히 집중력을 유지한 흔적이 뚜렷하게 나타납니다.',
-      '{totalMinutes}분에 걸친 오늘의 학습량은 {subjectCount}개 과목을 아우르는 매우 밀도 높은 하루였습니다. 시간 배분과 몰입도 모두 상위권에 속하는 수준으로 판단됩니다.',
-      '오늘 하루 {subjectCount}개 과목, {totalMinutes}분의 집중 학습이 끊김 없이 이어졌습니다. 특정 과목에 치우치지 않고 고르게 시간을 투자한 점이 인상적입니다.',
-    ],
-    'good': [
-      '오늘 {subjectCount}개 과목에서 {totalMinutes}분의 안정적인 학습 흐름이 확인되었습니다. 무리하지 않으면서도 꾸준함을 유지하는 좋은 리듬을 보여주고 있습니다.',
-      '{totalMinutes}분 동안 {subjectCount}개 과목을 고르게 학습한 알찬 하루였습니다. 특정 과목에 편중되지 않고 균형 잡힌 학습 패턴을 이어가고 있는 것으로 보입니다.',
-      '오늘의 학습 기록은 {subjectCount}개 과목, {totalMinutes}분으로 무난하고 안정적인 페이스를 보여줍니다. 이 흐름이 반복되면 점진적인 성장으로 이어질 가능성이 높습니다.',
-    ],
-    'mid': [
-      '오늘 {subjectCount}개 과목에서 {totalMinutes}분의 학습이 기록되었습니다. 다른 날에 비해 다소 짧을 수 있으나, 꾸준히 이어간다면 충분히 의미 있는 흐름입니다.',
-      '{totalMinutes}분 동안 {subjectCount}개 과목을 짚어본 하루였습니다. 컨디션이나 일정에 따라 자연스럽게 나타날 수 있는 수준으로, 크게 걱정할 부분은 아닙니다.',
-      '오늘의 학습 시간은 {totalMinutes}분으로, 평소 페이스보다 조금 여유로웠던 하루로 보입니다. 조금씩 시간을 늘려가 보는 것도 좋은 방향이 될 수 있습니다.',
-    ],
-    'low': [
-      '오늘은 {subjectCount}개 과목에서 총 {totalMinutes}분의 비교적 짧은 학습이 기록되었습니다. 컨디션이나 다른 일정의 영향일 수 있으니 너무 걱정하지 않으셔도 됩니다.',
-      '{totalMinutes}분의 학습 기록으로, 오늘은 다소 여유로운 하루였던 것으로 보입니다. 하루 이틀의 흐름보다는 한 주 전체의 꾸준함이 더 중요한 지표입니다.',
-      '오늘의 학습 시간이 {totalMinutes}분으로 평소보다 짧게 기록되었습니다. 가벼운 컨디션 난조였을 가능성도 있으니, 내일의 흐름을 함께 지켜봐 주시면 좋겠습니다.',
-    ],
+  // ==========================================================================
+  // 🆕 [12개국어] 일일 총평 문구뱅크: tier -> lang -> [변형1, 변형2, 변형3]
+  // ==========================================================================
+  static const Map<String, Map<String, List<String>>> _dailyOpenings = {
+    'high': {
+      'KO': ['오늘 {subjectCount}개 과목에서 총 {totalMinutes}분에 달하는 학습 몰입이 확인되었습니다. 하루 동안 여러 과목을 오가며 꾸준히 집중력을 유지한 흔적이 뚜렷하게 나타납니다.', '{totalMinutes}분에 걸친 오늘의 학습량은 {subjectCount}개 과목을 아우르는 매우 밀도 높은 하루였습니다. 시간 배분과 몰입도 모두 상위권에 속하는 수준으로 판단됩니다.', '오늘 하루 {subjectCount}개 과목, {totalMinutes}분의 집중 학습이 끊김 없이 이어졌습니다. 특정 과목에 치우치지 않고 고르게 시간을 투자한 점이 인상적입니다.'],
+      'EN': ["Today, {totalMinutes} minutes of focused study across {subjectCount} subjects were confirmed. There are clear signs of sustained concentration maintained throughout the day across multiple subjects.", "Today's study volume of {totalMinutes} minutes spanning {subjectCount} subjects made for a very dense day. Both time allocation and immersion appear to be at a top-tier level.", "Today, {totalMinutes} minutes of concentrated study across {subjectCount} subjects continued without interruption. It's impressive that time was invested evenly rather than being skewed toward any one subject."],
+      'JA': ['本日は{subjectCount}科目で計{totalMinutes}分に達する学習没入が確認されました。一日を通して複数科目を行き来しながら集中力を維持した痕跡がはっきりと表れています。', '{totalMinutes}分にわたる本日の学習量は、{subjectCount}科目を網羅する非常に密度の高い一日でした。時間配分と没入度のいずれも上位水準と判断されます。', '本日{subjectCount}科目、{totalMinutes}分の集中学習が途切れることなく続きました。特定科目に偏らず均等に時間を投資した点が印象的です。'],
+      'ZH': ['今天在{subjectCount}个科目中确认了累计{totalMinutes}分钟的学习投入。全天在多个科目间切换的同时保持了持续专注的痕迹十分明显。', '今天{totalMinutes}分钟的学习量涵盖了{subjectCount}个科目，是密度非常高的一天。时间分配与投入度均处于较高水平。', '今天{subjectCount}个科目、{totalMinutes}分钟的专注学习不间断地持续进行。没有偏重某一科目、均衡投入时间这一点令人印象深刻。'],
+      'FR': ["Aujourd'hui, {totalMinutes} minutes d'engagement studieux ont été confirmées sur {subjectCount} matières. Des signes clairs de concentration soutenue tout au long de la journée à travers plusieurs matières apparaissent.", "Le volume d'étude d'aujourd'hui, {totalMinutes} minutes réparties sur {subjectCount} matières, a fait de cette journée une journée très dense. La répartition du temps et l'immersion semblent toutes deux de haut niveau.", "Aujourd'hui, {totalMinutes} minutes d'étude concentrée sur {subjectCount} matières se sont poursuivies sans interruption. Il est impressionnant que le temps ait été investi de façon équilibrée plutôt que concentré sur une seule matière."],
+      'DE': ['Heute wurden {totalMinutes} Minuten fokussierten Lernens über {subjectCount} Fächer hinweg bestätigt. Es zeigen sich deutliche Anzeichen anhaltender Konzentration über mehrere Fächer hinweg den ganzen Tag über.', 'Das heutige Lernvolumen von {totalMinutes} Minuten über {subjectCount} Fächer machte den Tag sehr dicht. Sowohl Zeitverteilung als auch Vertiefung scheinen auf Spitzenniveau zu liegen.', 'Heute setzte sich {totalMinutes} Minuten konzentriertes Lernen über {subjectCount} Fächer ohne Unterbrechung fort. Beeindruckend ist, dass die Zeit gleichmäßig statt auf ein einzelnes Fach konzentriert investiert wurde.'],
+      'RU': ['Сегодня подтверждено {totalMinutes} минут сосредоточенной учёбы по {subjectCount} предметам. Заметны явные признаки устойчивой концентрации, поддерживаемой в течение всего дня по нескольким предметам.', 'Сегодняшний объём учёбы в {totalMinutes} минут, охватывающий {subjectCount} предметов, сделал день очень насыщенным. И распределение времени, и погружённость находятся на высоком уровне.', 'Сегодня {totalMinutes} минут сосредоточенной учёбы по {subjectCount} предметам продолжались без перерыва. Впечатляет, что время было вложено равномерно, а не сосредоточено на одном предмете.'],
+      'AR': ['تم اليوم تأكيد {totalMinutes} دقيقة من الدراسة المركزة عبر {subjectCount} مواد. تظهر علامات واضحة على التركيز المستمر طوال اليوم عبر مواد متعددة.', 'جعل حجم الدراسة اليوم البالغ {totalMinutes} دقيقة موزعًا على {subjectCount} مواد هذا اليوم كثيفًا للغاية. يبدو كل من توزيع الوقت ومستوى الانغماس في مستوى عالٍ.', 'استمرت اليوم {totalMinutes} دقيقة من الدراسة المركزة عبر {subjectCount} مواد دون انقطاع. من المثير للإعجاب أن الوقت استُثمر بالتساوي بدلاً من التركيز على مادة واحدة.'],
+      'HI': ['आज {subjectCount} विषयों में कुल {totalMinutes} मिनट का अध्ययन तल्लीनता पुष्टि हुई है। दिनभर कई विषयों के बीच निरंतर एकाग्रता बनाए रखने के स्पष्ट संकेत दिखते हैं।', 'आज {subjectCount} विषयों में फैला {totalMinutes} मिनट का अध्ययन एक बेहद सघन दिन रहा। समय आवंटन और तल्लीनता दोनों उच्च स्तर के प्रतीत होते हैं।', 'आज {subjectCount} विषयों में {totalMinutes} मिनट का केंद्रित अध्ययन बिना रुके जारी रहा। किसी एक विषय पर झुकाव के बिना समान रूप से समय निवेश करना प्रभावशाली है।'],
+      'VI': ['Hôm nay đã xác nhận {totalMinutes} phút học tập trung trên {subjectCount} môn học. Có dấu hiệu rõ ràng của sự tập trung bền bỉ được duy trì suốt cả ngày qua nhiều môn học.', 'Khối lượng học hôm nay là {totalMinutes} phút trải rộng trên {subjectCount} môn, tạo nên một ngày rất dày đặc. Cả việc phân bổ thời gian và mức độ đắm chìm đều ở mức cao.', 'Hôm nay, {totalMinutes} phút học tập trung trên {subjectCount} môn tiếp tục không gián đoạn. Thật ấn tượng khi thời gian được đầu tư đồng đều thay vì lệch về một môn.'],
+      'ES': ['Hoy se confirmaron {totalMinutes} minutos de estudio enfocado en {subjectCount} materias. Hay señales claras de concentración sostenida mantenida a lo largo del día en varias materias.', 'El volumen de estudio de hoy, {totalMinutes} minutos que abarcan {subjectCount} materias, hizo de este un día muy denso. Tanto la distribución del tiempo como la inmersión parecen estar en un nivel superior.', 'Hoy, {totalMinutes} minutos de estudio concentrado en {subjectCount} materias continuaron sin interrupción. Es impresionante que el tiempo se haya invertido de manera equilibrada en lugar de concentrarse en una sola materia.'],
+      'TH': ['วันนี้ยืนยันการเรียนอย่างตั้งใจรวม {totalMinutes} นาทีใน {subjectCount} วิชา มีร่องรอยชัดเจนของสมาธิที่ต่อเนื่องตลอดทั้งวันในหลายวิชา', 'ปริมาณการเรียนวันนี้ {totalMinutes} นาทีครอบคลุม {subjectCount} วิชา ทำให้เป็นวันที่มีความเข้มข้นสูงมาก ทั้งการจัดสรรเวลาและความตั้งใจอยู่ในระดับสูง', 'วันนี้การเรียนอย่างตั้งใจ {totalMinutes} นาทีใน {subjectCount} วิชาดำเนินต่อเนื่องไม่ขาดตอน น่าประทับใจที่ลงทุนเวลาอย่างสม่ำเสมอไม่เอนเอียงไปวิชาใดวิชาหนึ่ง'],
+    },
+    'good': {
+      'KO': ['오늘 {subjectCount}개 과목에서 {totalMinutes}분의 안정적인 학습 흐름이 확인되었습니다. 무리하지 않으면서도 꾸준함을 유지하는 좋은 리듬을 보여주고 있습니다.', '{totalMinutes}분 동안 {subjectCount}개 과목을 고르게 학습한 알찬 하루였습니다. 특정 과목에 편중되지 않고 균형 잡힌 학습 패턴을 이어가고 있는 것으로 보입니다.', '오늘의 학습 기록은 {subjectCount}개 과목, {totalMinutes}분으로 무난하고 안정적인 페이스를 보여줍니다. 이 흐름이 반복되면 점진적인 성장으로 이어질 가능성이 높습니다.'],
+      'EN': ['Today, a stable study flow of {totalMinutes} minutes across {subjectCount} subjects was confirmed. This shows a good rhythm of maintaining consistency without overexertion.', 'A well-rounded day of studying {subjectCount} subjects evenly over {totalMinutes} minutes. The learning pattern appears balanced rather than skewed toward one subject.', "Today's study record of {subjectCount} subjects and {totalMinutes} minutes shows a solid, stable pace. If this continues, it is likely to lead to gradual growth."],
+      'JA': ['本日は{subjectCount}科目で{totalMinutes}分の安定した学習の流れが確認されました。無理をせずに継続性を維持する良いリズムを見せています。', '{totalMinutes}分間{subjectCount}科目を均等に学習した充実した一日でした。特定科目に偏らずバランスの取れた学習パターンを続けているようです。', '本日の学習記録は{subjectCount}科目、{totalMinutes}分と無難で安定したペースを示しています。この流れが続けば緩やかな成長につながる可能性が高いです。'],
+      'ZH': ['今天在{subjectCount}个科目中确认了{totalMinutes}分钟的稳定学习节奏。展现出既不勉强又能保持坚持的良好节奏。', '{totalMinutes}分钟内均衡学习了{subjectCount}个科目，是充实的一天。看起来没有偏重某一科目，学习模式较为均衡。', '今天的学习记录为{subjectCount}个科目、{totalMinutes}分钟，展现出平稳、稳定的节奏。若持续保持，很可能带来循序渐进的进步。'],
+      'FR': ["Aujourd'hui, un flux d'étude stable de {totalMinutes} minutes sur {subjectCount} matières a été confirmé. Cela montre un bon rythme, sans excès, avec une constance maintenue.", "Une journée bien remplie avec {subjectCount} matières étudiées de façon égale sur {totalMinutes} minutes. Le schéma d'apprentissage semble équilibré plutôt que centré sur une seule matière.", "Le relevé d'étude d'aujourd'hui, {subjectCount} matières et {totalMinutes} minutes, montre un rythme solide et stable. Si cela continue, cela devrait mener à une progression graduelle."],
+      'DE': ['Heute wurde ein stabiler Lernfluss von {totalMinutes} Minuten über {subjectCount} Fächer bestätigt. Dies zeigt einen guten Rhythmus, der Beständigkeit ohne Überanstrengung bewahrt.', 'Ein ausgewogener Tag mit {subjectCount} gleichmäßig über {totalMinutes} Minuten gelernten Fächern. Das Lernmuster wirkt ausgewogen statt auf ein Fach konzentriert.', 'Der heutige Lernrekord von {subjectCount} Fächern und {totalMinutes} Minuten zeigt ein solides, stabiles Tempo. Setzt sich dies fort, führt es wahrscheinlich zu allmählichem Wachstum.'],
+      'RU': ['Сегодня подтверждён стабильный учебный поток в {totalMinutes} минут по {subjectCount} предметам. Это показывает хороший ритм — постоянство без перенапряжения.', 'Насыщенный день с равномерным изучением {subjectCount} предметов за {totalMinutes} минут. Модель обучения выглядит сбалансированной, а не смещённой в сторону одного предмета.', 'Сегодняшняя запись — {subjectCount} предметов и {totalMinutes} минут — показывает уверенный, стабильный темп. При продолжении это, вероятно, приведёт к постепенному росту.'],
+      'AR': ['تم اليوم تأكيد تدفق دراسي مستقر لمدة {totalMinutes} دقيقة عبر {subjectCount} مواد. يُظهر هذا إيقاعًا جيدًا يحافظ على الاستمرارية دون إفراط.', 'يوم مثمر تمت فيه دراسة {subjectCount} مواد بالتساوي على مدى {totalMinutes} دقيقة. يبدو نمط التعلم متوازنًا بدلاً من التركيز على مادة واحدة.', 'يُظهر سجل الدراسة اليوم، {subjectCount} مواد و{totalMinutes} دقيقة، وتيرة ثابتة ومستقرة. إذا استمر هذا، فمن المرجح أن يؤدي إلى نمو تدريجي.'],
+      'HI': ['आज {subjectCount} विषयों में {totalMinutes} मिनट का स्थिर अध्ययन प्रवाह पुष्टि हुआ है। यह अत्यधिक परिश्रम के बिना निरंतरता बनाए रखने की अच्छी लय दिखाता है।', '{totalMinutes} मिनट में {subjectCount} विषयों का समान रूप से अध्ययन किया गया एक संपन्न दिन रहा। अध्ययन पैटर्न किसी एक विषय पर झुके बिना संतुलित प्रतीत होता है।', 'आज का अध्ययन रिकॉर्ड {subjectCount} विषय, {totalMinutes} मिनट एक ठोस, स्थिर गति दिखाता है। यदि यह जारी रहा, तो क्रमिक विकास की संभावना अधिक है।'],
+      'VI': ['Hôm nay đã xác nhận dòng chảy học tập ổn định {totalMinutes} phút trên {subjectCount} môn học. Điều này cho thấy một nhịp điệu tốt, duy trì sự đều đặn mà không quá sức.', 'Một ngày trọn vẹn với {subjectCount} môn được học đều trong {totalMinutes} phút. Kiểu học có vẻ cân bằng thay vì lệch về một môn.', 'Hồ sơ học tập hôm nay với {subjectCount} môn và {totalMinutes} phút cho thấy nhịp độ vững chắc, ổn định. Nếu tiếp tục, khả năng cao sẽ dẫn đến sự tiến bộ dần dần.'],
+      'ES': ['Hoy se confirmó un flujo de estudio estable de {totalMinutes} minutos en {subjectCount} materias. Esto muestra un buen ritmo de constancia sin excederse.', 'Un día completo estudiando {subjectCount} materias de manera uniforme durante {totalMinutes} minutos. El patrón de aprendizaje parece equilibrado en lugar de concentrado en una materia.', 'El registro de estudio de hoy, {subjectCount} materias y {totalMinutes} minutos, muestra un ritmo sólido y estable. Si continúa, es probable que conduzca a un crecimiento gradual.'],
+      'TH': ['วันนี้ยืนยันการไหลของการเรียนที่มั่นคง {totalMinutes} นาทีใน {subjectCount} วิชา แสดงถึงจังหวะที่ดีในการรักษาความสม่ำเสมอโดยไม่หักโหม', 'วันที่อุดมสมบูรณ์ด้วยการเรียน {subjectCount} วิชาอย่างเท่าเทียมกันตลอด {totalMinutes} นาที รูปแบบการเรียนดูสมดุลไม่เอนเอียงไปวิชาใดวิชาหนึ่ง', 'บันทึกการเรียนวันนี้ {subjectCount} วิชา {totalMinutes} นาที แสดงจังหวะที่มั่นคงและมั่นคง หากดำเนินต่อไปมีแนวโน้มจะนำไปสู่การเติบโตอย่างค่อยเป็นค่อยไป'],
+    },
+    'mid': {
+      'KO': ['오늘 {subjectCount}개 과목에서 {totalMinutes}분의 학습이 기록되었습니다. 다른 날에 비해 다소 짧을 수 있으나, 꾸준히 이어간다면 충분히 의미 있는 흐름입니다.', '{totalMinutes}분 동안 {subjectCount}개 과목을 짚어본 하루였습니다. 컨디션이나 일정에 따라 자연스럽게 나타날 수 있는 수준으로, 크게 걱정할 부분은 아닙니다.', '오늘의 학습 시간은 {totalMinutes}분으로, 평소 페이스보다 조금 여유로웠던 하루로 보입니다. 조금씩 시간을 늘려가 보는 것도 좋은 방향이 될 수 있습니다.'],
+      'EN': ['Today, {totalMinutes} minutes of study across {subjectCount} subjects was recorded. This may be somewhat shorter than other days, but continuing consistently makes it a meaningful flow.', 'A day of touching on {subjectCount} subjects over {totalMinutes} minutes. This level can naturally occur depending on condition or schedule, so there is no major cause for concern.', "Today's study time of {totalMinutes} minutes appears to be a bit more relaxed than the usual pace. Gradually increasing the time could be a good direction to take."],
+      'JA': ['本日は{subjectCount}科目で{totalMinutes}分の学習が記録されました。他の日に比べてやや短いかもしれませんが、続けていけば十分意味のある流れです。', '{totalMinutes}分間{subjectCount}科目に取り組んだ一日でした。体調やスケジュールによって自然に現れうる水準であり、大きく心配する部分ではありません。', '本日の学習時間は{totalMinutes}分で、普段のペースよりやや余裕のある一日だったようです。少しずつ時間を増やしていくのも良い方向です。'],
+      'ZH': ['今天在{subjectCount}个科目中记录了{totalMinutes}分钟的学习。虽然可能比其他日子稍短，但若能持续下去仍是有意义的节奏。', '{totalMinutes}分钟内涉及了{subjectCount}个科目的一天。这可能是根据状态或日程自然出现的水平，无需过度担心。', '今天的学习时间为{totalMinutes}分钟，看起来比平时的节奏稍显宽松。逐渐增加学习时间也是不错的方向。'],
+      'FR': ["Aujourd'hui, {totalMinutes} minutes d'étude sur {subjectCount} matières ont été enregistrées. Cela peut être un peu plus court que d'autres jours, mais continuer régulièrement en fait un flux significatif.", "Une journée où {subjectCount} matières ont été abordées sur {totalMinutes} minutes. Ce niveau peut naturellement survenir selon la forme ou l'emploi du temps, donc pas de quoi s'inquiéter outre mesure.", "Le temps d'étude d'aujourd'hui, {totalMinutes} minutes, semble un peu plus détendu que le rythme habituel. Augmenter progressivement le temps pourrait être une bonne direction."],
+      'DE': ['Heute wurden {totalMinutes} Minuten Lernen über {subjectCount} Fächer erfasst. Dies mag etwas kürzer sein als an anderen Tagen, aber die Fortsetzung macht es zu einem sinnvollen Fluss.', 'Ein Tag, an dem {subjectCount} Fächer über {totalMinutes} Minuten angerissen wurden. Dieses Niveau kann je nach Zustand oder Zeitplan natürlich auftreten, also kein großer Grund zur Sorge.', 'Die heutige Lernzeit von {totalMinutes} Minuten wirkt etwas entspannter als das übliche Tempo. Die Zeit schrittweise zu erhöhen könnte eine gute Richtung sein.'],
+      'RU': ['Сегодня зафиксировано {totalMinutes} минут учёбы по {subjectCount} предметам. Это может быть немного короче, чем в другие дни, но при продолжении это осмысленный поток.', 'День, в который были затронуты {subjectCount} предметов за {totalMinutes} минут. Такой уровень может естественно возникать в зависимости от самочувствия или расписания, так что серьёзного повода для беспокойства нет.', 'Сегодняшнее время учёбы в {totalMinutes} минут выглядит немного более расслабленным, чем обычный темп. Постепенное увеличение времени может стать хорошим направлением.'],
+      'AR': ['سُجّلت اليوم {totalMinutes} دقيقة من الدراسة عبر {subjectCount} مواد. قد يكون هذا أقصر قليلاً من أيام أخرى، لكن الاستمرار بثبات يجعله تدفقًا ذا معنى.', 'يوم تم فيه تناول {subjectCount} مواد على مدى {totalMinutes} دقيقة. قد يظهر هذا المستوى بشكل طبيعي حسب الحالة أو الجدول، فلا داعي للقلق الكبير.', 'يبدو وقت الدراسة اليوم البالغ {totalMinutes} دقيقة أكثر استرخاءً قليلاً من الوتيرة المعتادة. قد تكون زيادة الوقت تدريجيًا اتجاهًا جيدًا.'],
+      'HI': ['आज {subjectCount} विषयों में {totalMinutes} मिनट का अध्ययन दर्ज हुआ है। यह अन्य दिनों की तुलना में थोड़ा कम हो सकता है, लेकिन निरंतर जारी रखने पर यह पर्याप्त सार्थक प्रवाह है।', '{totalMinutes} मिनट में {subjectCount} विषयों को छूने वाला एक दिन रहा। यह स्तर स्थिति या कार्यक्रम के अनुसार स्वाभाविक रूप से आ सकता है, इसलिए अधिक चिंता की बात नहीं है।', 'आज का अध्ययन समय {totalMinutes} मिनट सामान्य गति से थोड़ा अधिक आरामदायक प्रतीत होता है। धीरे-धीरे समय बढ़ाना एक अच्छी दिशा हो सकती है।'],
+      'VI': ['Hôm nay đã ghi nhận {totalMinutes} phút học trên {subjectCount} môn học. Có thể ngắn hơn đôi chút so với những ngày khác, nhưng nếu duy trì đều đặn thì đây vẫn là một dòng chảy có ý nghĩa.', 'Một ngày chạm đến {subjectCount} môn học trong {totalMinutes} phút. Mức độ này có thể tự nhiên xuất hiện tùy theo tình trạng hoặc lịch trình, không đáng lo ngại nhiều.', 'Thời gian học hôm nay là {totalMinutes} phút, có vẻ thoải mái hơn nhịp độ thường ngày một chút. Tăng dần thời gian cũng có thể là một hướng đi tốt.'],
+      'ES': ['Hoy se registraron {totalMinutes} minutos de estudio en {subjectCount} materias. Puede ser algo más corto que otros días, pero continuar de forma constante lo convierte en un flujo significativo.', 'Un día en el que se tocaron {subjectCount} materias durante {totalMinutes} minutos. Este nivel puede surgir naturalmente según el estado o el horario, por lo que no es motivo de gran preocupación.', 'El tiempo de estudio de hoy, {totalMinutes} minutos, parece un poco más relajado que el ritmo habitual. Aumentar el tiempo gradualmente podría ser una buena dirección.'],
+      'TH': ['วันนี้บันทึกการเรียน {totalMinutes} นาทีใน {subjectCount} วิชา อาจสั้นกว่าวันอื่นเล็กน้อย แต่หากดำเนินต่อไปอย่างสม่ำเสมอก็ถือเป็นแนวโน้มที่มีความหมายเพียงพอ', 'วันที่แตะต้อง {subjectCount} วิชาในเวลา {totalMinutes} นาที ระดับนี้อาจเกิดขึ้นตามธรรมชาติตามสภาพร่างกายหรือตารางเวลา ไม่ต้องกังวลมากนัก', 'เวลาเรียนวันนี้ {totalMinutes} นาที ดูผ่อนคลายกว่าจังหวะปกติเล็กน้อย การค่อยๆ เพิ่มเวลาอาจเป็นทิศทางที่ดี'],
+    },
+    'low': {
+      'KO': ['오늘은 {subjectCount}개 과목에서 총 {totalMinutes}분의 비교적 짧은 학습이 기록되었습니다. 컨디션이나 다른 일정의 영향일 수 있으니 너무 걱정하지 않으셔도 됩니다.', '{totalMinutes}분의 학습 기록으로, 오늘은 다소 여유로운 하루였던 것으로 보입니다. 하루 이틀의 흐름보다는 한 주 전체의 꾸준함이 더 중요한 지표입니다.', '오늘의 학습 시간이 {totalMinutes}분으로 평소보다 짧게 기록되었습니다. 가벼운 컨디션 난조였을 가능성도 있으니, 내일의 흐름을 함께 지켜봐 주시면 좋겠습니다.'],
+      'EN': ['Today, a relatively short study period of {totalMinutes} minutes across {subjectCount} subjects was recorded. This may be due to condition or other schedule factors, so there is no need to worry too much.', 'With {totalMinutes} minutes of study recorded, today appears to have been a somewhat relaxed day. The consistency across the whole week matters more than the flow of a single day or two.', "Today's study time was recorded as {totalMinutes} minutes, shorter than usual. This could be due to a minor dip in condition, so it would be good to keep an eye on tomorrow's flow together."],
+      'JA': ['本日は{subjectCount}科目で計{totalMinutes}分の比較的短い学習が記録されました。体調や他の予定の影響かもしれないので、あまり心配しなくても大丈夫です。', '{totalMinutes}分の学習記録から、本日はやや余裕のある一日だったようです。一日二日の流れよりも一週間全体の継続性がより重要な指標です。', '本日の学習時間は{totalMinutes}分と、いつもより短く記録されました。軽い体調不良の可能性もあるので、明日の流れを一緒に見守っていただければと思います。'],
+      'ZH': ['今天在{subjectCount}个科目中记录了相对较短的总计{totalMinutes}分钟学习。可能是状态或其他日程的影响，无需过度担心。', '根据{totalMinutes}分钟的学习记录，今天似乎是较为轻松的一天。相比一两天的波动，整周的持续性才是更重要的指标。', '今天的学习时间记录为{totalMinutes}分钟，比平时短。也可能是轻微状态不佳所致，希望一起关注明天的情况。'],
+      'FR': ["Aujourd'hui, une période d'étude relativement courte de {totalMinutes} minutes sur {subjectCount} matières a été enregistrée. Cela peut être dû à la forme ou à d'autres facteurs d'emploi du temps, donc pas besoin de trop s'inquiéter.", "Avec {totalMinutes} minutes d'étude enregistrées, aujourd'hui semble avoir été une journée plutôt détendue. La constance sur toute la semaine compte plus que le flux d'un jour ou deux.", "Le temps d'étude d'aujourd'hui a été enregistré à {totalMinutes} minutes, plus court que d'habitude. Cela pourrait être dû à une légère baisse de forme, il serait donc bon de surveiller ensemble le déroulement de demain."],
+      'DE': ['Heute wurde eine relativ kurze Lernzeit von {totalMinutes} Minuten über {subjectCount} Fächer erfasst. Dies könnte an der Verfassung oder anderen Terminfaktoren liegen, also keine übermäßige Sorge nötig.', 'Mit {totalMinutes} Minuten erfasster Lernzeit scheint heute ein eher entspannter Tag gewesen zu sein. Die Beständigkeit über die ganze Woche zählt mehr als der Verlauf von ein oder zwei Tagen.', 'Die heutige Lernzeit wurde mit {totalMinutes} Minuten kürzer als üblich erfasst. Dies könnte an einer leichten Verfassungsschwankung liegen, daher wäre es gut, den Verlauf von morgen gemeinsam zu beobachten.'],
+      'RU': ['Сегодня зафиксирован относительно короткий период учёбы в {totalMinutes} минут по {subjectCount} предметам. Это может быть связано с самочувствием или другими факторами расписания, так что сильно беспокоиться не стоит.', 'Судя по записи в {totalMinutes} минут учёбы, сегодня был, похоже, довольно спокойный день. Постоянство на протяжении всей недели важнее хода одного-двух дней.', 'Сегодняшнее время учёбы зафиксировано как {totalMinutes} минут, короче обычного. Это может быть связано с лёгким спадом самочувствия, поэтому стоит вместе понаблюдать за завтрашним днём.'],
+      'AR': ['سُجّلت اليوم فترة دراسة قصيرة نسبيًا بلغت {totalMinutes} دقيقة عبر {subjectCount} مواد. قد يكون ذلك بسبب الحالة أو عوامل جدولة أخرى، فلا داعي للقلق الشديد.', 'مع تسجيل {totalMinutes} دقيقة من الدراسة، يبدو أن اليوم كان يومًا هادئًا نوعًا ما. الاستمرارية طوال الأسبوع بأكمله أهم من مسار يوم أو يومين.', 'سُجّل وقت الدراسة اليوم بـ {totalMinutes} دقيقة، أقصر من المعتاد. قد يكون هذا بسبب تراجع طفيف في الحالة، لذا من الجيد متابعة سير الأمور غدًا معًا.'],
+      'HI': ['आज {subjectCount} विषयों में कुल {totalMinutes} मिनट का अपेक्षाकृत छोटा अध्ययन दर्ज हुआ है। यह स्थिति या अन्य कार्यक्रम के प्रभाव के कारण हो सकता है, इसलिए अधिक चिंता की आवश्यकता नहीं है।', '{totalMinutes} मिनट के अध्ययन रिकॉर्ड के साथ, आज कुछ हद तक आरामदायक दिन प्रतीत होता है। एक-दो दिन के प्रवाह से अधिक पूरे सप्ताह की निरंतरता अधिक महत्वपूर्ण संकेतक है।', 'आज का अध्ययन समय {totalMinutes} मिनट, सामान्य से कम दर्ज हुआ है। यह हल्की स्थिति में गिरावट के कारण भी हो सकता है, इसलिए कल के प्रवाह पर साथ नज़र रखना अच्छा रहेगा।'],
+      'VI': ['Hôm nay đã ghi nhận thời gian học tương đối ngắn, tổng cộng {totalMinutes} phút trên {subjectCount} môn. Điều này có thể do tình trạng sức khỏe hoặc yếu tố lịch trình khác, nên không cần quá lo lắng.', 'Với {totalMinutes} phút học được ghi nhận, hôm nay có vẻ là một ngày khá thoải mái. Sự đều đặn trong cả tuần quan trọng hơn diễn biến của một hai ngày.', 'Thời gian học hôm nay được ghi nhận là {totalMinutes} phút, ngắn hơn thường lệ. Điều này có thể do tình trạng hơi giảm sút, nên theo dõi cùng diễn biến của ngày mai sẽ tốt.'],
+      'ES': ['Hoy se registró un período de estudio relativamente corto de {totalMinutes} minutos en {subjectCount} materias. Esto puede deberse al estado o a otros factores de horario, así que no hay que preocuparse demasiado.', 'Con {totalMinutes} minutos de estudio registrados, hoy parece haber sido un día algo más relajado. La constancia durante toda la semana importa más que el flujo de uno o dos días.', 'El tiempo de estudio de hoy se registró en {totalMinutes} minutos, más corto de lo habitual. Esto podría deberse a una ligera baja en el estado, así que sería bueno observar juntos cómo va mañana.'],
+      'TH': ['วันนี้บันทึกการเรียนที่ค่อนข้างสั้นรวม {totalMinutes} นาทีใน {subjectCount} วิชา อาจเป็นผลจากสภาพร่างกายหรือตารางอื่นๆ ไม่ต้องกังวลมากเกินไป', 'ด้วยบันทึกการเรียน {totalMinutes} นาที วันนี้ดูเหมือนจะเป็นวันที่ค่อนข้างผ่อนคลาย ความสม่ำเสมอตลอดทั้งสัปดาห์สำคัญกว่าแนวโน้มของหนึ่งหรือสองวัน', 'เวลาเรียนวันนี้บันทึกไว้ที่ {totalMinutes} นาที สั้นกว่าปกติ อาจเป็นเพราะสภาพร่างกายที่ลดลงเล็กน้อย อยากให้ติดตามแนวโน้มของพรุ่งนี้ไปด้วยกัน'],
+    },
   };
 
-  static const Map<String, List<String>> _dailyClosings = {
-    'high': [
-      ' 이 흐름을 무리 없이 이어가되, 과목 간 틈틈이 휴식도 충분히 챙겨주시길 권해드립니다.',
-      ' 다만 장시간 집중한 뒤에는 컨디션 관리도 함께 신경 써주시면 더욱 좋겠습니다.',
-      ' 이런 밀도 있는 하루가 꾸준히 쌓이면 성적 향상으로 자연스럽게 이어질 가능성이 높습니다.',
-    ],
-    'good': [
-      ' 지금의 학습 페이스를 꾸준히 유지하는 것을 권장드립니다.',
-      ' 상대적으로 취약한 과목에 조금 더 시간을 배분해보는 것도 좋은 선택이 될 것입니다.',
-      ' 안정적인 학습 습관이 차근차근 자리잡아가고 있는 것으로 판단됩니다.',
-    ],
-    'mid': [
-      ' 내일은 조금 더 여유 있게 집중 시간을 확보해보시길 권해드립니다.',
-      ' 짧더라도 매일 꾸준히 이어가는 습관이 장기적으로는 더 중요합니다.',
-      ' 부담되지 않는 선에서 학습 시간을 조금씩 늘려가 보시길 바랍니다.',
-    ],
-    'low': [
-      ' 컨디션에 따라 자연스럽게 나타나는 흐름일 수 있으니 크게 걱정하지 않으셔도 됩니다.',
-      ' 내일은 좋아하는 과목부터 가볍게 시작해보시는 것을 권해드립니다.',
-      ' 짧은 학습이라도 꾸준히 이어진다면 그 자체로 충분히 의미 있는 습관이 됩니다.',
-    ],
+  static const Map<String, Map<String, List<String>>> _dailyClosings = {
+    'high': {
+      'KO': [' 이 흐름을 무리 없이 이어가되, 과목 간 틈틈이 휴식도 충분히 챙겨주시길 권해드립니다.', ' 다만 장시간 집중한 뒤에는 컨디션 관리도 함께 신경 써주시면 더욱 좋겠습니다.', ' 이런 밀도 있는 하루가 꾸준히 쌓이면 성적 향상으로 자연스럽게 이어질 가능성이 높습니다.'],
+      'EN': [' We recommend continuing this flow without overexertion, while also taking sufficient breaks between subjects.', ' However, it would be even better to pay attention to condition management after long periods of concentration.', ' If such dense days accumulate consistently, it is likely to naturally lead to improved grades.'],
+      'JA': [' この流れを無理なく続けつつ、科目間の休憩も十分に取ることをお勧めします。', ' ただ、長時間集中した後はコンディション管理にも気を配っていただけるとより良いです。', ' このような密度の高い一日が積み重なれば、成績向上に自然とつながる可能性が高いです。'],
+      'ZH': [' 建议在不勉强的前提下延续这一节奏，同时在科目之间充分休息。', ' 不过长时间专注之后，也建议兼顾状态管理。', ' 若这样高密度的一天持续积累，很可能自然带来成绩提升。'],
+      'FR': [" Nous recommandons de poursuivre ce rythme sans excès, tout en prenant suffisamment de pauses entre les matières.", " Cependant, il serait encore mieux de veiller à la gestion de la forme après de longues périodes de concentration.", " Si de telles journées denses s'accumulent régulièrement, cela devrait naturellement conduire à une amélioration des résultats."],
+      'DE': [' Wir empfehlen, diesen Fluss ohne Überanstrengung fortzusetzen und dabei ausreichend Pausen zwischen den Fächern einzulegen.', ' Es wäre jedoch noch besser, nach längeren Konzentrationsphasen auch auf das Wohlbefinden zu achten.', ' Wenn sich solche dichten Tage regelmäßig ansammeln, führt dies wahrscheinlich auf natürliche Weise zu besseren Noten.'],
+      'RU': [' Рекомендуем продолжать этот темп без перенапряжения, делая достаточные перерывы между предметами.', ' Однако было бы ещё лучше уделять внимание самочувствию после долгих периодов концентрации.', ' Если такие насыщенные дни будут накапливаться регулярно, это, вероятно, естественным образом приведёт к улучшению оценок.'],
+      'AR': [' نوصي بمواصلة هذا الإيقاع دون إفراط، مع أخذ فترات راحة كافية بين المواد.', ' ومع ذلك، سيكون من الأفضل الاهتمام بإدارة الحالة بعد فترات طويلة من التركيز.', ' إذا تراكمت مثل هذه الأيام الكثيفة باستمرار، فمن المرجح أن يؤدي ذلك بشكل طبيعي إلى تحسن الدرجات.'],
+      'HI': [' हम इस प्रवाह को बिना अत्यधिक परिश्रम के जारी रखने की सलाह देते हैं, साथ ही विषयों के बीच पर्याप्त विश्राम भी लें।', ' हालांकि, लंबे समय तक एकाग्रता के बाद स्थिति प्रबंधन पर भी ध्यान देना और भी बेहतर होगा।', ' यदि ऐसे सघन दिन लगातार जमा होते रहें, तो स्वाभाविक रूप से अंकों में सुधार की संभावना अधिक है।'],
+      'VI': [' Chúng tôi khuyên nên tiếp tục dòng chảy này mà không quá sức, đồng thời nghỉ ngơi đầy đủ giữa các môn.', ' Tuy nhiên, sẽ tốt hơn nếu cũng chú ý đến việc quản lý tình trạng sau thời gian tập trung dài.', ' Nếu những ngày dày đặc như vậy tích lũy đều đặn, khả năng cao sẽ tự nhiên dẫn đến cải thiện điểm số.'],
+      'ES': [' Recomendamos continuar este flujo sin excederse, tomando también descansos suficientes entre materias.', ' Sin embargo, sería aún mejor prestar atención al manejo del estado después de largos períodos de concentración.', ' Si estos días densos se acumulan de manera constante, es probable que conduzcan naturalmente a una mejora en las calificaciones.'],
+      'TH': [' แนะนำให้ดำเนินจังหวะนี้ต่อไปโดยไม่หักโหม พร้อมพักผ่อนให้เพียงพอระหว่างวิชาต่างๆ', ' อย่างไรก็ตาม จะดียิ่งขึ้นหากดูแลสภาพร่างกายหลังจากตั้งใจเรียนเป็นเวลานาน', ' หากวันที่เข้มข้นเช่นนี้สะสมอย่างสม่ำเสมอ มีแนวโน้มสูงที่จะนำไปสู่ผลการเรียนที่ดีขึ้นตามธรรมชาติ'],
+    },
+    'good': {
+      'KO': [' 지금의 학습 페이스를 꾸준히 유지하는 것을 권장드립니다.', ' 상대적으로 취약한 과목에 조금 더 시간을 배분해보는 것도 좋은 선택이 될 것입니다.', ' 안정적인 학습 습관이 차근차근 자리잡아가고 있는 것으로 판단됩니다.'],
+      'EN': [' We recommend maintaining the current study pace consistently.', ' Allocating a bit more time to relatively weaker subjects could also be a good choice.', ' A stable study habit appears to be steadily taking shape.'],
+      'JA': [' 今の学習ペースを継続的に維持することをお勧めします。', ' 相対的に苦手な科目にもう少し時間を配分してみるのも良い選択となるでしょう。', ' 安定した学習習慣が着実に定着しつつあると判断されます。'],
+      'ZH': [' 建议持续保持目前的学习节奏。', ' 为相对薄弱的科目多分配一些时间也是不错的选择。', ' 判断稳定的学习习惯正在逐步形成。'],
+      'FR': [" Nous recommandons de maintenir le rythme d'étude actuel de manière constante.", " Allouer un peu plus de temps aux matières relativement plus faibles pourrait aussi être un bon choix.", " Une habitude d'étude stable semble se former progressivement."],
+      'DE': [' Wir empfehlen, das aktuelle Lerntempo konsequent beizubehalten.', ' Relativ schwächeren Fächern etwas mehr Zeit zu widmen könnte ebenfalls eine gute Wahl sein.', ' Eine stabile Lerngewohnheit scheint sich schrittweise zu festigen.'],
+      'RU': [' Рекомендуем последовательно поддерживать текущий темп учёбы.', ' Выделение немного больше времени относительно слабым предметам также может быть хорошим выбором.', ' Стабильная учебная привычка, судя по всему, постепенно закрепляется.'],
+      'AR': [' نوصي بالحفاظ على وتيرة الدراسة الحالية باستمرار.', ' قد يكون تخصيص وقت أكبر قليلاً للمواد الأضعف نسبيًا خيارًا جيدًا أيضًا.', ' يبدو أن عادة دراسية مستقرة تترسخ تدريجيًا.'],
+      'HI': [' हम वर्तमान अध्ययन गति को लगातार बनाए रखने की सलाह देते हैं।', ' अपेक्षाकृत कमजोर विषयों में थोड़ा अधिक समय आवंटित करना भी एक अच्छा विकल्प हो सकता है।', ' एक स्थिर अध्ययन आदत धीरे-धीरे स्थापित हो रही प्रतीत होती है।'],
+      'VI': [' Chúng tôi khuyên nên duy trì nhịp độ học tập hiện tại một cách nhất quán.', ' Phân bổ thêm chút thời gian cho các môn tương đối yếu hơn cũng có thể là lựa chọn tốt.', ' Một thói quen học tập ổn định dường như đang dần hình thành.'],
+      'ES': [' Recomendamos mantener el ritmo de estudio actual de manera constante.', ' Asignar un poco más de tiempo a las materias relativamente más débiles también podría ser una buena opción.', ' Parece que se está consolidando gradualmente un hábito de estudio estable.'],
+      'TH': [' แนะนำให้รักษาจังหวะการเรียนปัจจุบันไว้อย่างสม่ำเสมอ', ' การจัดสรรเวลาให้วิชาที่ค่อนข้างอ่อนมากขึ้นอีกเล็กน้อยก็อาจเป็นทางเลือกที่ดี', ' ดูเหมือนว่านิสัยการเรียนที่มั่นคงกำลังก่อตัวขึ้นทีละขั้น'],
+    },
+    'mid': {
+      'KO': [' 내일은 조금 더 여유 있게 집중 시간을 확보해보시길 권해드립니다.', ' 짧더라도 매일 꾸준히 이어가는 습관이 장기적으로는 더 중요합니다.', ' 부담되지 않는 선에서 학습 시간을 조금씩 늘려가 보시길 바랍니다.'],
+      'EN': [' We recommend securing a bit more focused time tomorrow, at a comfortable pace.', ' Even if short, the habit of continuing every day consistently matters more in the long run.', ' We hope you can gradually increase study time without feeling burdened.'],
+      'JA': [' 明日はもう少し余裕を持って集中時間を確保することをお勧めします。', ' 短くても毎日続ける習慣が長期的にはより重要です。', ' 負担にならない範囲で学習時間を少しずつ増やしてみてください。'],
+      'ZH': [' 建议明天更从容地确保专注学习时间。', ' 即使时间短，每天坚持的习惯从长远来看更为重要。', ' 希望在不造成负担的范围内逐渐增加学习时间。'],
+      'FR': [" Nous recommandons de vous accorder un peu plus de temps de concentration demain, à un rythme confortable.", " Même court, l'habitude de continuer chaque jour compte davantage à long terme.", " Nous espérons que vous pourrez augmenter progressivement le temps d'étude sans vous sentir surchargé."],
+      'DE': [' Wir empfehlen, sich morgen etwas mehr fokussierte Zeit in einem angenehmen Tempo zu nehmen.', ' Auch wenn kurz, zählt die Gewohnheit, jeden Tag weiterzumachen, langfristig mehr.', ' Wir hoffen, dass Sie die Lernzeit schrittweise erhöhen können, ohne sich belastet zu fühlen.'],
+      'RU': [' Рекомендуем завтра выделить немного больше времени на сосредоточенную учёбу в комфортном темпе.', ' Даже если коротко, привычка продолжать каждый день важнее в долгосрочной перспективе.', ' Надеемся, вы сможете постепенно увеличивать время учёбы, не чувствуя перегрузки.'],
+      'AR': [' نوصي بتخصيص وقت أطول قليلاً للتركيز غدًا، بوتيرة مريحة.', ' حتى لو كان قصيرًا، فإن عادة الاستمرار كل يوم أكثر أهمية على المدى الطويل.', ' نأمل أن تتمكن من زيادة وقت الدراسة تدريجيًا دون الشعور بالعبء.'],
+      'HI': [' हम कल थोड़ा अधिक आरामदायक गति से केंद्रित समय सुरक्षित करने की सलाह देते हैं।', ' छोटा होने पर भी हर दिन जारी रखने की आदत दीर्घकाल में अधिक महत्वपूर्ण है।', ' उम्मीद है कि आप बिना बोझ महसूस किए धीरे-धीरे अध्ययन समय बढ़ा सकेंगे।'],
+      'VI': [' Chúng tôi khuyên nên dành thêm chút thời gian tập trung vào ngày mai với nhịp độ thoải mái.', ' Dù ngắn, thói quen duy trì mỗi ngày quan trọng hơn về lâu dài.', ' Hy vọng bạn có thể tăng dần thời gian học mà không cảm thấy áp lực.'],
+      'ES': [' Recomendamos asegurar un poco más de tiempo de concentración mañana, a un ritmo cómodo.', ' Aunque sea corto, el hábito de continuar todos los días importa más a largo plazo.', ' Esperamos que pueda aumentar gradualmente el tiempo de estudio sin sentirse agobiado.'],
+      'TH': [' แนะนำให้จัดสรรเวลาโฟกัสเพิ่มอีกเล็กน้อยในวันพรุ่งนี้ด้วยจังหวะที่สบาย', ' แม้จะสั้น แต่นิสัยการทำต่อเนื่องทุกวันสำคัญกว่าในระยะยาว', ' หวังว่าจะสามารถเพิ่มเวลาเรียนทีละน้อยโดยไม่รู้สึกกดดัน'],
+    },
+    'low': {
+      'KO': [' 컨디션에 따라 자연스럽게 나타나는 흐름일 수 있으니 크게 걱정하지 않으셔도 됩니다.', ' 내일은 좋아하는 과목부터 가볍게 시작해보시는 것을 권해드립니다.', ' 짧은 학습이라도 꾸준히 이어진다면 그 자체로 충분히 의미 있는 습관이 됩니다.'],
+      'EN': [' This may simply be a natural flow depending on condition, so there is no need for major concern.', ' We recommend starting tomorrow lightly with a favorite subject.', ' Even short study sessions, if continued consistently, become a meaningful habit in themselves.'],
+      'JA': [' 体調によって自然に現れる流れかもしれないので、大きく心配しなくても大丈夫です。', ' 明日は好きな科目から軽く始めてみることをお勧めします。', ' 短い学習でも継続していけば、それ自体が十分意味のある習慣になります。'],
+      'ZH': [' 这可能只是根据状态自然出现的节奏，无需过度担心。', ' 建议明天从喜欢的科目开始轻松入手。', ' 即使学习时间短，只要坚持下去，本身就是很有意义的习惯。'],
+      'FR': [" Cela peut simplement être un flux naturel selon la forme, donc pas besoin de trop s'inquiéter.", " Nous recommandons de commencer demain légèrement avec une matière préférée.", " Même de courtes sessions d'étude, si elles se poursuivent régulièrement, deviennent en elles-mêmes une habitude significative."],
+      'DE': [' Dies könnte einfach ein natürlicher, verfassungsabhängiger Verlauf sein, also keine große Sorge nötig.', ' Wir empfehlen, morgen leicht mit einem Lieblingsfach zu beginnen.', ' Auch kurze Lerneinheiten werden, wenn sie konsequent fortgesetzt werden, an sich zu einer sinnvollen Gewohnheit.'],
+      'RU': [' Это может быть просто естественным ходом в зависимости от самочувствия, так что серьёзного повода для беспокойства нет.', ' Рекомендуем завтра начать легко, с любимого предмета.', ' Даже короткие занятия, если продолжать их регулярно, сами по себе становятся значимой привычкой.'],
+      'AR': [' قد يكون هذا مجرد تدفق طبيعي حسب الحالة، فلا داعي للقلق الكبير.', ' نوصي بالبدء غدًا بخفة بمادة مفضلة.', ' حتى جلسات الدراسة القصيرة، إذا استمرت بثبات، تصبح في حد ذاتها عادة ذات معنى.'],
+      'HI': [' यह स्थिति के अनुसार स्वाभाविक रूप से आने वाला प्रवाह हो सकता है, इसलिए अधिक चिंता की आवश्यकता नहीं है।', ' हम कल पसंदीदा विषय से हल्की शुरुआत करने की सलाह देते हैं।', ' छोटा अध्ययन भी यदि निरंतर जारी रहे, तो वह अपने आप में एक सार्थक आदत बन जाता है।'],
+      'VI': [' Đây có thể chỉ là dòng chảy tự nhiên tùy theo tình trạng, nên không cần quá lo lắng.', ' Chúng tôi khuyên nên bắt đầu ngày mai nhẹ nhàng với môn học yêu thích.', ' Ngay cả những buổi học ngắn, nếu duy trì đều đặn, tự nó trở thành một thói quen có ý nghĩa.'],
+      'ES': [' Esto puede ser simplemente un flujo natural según el estado, así que no hay necesidad de gran preocupación.', ' Recomendamos comenzar mañana de forma ligera con una materia favorita.', ' Incluso las sesiones de estudio cortas, si se mantienen de manera constante, se convierten en sí mismas en un hábito significativo.'],
+      'TH': [' นี่อาจเป็นเพียงแนวโน้มตามธรรมชาติขึ้นอยู่กับสภาพร่างกาย ไม่ต้องกังวลมากนัก', ' แนะนำให้เริ่มวันพรุ่งนี้แบบเบาๆ ด้วยวิชาที่ชอบ', ' แม้การเรียนช่วงสั้นๆ หากทำต่อเนื่องสม่ำเสมอ ก็กลายเป็นนิสัยที่มีความหมายในตัวมันเอง'],
+    },
+  };
+
+  static const Map<String, List<String>> _dailyFillers = {
+    'KO': [' 오늘 하루의 기록도 꾸준함을 만들어가는 소중한 한 걸음입니다.', ' 작은 습관들이 쌓여 큰 변화를 만든다는 점을 기억해주시면 좋겠습니다.', ' 앞으로도 이런 학습 기록이 꾸준히 이어지길 응원합니다.'],
+    'EN': [" Today's record is also a valuable step toward building consistency.", ' We hope you remember that small habits accumulate into big changes.', ' We hope this kind of study record continues steadily going forward.'],
+    'JA': [' 今日一日の記録も継続を作る大切な一歩です。', ' 小さな習慣が積み重なって大きな変化を生むことを覚えていていただければと思います。', ' 今後もこのような学習記録が着実に続くことを応援しています。'],
+    'ZH': [' 今天的记录也是积累坚持的重要一步。', ' 希望您记住，小习惯的累积会带来大的变化。', ' 期待这样的学习记录今后能持续下去。'],
+    'FR': [" L'enregistrement d'aujourd'hui est aussi une étape précieuse vers la constance.", " Nous espérons que vous vous souviendrez que de petites habitudes s'accumulent en grands changements.", " Nous espérons que ce type de suivi d'étude continuera régulièrement à l'avenir."],
+    'DE': [' Der heutige Eintrag ist ebenfalls ein wertvoller Schritt zum Aufbau von Beständigkeit.', ' Wir hoffen, Sie behalten im Hinterkopf, dass sich kleine Gewohnheiten zu großen Veränderungen summieren.', ' Wir hoffen, dass solche Lernaufzeichnungen auch weiterhin beständig fortgeführt werden.'],
+    'RU': [' Сегодняшняя запись — тоже ценный шаг к формированию постоянства.', ' Надеемся, вы будете помнить, что маленькие привычки складываются в большие перемены.', ' Надеемся, что такие учебные записи будут продолжаться и впредь.'],
+    'AR': [' سجل اليوم أيضًا خطوة قيّمة نحو بناء الاستمرارية.', ' نأمل أن تتذكر أن العادات الصغيرة تتراكم لتصنع تغييرات كبيرة.', ' نأمل أن يستمر هذا النوع من سجلات الدراسة بثبات في المستقبل.'],
+    'HI': [' आज का रिकॉर्ड भी निरंतरता बनाने की दिशा में एक मूल्यवान कदम है।', ' हमें आशा है कि आप याद रखेंगे कि छोटी आदतें मिलकर बड़े बदलाव लाती हैं।', ' आशा है कि इस तरह के अध्ययन रिकॉर्ड आगे भी लगातार जारी रहेंगे।'],
+    'VI': [' Bản ghi hôm nay cũng là một bước quý giá để xây dựng sự đều đặn.', ' Hy vọng bạn nhớ rằng những thói quen nhỏ tích lũy thành thay đổi lớn.', ' Hy vọng loại hồ sơ học tập này sẽ tiếp tục đều đặn trong tương lai.'],
+    'ES': [' El registro de hoy también es un paso valioso hacia la constancia.', ' Esperamos que recuerde que los pequeños hábitos se acumulan en grandes cambios.', ' Esperamos que este tipo de registro de estudio continúe de manera constante en el futuro.'],
+    'TH': [' บันทึกของวันนี้ก็เป็นก้าวสำคัญในการสร้างความสม่ำเสมอเช่นกัน', ' หวังว่าคุณจะจำไว้ว่านิสัยเล็กๆ สะสมกลายเป็นการเปลี่ยนแปลงที่ยิ่งใหญ่', ' หวังว่าบันทึกการเรียนแบบนี้จะดำเนินต่อไปอย่างสม่ำเสมอ'],
   };
 
   static Future<String> getDailySummary({
@@ -128,54 +240,59 @@ class DiagnosisService {
       }).toList();
       await prefs.setString(seenKey, jsonEncode(trimmedSeen));
 
-      // 템플릿 안의 {subjectCount}/{totalMinutes}는 실제 오늘 값으로 채워서 반환
-      final String template = chosenTemplate['text'].toString();
-      return template
-          .replaceAll('{subjectCount}', '$subjectCount')
-          .replaceAll('{totalMinutes}', '$totalMinutes');
+      // 🆕 [12개국어] 저장된 texts 맵에서 현재 언어 설정에 맞춰 표시 문자열 구성
+      final Map<String, dynamic> rawTexts = Map<String, dynamic>.from(chosenTemplate['texts'] as Map);
+      final Map<String, String> texts = rawTexts.map((k, v) => MapEntry(
+        k,
+        v.toString().replaceAll('{subjectCount}', '$subjectCount').replaceAll('{totalMinutes}', '$totalMinutes'),
+      ));
+      return _display(texts);
     } catch (e) {
       final fallback = _generateNewDailyCombo(_dailyTierFor(totalMinutes), {});
-      return fallback['text']
-          .toString()
-          .replaceAll('{subjectCount}', '$subjectCount')
-          .replaceAll('{totalMinutes}', '$totalMinutes');
+      final Map<String, dynamic> rawTexts = Map<String, dynamic>.from(fallback['texts'] as Map);
+      final Map<String, String> texts = rawTexts.map((k, v) => MapEntry(
+        k,
+        v.toString().replaceAll('{subjectCount}', '$subjectCount').replaceAll('{totalMinutes}', '$totalMinutes'),
+      ));
+      return _display(texts);
     }
   }
 
   static Map<String, dynamic> _generateNewDailyCombo(String tier, Set<String> avoidIds) {
     final Random rnd = Random();
-    final List<String> openings = _dailyOpenings[tier]!;
-    final List<String> closings = _dailyClosings[tier]!;
+    final List<String> koOpenings = _dailyOpenings[tier]!['KO']!;
+    final List<String> koClosings = _dailyClosings[tier]!['KO']!;
 
     String comboId = '';
-    String text = '';
+    int oi = 0, ci = 0;
     int attempts = 0;
     do {
-      final int oi = rnd.nextInt(openings.length);
-      final int ci = rnd.nextInt(closings.length);
+      oi = rnd.nextInt(koOpenings.length);
+      ci = rnd.nextInt(koClosings.length);
       comboId = 'daily_${tier}_o${oi}_c$ci';
-      text = openings[oi] + closings[ci];
       attempts++;
     } while (avoidIds.contains(comboId) && attempts < 20);
 
-    // 150자에 못 미치면 보강 문구를 순서대로 덧붙여 확실하게 150~200자 범위를 맞춤
-    const List<String> fillers = [
-      ' 오늘 하루의 기록도 꾸준함을 만들어가는 소중한 한 걸음입니다.',
-      ' 작은 습관들이 쌓여 큰 변화를 만든다는 점을 기억해주시면 좋겠습니다.',
-      ' 앞으로도 이런 학습 기록이 꾸준히 이어지길 응원합니다.',
-    ];
-    int fillerIdx = 0;
-    while (text.length < dailyMinLength && fillerIdx < fillers.length) {
-      text += fillers[fillerIdx];
-      fillerIdx++;
-    }
-    if (text.length > dailyMaxLength) {
-      text = text.substring(0, dailyMaxLength);
+    final Map<String, String> texts = {};
+    for (final lang in _langCodes) {
+      String text = _dailyOpenings[tier]![lang]![oi] + _dailyClosings[tier]![lang]![ci];
+      // 🆕 [12개국어] 150자 미만이면 보강 문구를 순서대로 덧붙임 (한글 기준 최소 분량 로직 유지,
+      // 다른 언어는 스크립트 밀도가 달라 이 길이 기준을 그대로 강제하지 않고 자연스러운 번역 그대로 둠)
+      if (lang == 'KO') {
+        int fillerIdx = 0;
+        final fillers = _dailyFillers['KO']!;
+        while (text.length < dailyMinLength && fillerIdx < fillers.length) {
+          text += fillers[fillerIdx];
+          fillerIdx++;
+        }
+        if (text.length > dailyMaxLength) text = text.substring(0, dailyMaxLength);
+      }
+      texts[lang] = text;
     }
 
     return {
       'comboId': comboId,
-      'text': text,
+      'texts': texts,
       'createdAt': DateTime.now().toIso8601String(),
     };
   }
@@ -188,120 +305,307 @@ class DiagnosisService {
     return 'low';
   }
 
-  // ── 문장 뱅크 (점수 구간별 4개 카테고리) ───────────────────────────────────
-  static const Map<String, List<String>> _openings = {
-    'good': [
-      '이번 {type}에서 90점 이상의 우수한 성취를 기록한 것은, 그동안 꾸준히 쌓아온 학습의 밀도가 눈에 보이는 성과로 이어졌음을 보여주는 매우 고무적인 결과입니다.',
-      '90점대의 높은 점수는 학습자의 메타인지(자신이 무엇을 알고 무엇을 모르는지 스스로 점검하는 능력) 수준이 안정적인 궤도에 올라섰음을 시사하는 결과입니다.',
-      '이번 평가에서 확인된 우수한 성취는 단기간의 요행이 아니라, 반복적인 개념 확인과 오답 정리가 축적된 결과로 판단됩니다.',
-    ],
-    'mid': [
-      '이번 {type}에서 80점대의 안정적인 성취를 기록한 것은 학습의 기본기가 탄탄하게 자리잡았음을 보여주는 결과입니다.',
-      '80점대 점수는 개념 스키마(지식의 구조적 네트워크)가 상당 부분 정착되었음을 의미하며, 조금만 더 정밀하게 다듬으면 상위권 진입이 충분히 가능한 위치입니다.',
-      '이번 평가는 안정적인 중상위권 성취를 보여주었고, 특히 실수를 줄이는 방향으로 조금만 보완하면 눈에 띄는 향상을 기대할 수 있습니다.',
-    ],
-    'seventy': [
-      '이번 {type}에서 기록한 70점대의 성취는 학습자가 지닌 실제 역량에 비해 다소 아쉬운 결과로 판단됩니다.',
-      '70점대 점수는 기본 개념은 갖추었으나 실전 적용 과정에서 정합성(논리적 일관성)이 흔들리는 지점이 있음을 시사합니다.',
-      '이번 평가는 개념 이해와 실전 문제풀이 사이의 간극이 드러난 결과로, 구조적인 점검이 필요한 시점입니다.',
-    ],
-    'sixty': [
-      '이번 {type}에서 누적된 60점대의 성취도는 교과 개념의 정착 단계에서 예상보다 깊은 균열이 발생했음을 나타냅니다.',
-      '60점대 점수는 개념 자체보다는 학습 습관의 구조적인 전환이 시급함을 알리는 신호로 받아들이는 것이 바람직합니다.',
-      '이번 평가 결과는 조급함보다는 기초를 다시 점검해야 하는 시점임을 알려주는 지표로 해석하는 것이 필요합니다.',
-    ],
-    'low': [
-      '이번 {type}에서 기록된 수치는 기초 개념 정착 단계에서 전반적인 재조정과 보완이 시급함을 가리키는 진단 결과입니다.',
-      '현재 지표는 학습 과정 전체에 걸쳐 개념적인 공백이 누적되었음을 경고하고 있으며, 즉각적인 학습 루틴의 재정비가 필요합니다.',
-      '이번 결과는 실망하기보다, 학습 방식 자체를 근본적으로 재점검할 수 있는 기회로 삼는 것이 중요합니다.',
-    ],
+  // ==========================================================================
+  // 🆕 [12개국어] 정밀 진단문 문구뱅크 (점수 구간별 4개 카테고리): tier -> lang -> [변형들]
+  // ==========================================================================
+  static const Map<String, Map<String, List<String>>> _openings = {
+    'good': {
+      'KO': ['이번 {type}에서 90점 이상의 우수한 성취를 기록한 것은, 그동안 꾸준히 쌓아온 학습의 밀도가 눈에 보이는 성과로 이어졌음을 보여주는 매우 고무적인 결과입니다.', '90점대의 높은 점수는 학습자의 메타인지(자신이 무엇을 알고 무엇을 모르는지 스스로 점검하는 능력) 수준이 안정적인 궤도에 올라섰음을 시사하는 결과입니다.', '이번 평가에서 확인된 우수한 성취는 단기간의 요행이 아니라, 반복적인 개념 확인과 오답 정리가 축적된 결과로 판단됩니다.'],
+      'EN': ['Recording an excellent achievement of 90 or above in this {type} is a highly encouraging result, showing that the density of study built up over time has translated into visible outcomes.', 'A score in the 90s suggests that the learner\'s metacognition (the ability to self-check what one does and does not know) has settled onto a stable trajectory.', 'The excellent achievement confirmed in this evaluation is judged to be the result of repeated concept-checking and error review accumulated over time, not a short-term stroke of luck.'],
+      'JA': ['今回の{type}で90点以上の優秀な成果を記録したことは、これまで着実に積み上げてきた学習の密度が目に見える成果につながったことを示す非常に励みになる結果です。', '90点台の高得点は、学習者のメタ認知（自分が何を知っていて何を知らないかを自ら点検する能力）水準が安定した軌道に乗ったことを示唆する結果です。', '今回の評価で確認された優秀な成果は、短期的な偶然ではなく、繰り返しの概念確認と誤答整理が積み重なった結果と判断されます。'],
+      'ZH': ['本次{type}中取得90分以上的优异成绩，是长期积累的学习密度转化为可见成果的令人振奋的结果。', '90分段的高分表明学习者的元认知（自我检查知与不知的能力）水平已进入稳定轨道。', '本次评估中确认的优异成绩，判断并非短期侥幸，而是反复的概念确认与错题整理长期积累的结果。'],
+      'FR': ["Obtenir un excellent résultat de 90 ou plus lors de ce {type} est un résultat très encourageant, montrant que la densité d'étude accumulée au fil du temps s'est traduite en résultats visibles.", "Un score dans les 90 suggère que la métacognition de l'apprenant (la capacité à vérifier soi-même ce que l'on sait et ne sait pas) s'est installée sur une trajectoire stable.", "L'excellente réussite confirmée lors de cette évaluation est jugée être le résultat d'une vérification répétée des concepts et d'une révision des erreurs accumulées, et non un coup de chance à court terme."],
+      'DE': ['Eine hervorragende Leistung von 90 oder mehr in dieser {type} zu erzielen, ist ein sehr ermutigendes Ergebnis, das zeigt, dass die über die Zeit aufgebaute Lerndichte zu sichtbaren Resultaten geführt hat.', 'Eine Punktzahl im 90er-Bereich deutet darauf hin, dass die Metakognition des Lernenden (die Fähigkeit, selbst zu prüfen, was man weiß und nicht weiß) sich auf eine stabile Bahn eingependelt hat.', 'Die in dieser Bewertung bestätigte hervorragende Leistung wird als Ergebnis wiederholter Konzeptüberprüfung und angesammelter Fehleraufarbeitung beurteilt, nicht als kurzfristiger Glücksfall.'],
+      'RU': ['Достижение отличного результата в 90 баллов и выше на этом {type} — весьма обнадёживающий результат, показывающий, что накопленная со временем плотность учёбы воплотилась в видимые результаты.', 'Балл в диапазоне 90-х предполагает, что метапознание учащегося (способность самостоятельно проверять, что он знает и чего не знает) вышло на стабильную траекторию.', 'Отличное достижение, подтверждённое в этой оценке, расценивается как результат многократной проверки понятий и накопленного разбора ошибок, а не как краткосрочная удача.'],
+      'AR': ['يُعد تسجيل إنجاز ممتاز بلغ 90 أو أكثر في هذا {type} نتيجة مشجعة للغاية، تُظهر أن كثافة الدراسة المتراكمة عبر الوقت تحولت إلى نتائج ملموسة.', 'تشير الدرجة في نطاق التسعينيات إلى أن الإدراك الفوقي للمتعلم (القدرة على التحقق ذاتيًا مما يعرفه وما لا يعرفه) قد استقر على مسار ثابت.', 'يُعتبر الإنجاز الممتاز الذي تم تأكيده في هذا التقييم نتيجة للتحقق المتكرر من المفاهيم ومراجعة الأخطاء المتراكمة، وليس حظًا قصير المدى.'],
+      'HI': ['इस {type} में 90 या उससे अधिक की उत्कृष्ट उपलब्धि दर्ज करना एक अत्यंत उत्साहजनक परिणाम है, जो दर्शाता है कि समय के साथ बनाई गई अध्ययन सघनता दृश्य परिणामों में बदल गई है।', '90 के दशक का स्कोर बताता है कि शिक्षार्थी की मेटाकॉग्निशन (स्वयं जांचने की क्षमता कि वे क्या जानते हैं और क्या नहीं) एक स्थिर प्रक्षेपवक्र पर स्थिर हो गई है।', 'इस मूल्यांकन में पुष्टि की गई उत्कृष्ट उपलब्धि को अल्पकालिक संयोग नहीं, बल्कि बार-बार अवधारणा जांच और संचित त्रुटि समीक्षा का परिणाम माना जाता है।'],
+      'VI': ['Đạt được thành tích xuất sắc từ 90 điểm trở lên trong {type} này là kết quả rất đáng khích lệ, cho thấy mật độ học tập được tích lũy theo thời gian đã chuyển hóa thành kết quả rõ ràng.', 'Điểm số ở mức 90 cho thấy khả năng siêu nhận thức (metacognition - khả năng tự kiểm tra những gì mình biết và không biết) của người học đã ổn định trên quỹ đạo vững chắc.', 'Thành tích xuất sắc được xác nhận trong đánh giá này được đánh giá là kết quả của việc kiểm tra khái niệm lặp đi lặp lại và tích lũy xem lại lỗi sai, chứ không phải may mắn ngắn hạn.'],
+      'ES': ['Registrar un logro excelente de 90 o más en este {type} es un resultado muy alentador, que muestra que la densidad de estudio acumulada con el tiempo se ha traducido en resultados visibles.', 'Una puntuación en los 90 sugiere que la metacognición del estudiante (la capacidad de verificar por sí mismo qué sabe y qué no sabe) se ha asentado en una trayectoria estable.', 'El excelente logro confirmado en esta evaluación se considera resultado de la verificación repetida de conceptos y la revisión acumulada de errores, no un golpe de suerte a corto plazo.'],
+      'TH': ['การบันทึกผลสัมฤทธิ์ที่ยอดเยี่ยม 90 คะแนนขึ้นไปใน{type}นี้เป็นผลลัพธ์ที่น่าให้กำลังใจอย่างมาก แสดงว่าความเข้มข้นในการเรียนที่สะสมมาตลอดได้กลายเป็นผลลัพธ์ที่มองเห็นได้', 'คะแนนในช่วง 90 บ่งชี้ว่าเมทาค็อกนิชัน (ความสามารถในการตรวจสอบตนเองว่ารู้หรือไม่รู้อะไร) ของผู้เรียนได้เข้าสู่วิถีที่มั่นคงแล้ว', 'ผลสัมฤทธิ์ที่ยอดเยี่ยมที่ยืนยันในการประเมินครั้งนี้ถูกประเมินว่าเป็นผลจากการตรวจสอบแนวคิดซ้ำๆ และการทบทวนข้อผิดพลาดที่สะสมมา ไม่ใช่โชคช่วยระยะสั้น'],
+    },
+    'mid': {
+      'KO': ['이번 {type}에서 80점대의 안정적인 성취를 기록한 것은 학습의 기본기가 탄탄하게 자리잡았음을 보여주는 결과입니다.', '80점대 점수는 개념 스키마(지식의 구조적 네트워크)가 상당 부분 정착되었음을 의미하며, 조금만 더 정밀하게 다듬으면 상위권 진입이 충분히 가능한 위치입니다.', '이번 평가는 안정적인 중상위권 성취를 보여주었고, 특히 실수를 줄이는 방향으로 조금만 보완하면 눈에 띄는 향상을 기대할 수 있습니다.'],
+      'EN': ['Recording a stable achievement in the 80s in this {type} shows that the fundamentals of learning have taken firm root.', 'A score in the 80s means the concept schema (the structural network of knowledge) has largely settled, and with a little more refinement, entering the top tier is well within reach.', 'This evaluation showed a stable upper-middle achievement, and with just a small improvement in reducing mistakes, a noticeable improvement can be expected.'],
+      'JA': ['今回の{type}で80点台の安定した成果を記録したことは、学習の基礎がしっかりと定着したことを示す結果です。', '80点台の得点は概念スキーマ（知識の構造的ネットワーク）がかなり定着していることを意味し、もう少し精密に磨けば上位圏入りも十分可能な位置です。', '今回の評価は安定した中上位圏の成果を示しており、特にミスを減らす方向へ少し補えば目に見える向上が期待できます。'],
+      'ZH': ['本次{type}中取得80分段的稳定成绩，表明学习基础已扎实建立。', '80分段的分数意味着概念图式（知识的结构性网络）已大部分定型，只需再精细打磨，冲击上位圈完全可能。', '本次评估显示出稳定的中上等成绩，尤其若在减少失误方面稍加补强，可期待明显的提升。'],
+      'FR': ["Obtenir un résultat stable dans les 80 lors de ce {type} montre que les bases de l'apprentissage se sont solidement enracinées.", "Un score dans les 80 signifie que le schéma conceptuel (le réseau structurel des connaissances) s'est largement installé, et avec un peu plus de raffinement, atteindre le premier rang est tout à fait accessible.", "Cette évaluation a montré une réussite stable dans la tranche moyenne-supérieure, et avec juste une petite amélioration pour réduire les erreurs, une amélioration notable peut être attendue."],
+      'DE': ['Eine stabile Leistung im 80er-Bereich in dieser {type} zeigt, dass die Grundlagen des Lernens fest verwurzelt sind.', 'Eine Punktzahl im 80er-Bereich bedeutet, dass sich das Konzeptschema (das strukturelle Netzwerk des Wissens) weitgehend gefestigt hat, und mit etwas mehr Feinschliff ist der Einstieg in die Spitzengruppe gut erreichbar.', 'Diese Bewertung zeigte eine stabile obere Mittelklasse-Leistung, und mit nur einer kleinen Verbesserung bei der Fehlerreduzierung kann eine spürbare Verbesserung erwartet werden.'],
+      'RU': ['Стабильное достижение в диапазоне 80-х на этом {type} показывает, что основы обучения прочно укоренились.', 'Балл в диапазоне 80-х означает, что концептуальная схема (структурная сеть знаний) в значительной степени устоялась, и при небольшой доработке выход в верхний эшелон вполне достижим.', 'Эта оценка показала стабильное достижение выше среднего, и при небольшом улучшении в сокращении ошибок можно ожидать заметного прогресса.'],
+      'AR': ['يُظهر تسجيل إنجاز مستقر في نطاق الثمانينيات في هذا {type} أن أساسيات التعلم قد ترسخت بقوة.', 'تعني الدرجة في نطاق الثمانينيات أن المخطط المفاهيمي (الشبكة الهيكلية للمعرفة) قد استقر إلى حد كبير، ومع القليل من الصقل الإضافي يصبح الوصول إلى الفئة العليا ممكنًا تمامًا.', 'أظهر هذا التقييم إنجازًا مستقرًا فوق المتوسط، ومع تحسن بسيط في تقليل الأخطاء يمكن توقع تحسن ملحوظ.'],
+      'HI': ['इस {type} में 80 के दशक की स्थिर उपलब्धि दर्ज करना दर्शाता है कि सीखने की बुनियादी बातें मजबूती से जड़ें जमा चुकी हैं।', '80 के दशक का स्कोर इंगित करता है कि अवधारणा स्कीमा (ज्ञान का संरचनात्मक नेटवर्क) काफी हद तक स्थिर हो चुका है, और थोड़े और परिष्करण के साथ शीर्ष स्तर में प्रवेश पूरी तरह संभव है।', 'इस मूल्यांकन ने स्थिर उच्च-मध्यम उपलब्धि दिखाई, और गलतियों को कम करने की दिशा में थोड़े सुधार से उल्लेखनीय सुधार की उम्मीद की जा सकती है।'],
+      'VI': ['Đạt được thành tích ổn định ở mức 80 trong {type} này cho thấy nền tảng học tập đã bén rễ vững chắc.', 'Điểm số ở mức 80 có nghĩa là sơ đồ khái niệm (mạng lưới cấu trúc kiến thức) đã phần lớn ổn định, và chỉ cần trau chuốt thêm một chút là hoàn toàn có thể vươn vào nhóm dẫn đầu.', 'Đánh giá này cho thấy thành tích ổn định ở mức trên trung bình, và chỉ cần cải thiện nhỏ trong việc giảm sai sót là có thể kỳ vọng sự tiến bộ đáng kể.'],
+      'ES': ['Registrar un logro estable en los 80 en este {type} muestra que los fundamentos del aprendizaje se han arraigado firmemente.', 'Una puntuación en los 80 significa que el esquema conceptual (la red estructural del conocimiento) se ha asentado en gran medida, y con un poco más de refinamiento, entrar en el nivel superior está totalmente al alcance.', 'Esta evaluación mostró un logro estable de nivel medio-alto, y con solo una pequeña mejora en la reducción de errores, se puede esperar una mejora notable.'],
+      'TH': ['การบันทึกผลสัมฤทธิ์ที่มั่นคงในช่วง 80 ใน{type}นี้แสดงว่าพื้นฐานการเรียนได้หยั่งรากอย่างมั่นคงแล้ว', 'คะแนนในช่วง 80 หมายความว่าโครงสร้างแนวคิด (เครือข่ายเชิงโครงสร้างของความรู้) ได้ลงตัวเป็นส่วนใหญ่แล้ว และหากขัดเกลาเพิ่มอีกเล็กน้อยก็สามารถก้าวสู่กลุ่มบนได้อย่างเต็มที่', 'การประเมินนี้แสดงผลสัมฤทธิ์ที่มั่นคงในระดับกลางค่อนบน และหากปรับปรุงเล็กน้อยในการลดข้อผิดพลาดก็สามารถคาดหวังการพัฒนาที่เห็นได้ชัด'],
+    },
+    'seventy': {
+      'KO': ['이번 {type}에서 기록한 70점대의 성취는 학습자가 지닌 실제 역량에 비해 다소 아쉬운 결과로 판단됩니다.', '70점대 점수는 기본 개념은 갖추었으나 실전 적용 과정에서 정합성(논리적 일관성)이 흔들리는 지점이 있음을 시사합니다.', '이번 평가는 개념 이해와 실전 문제풀이 사이의 간극이 드러난 결과로, 구조적인 점검이 필요한 시점입니다.'],
+      'EN': ['The achievement in the 70s recorded in this {type} is judged to be somewhat disappointing compared to the learner\'s actual capability.', 'A score in the 70s suggests that while basic concepts are in place, there are points where consistency (logical coherence) wavers during practical application.', 'This evaluation revealed a gap between conceptual understanding and practical problem-solving, indicating a need for structural review at this point.'],
+      'JA': ['今回の{type}で記録した70点台の成果は、学習者が持つ実際の能力に比べてやや惜しい結果と判断されます。', '70点台の得点は基本概念は備えているものの、実戦適用の過程で整合性（論理的一貫性）が揺らぐ地点があることを示唆します。', '今回の評価は概念理解と実戦問題解決の間のギャップが明らかになった結果であり、構造的な点検が必要な時期です。'],
+      'ZH': ['本次{type}中记录的70分段成绩，相对于学习者实际能力而言，判断为略显遗憾的结果。', '70分段的分数表明虽具备基本概念，但在实战应用过程中存在逻辑一致性动摇之处。', '本次评估暴露出概念理解与实战解题之间的差距，是需要进行结构性检视的时点。'],
+      'FR': ["La réussite dans les 70 enregistrée lors de ce {type} est jugée quelque peu décevante par rapport à la capacité réelle de l'apprenant.", "Un score dans les 70 suggère que, bien que les concepts de base soient acquis, il existe des points où la cohérence (cohérence logique) vacille lors de l'application pratique.", "Cette évaluation a révélé un écart entre la compréhension conceptuelle et la résolution pratique de problèmes, indiquant un besoin de révision structurelle à ce stade."],
+      'DE': ['Die in dieser {type} erzielte Leistung im 70er-Bereich wird im Vergleich zur tatsächlichen Fähigkeit des Lernenden als etwas enttäuschend beurteilt.', 'Eine Punktzahl im 70er-Bereich deutet darauf hin, dass zwar grundlegende Konzepte vorhanden sind, es aber Stellen gibt, an denen die Konsistenz (logische Kohärenz) bei der praktischen Anwendung ins Wanken gerät.', 'Diese Bewertung offenbarte eine Lücke zwischen konzeptionellem Verständnis und praktischer Problemlösung, was auf einen Bedarf an struktureller Überprüfung an diesem Punkt hinweist.'],
+      'RU': ['Достижение в диапазоне 70-х, зафиксированное на этом {type}, оценивается как несколько разочаровывающее по сравнению с реальными способностями учащегося.', 'Балл в диапазоне 70-х предполагает, что базовые понятия усвоены, но есть моменты, где согласованность (логическая последовательность) колеблется при практическом применении.', 'Эта оценка выявила разрыв между концептуальным пониманием и практическим решением задач, указывая на необходимость структурного пересмотра на данном этапе.'],
+      'AR': ['يُعتبر الإنجاز في نطاق السبعينيات المسجل في هذا {type} مخيبًا للآمال إلى حد ما مقارنة بالقدرة الفعلية للمتعلم.', 'تشير الدرجة في نطاق السبعينيات إلى أنه رغم توفر المفاهيم الأساسية، توجد نقاط يتذبذب فيها الاتساق (الترابط المنطقي) أثناء التطبيق العملي.', 'كشف هذا التقييم عن فجوة بين الفهم المفاهيمي وحل المسائل العملي، مما يشير إلى الحاجة لمراجعة هيكلية في هذه المرحلة.'],
+      'HI': ['इस {type} में दर्ज 70 के दशक की उपलब्धि शिक्षार्थी की वास्तविक क्षमता की तुलना में कुछ हद तक निराशाजनक मानी जाती है।', '70 के दशक का स्कोर बताता है कि बुनियादी अवधारणाएं मौजूद हैं, लेकिन व्यावहारिक प्रयोग के दौरान संगति (तार्किक सुसंगति) डगमगाने के बिंदु हैं।', 'इस मूल्यांकन ने अवधारणा समझ और व्यावहारिक समस्या-समाधान के बीच अंतर उजागर किया, जो इस बिंदु पर संरचनात्मक समीक्षा की आवश्यकता दर्शाता है।'],
+      'VI': ['Thành tích ở mức 70 được ghi nhận trong {type} này được đánh giá là hơi đáng tiếc so với năng lực thực tế của người học.', 'Điểm số ở mức 70 cho thấy dù đã có khái niệm cơ bản, nhưng có những điểm mà tính nhất quán (mạch lạc logic) bị lung lay trong quá trình áp dụng thực tế.', 'Đánh giá này đã bộc lộ khoảng cách giữa hiểu biết khái niệm và giải quyết vấn đề thực tế, cho thấy cần xem xét lại cấu trúc vào thời điểm này.'],
+      'ES': ['El logro en los 70 registrado en este {type} se considera algo decepcionante en comparación con la capacidad real del estudiante.', 'Una puntuación en los 70 sugiere que, aunque los conceptos básicos están presentes, hay puntos donde la coherencia (consistencia lógica) vacila durante la aplicación práctica.', 'Esta evaluación reveló una brecha entre la comprensión conceptual y la resolución práctica de problemas, indicando la necesidad de una revisión estructural en este punto.'],
+      'TH': ['ผลสัมฤทธิ์ในช่วง 70 ที่บันทึกใน{type}นี้ถูกประเมินว่าค่อนข้างน่าเสียดายเมื่อเทียบกับความสามารถที่แท้จริงของผู้เรียน', 'คะแนนในช่วง 70 บ่งชี้ว่าแม้จะมีแนวคิดพื้นฐานแล้ว แต่มีจุดที่ความสอดคล้อง (ความสม่ำเสมอเชิงตรรกะ) สั่นคลอนในระหว่างการประยุกต์ใช้จริง', 'การประเมินนี้เผยให้เห็นช่องว่างระหว่างความเข้าใจแนวคิดและการแก้ปัญหาจริง ซึ่งบ่งชี้ว่าจำเป็นต้องทบทวนเชิงโครงสร้างในจุดนี้'],
+    },
+    'sixty': {
+      'KO': ['이번 {type}에서 누적된 60점대의 성취도는 교과 개념의 정착 단계에서 예상보다 깊은 균열이 발생했음을 나타냅니다.', '60점대 점수는 개념 자체보다는 학습 습관의 구조적인 전환이 시급함을 알리는 신호로 받아들이는 것이 바람직합니다.', '이번 평가 결과는 조급함보다는 기초를 다시 점검해야 하는 시점임을 알려주는 지표로 해석하는 것이 필요합니다.'],
+      'EN': ['The cumulative achievement in the 60s in this {type} indicates that a deeper crack than expected has appeared at the stage of settling curriculum concepts.', 'A score in the 60s is best understood not as a problem with the concepts themselves, but as a signal that an urgent structural shift in study habits is needed.', 'The result of this evaluation should be interpreted as an indicator that it is time to re-examine the basics rather than to rush ahead.'],
+      'JA': ['今回の{type}で累積した60点台の成果度は、教科概念の定着段階で予想より深い亀裂が生じたことを示しています。', '60点台の得点は概念自体よりも、学習習慣の構造的な転換が急務であることを知らせる信号として受け止めるのが望ましいです。', '今回の評価結果は焦るよりも基礎を再点検すべき時期であることを示す指標として解釈することが必要です。'],
+      'ZH': ['本次{type}累积的60分段成就度表明，在教科概念定型阶段出现了比预期更深的裂痕。', '60分段的分数最好理解为并非概念本身的问题，而是提示学习习惯亟需结构性转变的信号。', '本次评估结果应被解读为提示此刻应重新检视基础，而非急躁前进的指标。'],
+      'FR': ["La réussite cumulée dans les 60 lors de ce {type} indique qu'une fissure plus profonde que prévu est apparue au stade de la consolidation des concepts du programme.", "Un score dans les 60 est mieux compris non pas comme un problème avec les concepts eux-mêmes, mais comme un signal indiquant qu'un changement structurel urgent des habitudes d'étude est nécessaire.", "Le résultat de cette évaluation doit être interprété comme un indicateur qu'il est temps de réexaminer les bases plutôt que de se précipiter."],
+      'DE': ['Die kumulierte Leistung im 60er-Bereich in dieser {type} zeigt, dass in der Phase der Festigung der Lehrplankonzepte ein tieferer Riss als erwartet aufgetreten ist.', 'Eine Punktzahl im 60er-Bereich versteht man am besten nicht als Problem der Konzepte selbst, sondern als Signal, dass ein dringender struktureller Wandel der Lerngewohnheiten nötig ist.', 'Das Ergebnis dieser Bewertung sollte als Indikator interpretiert werden, dass es Zeit ist, die Grundlagen erneut zu prüfen, statt vorzupreschen.'],
+      'RU': ['Накопленное достижение в диапазоне 60-х на этом {type} указывает на то, что на этапе закрепления понятий учебной программы возникла более глубокая трещина, чем ожидалось.', 'Балл в диапазоне 60-х лучше понимать не как проблему самих понятий, а как сигнал о срочной необходимости структурного изменения учебных привычек.', 'Результат этой оценки следует трактовать как индикатор того, что настало время пересмотреть основы, а не спешить вперёд.'],
+      'AR': ['يشير الإنجاز التراكمي في نطاق الستينيات في هذا {type} إلى ظهور شرخ أعمق من المتوقع في مرحلة ترسيخ مفاهيم المنهج.', 'من الأفضل فهم الدرجة في نطاق الستينيات ليس كمشكلة في المفاهيم نفسها، بل كإشارة إلى الحاجة الملحة لتحول هيكلي في عادات الدراسة.', 'ينبغي تفسير نتيجة هذا التقييم كمؤشر على أن الوقت قد حان لإعادة فحص الأساسيات بدلاً من التسرع.'],
+      'HI': ['इस {type} में संचित 60 के दशक की उपलब्धि दर्शाती है कि पाठ्यक्रम अवधारणाओं के स्थिरीकरण चरण में अपेक्षा से अधिक गहरी दरार आई है।', '60 के दशक का स्कोर अवधारणाओं की समस्या के बजाय अध्ययन आदतों में तत्काल संरचनात्मक बदलाव की आवश्यकता के संकेत के रूप में समझना बेहतर है।', 'इस मूल्यांकन के परिणाम को जल्दबाजी के बजाय बुनियादी बातों की पुनः जांच करने के समय के संकेतक के रूप में व्याख्या करना आवश्यक है।'],
+      'VI': ['Thành tích tích lũy ở mức 60 trong {type} này cho thấy đã xuất hiện vết nứt sâu hơn dự kiến ở giai đoạn ổn định các khái niệm chương trình học.', 'Điểm số ở mức 60 nên được hiểu không phải là vấn đề của bản thân khái niệm, mà là tín hiệu cho thấy cần có sự chuyển đổi cấu trúc khẩn cấp trong thói quen học tập.', 'Kết quả đánh giá này nên được diễn giải là chỉ báo cho thấy đây là lúc cần xem xét lại nền tảng thay vì vội vàng tiến lên.'],
+      'ES': ['El logro acumulado en los 60 en este {type} indica que ha aparecido una grieta más profunda de lo esperado en la etapa de consolidación de los conceptos del currículo.', 'Una puntuación en los 60 se entiende mejor no como un problema con los conceptos en sí, sino como una señal de que se necesita un cambio estructural urgente en los hábitos de estudio.', 'El resultado de esta evaluación debe interpretarse como un indicador de que es momento de reexaminar las bases en lugar de apresurarse.'],
+      'TH': ['ผลสัมฤทธิ์สะสมในช่วง 60 ใน{type}นี้บ่งชี้ว่าเกิดรอยร้าวที่ลึกกว่าที่คาดไว้ในขั้นตอนการลงตัวของแนวคิดหลักสูตร', 'คะแนนในช่วง 60 ควรเข้าใจว่าไม่ใช่ปัญหาของแนวคิดเอง แต่เป็นสัญญาณว่าจำเป็นต้องเปลี่ยนแปลงโครงสร้างนิสัยการเรียนอย่างเร่งด่วน', 'ผลการประเมินนี้ควรตีความเป็นตัวชี้วัดว่าถึงเวลาต้องทบทวนพื้นฐานใหม่ แทนที่จะรีบเร่งต่อไป'],
+    },
+    'low': {
+      'KO': ['이번 {type}에서 기록된 수치는 기초 개념 정착 단계에서 전반적인 재조정과 보완이 시급함을 가리키는 진단 결과입니다.', '현재 지표는 학습 과정 전체에 걸쳐 개념적인 공백이 누적되었음을 경고하고 있으며, 즉각적인 학습 루틴의 재정비가 필요합니다.', '이번 결과는 실망하기보다, 학습 방식 자체를 근본적으로 재점검할 수 있는 기회로 삼는 것이 중요합니다.'],
+      'EN': ['The figure recorded in this {type} is a diagnostic result indicating an urgent need for overall readjustment and supplementation at the stage of establishing basic concepts.', 'The current indicator warns that conceptual gaps have accumulated throughout the entire learning process, and immediate restructuring of the study routine is needed.', 'Rather than being discouraged by this result, it is important to treat it as an opportunity to fundamentally re-examine the learning approach itself.'],
+      'JA': ['今回の{type}で記録された数値は、基礎概念の定着段階で全般的な再調整と補完が急務であることを示す診断結果です。', '現在の指標は学習過程全体にわたって概念的な空白が積み重なったことを警告しており、即座に学習ルーティンの再整備が必要です。', '今回の結果は落胆するよりも、学習方式そのものを根本的に再点検できる機会として捉えることが重要です。'],
+      'ZH': ['本次{type}中记录的数值是提示在基础概念定型阶段亟需全面调整与补强的诊断结果。', '当前指标警示学习过程整体存在概念性空白的累积，需要立即重新整顿学习常规。', '本次结果与其感到失望，不如将其视为从根本上重新检视学习方式本身的机会，这一点很重要。'],
+      'FR': ["Le chiffre enregistré lors de ce {type} est un résultat diagnostique indiquant un besoin urgent de réajustement global et de supplémentation au stade de l'établissement des concepts de base.", "L'indicateur actuel avertit que des lacunes conceptuelles se sont accumulées tout au long du processus d'apprentissage, et une restructuration immédiate de la routine d'étude est nécessaire.", "Plutôt que d'être découragé par ce résultat, il est important de le considérer comme une opportunité de réexaminer fondamentalement l'approche d'apprentissage elle-même."],
+      'DE': ['Der in dieser {type} erfasste Wert ist ein diagnostisches Ergebnis, das auf einen dringenden Bedarf an umfassender Neuausrichtung und Ergänzung in der Phase der Etablierung grundlegender Konzepte hinweist.', 'Der aktuelle Indikator warnt davor, dass sich konzeptionelle Lücken über den gesamten Lernprozess hinweg angesammelt haben, und eine sofortige Umstrukturierung der Lernroutine ist erforderlich.', 'Anstatt von diesem Ergebnis entmutigt zu sein, ist es wichtig, es als Gelegenheit zu nutzen, den Lernansatz selbst grundlegend zu überdenken.'],
+      'RU': ['Показатель, зафиксированный на этом {type}, — это диагностический результат, указывающий на срочную необходимость общей корректировки и дополнения на этапе закрепления базовых понятий.', 'Текущий показатель предупреждает о том, что концептуальные пробелы накопились на протяжении всего учебного процесса, и требуется немедленная перестройка учебного распорядка.', 'Вместо того чтобы разочаровываться этим результатом, важно рассматривать его как возможность фундаментально пересмотреть сам подход к обучению.'],
+      'AR': ['الرقم المسجل في هذا {type} هو نتيجة تشخيصية تشير إلى حاجة ملحة لإعادة ضبط شاملة وتعزيز في مرحلة ترسيخ المفاهيم الأساسية.', 'يحذر المؤشر الحالي من تراكم فجوات مفاهيمية عبر عملية التعلم بأكملها، وهناك حاجة لإعادة هيكلة فورية لروتين الدراسة.', 'بدلاً من الشعور بالإحباط من هذه النتيجة، من المهم اعتبارها فرصة لإعادة النظر بشكل أساسي في نهج التعلم نفسه.'],
+      'HI': ['इस {type} में दर्ज आंकड़ा एक निदान परिणाम है जो बुनियादी अवधारणाओं की स्थापना के चरण में समग्र पुनः समायोजन और पूरक की तत्काल आवश्यकता को इंगित करता है।', 'वर्तमान संकेतक चेतावनी देता है कि पूरी अध्ययन प्रक्रिया में अवधारणात्मक अंतराल जमा हो गए हैं, और अध्ययन दिनचर्या का तत्काल पुनर्गठन आवश्यक है।', 'इस परिणाम से निराश होने के बजाय, इसे सीखने के दृष्टिकोण की मौलिक रूप से पुनः जांच करने के अवसर के रूप में लेना महत्वपूर्ण है।'],
+      'VI': ['Con số ghi nhận trong {type} này là kết quả chẩn đoán cho thấy nhu cầu cấp bách về việc điều chỉnh và bổ sung toàn diện ở giai đoạn thiết lập các khái niệm cơ bản.', 'Chỉ số hiện tại cảnh báo rằng các khoảng trống khái niệm đã tích lũy trong suốt quá trình học tập, và cần tái cấu trúc ngay lập tức thói quen học tập.', 'Thay vì thất vọng vì kết quả này, điều quan trọng là coi đây là cơ hội để xem xét lại một cách căn bản chính phương pháp học tập.'],
+      'ES': ['La cifra registrada en este {type} es un resultado diagnóstico que indica una necesidad urgente de reajuste general y refuerzo en la etapa de establecimiento de conceptos básicos.', 'El indicador actual advierte que se han acumulado brechas conceptuales a lo largo de todo el proceso de aprendizaje, y se necesita una reestructuración inmediata de la rutina de estudio.', 'En lugar de desanimarse por este resultado, es importante tomarlo como una oportunidad para reexaminar fundamentalmente el propio enfoque de aprendizaje.'],
+      'TH': ['ตัวเลขที่บันทึกใน{type}นี้เป็นผลการวินิจฉัยที่บ่งชี้ว่าจำเป็นต้องปรับปรุงและเสริมโดยรวมอย่างเร่งด่วนในขั้นตอนการวางรากฐานแนวคิดพื้นฐาน', 'ตัวชี้วัดปัจจุบันเตือนว่าช่องว่างเชิงแนวคิดได้สะสมตลอดกระบวนการเรียนรู้ทั้งหมด และจำเป็นต้องปรับโครงสร้างกิจวัตรการเรียนทันที', 'แทนที่จะผิดหวังกับผลลัพธ์นี้ สิ่งสำคัญคือการมองว่าเป็นโอกาสในการทบทวนแนวทางการเรียนรู้เองอย่างถึงรากฐาน'],
+    },
   };
 
-  static const Map<String, List<String>> _observations = {
-    'good': [
-      '특히 {subject} 과목에서는 개념 간의 연결 구조를 정확히 파악하고 있어, 응용문제에서도 흔들림 없는 정합성을 보여주고 있습니다.',
-      '{subject} 영역의 최근 풀이 패턴을 살펴보면 기본 개념 확인 단계를 충실히 거친 흔적이 뚜렷하게 나타납니다.',
-      '이번 {subject} 평가는 시간 배분과 문제 해석 속도 모두 균형 잡힌 모습을 보여, 실전 감각이 상당히 성숙했음을 알 수 있습니다.',
-    ],
-    'mid': [
-      '{subject} 과목에서는 핵심 개념의 뼈대는 잘 갖추어져 있으나, 조건 해석의 정밀도에서 약간의 감점 요인이 확인됩니다.',
-      '{subject} 영역은 기본 문제풀이는 안정적이나, 고난도 변형 문제로 갈수록 처리 속도가 다소 느려지는 경향이 관찰됩니다.',
-      '이번 {subject} 평가에서는 전반적인 이해도는 양호하나, 세부 조건을 놓치는 실수가 반복적으로 나타났습니다.',
-    ],
-    'seventy': [
-      '{subject} 과목의 오답을 살펴보면 대부분 구조적 오인(개념의 뼈대를 잘못 이해해 오답을 도출하는 현상)에서 비롯된 것으로 보입니다.',
-      '{subject} 영역에서는 기본 개념 자체보다, 문제 조건을 정확히 읽어내는 과정에서 실수가 반복되는 경향이 확인됩니다.',
-      '이번 {subject} 평가는 시간 부족으로 인해 후반부 문항에서 집중력이 흐트러진 흔적이 뚜렷하게 나타납니다.',
-    ],
-    'sixty': [
-      '{subject} 과목의 오답 패턴은 개념의 기본 뼈대를 오해한 채 진도만 나간 부작용으로 판단됩니다.',
-      '{subject} 영역에서는 인지적 기만(완전히 이해하지 못했음에도 이해했다고 착각하는 상태)이 반복적으로 관찰됩니다.',
-      '이번 {subject} 평가는 기초 개념 확인 단계가 충분히 이루어지지 않은 상태에서 문제풀이로 넘어간 흔적이 뚜렷합니다.',
-    ],
-    'low': [
-      '{subject} 과목은 기초 어휘 스키마(지식의 구조적 네트워크)조차 아직 불안정한 상태로 보이며, 근본적인 재학습이 필요합니다.',
-      '{subject} 영역의 오답은 개념 이해 여부와 무관하게 광범위하게 나타나고 있어, 단원 전체를 처음부터 다시 점검하는 것이 바람직합니다.',
-      '이번 {subject} 평가는 문제풀이량보다 기본 원리 이해에 투입된 시간이 부족했던 결과로 판단됩니다.',
-    ],
+  static const Map<String, Map<String, List<String>>> _observations = {
+    'good': {
+      'KO': ['특히 {subject} 과목에서는 개념 간의 연결 구조를 정확히 파악하고 있어, 응용문제에서도 흔들림 없는 정합성을 보여주고 있습니다.', '{subject} 영역의 최근 풀이 패턴을 살펴보면 기본 개념 확인 단계를 충실히 거친 흔적이 뚜렷하게 나타납니다.', '이번 {subject} 평가는 시간 배분과 문제 해석 속도 모두 균형 잡힌 모습을 보여, 실전 감각이 상당히 성숙했음을 알 수 있습니다.'],
+      'EN': ['In particular, in {subject}, the connective structure between concepts is accurately grasped, showing unwavering consistency even in application problems.', 'Looking at the recent problem-solving pattern in {subject}, there are clear traces of having faithfully gone through the basic concept-checking stage.', 'This {subject} evaluation showed a balanced approach to both time allocation and problem interpretation speed, indicating that practical exam sense has matured considerably.'],
+      'JA': ['特に{subject}科目では概念間の連結構造を正確に把握しており、応用問題でも揺るぎない整合性を見せています。', '{subject}領域の最近の解答パターンを見ると、基本概念確認段階を忠実に経た痕跡がはっきりと表れています。', '今回の{subject}評価は時間配分と問題解釈速度の両方でバランスの取れた姿を見せ、実戦感覚がかなり成熟していることが分かります。'],
+      'ZH': ['尤其在{subject}科目中，能够准确把握概念间的连接结构，在应用题中也展现出稳固的一致性。', '观察{subject}领域近期的解题模式，明显可见扎实经过基本概念确认阶段的痕迹。', '本次{subject}评估在时间分配与题意解读速度上均表现均衡，可见实战感已相当成熟。'],
+      'FR': ["En particulier, en {subject}, la structure de connexion entre les concepts est bien saisie, montrant une cohérence inébranlable même dans les problèmes d'application.", "En examinant le schéma de résolution récent en {subject}, on constate clairement des traces d'un passage fidèle par l'étape de vérification des concepts de base.", "Cette évaluation en {subject} a montré une approche équilibrée tant dans la répartition du temps que dans la vitesse d'interprétation des problèmes, indiquant que le sens pratique de l'examen a considérablement mûri."],
+      'DE': ['Insbesondere in {subject} wird die Verbindungsstruktur zwischen den Konzepten präzise erfasst, was auch bei Anwendungsaufgaben unerschütterliche Konsistenz zeigt.', 'Betrachtet man das jüngste Lösungsmuster in {subject}, zeigen sich klare Spuren einer treuen Durchlaufung der Grundkonzeptüberprüfung.', 'Diese Bewertung in {subject} zeigte einen ausgewogenen Ansatz sowohl bei der Zeitverteilung als auch bei der Geschwindigkeit der Aufgabeninterpretation, was darauf hindeutet, dass sich das praktische Prüfungsgefühl erheblich weiterentwickelt hat.'],
+      'RU': ['В частности, по предмету {subject} точно понимается связующая структура между понятиями, что демонстрирует непоколебимую последовательность даже в прикладных задачах.', 'Судя по недавней модели решения по предмету {subject}, есть явные следы добросовестного прохождения этапа проверки базовых понятий.', 'Эта оценка по предмету {subject} показала сбалансированный подход как к распределению времени, так и к скорости интерпретации задач, что говорит о значительном развитии практического экзаменационного чутья.'],
+      'AR': ['على وجه الخصوص، في مادة {subject}، يتم فهم بنية الترابط بين المفاهيم بدقة، مما يُظهر اتساقًا ثابتًا حتى في مسائل التطبيق.', 'بالنظر إلى نمط الحل الأخير في {subject}، تظهر آثار واضحة على المرور بأمانة بمرحلة التحقق من المفاهيم الأساسية.', 'أظهر هذا التقييم في {subject} نهجًا متوازنًا في كل من توزيع الوقت وسرعة تفسير المسائل، مما يشير إلى نضج كبير في الحس العملي للاختبار.'],
+      'HI': ['विशेष रूप से, {subject} में, अवधारणाओं के बीच संयोजी संरचना को सटीक रूप से समझा गया है, जो अनुप्रयोग प्रश्नों में भी अटूट संगति दिखाता है।', '{subject} क्षेत्र में हाल के समाधान पैटर्न को देखते हुए, बुनियादी अवधारणा जांच चरण से ईमानदारी से गुजरने के स्पष्ट निशान दिखते हैं।', 'इस {subject} मूल्यांकन ने समय आवंटन और प्रश्न व्याख्या गति दोनों में संतुलित दृष्टिकोण दिखाया, जो दर्शाता है कि व्यावहारिक परीक्षा समझ काफी परिपक्व हो चुकी है।'],
+      'VI': ['Đặc biệt, trong môn {subject}, cấu trúc liên kết giữa các khái niệm được nắm bắt chính xác, thể hiện tính nhất quán vững chắc ngay cả trong các bài toán ứng dụng.', 'Nhìn vào mô hình giải bài gần đây trong {subject}, có dấu vết rõ ràng của việc đã trải qua trung thực giai đoạn kiểm tra khái niệm cơ bản.', 'Đánh giá {subject} này cho thấy cách tiếp cận cân bằng cả về phân bổ thời gian và tốc độ diễn giải bài toán, cho thấy cảm giác thực chiến đã trưởng thành đáng kể.'],
+      'ES': ['En particular, en {subject}, la estructura de conexión entre conceptos se comprende con precisión, mostrando una coherencia inquebrantable incluso en problemas de aplicación.', 'Observando el patrón de resolución reciente en {subject}, hay indicios claros de haber pasado fielmente por la etapa de verificación de conceptos básicos.', 'Esta evaluación de {subject} mostró un enfoque equilibrado tanto en la asignación de tiempo como en la velocidad de interpretación de problemas, lo que indica que el sentido práctico del examen ha madurado considerablemente.'],
+      'TH': ['โดยเฉพาะในวิชา{subject} มีการเข้าใจโครงสร้างการเชื่อมโยงระหว่างแนวคิดอย่างแม่นยำ แสดงความสอดคล้องที่มั่นคงแม้ในโจทย์ประยุกต์', 'เมื่อดูรูปแบบการแก้โจทย์ล่าสุดใน{subject} พบร่องรอยชัดเจนของการผ่านขั้นตอนตรวจสอบแนวคิดพื้นฐานอย่างซื่อสัตย์', 'การประเมิน{subject}นี้แสดงแนวทางที่สมดุลทั้งในการจัดสรรเวลาและความเร็วในการตีความโจทย์ แสดงว่าสัมผัสการสอบจริงเติบโตขึ้นมาก'],
+    },
+    'mid': {
+      'KO': ['{subject} 과목에서는 핵심 개념의 뼈대는 잘 갖추어져 있으나, 조건 해석의 정밀도에서 약간의 감점 요인이 확인됩니다.', '{subject} 영역은 기본 문제풀이는 안정적이나, 고난도 변형 문제로 갈수록 처리 속도가 다소 느려지는 경향이 관찰됩니다.', '이번 {subject} 평가에서는 전반적인 이해도는 양호하나, 세부 조건을 놓치는 실수가 반복적으로 나타났습니다.'],
+      'EN': ['In {subject}, the framework of core concepts is well-established, but a few point-losing factors are confirmed in the precision of condition interpretation.', 'In {subject}, basic problem-solving is stable, but a tendency toward slower processing speed is observed as questions become more highly varied and difficult.', 'In this {subject} evaluation, overall understanding was good, but mistakes of missing detailed conditions appeared repeatedly.'],
+      'JA': ['{subject}科目では核心概念の骨組みはよく整っているものの、条件解釈の精密さでやや減点要因が確認されます。', '{subject}領域は基本問題解決は安定していますが、高難度の変形問題になるほど処理速度がやや遅くなる傾向が観察されます。', '今回の{subject}評価では全般的な理解度は良好ですが、細部条件を見落とすミスが繰り返し現れました。'],
+      'ZH': ['{subject}科目中核心概念的骨架掌握良好，但在条件解读的精确度上确认存在若干失分因素。', '{subject}领域基本解题较为稳定，但随着高难度变形题的增多，处理速度呈现放缓趋势。', '本次{subject}评估中整体理解度良好，但反复出现遗漏细节条件的失误。'],
+      'FR': ["En {subject}, le cadre des concepts fondamentaux est bien établi, mais quelques facteurs de perte de points sont confirmés dans la précision de l'interprétation des conditions.", "En {subject}, la résolution de problèmes de base est stable, mais une tendance à une vitesse de traitement plus lente est observée à mesure que les questions deviennent plus variées et difficiles.", "Dans cette évaluation en {subject}, la compréhension globale était bonne, mais des erreurs d'oubli de conditions détaillées sont apparues à plusieurs reprises."],
+      'DE': ['In {subject} ist das Grundgerüst der Kernkonzepte gut etabliert, aber einige punktabziehende Faktoren werden bei der Präzision der Bedingungsinterpretation bestätigt.', 'In {subject} ist die grundlegende Problemlösung stabil, aber eine Tendenz zu langsamerer Verarbeitungsgeschwindigkeit wird beobachtet, je vielfältiger und schwieriger die Fragen werden.', 'In dieser Bewertung in {subject} war das Gesamtverständnis gut, aber Fehler durch Übersehen detaillierter Bedingungen traten wiederholt auf.'],
+      'RU': ['По предмету {subject} каркас основных понятий хорошо выстроен, но подтверждаются некоторые факторы потери баллов в точности интерпретации условий.', 'По предмету {subject} решение базовых задач стабильно, но по мере усложнения и разнообразия вопросов наблюдается тенденция к замедлению скорости обработки.', 'В этой оценке по предмету {subject} общее понимание было хорошим, но ошибки, связанные с упущением деталей условий, повторялись.'],
+      'AR': ['في {subject}، إطار المفاهيم الأساسية راسخ بشكل جيد، لكن تم تأكيد بعض عوامل فقدان النقاط في دقة تفسير الشروط.', 'في {subject}، حل المسائل الأساسية مستقر، لكن يُلاحظ ميل نحو بطء سرعة المعالجة كلما أصبحت الأسئلة أكثر تنوعًا وصعوبة.', 'في هذا التقييم في {subject}، كان الفهم العام جيدًا، لكن أخطاء إغفال الشروط التفصيلية ظهرت بشكل متكرر.'],
+      'HI': ['{subject} में, मूल अवधारणाओं का ढांचा अच्छी तरह से स्थापित है, लेकिन शर्त व्याख्या की सटीकता में कुछ अंक-हानि कारक पुष्टि किए गए हैं।', '{subject} में, बुनियादी समस्या-समाधान स्थिर है, लेकिन जैसे-जैसे प्रश्न अधिक विविध और कठिन होते जाते हैं, प्रसंस्करण गति धीमी होने की प्रवृत्ति देखी जाती है।', 'इस {subject} मूल्यांकन में, समग्र समझ अच्छी थी, लेकिन विस्तृत शर्तों को छोड़ने की गलतियां बार-बार सामने आईं।'],
+      'VI': ['Trong {subject}, khung khái niệm cốt lõi được thiết lập tốt, nhưng có một số yếu tố mất điểm được xác nhận trong độ chính xác diễn giải điều kiện.', 'Trong {subject}, giải quyết vấn đề cơ bản ổn định, nhưng có xu hướng tốc độ xử lý chậm hơn khi câu hỏi trở nên đa dạng và khó hơn.', 'Trong đánh giá {subject} này, hiểu biết tổng thể tốt, nhưng lỗi bỏ sót điều kiện chi tiết xuất hiện lặp đi lặp lại.'],
+      'ES': ['En {subject}, el marco de conceptos centrales está bien establecido, pero se confirman algunos factores de pérdida de puntos en la precisión de la interpretación de condiciones.', 'En {subject}, la resolución de problemas básicos es estable, pero se observa una tendencia a una velocidad de procesamiento más lenta a medida que las preguntas se vuelven más variadas y difíciles.', 'En esta evaluación de {subject}, la comprensión general fue buena, pero los errores de omitir condiciones detalladas aparecieron repetidamente.'],
+      'TH': ['ในวิชา{subject} โครงสร้างแนวคิดหลักถูกวางไว้อย่างดี แต่ยืนยันปัจจัยเสียคะแนนบางประการในความแม่นยำของการตีความเงื่อนไข', 'ในวิชา{subject} การแก้โจทย์พื้นฐานมีความมั่นคง แต่พบแนวโน้มความเร็วในการประมวลผลช้าลงเมื่อโจทย์มีความหลากหลายและยากขึ้น', 'ในการประเมิน{subject}นี้ ความเข้าใจโดยรวมดี แต่ข้อผิดพลาดจากการมองข้ามเงื่อนไขรายละเอียดปรากฏซ้ำๆ'],
+    },
+    'seventy': {
+      'KO': ['{subject} 과목의 오답을 살펴보면 대부분 구조적 오인(개념의 뼈대를 잘못 이해해 오답을 도출하는 현상)에서 비롯된 것으로 보입니다.', '{subject} 영역에서는 기본 개념 자체보다, 문제 조건을 정확히 읽어내는 과정에서 실수가 반복되는 경향이 확인됩니다.', '이번 {subject} 평가는 시간 부족으로 인해 후반부 문항에서 집중력이 흐트러진 흔적이 뚜렷하게 나타납니다.'],
+      'EN': ['Looking at the mistakes in {subject}, most appear to stem from structural misconception (a phenomenon where a wrong understanding of the conceptual framework leads to incorrect answers).', 'In {subject}, a tendency toward repeated mistakes is confirmed not so much in the basic concepts themselves, but in the process of accurately reading problem conditions.', 'This {subject} evaluation clearly shows signs of lost concentration in later questions due to time shortage.'],
+      'JA': ['{subject}科目の誤答を見ると、大部分が構造的誤認（概念の骨組みを誤って理解し誤答を導く現象）に起因すると見られます。', '{subject}領域では基本概念自体よりも、問題条件を正確に読み取る過程でミスが繰り返される傾向が確認されます。', '今回の{subject}評価は時間不足により後半の問題で集中力が乱れた痕跡がはっきりと現れています。'],
+      'ZH': ['查看{subject}科目的错题，大多似乎源于结构性误解（对概念骨架理解错误而导出错误答案的现象）。', '在{subject}领域，与其说是基本概念本身，不如说在准确读取题目条件的过程中反复出现失误的倾向得到确认。', '本次{subject}评估因时间不足，在后半部分题目中出现集中力涣散的明显痕迹。'],
+      'FR': ["En examinant les erreurs en {subject}, la plupart semblent provenir d'une méconception structurelle (un phénomène où une mauvaise compréhension du cadre conceptuel conduit à des réponses incorrectes).", "En {subject}, une tendance aux erreurs répétées est confirmée non pas tant dans les concepts de base eux-mêmes, mais dans le processus de lecture précise des conditions des problèmes.", "Cette évaluation en {subject} montre clairement des signes de perte de concentration dans les questions ultérieures en raison d'un manque de temps."],
+      'DE': ['Betrachtet man die Fehler in {subject}, scheinen die meisten aus strukturellen Fehlvorstellungen zu resultieren (ein Phänomen, bei dem ein falsches Verständnis des konzeptionellen Rahmens zu falschen Antworten führt).', 'In {subject} wird eine Tendenz zu wiederholten Fehlern nicht so sehr in den Grundkonzepten selbst bestätigt, sondern im Prozess des genauen Lesens der Aufgabenbedingungen.', 'Diese Bewertung in {subject} zeigt deutliche Anzeichen von nachlassender Konzentration bei späteren Fragen aufgrund von Zeitmangel.'],
+      'RU': ['Если рассмотреть ошибки по предмету {subject}, большинство из них, по-видимому, происходят из структурного заблуждения (явление, когда неверное понимание концептуального каркаса приводит к неправильным ответам).', 'По предмету {subject} подтверждается тенденция к повторяющимся ошибкам не столько в самих базовых понятиях, сколько в процессе точного считывания условий задач.', 'Эта оценка по предмету {subject} ясно показывает признаки утраты концентрации в более поздних вопросах из-за нехватки времени.'],
+      'AR': ['بالنظر إلى الأخطاء في {subject}، يبدو أن معظمها ينبع من سوء فهم هيكلي (ظاهرة يؤدي فيها الفهم الخاطئ للإطار المفاهيمي إلى إجابات غير صحيحة).', 'في {subject}، يتم تأكيد ميل نحو أخطاء متكررة ليس كثيرًا في المفاهيم الأساسية نفسها، بل في عملية القراءة الدقيقة لشروط المسائل.', 'يُظهر هذا التقييم في {subject} بوضوح علامات فقدان التركيز في الأسئلة اللاحقة بسبب نقص الوقت.'],
+      'HI': ['{subject} में गलतियों को देखते हुए, अधिकांश संरचनात्मक गलतफहमी (एक घटना जहां अवधारणात्मक ढांचे की गलत समझ गलत उत्तरों की ओर ले जाती है) से उत्पन्न प्रतीत होती हैं।', '{subject} में, बुनियादी अवधारणाओं की तुलना में, समस्या की शर्तों को सटीक रूप से पढ़ने की प्रक्रिया में बार-बार गलतियों की प्रवृत्ति की पुष्टि होती है।', 'इस {subject} मूल्यांकन में समय की कमी के कारण बाद के प्रश्नों में एकाग्रता खोने के स्पष्ट संकेत दिखते हैं।'],
+      'VI': ['Nhìn vào các lỗi sai trong {subject}, hầu hết dường như bắt nguồn từ hiểu lầm cấu trúc (hiện tượng hiểu sai khung khái niệm dẫn đến câu trả lời sai).', 'Trong {subject}, xu hướng lỗi lặp lại được xác nhận không nhiều ở bản thân khái niệm cơ bản, mà ở quá trình đọc chính xác điều kiện bài toán.', 'Đánh giá {subject} này cho thấy rõ dấu hiệu mất tập trung ở các câu hỏi sau do thiếu thời gian.'],
+      'ES': ['Al observar los errores en {subject}, la mayoría parece provenir de una concepción errónea estructural (un fenómeno en el que una comprensión incorrecta del marco conceptual conduce a respuestas incorrectas).', 'En {subject}, se confirma una tendencia a errores repetidos no tanto en los conceptos básicos en sí, sino en el proceso de leer con precisión las condiciones de los problemas.', 'Esta evaluación de {subject} muestra claramente signos de pérdida de concentración en preguntas posteriores debido a la falta de tiempo.'],
+      'TH': ['เมื่อดูข้อผิดพลาดในวิชา{subject} ส่วนใหญ่ดูเหมือนจะมาจากความเข้าใจผิดเชิงโครงสร้าง (ปรากฏการณ์ที่เข้าใจโครงสร้างแนวคิดผิดจนได้คำตอบผิด)', 'ในวิชา{subject} ยืนยันแนวโน้มข้อผิดพลาดซ้ำๆ ไม่ใช่ที่ตัวแนวคิดพื้นฐานมากนัก แต่อยู่ที่กระบวนการอ่านเงื่อนไขโจทย์อย่างแม่นยำ', 'การประเมิน{subject}นี้แสดงร่องรอยชัดเจนของสมาธิที่ขาดหายไปในโจทย์ช่วงหลังเนื่องจากเวลาไม่พอ'],
+    },
+    'sixty': {
+      'KO': ['{subject} 과목의 오답 패턴은 개념의 기본 뼈대를 오해한 채 진도만 나간 부작용으로 판단됩니다.', '{subject} 영역에서는 인지적 기만(완전히 이해하지 못했음에도 이해했다고 착각하는 상태)이 반복적으로 관찰됩니다.', '이번 {subject} 평가는 기초 개념 확인 단계가 충분히 이루어지지 않은 상태에서 문제풀이로 넘어간 흔적이 뚜렷합니다.'],
+      'EN': ['The error pattern in {subject} is judged to be a side effect of having moved forward in the curriculum while misunderstanding the basic conceptual framework.', 'In {subject}, cognitive deception (a state of mistakenly believing one understands when one has not fully understood) is repeatedly observed.', 'This {subject} evaluation clearly shows signs of having moved on to problem-solving without sufficiently completing the basic concept-checking stage.'],
+      'JA': ['{subject}科目の誤答パターンは、概念の基本骨組みを誤解したまま進度だけ進んだ副作用と判断されます。', '{subject}領域では認知的欺瞞（完全に理解していないのに理解したと錯覚する状態）が繰り返し観察されます。', '今回の{subject}評価は基礎概念確認段階が十分に行われないまま問題解決に移った痕跡がはっきりしています。'],
+      'ZH': ['{subject}科目的错题模式判断为在误解概念基本骨架的情况下只推进了进度所产生的副作用。', '在{subject}领域反复观察到认知欺骗（尚未完全理解却误以为已理解的状态）。', '本次{subject}评估明显可见在基础概念确认阶段未充分完成的情况下就转入解题的痕迹。'],
+      'FR': ["Le schéma d'erreurs en {subject} est jugé être un effet secondaire d'avoir avancé dans le programme tout en mal comprenant le cadre conceptuel de base.", "En {subject}, une tromperie cognitive (un état de croire à tort que l'on comprend alors qu'on n'a pas pleinement compris) est observée à plusieurs reprises.", "Cette évaluation en {subject} montre clairement des signes d'être passé à la résolution de problèmes sans avoir suffisamment complété l'étape de vérification des concepts de base."],
+      'DE': ['Das Fehlermuster in {subject} wird als Nebenwirkung dessen beurteilt, im Lehrplan vorangeschritten zu sein, während das grundlegende konzeptionelle Gerüst missverstanden wurde.', 'In {subject} wird wiederholt kognitive Täuschung beobachtet (ein Zustand, in dem man fälschlicherweise glaubt, verstanden zu haben, obwohl man es nicht vollständig hat).', 'Diese Bewertung in {subject} zeigt deutliche Anzeichen dafür, zur Problemlösung übergegangen zu sein, ohne die Grundkonzeptüberprüfung ausreichend abgeschlossen zu haben.'],
+      'RU': ['Модель ошибок по предмету {subject} расценивается как побочный эффект продвижения по программе при неправильном понимании базового концептуального каркаса.', 'По предмету {subject} неоднократно наблюдается когнитивный обман (состояние, при котором человек ошибочно полагает, что понял, хотя понял не полностью).', 'Эта оценка по предмету {subject} ясно показывает признаки перехода к решению задач без достаточного завершения этапа проверки базовых понятий.'],
+      'AR': ['يُعتبر نمط الأخطاء في {subject} أثرًا جانبيًا للتقدم في المنهج مع سوء فهم الإطار المفاهيمي الأساسي.', 'في {subject}، يُلاحظ الخداع الإدراكي بشكل متكرر (حالة الاعتقاد الخاطئ بالفهم رغم عدم الفهم الكامل).', 'يُظهر هذا التقييم في {subject} بوضوح علامات الانتقال إلى حل المسائل دون إكمال مرحلة التحقق من المفاهيم الأساسية بشكل كافٍ.'],
+      'HI': ['{subject} में त्रुटि पैटर्न को बुनियादी अवधारणात्मक ढांचे को गलत समझते हुए पाठ्यक्रम में आगे बढ़ने का दुष्प्रभाव माना जाता है।', '{subject} में संज्ञानात्मक धोखा (पूरी तरह से न समझते हुए भी समझने का भ्रम होने की स्थिति) बार-बार देखा जाता है।', 'इस {subject} मूल्यांकन में बुनियादी अवधारणा जांच चरण पर्याप्त रूप से पूरा किए बिना समस्या-समाधान की ओर बढ़ने के स्पष्ट संकेत दिखते हैं।'],
+      'VI': ['Mô hình lỗi sai trong {subject} được đánh giá là tác dụng phụ của việc tiến lên trong chương trình học trong khi hiểu sai khung khái niệm cơ bản.', 'Trong {subject}, sự lừa dối nhận thức (trạng thái nhầm tưởng đã hiểu trong khi chưa hiểu đầy đủ) được quan sát lặp đi lặp lại.', 'Đánh giá {subject} này cho thấy rõ dấu hiệu đã chuyển sang giải bài mà chưa hoàn thành đầy đủ giai đoạn kiểm tra khái niệm cơ bản.'],
+      'ES': ['El patrón de errores en {subject} se considera un efecto secundario de haber avanzado en el currículo mientras se malinterpretaba el marco conceptual básico.', 'En {subject}, se observa repetidamente el engaño cognitivo (un estado de creer erróneamente que se entiende cuando no se ha entendido completamente).', 'Esta evaluación de {subject} muestra claramente signos de haber pasado a la resolución de problemas sin completar suficientemente la etapa de verificación de conceptos básicos.'],
+      'TH': ['รูปแบบข้อผิดพลาดในวิชา{subject} ถูกประเมินว่าเป็นผลข้างเคียงจากการเดินหน้าตามหลักสูตรทั้งที่เข้าใจโครงสร้างแนวคิดพื้นฐานผิด', 'ในวิชา{subject} พบการหลอกลวงทางปัญญา (สภาวะที่เข้าใจผิดว่าเข้าใจทั้งที่ยังไม่เข้าใจอย่างสมบูรณ์) ซ้ำๆ', 'การประเมิน{subject}นี้แสดงร่องรอยชัดเจนของการเข้าสู่การแก้โจทย์โดยไม่ผ่านขั้นตอนตรวจสอบแนวคิดพื้นฐานอย่างเพียงพอ'],
+    },
+    'low': {
+      'KO': ['{subject} 과목은 기초 어휘 스키마(지식의 구조적 네트워크)조차 아직 불안정한 상태로 보이며, 근본적인 재학습이 필요합니다.', '{subject} 영역의 오답은 개념 이해 여부와 무관하게 광범위하게 나타나고 있어, 단원 전체를 처음부터 다시 점검하는 것이 바람직합니다.', '이번 {subject} 평가는 문제풀이량보다 기본 원리 이해에 투입된 시간이 부족했던 결과로 판단됩니다.'],
+      'EN': ['In {subject}, even the basic vocabulary schema (the structural network of knowledge) appears to still be unstable, requiring fundamental relearning.', 'Errors in {subject} appear broadly regardless of conceptual understanding, so it is advisable to re-examine the entire unit from the beginning.', 'This {subject} evaluation is judged to be the result of insufficient time invested in understanding basic principles, rather than in the volume of problems solved.'],
+      'JA': ['{subject}科目は基礎語彙スキーマ（知識の構造的ネットワーク）さえまだ不安定な状態と見られ、根本的な再学習が必要です。', '{subject}領域の誤答は概念理解の有無に関係なく広範囲に現れており、単元全体を最初から再点検することが望ましいです。', '今回の{subject}評価は問題演習量よりも基本原理理解に投入した時間が不足していた結果と判断されます。'],
+      'ZH': ['{subject}科目似乎连基础词汇图式（知识的结构性网络）都尚不稳定，需要从根本上重新学习。', '{subject}领域的错题无论是否理解概念都广泛出现，建议从头重新检视整个单元。', '本次{subject}评估判断为投入基本原理理解的时间不足，而非解题量不够所致。'],
+      'FR': ["En {subject}, même le schéma de vocabulaire de base (le réseau structurel des connaissances) semble encore instable, nécessitant un réapprentissage fondamental.", "Les erreurs en {subject} apparaissent largement, indépendamment de la compréhension conceptuelle, il est donc conseillé de réexaminer toute l'unité depuis le début.", "Cette évaluation en {subject} est jugée être le résultat d'un temps insuffisant investi dans la compréhension des principes de base, plutôt que dans le volume de problèmes résolus."],
+      'DE': ['In {subject} scheint sogar das grundlegende Vokabelschema (das strukturelle Netzwerk des Wissens) noch instabil zu sein, was ein grundlegendes Neulernen erfordert.', 'Fehler in {subject} treten unabhängig vom konzeptionellen Verständnis breit auf, daher ist es ratsam, die gesamte Einheit von Anfang an erneut zu prüfen.', 'Diese Bewertung in {subject} wird als Ergebnis unzureichend investierter Zeit in das Verständnis der Grundprinzipien beurteilt, statt in das Volumen gelöster Aufgaben.'],
+      'RU': ['По предмету {subject} даже базовая словарная схема (структурная сеть знаний), похоже, всё ещё нестабильна, что требует фундаментального переобучения.', 'Ошибки по предмету {subject} проявляются широко, независимо от концептуального понимания, поэтому рекомендуется пересмотреть весь раздел с самого начала.', 'Эта оценка по предмету {subject} расценивается как результат недостаточного времени, вложенного в понимание базовых принципов, а не в объём решённых задач.'],
+      'AR': ['في {subject}، حتى المخطط المفرداتي الأساسي (الشبكة الهيكلية للمعرفة) لا يزال يبدو غير مستقر، مما يتطلب إعادة تعلم جذرية.', 'تظهر الأخطاء في {subject} على نطاق واسع بغض النظر عن الفهم المفاهيمي، لذا يُنصح بإعادة فحص الوحدة بأكملها من البداية.', 'يُعتبر هذا التقييم في {subject} نتيجة لعدم كفاية الوقت المستثمر في فهم المبادئ الأساسية، بدلاً من حجم المسائل المحلولة.'],
+      'HI': ['{subject} में, बुनियादी शब्दावली स्कीमा (ज्ञान का संरचनात्मक नेटवर्क) भी अभी अस्थिर प्रतीत होता है, जिसके लिए मौलिक पुनः शिक्षण आवश्यक है।', '{subject} में गलतियां अवधारणा समझ की परवाह किए बिना व्यापक रूप से दिखाई देती हैं, इसलिए पूरी इकाई की शुरुआत से पुनः जांच करना उचित है।', 'इस {subject} मूल्यांकन को समस्या-समाधान की मात्रा के बजाय बुनियादी सिद्धांतों को समझने में लगाए गए अपर्याप्त समय का परिणाम माना जाता है।'],
+      'VI': ['Trong {subject}, ngay cả sơ đồ từ vựng cơ bản (mạng lưới cấu trúc kiến thức) dường như vẫn chưa ổn định, cần học lại từ căn bản.', 'Lỗi sai trong {subject} xuất hiện rộng rãi bất kể có hiểu khái niệm hay không, vì vậy nên xem xét lại toàn bộ chương từ đầu.', 'Đánh giá {subject} này được đánh giá là kết quả của việc đầu tư không đủ thời gian vào hiểu nguyên lý cơ bản, hơn là khối lượng bài giải.'],
+      'ES': ['En {subject}, incluso el esquema de vocabulario básico (la red estructural del conocimiento) todavía parece inestable, lo que requiere un reaprendizaje fundamental.', 'Los errores en {subject} aparecen ampliamente independientemente de la comprensión conceptual, por lo que es recomendable reexaminar toda la unidad desde el principio.', 'Esta evaluación de {subject} se considera resultado de un tiempo insuficiente invertido en comprender los principios básicos, más que en el volumen de problemas resueltos.'],
+      'TH': ['ในวิชา{subject} แม้แต่โครงสร้างคำศัพท์พื้นฐาน (เครือข่ายเชิงโครงสร้างของความรู้) ก็ยังดูไม่มั่นคง จำเป็นต้องเรียนรู้ใหม่ตั้งแต่รากฐาน', 'ข้อผิดพลาดในวิชา{subject} ปรากฏอย่างกว้างขวางไม่ว่าจะเข้าใจแนวคิดหรือไม่ก็ตาม จึงควรทบทวนทั้งหน่วยใหม่ตั้งแต่ต้น', 'การประเมิน{subject}นี้ถูกประเมินว่าเป็นผลจากเวลาที่ลงทุนในการเข้าใจหลักการพื้นฐานไม่เพียงพอ มากกว่าปริมาณการฝึกโจทย์'],
+    },
   };
 
-  static const Map<String, List<String>> _advices = {
-    'good': [
-      '다만 이 위치에서 방심하면 성적이 다시 흔들릴 수 있으므로, 오답노트(틀린 문제의 원인을 기록하고 분석하는 학습 도구)를 꾸준히 활용해 취약한 부분을 세밀하게 보완해 나가는 습관을 유지하는 것이 중요합니다.',
-      '고난도 변형 문제를 주기적으로 접하면서 사고의 깊이를 확장하는 훈련을 병행한다면 안정적인 상위권 유지에 큰 도움이 될 것입니다.',
-      '지금의 학습 루틴을 그대로 유지하되, 오답을 3회 이상 반복해서 재점검하는 습관을 더한다면 흔들림 없는 실력으로 굳어질 것입니다.',
-    ],
-    'mid': [
-      '취약 단원의 고난도 변형 문제를 집중적으로 공략하고, 실전 시간 안배의 정밀도를 한 단계 더 끌어올리는 훈련이 필요합니다.',
-      '조건 해석 과정에서 놓치는 부분을 줄이기 위해, 문제를 풀기 전 조건을 소리 내어 정리하는 습관을 들이는 것을 권장합니다.',
-      '오답 정리를 단순 확인에서 그치지 말고, 왜 그렇게 접근했는지 원인을 기록하는 방식으로 심화하는 것이 도움이 될 것입니다.',
-    ],
-    'seventy': [
-      '기본 원리 분석부터 차근차근 다시 정립하여 취약점을 지워내는 과정이 필요하며, 이 구간은 올바른 노력이 투입되면 가장 크게 성적이 오를 수 있는 구간이기도 합니다.',
-      '오늘부터 취약 단원의 기본서를 차분하게 다시 훑으며, 문제풀이보다 개념 확인에 우선순위를 두는 것을 권장합니다.',
-      '실전 시간 안에서 조건을 놓치지 않는 훈련을 위해, 제한 시간을 두고 유사 문항을 반복해서 풀어보는 연습이 도움이 될 것입니다.',
-    ],
-    'sixty': [
-      '틀린 문항을 단순히 확인하는 것에 그치지 말고 원리를 파고드는 깊이 있는 복습 루틴을 오늘부터 즉시 가속화하는 것이 필요합니다.',
-      '느슨해진 오답 정비 체계를 철저히 다시 세우고, 핵심 원리 중심의 복습 인프라를 전면적으로 재구축하는 것을 권장합니다.',
-      '진도를 서두르기보다, 지금 단계에서 놓친 개념을 완전히 소화하는 데 시간을 투자하는 것이 장기적으로 더 빠른 길입니다.',
-    ],
-    'low': [
-      '조급한 마음을 완전히 내려놓고, 단원별 교과서의 핵심 원리 분석과 기본 개념 빌딩에 즉각 착수하는 것이 가장 필요한 시점입니다.',
-      '문제풀이량을 늘리기보다, 지금 당장 멈추어 서서 취약 단원의 개념을 완벽히 소화하는 인내의 시간이 절대적으로 요구됩니다.',
-      '기초부터 차근차근 벽돌을 쌓아 올리듯 학습 속도와 밀도를 점진적으로 끌어올리는 방식으로 접근하는 것을 권장합니다.',
-    ],
+  static const Map<String, Map<String, List<String>>> _advices = {
+    'good': {
+      'KO': ['다만 이 위치에서 방심하면 성적이 다시 흔들릴 수 있으므로, 오답노트(틀린 문제의 원인을 기록하고 분석하는 학습 도구)를 꾸준히 활용해 취약한 부분을 세밀하게 보완해 나가는 습관을 유지하는 것이 중요합니다.', '고난도 변형 문제를 주기적으로 접하면서 사고의 깊이를 확장하는 훈련을 병행한다면 안정적인 상위권 유지에 큰 도움이 될 것입니다.', '지금의 학습 루틴을 그대로 유지하되, 오답을 3회 이상 반복해서 재점검하는 습관을 더한다면 흔들림 없는 실력으로 굳어질 것입니다.'],
+      'EN': ['However, letting one\'s guard down at this position could cause scores to fluctuate again, so it is important to keep consistently using an error journal (a learning tool for recording and analyzing the causes of wrong answers) to carefully address weak areas.', 'Combining regular exposure to advanced variation problems with training that expands the depth of thinking would greatly help maintain a stable top-tier position.', 'Maintaining the current study routine as is, while adding the habit of reviewing mistakes three or more times, will solidify unwavering skill.'],
+      'JA': ['ただし、この位置で油断すると成績が再び揺らぐ可能性があるため、誤答ノート（間違えた問題の原因を記録し分析する学習ツール）を継続的に活用して弱点を綿密に補っていく習慣を維持することが重要です。', '高難度の変形問題に定期的に触れながら思考の深さを広げる訓練を並行すれば、安定した上位圏維持に大きく役立つでしょう。', '今の学習ルーティンをそのまま維持しつつ、誤答を3回以上繰り返し再点検する習慣を加えれば、揺るぎない実力として定着するでしょう。'],
+      'ZH': ['不过若在此位置放松警惕，成绩可能再次波动，因此持续利用错题本（记录并分析错题原因的学习工具）细致补强薄弱环节的习惯至关重要。', '若能定期接触高难度变形题并同步进行拓展思维深度的训练，将对稳固保持上位圈大有帮助。', '在维持现有学习节奏的同时，若加上对错题反复复查三次以上的习惯，将凝固为稳固的实力。'],
+      'FR': ["Cependant, baisser sa garde à ce niveau pourrait faire à nouveau fluctuer les résultats, il est donc important de continuer à utiliser un journal des erreurs (un outil d'apprentissage pour enregistrer et analyser les causes des mauvaises réponses) pour combler soigneusement les points faibles.", "Combiner une exposition régulière à des problèmes de variation avancés avec un entraînement qui approfondit la pensée aiderait grandement à maintenir une position stable de premier rang.", "Maintenir la routine d'étude actuelle telle quelle, tout en ajoutant l'habitude de revoir les erreurs trois fois ou plus, solidifiera une compétence inébranlable."],
+      'DE': ['Nachlässigkeit an dieser Stelle könnte jedoch dazu führen, dass die Noten wieder schwanken, daher ist es wichtig, weiterhin konsequent ein Fehlerprotokoll (ein Lernwerkzeug zum Aufzeichnen und Analysieren der Ursachen falscher Antworten) zu nutzen, um Schwachstellen sorgfältig zu beheben.', 'Die Kombination aus regelmäßigem Kontakt mit anspruchsvollen Variationsaufgaben und Training, das die Denktiefe erweitert, würde erheblich dazu beitragen, eine stabile Spitzenposition zu halten.', 'Die Beibehaltung der aktuellen Lernroutine, ergänzt um die Gewohnheit, Fehler drei- oder mehrmals zu überprüfen, wird unerschütterliche Fähigkeiten festigen.'],
+      'RU': ['Однако потеря бдительности на этой позиции может снова вызвать колебания баллов, поэтому важно продолжать последовательно использовать журнал ошибок (учебный инструмент для записи и анализа причин неправильных ответов), чтобы тщательно устранять слабые места.', 'Сочетание регулярного знакомства со сложными вариативными задачами с тренировкой, углубляющей мышление, значительно поможет удержать стабильную верхнюю позицию.', 'Сохранение текущего учебного распорядка с добавлением привычки пересматривать ошибки три и более раза закрепит непоколебимые навыки.'],
+      'AR': ['ومع ذلك، فإن التراخي في هذا الموقع قد يتسبب في تذبذب الدرجات مرة أخرى، لذا من المهم الاستمرار في استخدام دفتر الأخطاء (أداة تعليمية لتسجيل وتحليل أسباب الإجابات الخاطئة) بثبات لمعالجة نقاط الضعف بعناية.', 'الجمع بين التعرض المنتظم لمسائل التنويع المتقدمة والتدريب الذي يوسع عمق التفكير سيساعد كثيرًا في الحفاظ على مركز مستقر في الفئة العليا.', 'الحفاظ على روتين الدراسة الحالي كما هو، مع إضافة عادة مراجعة الأخطاء ثلاث مرات أو أكثر، سيرسخ مهارة ثابتة.'],
+      'HI': ['हालांकि, इस स्थिति में लापरवाही बरतने से स्कोर फिर से डगमगा सकता है, इसलिए कमजोर क्षेत्रों को सावधानीपूर्वक ठीक करने के लिए त्रुटि डायरी (गलत उत्तरों के कारणों को दर्ज करने और विश्लेषण करने का एक शिक्षण उपकरण) का लगातार उपयोग जारी रखना महत्वपूर्ण है।', 'उच्च-कठिनाई भिन्नता प्रश्नों के नियमित संपर्क को सोच की गहराई बढ़ाने वाले प्रशिक्षण के साथ जोड़ना स्थिर शीर्ष स्थिति बनाए रखने में बहुत मदद करेगा।', 'वर्तमान अध्ययन दिनचर्या को यथावत बनाए रखते हुए, गलतियों की तीन या अधिक बार समीक्षा करने की आदत जोड़ने से अटूट कौशल मजबूत होगा।'],
+      'VI': ['Tuy nhiên, việc mất cảnh giác ở vị trí này có thể khiến điểm số dao động trở lại, vì vậy điều quan trọng là tiếp tục sử dụng nhật ký lỗi sai (công cụ học tập để ghi lại và phân tích nguyên nhân câu trả lời sai) một cách nhất quán để giải quyết cẩn thận các điểm yếu.', 'Kết hợp việc tiếp xúc thường xuyên với các bài toán biến thể nâng cao cùng với luyện tập mở rộng chiều sâu tư duy sẽ giúp ích rất nhiều trong việc duy trì vị trí hàng đầu ổn định.', 'Duy trì thói quen học tập hiện tại nguyên vẹn, đồng thời thêm thói quen xem lại lỗi sai ba lần trở lên, sẽ củng cố năng lực vững chắc.'],
+      'ES': ['Sin embargo, bajar la guardia en esta posición podría hacer que las notas fluctúen de nuevo, por lo que es importante seguir usando de manera constante un diario de errores (una herramienta de aprendizaje para registrar y analizar las causas de las respuestas incorrectas) para abordar cuidadosamente las áreas débiles.', 'Combinar la exposición regular a problemas de variación avanzados con un entrenamiento que amplíe la profundidad del pensamiento ayudaría enormemente a mantener una posición estable de primer nivel.', 'Mantener la rutina de estudio actual tal cual, mientras se añade el hábito de revisar los errores tres o más veces, consolidará una habilidad inquebrantable.'],
+      'TH': ['อย่างไรก็ตาม การประมาทในตำแหน่งนี้อาจทำให้คะแนนสั่นคลอนอีกครั้ง จึงสำคัญที่จะใช้สมุดบันทึกข้อผิดพลาด (เครื่องมือการเรียนรู้สำหรับบันทึกและวิเคราะห์สาเหตุของคำตอบที่ผิด) อย่างสม่ำเสมอเพื่อแก้ไขจุดอ่อนอย่างละเอียด', 'การผสมผสานการเผชิญโจทย์ประยุกต์ระดับสูงเป็นประจำกับการฝึกที่ขยายความลึกของความคิดจะช่วยรักษาตำแหน่งระดับสูงที่มั่นคงได้มาก', 'การรักษากิจวัตรการเรียนปัจจุบันไว้ พร้อมเพิ่มนิสัยทบทวนข้อผิดพลาดซ้ำสามครั้งขึ้นไป จะทำให้ความสามารถมั่นคงไม่สั่นคลอน'],
+    },
+    'mid': {
+      'KO': ['취약 단원의 고난도 변형 문제를 집중적으로 공략하고, 실전 시간 안배의 정밀도를 한 단계 더 끌어올리는 훈련이 필요합니다.', '조건 해석 과정에서 놓치는 부분을 줄이기 위해, 문제를 풀기 전 조건을 소리 내어 정리하는 습관을 들이는 것을 권장합니다.', '오답 정리를 단순 확인에서 그치지 말고, 왜 그렇게 접근했는지 원인을 기록하는 방식으로 심화하는 것이 도움이 될 것입니다.'],
+      'EN': ['Focused practice on advanced variation problems in weak units, along with training that raises the precision of practical time management by another level, is needed.', 'To reduce the parts missed during condition interpretation, it is recommended to build the habit of reading conditions aloud and organizing them before solving problems.', 'Rather than stopping at simply checking wrong answers, it would help to deepen error review by recording the reason for the approach taken.'],
+      'JA': ['弱点単元の高難度変形問題を集中的に攻略し、実戦での時間配分の精密度をもう一段階引き上げる訓練が必要です。', '条件解釈の過程で見落とす部分を減らすため、問題を解く前に条件を声に出して整理する習慣をつけることをお勧めします。', '誤答整理を単純な確認にとどめず、なぜそのようにアプローチしたのか原因を記録する方式で深めることが役立つでしょう。'],
+      'ZH': ['需要集中攻克薄弱单元的高难度变形题，并将实战时间分配的精确度再提升一个层次。', '为减少条件解读过程中遗漏的部分，建议养成解题前将条件出声整理的习惯。', '错题整理不应止于单纯确认，将为何如此作答的原因记录下来加以深化会有所帮助。'],
+      'FR': ["Une pratique concentrée sur les problèmes de variation avancés dans les unités faibles, ainsi qu'un entraînement qui augmente la précision de la gestion pratique du temps d'un niveau supplémentaire, est nécessaire.", "Pour réduire les parties manquées lors de l'interprétation des conditions, il est recommandé de développer l'habitude de lire les conditions à voix haute et de les organiser avant de résoudre les problèmes.", "Plutôt que de s'arrêter à simplement vérifier les mauvaises réponses, il serait utile d'approfondir la révision des erreurs en enregistrant la raison de l'approche adoptée."],
+      'DE': ['Konzentriertes Üben anspruchsvoller Variationsaufgaben in schwachen Einheiten sowie Training, das die Präzision des praktischen Zeitmanagements um eine weitere Stufe erhöht, ist erforderlich.', 'Um übersehene Teile bei der Bedingungsinterpretation zu reduzieren, wird empfohlen, die Gewohnheit zu entwickeln, Bedingungen vor dem Lösen von Aufgaben laut vorzulesen und zu ordnen.', 'Anstatt nur bei der einfachen Überprüfung falscher Antworten stehen zu bleiben, würde es helfen, die Fehleraufarbeitung zu vertiefen, indem man den Grund für den gewählten Ansatz aufzeichnet.'],
+      'RU': ['Необходима сосредоточенная практика над сложными вариативными задачами в слабых разделах, а также тренировка, повышающая точность практического распределения времени ещё на одну ступень.', 'Чтобы сократить упущения в процессе интерпретации условий, рекомендуется выработать привычку проговаривать и упорядочивать условия вслух перед решением задач.', 'Вместо того чтобы останавливаться на простой проверке неправильных ответов, было бы полезно углубить разбор ошибок, записывая причину выбранного подхода.'],
+      'AR': ['ثمة حاجة إلى ممارسة مركزة على مسائل التنويع المتقدمة في الوحدات الضعيفة، إلى جانب تدريب يرفع دقة إدارة الوقت العملي درجة أخرى.', 'لتقليل الأجزاء المفقودة أثناء تفسير الشروط، يُنصح ببناء عادة قراءة الشروط بصوت عالٍ وتنظيمها قبل حل المسائل.', 'بدلاً من التوقف عند مجرد التحقق من الإجابات الخاطئة، سيساعد تعميق مراجعة الأخطاء عن طريق تسجيل سبب النهج المتبع.'],
+      'HI': ['कमजोर इकाइयों में उच्च-कठिनाई भिन्नता प्रश्नों पर केंद्रित अभ्यास, साथ ही व्यावहारिक समय प्रबंधन की सटीकता को एक स्तर और बढ़ाने वाला प्रशिक्षण आवश्यक है।', 'शर्त व्याख्या के दौरान छूटे हिस्सों को कम करने के लिए, समस्या हल करने से पहले शर्तों को जोर से पढ़कर व्यवस्थित करने की आदत बनाने की सलाह दी जाती है।', 'गलत उत्तरों की केवल जांच पर रुकने के बजाय, अपनाए गए दृष्टिकोण का कारण दर्ज करके त्रुटि समीक्षा को गहरा करना सहायक होगा।'],
+      'VI': ['Cần luyện tập tập trung vào các bài toán biến thể nâng cao ở các chương yếu, cùng với luyện tập nâng cao độ chính xác của quản lý thời gian thực tế lên một cấp độ nữa.', 'Để giảm các phần bị bỏ sót trong quá trình diễn giải điều kiện, nên xây dựng thói quen đọc to điều kiện và sắp xếp trước khi giải bài.', 'Thay vì chỉ dừng lại ở việc kiểm tra đơn giản các câu trả lời sai, việc ghi lại lý do của cách tiếp cận đã chọn để làm sâu sắc thêm việc xem lại lỗi sẽ hữu ích.'],
+      'ES': ['Se necesita práctica enfocada en problemas de variación avanzados en unidades débiles, junto con entrenamiento que eleve la precisión de la gestión práctica del tiempo un nivel más.', 'Para reducir las partes pasadas por alto durante la interpretación de condiciones, se recomienda desarrollar el hábito de leer las condiciones en voz alta y organizarlas antes de resolver problemas.', 'En lugar de detenerse en simplemente verificar las respuestas incorrectas, ayudaría profundizar la revisión de errores registrando la razón del enfoque adoptado.'],
+      'TH': ['จำเป็นต้องฝึกฝนอย่างเข้มข้นในโจทย์ประยุกต์ระดับสูงของหน่วยที่อ่อน พร้อมทั้งฝึกยกระดับความแม่นยำในการจัดสรรเวลาจริงอีกขั้น', 'เพื่อลดส่วนที่พลาดในการตีความเงื่อนไข แนะนำให้สร้างนิสัยอ่านเงื่อนไขออกเสียงและจัดระเบียบก่อนแก้โจทย์', 'แทนที่จะหยุดเพียงแค่ตรวจสอบคำตอบที่ผิด การบันทึกเหตุผลของแนวทางที่ใช้เพื่อทบทวนข้อผิดพลาดให้ลึกซึ้งขึ้นจะเป็นประโยชน์'],
+    },
+    'seventy': {
+      'KO': ['기본 원리 분석부터 차근차근 다시 정립하여 취약점을 지워내는 과정이 필요하며, 이 구간은 올바른 노력이 투입되면 가장 크게 성적이 오를 수 있는 구간이기도 합니다.', '오늘부터 취약 단원의 기본서를 차분하게 다시 훑으며, 문제풀이보다 개념 확인에 우선순위를 두는 것을 권장합니다.', '실전 시간 안에서 조건을 놓치지 않는 훈련을 위해, 제한 시간을 두고 유사 문항을 반복해서 풀어보는 연습이 도움이 될 것입니다.'],
+      'EN': ['A process of methodically re-establishing basic principles from the ground up to erase weak points is needed, and this range is also where the greatest score improvement can occur if the right effort is invested.', 'It is recommended to calmly go back through the basic textbook of weak units starting today, prioritizing concept-checking over problem-solving.', 'To train not to miss conditions within actual test time, practicing similar questions repeatedly under a time limit would help.'],
+      'JA': ['基本原理の分析から着実に再確立して弱点を消していく過程が必要であり、この区間は正しい努力が投入されれば最も成績が上がりうる区間でもあります。', '今日から弱点単元の基本書を落ち着いて再確認し、問題演習より概念確認を優先することをお勧めします。', '実戦の時間内で条件を見落とさない訓練のため、制限時間を設けて類似問題を繰り返し解く練習が役立つでしょう。'],
+      'ZH': ['需要从基本原理分析开始逐步重新建立、消除薄弱点的过程，此区间也是若投入正确努力最能大幅提升成绩的区间。', '建议从今天起冷静地重新梳理薄弱单元的基础教材，将概念确认置于解题之前的优先级。', '为训练在实战时间内不遗漏条件，建议设定限时反复练习类似题目。'],
+      'FR': ["Un processus de rétablissement méthodique des principes de base depuis la base pour effacer les points faibles est nécessaire, et cette plage est aussi celle où la plus grande amélioration des résultats peut se produire si les bons efforts sont investis.", "Il est recommandé de repasser calmement le manuel de base des unités faibles à partir d'aujourd'hui, en priorisant la vérification des concepts plutôt que la résolution de problèmes.", "Pour s'entraîner à ne pas manquer de conditions dans le temps réel de l'examen, pratiquer des questions similaires de manière répétée dans un temps limité aiderait."],
+      'DE': ['Ein Prozess der methodischen Neuetablierung grundlegender Prinzipien von Grund auf, um Schwachstellen zu beseitigen, ist erforderlich, und dieser Bereich ist auch der, in dem bei richtigem Einsatz die größte Notenverbesserung erzielt werden kann.', 'Es wird empfohlen, ab heute ruhig das Grundlagenlehrbuch der schwachen Einheiten erneut durchzugehen und der Konzeptüberprüfung Vorrang vor der Problemlösung zu geben.', 'Um zu trainieren, Bedingungen innerhalb der tatsächlichen Prüfungszeit nicht zu übersehen, würde das wiederholte Üben ähnlicher Fragen unter Zeitlimit helfen.'],
+      'RU': ['Необходим процесс методичного восстановления базовых принципов с нуля для устранения слабых мест, и этот диапазон также является тем, где может произойти наибольший рост баллов при правильно вложенных усилиях.', 'Рекомендуется начиная с сегодняшнего дня спокойно заново пройти базовый учебник слабых разделов, отдавая приоритет проверке понятий, а не решению задач.', 'Для тренировки не упускать условия в рамках реального времени экзамена помогла бы практика решения похожих вопросов повторно с ограничением по времени.'],
+      'AR': ['هناك حاجة إلى عملية إعادة ترسيخ منهجية للمبادئ الأساسية من الصفر لمحو نقاط الضعف، وهذا النطاق هو أيضًا حيث يمكن أن يحدث أكبر تحسن في الدرجات إذا تم استثمار الجهد الصحيح.', 'يُنصح بمراجعة الكتاب الأساسي للوحدات الضعيفة بهدوء بدءًا من اليوم، مع إعطاء الأولوية للتحقق من المفاهيم على حل المسائل.', 'للتدريب على عدم إغفال الشروط ضمن وقت الاختبار الفعلي، ستساعد ممارسة أسئلة مماثلة بشكل متكرر ضمن وقت محدود.'],
+      'HI': ['बुनियादी सिद्धांतों के विश्लेषण से व्यवस्थित रूप से फिर से स्थापित करके कमजोरियों को मिटाने की प्रक्रिया आवश्यक है, और यह सीमा वह भी है जहां सही प्रयास निवेशित होने पर सबसे बड़ा स्कोर सुधार हो सकता है।', 'आज से कमजोर इकाइयों की बुनियादी पुस्तक को शांति से फिर से देखने और समस्या-समाधान की तुलना में अवधारणा जांच को प्राथमिकता देने की सलाह दी जाती है।', 'वास्तविक परीक्षा समय के भीतर शर्तों को न चूकने का प्रशिक्षण देने के लिए, समय सीमा के साथ समान प्रश्नों को बार-बार हल करने का अभ्यास सहायक होगा।'],
+      'VI': ['Cần một quá trình tái thiết lập có phương pháp các nguyên lý cơ bản từ đầu để xóa bỏ điểm yếu, và phạm vi này cũng là nơi có thể cải thiện điểm số lớn nhất nếu đầu tư nỗ lực đúng đắn.', 'Khuyến nghị bắt đầu từ hôm nay bình tĩnh xem lại sách giáo khoa cơ bản của các chương yếu, ưu tiên kiểm tra khái niệm hơn là giải bài.', 'Để luyện tập không bỏ sót điều kiện trong thời gian thi thực tế, luyện tập các câu hỏi tương tự lặp đi lặp lại với giới hạn thời gian sẽ hữu ích.'],
+      'ES': ['Se necesita un proceso de restablecimiento metódico de los principios básicos desde cero para eliminar los puntos débiles, y este rango también es donde puede ocurrir la mayor mejora de puntuación si se invierte el esfuerzo correcto.', 'Se recomienda repasar con calma el libro básico de las unidades débiles a partir de hoy, priorizando la verificación de conceptos sobre la resolución de problemas.', 'Para entrenar a no pasar por alto condiciones dentro del tiempo real del examen, practicar preguntas similares repetidamente bajo un límite de tiempo ayudaría.'],
+      'TH': ['จำเป็นต้องมีกระบวนการวางรากฐานหลักการพื้นฐานใหม่อย่างเป็นระบบเพื่อลบล้างจุดอ่อน และช่วงนี้ก็เป็นช่วงที่สามารถพัฒนาคะแนนได้มากที่สุดหากลงทุนความพยายามอย่างถูกต้อง', 'แนะนำให้เริ่มตั้งแต่วันนี้ทบทวนตำราพื้นฐานของหน่วยที่อ่อนอย่างใจเย็น โดยให้ความสำคัญกับการตรวจสอบแนวคิดมากกว่าการแก้โจทย์', 'เพื่อฝึกไม่ให้พลาดเงื่อนไขภายในเวลาสอบจริง การฝึกแก้โจทย์คล้ายกันซ้ำๆ ภายใต้เวลาจำกัดจะเป็นประโยชน์'],
+    },
+    'sixty': {
+      'KO': ['틀린 문항을 단순히 확인하는 것에 그치지 말고 원리를 파고드는 깊이 있는 복습 루틴을 오늘부터 즉시 가속화하는 것이 필요합니다.', '느슨해진 오답 정비 체계를 철저히 다시 세우고, 핵심 원리 중심의 복습 인프라를 전면적으로 재구축하는 것을 권장합니다.', '진도를 서두르기보다, 지금 단계에서 놓친 개념을 완전히 소화하는 데 시간을 투자하는 것이 장기적으로 더 빠른 길입니다.'],
+      'EN': ['It is necessary to immediately accelerate, starting today, a deep review routine that digs into principles rather than simply checking wrong answers.', 'It is recommended to thoroughly re-establish the loosened error-correction system and completely rebuild the review infrastructure centered on core principles.', 'Rather than rushing through the curriculum, investing time to fully digest concepts missed at this stage is the faster path in the long run.'],
+      'JA': ['間違えた問題を単に確認するだけにとどめず、原理を掘り下げる深い復習ルーティンを今日から即座に加速させることが必要です。', '緩んだ誤答整備体系を徹底的に立て直し、核心原理中心の復習インフラを全面的に再構築することをお勧めします。', '進度を急ぐよりも、今の段階で見逃した概念を完全に消化することに時間を投資することが長期的にはより早い道です。'],
+      'ZH': ['不应止步于单纯确认错题，而需要从今天起立即加速深入探究原理的复习常规。', '建议彻底重建松懈的错题整备体系，全面重构以核心原理为中心的复习基础设施。', '与其急于赶进度，不如在此阶段投入时间完全消化遗漏的概念，从长远来看这才是更快的路径。'],
+      'FR': ["Il est nécessaire d'accélérer immédiatement, à partir d'aujourd'hui, une routine de révision approfondie qui creuse les principes plutôt que de simplement vérifier les mauvaises réponses.", "Il est recommandé de rétablir en profondeur le système de correction des erreurs relâché et de reconstruire complètement l'infrastructure de révision centrée sur les principes fondamentaux.", "Plutôt que de se précipiter dans le programme, investir du temps pour digérer complètement les concepts manqués à ce stade est le chemin le plus rapide à long terme."],
+      'DE': ['Es ist notwendig, ab heute sofort eine tiefgehende Wiederholungsroutine zu beschleunigen, die Prinzipien ergründet, statt nur falsche Antworten zu prüfen.', 'Es wird empfohlen, das gelockerte Fehlerkorrektursystem gründlich neu aufzubauen und die auf Kernprinzipien zentrierte Wiederholungsinfrastruktur vollständig neu zu errichten.', 'Anstatt durch den Lehrplan zu eilen, ist es langfristig der schnellere Weg, Zeit zu investieren, um in dieser Phase verpasste Konzepte vollständig zu verdauen.'],
+      'RU': ['Необходимо немедленно, начиная с сегодняшнего дня, ускорить глубокую практику повторения, вникающую в принципы, а не просто проверяющую неправильные ответы.', 'Рекомендуется тщательно восстановить ослабленную систему исправления ошибок и полностью перестроить инфраструктуру повторения, ориентированную на ключевые принципы.', 'Вместо того чтобы спешить по программе, вложение времени в полное усвоение упущенных на этом этапе понятий — более быстрый путь в долгосрочной перспективе.'],
+      'AR': ['من الضروري التسريع فورًا، بدءًا من اليوم، لروتين مراجعة عميق يتعمق في المبادئ بدلاً من مجرد التحقق من الإجابات الخاطئة.', 'يُنصح بإعادة بناء نظام تصحيح الأخطاء المتراخي بدقة، وإعادة بناء بنية المراجعة المتمحورة حول المبادئ الأساسية بالكامل.', 'بدلاً من التسرع في المنهج، فإن استثمار الوقت لاستيعاب المفاهيم الفائتة في هذه المرحلة بالكامل هو الطريق الأسرع على المدى الطويل.'],
+      'HI': ['गलत प्रश्नों की केवल जांच करने के बजाय, सिद्धांतों में गहराई से जाने वाली गहन समीक्षा दिनचर्या को आज से तुरंत तेज करना आवश्यक है।', 'ढीली हो चुकी त्रुटि सुधार प्रणाली को पूरी तरह से फिर से स्थापित करने और मूल सिद्धांत-केंद्रित समीक्षा अवसंरचना को पूरी तरह से पुनर्निर्मित करने की सलाह दी जाती है।', 'पाठ्यक्रम में जल्दबाजी करने के बजाय, इस चरण में छूटी अवधारणाओं को पूरी तरह से आत्मसात करने में समय निवेश करना दीर्घकाल में तेज़ मार्ग है।'],
+      'VI': ['Cần đẩy nhanh ngay lập tức, bắt đầu từ hôm nay, một thói quen ôn tập sâu đào sâu vào nguyên lý thay vì chỉ đơn giản kiểm tra câu trả lời sai.', 'Khuyến nghị tái thiết lập triệt để hệ thống sửa lỗi đã lỏng lẻo và xây dựng lại hoàn toàn cơ sở hạ tầng ôn tập tập trung vào nguyên lý cốt lõi.', 'Thay vì vội vàng theo chương trình, đầu tư thời gian để tiêu hóa hoàn toàn các khái niệm bị bỏ lỡ ở giai đoạn này là con đường nhanh hơn về lâu dài.'],
+      'ES': ['Es necesario acelerar de inmediato, a partir de hoy, una rutina de repaso profundo que profundice en los principios en lugar de simplemente verificar las respuestas incorrectas.', 'Se recomienda restablecer a fondo el sistema de corrección de errores que se ha relajado y reconstruir por completo la infraestructura de repaso centrada en principios fundamentales.', 'En lugar de apresurarse en el currículo, invertir tiempo en digerir completamente los conceptos perdidos en esta etapa es el camino más rápido a largo plazo.'],
+      'TH': ['จำเป็นต้องเร่งกิจวัตรการทบทวนเชิงลึกที่เจาะลึกหลักการแทนที่จะเพียงตรวจสอบคำตอบที่ผิด โดยเริ่มทันทีตั้งแต่วันนี้', 'แนะนำให้สร้างระบบแก้ไขข้อผิดพลาดที่หย่อนยานขึ้นมาใหม่อย่างละเอียด และปรับโครงสร้างพื้นฐานการทบทวนที่เน้นหลักการสำคัญทั้งหมด', 'แทนที่จะเร่งความคืบหน้า การลงทุนเวลาเพื่อย่อยแนวคิดที่พลาดไปในขั้นนี้อย่างสมบูรณ์เป็นเส้นทางที่เร็วกว่าในระยะยาว'],
+    },
+    'low': {
+      'KO': ['조급한 마음을 완전히 내려놓고, 단원별 교과서의 핵심 원리 분석과 기본 개념 빌딩에 즉각 착수하는 것이 가장 필요한 시점입니다.', '문제풀이량을 늘리기보다, 지금 당장 멈추어 서서 취약 단원의 개념을 완벽히 소화하는 인내의 시간이 절대적으로 요구됩니다.', '기초부터 차근차근 벽돌을 쌓아 올리듯 학습 속도와 밀도를 점진적으로 끌어올리는 방식으로 접근하는 것을 권장합니다.'],
+      'EN': ['This is the point where it is most necessary to completely let go of impatience and immediately begin analyzing core principles and building basic concepts unit by unit.', 'Rather than increasing the volume of problem-solving, an absolute need exists for patient time spent right now to fully digest the concepts of weak units.', 'It is recommended to approach this like building with bricks from the foundation, gradually raising the speed and density of study.'],
+      'JA': ['焦る気持ちを完全に手放し、単元別教科書の核心原理分析と基本概念の構築に即座に着手することが最も必要な時期です。', '問題演習量を増やすよりも、今すぐ立ち止まって弱点単元の概念を完全に消化する忍耐の時間が絶対的に求められます。', '基礎から着実にレンガを積み上げるように学習速度と密度を段階的に引き上げる方式で取り組むことをお勧めします。'],
+      'ZH': ['此刻最需要的是完全放下焦躁的心态，立即着手对各单元教材核心原理的分析与基本概念的构建。', '与其增加解题量，不如现在立刻停下来，投入耐心完全消化薄弱单元的概念，这是绝对必要的。', '建议采取如同从基础开始逐块砌砖般，循序渐进地提升学习速度与密度的方式。'],
+      'FR': ["C'est le moment où il est le plus nécessaire de lâcher complètement l'impatience et de commencer immédiatement à analyser les principes fondamentaux et à construire les concepts de base unité par unité.", "Plutôt que d'augmenter le volume de résolution de problèmes, un besoin absolu existe de passer du temps patient dès maintenant pour digérer pleinement les concepts des unités faibles.", "Il est recommandé d'aborder cela comme la construction avec des briques depuis les fondations, en augmentant progressivement la vitesse et la densité de l'étude."],
+      'DE': ['Dies ist der Punkt, an dem es am notwendigsten ist, die Ungeduld vollständig loszulassen und sofort mit der Analyse der Kernprinzipien und dem Aufbau grundlegender Konzepte Einheit für Einheit zu beginnen.', 'Anstatt das Volumen der Problemlösung zu erhöhen, besteht ein absoluter Bedarf, jetzt geduldig Zeit zu investieren, um die Konzepte schwacher Einheiten vollständig zu verdauen.', 'Es wird empfohlen, dies wie den Bau mit Ziegeln vom Fundament aus anzugehen und Geschwindigkeit und Dichte des Lernens schrittweise zu erhöhen.'],
+      'RU': ['Это момент, когда наиболее необходимо полностью отпустить нетерпение и немедленно приступить к анализу ключевых принципов и построению базовых понятий раздел за разделом.', 'Вместо увеличения объёма решения задач существует абсолютная необходимость сейчас же терпеливо потратить время на полное усвоение понятий слабых разделов.', 'Рекомендуется подходить к этому как к строительству из кирпичей с фундамента, постепенно повышая скорость и плотность учёбы.'],
+      'AR': ['هذه هي اللحظة الأكثر ضرورة للتخلي تمامًا عن نفاد الصبر والبدء فورًا في تحليل المبادئ الأساسية وبناء المفاهيم الأساسية وحدة تلو الأخرى.', 'بدلاً من زيادة حجم حل المسائل، هناك حاجة مطلقة لقضاء وقت صبور الآن لاستيعاب مفاهيم الوحدات الضعيفة بشكل كامل.', 'يُنصح بالتعامل مع هذا كبناء بالطوب من الأساس، مع رفع سرعة وكثافة الدراسة تدريجيًا.'],
+      'HI': ['यह वह क्षण है जब जल्दबाजी को पूरी तरह से त्यागना और तुरंत इकाई दर इकाई मूल सिद्धांतों का विश्लेषण और बुनियादी अवधारणाओं का निर्माण शुरू करना सबसे आवश्यक है।', 'समस्या-समाधान की मात्रा बढ़ाने के बजाय, अभी धैर्यपूर्वक समय बिताकर कमजोर इकाइयों की अवधारणाओं को पूरी तरह से आत्मसात करने की पूर्ण आवश्यकता है।', 'नींव से ईंट-दर-ईंट बनाने की तरह अध्ययन की गति और सघनता को धीरे-धीरे बढ़ाने के दृष्टिकोण से आगे बढ़ने की सलाह दी जाती है।'],
+      'VI': ['Đây là thời điểm cần thiết nhất để hoàn toàn buông bỏ sự nóng vội và ngay lập tức bắt đầu phân tích nguyên lý cốt lõi và xây dựng khái niệm cơ bản từng chương một.', 'Thay vì tăng khối lượng giải bài, có nhu cầu tuyệt đối dành thời gian kiên nhẫn ngay bây giờ để tiêu hóa hoàn toàn khái niệm của các chương yếu.', 'Khuyến nghị tiếp cận như việc xây từng viên gạch từ nền móng, dần dần nâng cao tốc độ và mật độ học tập.'],
+      'ES': ['Este es el momento en que es más necesario soltar completamente la impaciencia y comenzar de inmediato a analizar los principios fundamentales y construir conceptos básicos unidad por unidad.', 'En lugar de aumentar el volumen de resolución de problemas, existe una necesidad absoluta de dedicar tiempo con paciencia ahora mismo para digerir completamente los conceptos de las unidades débiles.', 'Se recomienda abordar esto como construir con ladrillos desde los cimientos, aumentando gradualmente la velocidad y densidad del estudio.'],
+      'TH': ['นี่คือช่วงเวลาที่จำเป็นที่สุดที่จะละทิ้งความใจร้อนโดยสิ้นเชิง และเริ่มวิเคราะห์หลักการสำคัญและสร้างแนวคิดพื้นฐานทีละหน่วยทันที', 'แทนที่จะเพิ่มปริมาณการแก้โจทย์ มีความจำเป็นอย่างยิ่งที่จะใช้เวลาอย่างอดทนตอนนี้เพื่อย่อยแนวคิดของหน่วยที่อ่อนให้สมบูรณ์', 'แนะนำให้เข้าหาแบบเดียวกับการก่อบล็อกทีละก้อนจากฐานราก โดยค่อยๆ ยกระดับความเร็วและความเข้มข้นของการเรียน'],
+    },
   };
 
-  static const Map<String, List<String>> _closings = {
-    'good': [
-      '지금까지 쌓아온 노력을 믿고 흔들림 없이 정진한다면, 앞으로의 평가에서도 충분히 좋은 결과를 이어갈 수 있을 것입니다.',
-      '자만하지 않되 자신감을 잃지 않는 균형 잡힌 태도로 다음 목표를 향해 나아가시길 응원합니다.',
-    ],
-    'mid': [
-      '지금의 위치는 정상으로 가는 마지막 관문에 가까우니, 조금만 더 집중력을 발휘한다면 충분히 상위권 진입이 가능할 것입니다.',
-      '꾸준함을 잃지 않는다면 다음 평가에서는 지금보다 한 단계 더 높은 성취를 확인할 수 있을 것으로 기대됩니다.',
-    ],
-    'seventy': [
-      '좌절할 필요는 전혀 없으며, 오히려 지금이 가장 극적인 반등을 만들어낼 수 있는 구간이라는 점을 기억하시길 바랍니다.',
-      '문제점을 명확히 인지하고 있는 만큼, 오늘부터의 작은 변화가 다음 평가에서 눈에 띄는 결과로 이어질 것입니다.',
-    ],
-    'sixty': [
-      '지금의 경각심을 변화의 발판으로 삼는다면, 충분히 반등할 수 있는 위치에 있다는 점을 잊지 않으시길 바랍니다.',
-      '나태함에 빠지지 않고 오늘부터 집중도를 끌어올린다면, 다음 평가에서는 분명히 다른 결과를 확인할 수 있을 것입니다.',
-    ],
-    'low': [
-      '지금의 어려움은 기초를 다시 다지는 과정에서 누구나 겪을 수 있는 단계이니, 포기하지 않고 꾸준히 나아가는 것이 가장 중요합니다.',
-      '작은 진전이라도 꾸준히 쌓인다면 반드시 눈에 보이는 변화로 이어질 것이니, 조급해하지 않고 함께 나아가시길 바랍니다.',
-    ],
+  static const Map<String, Map<String, List<String>>> _closings = {
+    'good': {
+      'KO': ['지금까지 쌓아온 노력을 믿고 흔들림 없이 정진한다면, 앞으로의 평가에서도 충분히 좋은 결과를 이어갈 수 있을 것입니다.', '자만하지 않되 자신감을 잃지 않는 균형 잡힌 태도로 다음 목표를 향해 나아가시길 응원합니다.'],
+      'EN': ['Trusting the effort built up so far and advancing steadily should be enough to continue good results in future evaluations as well.', 'We hope you move toward the next goal with a balanced attitude that neither becomes complacent nor loses confidence.'],
+      'JA': ['これまで積み上げてきた努力を信じて揺るぎなく精進すれば、今後の評価でも十分良い結果を続けられるでしょう。', '慢心せず自信も失わないバランスの取れた姿勢で次の目標に向かって進んでいくことを応援します。'],
+      'ZH': ['若能相信迄今积累的努力并坚定不移地精进，未来的评估也足以延续良好的结果。', '愿以不自满又不失自信的均衡态度，向下一个目标迈进，为你加油。'],
+      'FR': ["Faire confiance aux efforts accumulés jusqu'à présent et avancer sans relâche devrait suffire à continuer d'obtenir de bons résultats dans les futures évaluations également.", "Nous espérons que vous avancerez vers le prochain objectif avec une attitude équilibrée, ni complaisante ni dépourvue de confiance."],
+      'DE': ['Vertrauen in die bisher aufgebauten Anstrengungen und stetiges Voranschreiten sollten ausreichen, um auch in zukünftigen Bewertungen gute Ergebnisse fortzusetzen.', 'Wir hoffen, dass Sie sich mit einer ausgewogenen Haltung, die weder selbstgefällig wird noch das Vertrauen verliert, dem nächsten Ziel zuwenden.'],
+      'RU': ['Доверие к накопленным до сих пор усилиям и неуклонное продвижение вперёд должны быть достаточными, чтобы продолжить хорошие результаты и в будущих оценках.', 'Надеемся, вы будете двигаться к следующей цели со сбалансированным отношением, не становясь самодовольным, но и не теряя уверенности.'],
+      'AR': ['الثقة في الجهود المتراكمة حتى الآن والتقدم بثبات يجب أن يكونا كافيين لمواصلة تحقيق نتائج جيدة في التقييمات المستقبلية أيضًا.', 'نأمل أن تتقدم نحو الهدف التالي بموقف متوازن لا يصبح متغطرسًا ولا يفقد الثقة.'],
+      'HI': ['अब तक बनाए गए प्रयासों पर भरोसा करते हुए स्थिर रूप से आगे बढ़ना भविष्य के मूल्यांकनों में भी अच्छे परिणाम जारी रखने के लिए पर्याप्त होगा।', 'हमें आशा है कि आप न तो आत्मसंतुष्ट होंगे और न ही आत्मविश्वास खोएंगे, ऐसे संतुलित दृष्टिकोण के साथ अगले लक्ष्य की ओर बढ़ेंगे।'],
+      'VI': ['Tin tưởng vào nỗ lực đã tích lũy đến nay và tiến bước vững vàng sẽ đủ để tiếp tục đạt kết quả tốt trong các đánh giá tương lai.', 'Hy vọng bạn tiến tới mục tiêu tiếp theo với thái độ cân bằng, không tự mãn nhưng cũng không mất tự tin.'],
+      'ES': ['Confiar en el esfuerzo acumulado hasta ahora y avanzar de manera constante debería ser suficiente para continuar con buenos resultados en futuras evaluaciones también.', 'Esperamos que avance hacia el próximo objetivo con una actitud equilibrada que no se vuelva complaciente ni pierda la confianza.'],
+      'TH': ['การเชื่อมั่นในความพยายามที่สั่งสมมาและก้าวไปข้างหน้าอย่างมั่นคงน่าจะเพียงพอที่จะรักษาผลลัพธ์ที่ดีในการประเมินครั้งต่อไป', 'หวังว่าคุณจะก้าวไปสู่เป้าหมายถัดไปด้วยทัศนคติที่สมดุล ไม่หลงตัวเองแต่ก็ไม่สูญเสียความมั่นใจ'],
+    },
+    'mid': {
+      'KO': ['지금의 위치는 정상으로 가는 마지막 관문에 가까우니, 조금만 더 집중력을 발휘한다면 충분히 상위권 진입이 가능할 것입니다.', '꾸준함을 잃지 않는다면 다음 평가에서는 지금보다 한 단계 더 높은 성취를 확인할 수 있을 것으로 기대됩니다.'],
+      'EN': ['The current position is close to the final gateway to the top, so with just a bit more concentration, entering the top tier should be fully possible.', 'If consistency is not lost, it is expected that the next evaluation will show an achievement one level higher than now.'],
+      'JA': ['今の位置は頂上への最後の関門に近く、もう少し集中力を発揮すれば十分上位圏入りが可能でしょう。', '継続性を失わなければ、次の評価では今より一段高い成果を確認できると期待されます。'],
+      'ZH': ['目前的位置接近通往顶峰的最后关卡，只要再多发挥一点专注力，完全有可能进入上位圈。', '若不失去坚持，下次评估有望确认比现在更高一个层次的成就。'],
+      'FR': ["La position actuelle est proche de la dernière porte vers le sommet, donc avec juste un peu plus de concentration, entrer dans le premier rang devrait être tout à fait possible.", "Si la constance n'est pas perdue, on peut s'attendre à ce que la prochaine évaluation montre une réussite d'un niveau supérieur à maintenant."],
+      'DE': ['Die aktuelle Position ist nahe am letzten Tor zur Spitze, sodass mit nur etwas mehr Konzentration der Einstieg in die Spitzengruppe durchaus möglich sein sollte.', 'Wenn die Beständigkeit nicht verloren geht, wird erwartet, dass die nächste Bewertung eine um eine Stufe höhere Leistung als jetzt zeigt.'],
+      'RU': ['Текущая позиция близка к последним воротам на вершину, поэтому при чуть большей концентрации вход в верхний эшелон вполне возможен.', 'Если постоянство не будет утрачено, ожидается, что следующая оценка покажет достижение на ступень выше, чем сейчас.'],
+      'AR': ['الموقع الحالي قريب من البوابة الأخيرة نحو القمة، لذا مع القليل من التركيز الإضافي، يصبح الدخول إلى الفئة العليا ممكنًا تمامًا.', 'إذا لم يُفقد الثبات، من المتوقع أن يُظهر التقييم القادم إنجازًا بمستوى أعلى من الآن.'],
+      'HI': ['वर्तमान स्थिति शिखर की ओर अंतिम प्रवेश द्वार के करीब है, इसलिए थोड़ा और ध्यान केंद्रित करने पर शीर्ष स्तर में प्रवेश पूरी तरह संभव होगा।', 'यदि निरंतरता नहीं खोई गई, तो अगले मूल्यांकन में अभी से एक स्तर ऊंची उपलब्धि देखने की उम्मीद है।'],
+      'VI': ['Vị trí hiện tại gần với cánh cổng cuối cùng để đến đỉnh, vì vậy chỉ cần thêm chút tập trung, việc vào nhóm dẫn đầu hoàn toàn có thể.', 'Nếu không mất đi sự đều đặn, kỳ vọng đánh giá tiếp theo sẽ cho thấy thành tích cao hơn một bậc so với hiện tại.'],
+      'ES': ['La posición actual está cerca de la puerta final hacia la cima, así que con solo un poco más de concentración, entrar en el nivel superior debería ser completamente posible.', 'Si no se pierde la constancia, se espera que la próxima evaluación muestre un logro un nivel más alto que ahora.'],
+      'TH': ['ตำแหน่งปัจจุบันใกล้กับประตูสุดท้ายสู่จุดสูงสุด ดังนั้นด้วยสมาธิเพิ่มอีกเล็กน้อยก็สามารถเข้าสู่กลุ่มบนได้อย่างเต็มที่', 'หากไม่สูญเสียความสม่ำเสมอ คาดว่าการประเมินครั้งต่อไปจะแสดงผลสัมฤทธิ์ที่สูงขึ้นอีกระดับจากตอนนี้'],
+    },
+    'seventy': {
+      'KO': ['좌절할 필요는 전혀 없으며, 오히려 지금이 가장 극적인 반등을 만들어낼 수 있는 구간이라는 점을 기억하시길 바랍니다.', '문제점을 명확히 인지하고 있는 만큼, 오늘부터의 작은 변화가 다음 평가에서 눈에 띄는 결과로 이어질 것입니다.'],
+      'EN': ['There is no need to feel discouraged at all — please remember that this is exactly the range where the most dramatic turnaround can happen.', 'Since the issues are clearly recognized, small changes starting today will lead to noticeable results in the next evaluation.'],
+      'JA': ['落胆する必要は全くなく、むしろ今が最も劇的な反騰を生み出せる区間であることを覚えていてください。', '問題点を明確に認識できている分、今日からの小さな変化が次の評価で目に見える結果につながるでしょう。'],
+      'ZH': ['完全无需气馁，反而请记住现在正是能创造出最戏剧性反弹的区间。', '既然已经清楚认识到问题所在，从今天开始的小小改变将在下次评估中带来显著的结果。'],
+      'FR': ["Il n'y a absolument aucun besoin de se sentir découragé — veuillez vous rappeler que c'est exactement la plage où le retournement le plus spectaculaire peut se produire.", "Puisque les problèmes sont clairement reconnus, de petits changements dès aujourd'hui mèneront à des résultats notables lors de la prochaine évaluation."],
+      'DE': ['Es besteht überhaupt kein Grund zur Entmutigung — bitte denken Sie daran, dass dies genau der Bereich ist, in dem die dramatischste Wende geschehen kann.', 'Da die Probleme klar erkannt sind, werden kleine Veränderungen ab heute zu spürbaren Ergebnissen bei der nächsten Bewertung führen.'],
+      'RU': ['Совершенно не нужно расстраиваться — пожалуйста, помните, что это именно тот диапазон, где может произойти самый драматичный перелом.', 'Поскольку проблемы чётко осознаны, небольшие изменения, начатые сегодня, приведут к заметным результатам на следующей оценке.'],
+      'AR': ['لا داعي للشعور بالإحباط على الإطلاق — يرجى تذكر أن هذا هو بالضبط النطاق الذي يمكن أن يحدث فيه أكثر التحولات دراماتيكية.', 'بما أن المشاكل معترف بها بوضوح، فإن التغييرات الصغيرة التي تبدأ اليوم ستؤدي إلى نتائج ملحوظة في التقييم القادم.'],
+      'HI': ['निराश होने की बिल्कुल आवश्यकता नहीं है — कृपया याद रखें कि यह वह सीमा है जहां सबसे नाटकीय बदलाव आ सकता है।', 'चूंकि समस्याओं को स्पष्ट रूप से पहचाना गया है, आज से शुरू होने वाले छोटे बदलाव अगले मूल्यांकन में उल्लेखनीय परिणाम देंगे।'],
+      'VI': ['Hoàn toàn không cần cảm thấy nản lòng — hãy nhớ rằng đây chính xác là phạm vi có thể tạo ra sự đảo ngược kịch tính nhất.', 'Vì các vấn đề đã được nhận biết rõ ràng, những thay đổi nhỏ bắt đầu từ hôm nay sẽ dẫn đến kết quả đáng chú ý ở đánh giá tiếp theo.'],
+      'ES': ['No hay necesidad alguna de sentirse desanimado — recuerde que este es exactamente el rango donde puede ocurrir el cambio más dramático.', 'Dado que los problemas se reconocen claramente, pequeños cambios a partir de hoy conducirán a resultados notables en la próxima evaluación.'],
+      'TH': ['ไม่จำเป็นต้องรู้สึกท้อแท้เลย โปรดจำไว้ว่านี่คือช่วงที่สามารถสร้างการพลิกกลับที่น่าทึ่งที่สุด', 'เนื่องจากรับรู้ปัญหาอย่างชัดเจนแล้ว การเปลี่ยนแปลงเล็กๆ ตั้งแต่วันนี้จะนำไปสู่ผลลัพธ์ที่เห็นได้ชัดในการประเมินครั้งต่อไป'],
+    },
+    'sixty': {
+      'KO': ['지금의 경각심을 변화의 발판으로 삼는다면, 충분히 반등할 수 있는 위치에 있다는 점을 잊지 않으시길 바랍니다.', '나태함에 빠지지 않고 오늘부터 집중도를 끌어올린다면, 다음 평가에서는 분명히 다른 결과를 확인할 수 있을 것입니다.'],
+      'EN': ['If the current sense of alertness is used as a springboard for change, please remember that there is a position from which a full rebound is possible.', 'If you avoid falling into complacency and raise your concentration starting today, a clearly different result can be confirmed in the next evaluation.'],
+      'JA': ['今の警戒心を変化の足がかりにすれば、十分に反騰できる位置にあることを忘れないでください。', '怠惰に陥らず今日から集中度を引き上げれば、次の評価では明らかに違う結果を確認できるでしょう。'],
+      'ZH': ['若能将当下的警觉转化为变化的踏板，请不要忘记你正处于完全可以反弹的位置。', '若不陷入懈怠，从今天起提升专注度，下次评估中必将能确认不同的结果。'],
+      'FR': ["Si le sentiment d'alerte actuel est utilisé comme tremplin pour le changement, veuillez vous rappeler qu'il existe une position à partir de laquelle un rétablissement complet est possible.", "Si vous évitez de sombrer dans la complaisance et augmentez votre concentration dès aujourd'hui, un résultat nettement différent pourra être confirmé lors de la prochaine évaluation."],
+      'DE': ['Wenn das derzeitige Bewusstsein als Sprungbrett für Veränderungen genutzt wird, denken Sie bitte daran, dass es eine Position gibt, von der aus eine vollständige Erholung möglich ist.', 'Wenn Sie nicht in Selbstgefälligkeit verfallen und Ihre Konzentration ab heute steigern, kann bei der nächsten Bewertung ein deutlich anderes Ergebnis bestätigt werden.'],
+      'RU': ['Если использовать нынешнюю настороженность как трамплин для перемен, пожалуйста, помните, что есть позиция, с которой возможен полноценный подъём.', 'Если избежать самоуспокоенности и повысить концентрацию начиная с сегодняшнего дня, на следующей оценке можно будет подтвердить явно иной результат.'],
+      'AR': ['إذا تم استخدام الوعي الحالي كنقطة انطلاق للتغيير، يرجى تذكر أن هناك موقعًا يمكن منه تحقيق انتعاش كامل.', 'إذا تجنبت الوقوع في الرضا عن الذات ورفعت تركيزك بدءًا من اليوم، يمكن تأكيد نتيجة مختلفة بوضوح في التقييم القادم.'],
+      'HI': ['यदि वर्तमान सतर्कता को परिवर्तन के लिए एक आधार के रूप में उपयोग किया जाए, तो कृपया याद रखें कि आप ऐसी स्थिति में हैं जहां से पूर्ण वापसी संभव है।', 'यदि आप आत्मसंतोष में न पड़ें और आज से एकाग्रता बढ़ाएं, तो अगले मूल्यांकन में स्पष्ट रूप से भिन्न परिणाम की पुष्टि हो सकती है।'],
+      'VI': ['Nếu sự cảnh giác hiện tại được dùng làm bàn đạp cho sự thay đổi, hãy nhớ rằng bạn đang ở vị trí có thể hoàn toàn bật lại.', 'Nếu không rơi vào sự tự mãn và nâng cao sự tập trung từ hôm nay, một kết quả rõ ràng khác biệt có thể được xác nhận ở đánh giá tiếp theo.'],
+      'ES': ['Si el sentido de alerta actual se usa como trampolín para el cambio, recuerde que hay una posición desde la cual es posible una recuperación completa.', 'Si evita caer en la complacencia y aumenta su concentración a partir de hoy, se podrá confirmar un resultado claramente diferente en la próxima evaluación.'],
+      'TH': ['หากใช้ความตื่นตัวในปัจจุบันเป็นจุดกระโดดสู่การเปลี่ยนแปลง โปรดอย่าลืมว่าคุณอยู่ในตำแหน่งที่สามารถฟื้นตัวได้อย่างเต็มที่', 'หากไม่ตกอยู่ในความประมาทและยกระดับสมาธิตั้งแต่วันนี้ ผลลัพธ์ที่แตกต่างอย่างชัดเจนจะยืนยันได้ในการประเมินครั้งต่อไป'],
+    },
+    'low': {
+      'KO': ['지금의 어려움은 기초를 다시 다지는 과정에서 누구나 겪을 수 있는 단계이니, 포기하지 않고 꾸준히 나아가는 것이 가장 중요합니다.', '작은 진전이라도 꾸준히 쌓인다면 반드시 눈에 보이는 변화로 이어질 것이니, 조급해하지 않고 함께 나아가시길 바랍니다.'],
+      'EN': ['The current difficulty is a stage anyone can go through in the process of re-establishing fundamentals, so continuing forward without giving up is what matters most.', 'Even small progress, if it accumulates consistently, will surely lead to visible change, so please move forward together without rushing.'],
+      'JA': ['今の困難は基礎を再び固める過程で誰もが経験しうる段階なので、諦めずに着実に進むことが最も重要です。', '小さな進展でも着実に積み重なれば必ず目に見える変化につながるので、焦らずに一緒に進んでいってください。'],
+      'ZH': ['当下的困难是重新夯实基础过程中任何人都可能经历的阶段，不放弃、坚持前行最为重要。', '哪怕是微小的进步，若能持续积累，必将带来可见的变化，请不要急躁，一起稳步前行。'],
+      'FR': ["La difficulté actuelle est une étape que tout le monde peut traverser dans le processus de rétablissement des fondamentaux, donc continuer à avancer sans abandonner est ce qui compte le plus.", "Même de petits progrès, s'ils s'accumulent régulièrement, mèneront certainement à un changement visible, alors avancez ensemble sans vous précipiter."],
+      'DE': ['Die aktuelle Schwierigkeit ist eine Phase, die jeder im Prozess der Neuetablierung der Grundlagen durchmachen kann, daher ist es am wichtigsten, ohne aufzugeben weiterzumachen.', 'Selbst kleine Fortschritte führen, wenn sie sich konsequent ansammeln, sicher zu sichtbaren Veränderungen, also gehen Sie bitte gemeinsam voran, ohne zu hetzen.'],
+      'RU': ['Текущая трудность — это этап, через который может пройти каждый в процессе восстановления основ, поэтому важнее всего продолжать двигаться вперёд, не сдаваясь.', 'Даже небольшой прогресс, если он накапливается постоянно, обязательно приведёт к видимым переменам, поэтому, пожалуйста, двигайтесь вперёд вместе, не спеша.'],
+      'AR': ['الصعوبة الحالية هي مرحلة يمكن لأي شخص المرور بها في عملية إعادة ترسيخ الأساسيات، لذا فإن الاستمرار في التقدم دون الاستسلام هو الأهم.', 'حتى التقدم الصغير، إذا تراكم باستمرار، سيؤدي بالتأكيد إلى تغيير ملموس، لذا يرجى التقدم معًا دون تسرع.'],
+      'HI': ['वर्तमान कठिनाई एक ऐसा चरण है जिससे कोई भी बुनियादी बातों को फिर से स्थापित करने की प्रक्रिया में गुजर सकता है, इसलिए हार माने बिना आगे बढ़ते रहना सबसे महत्वपूर्ण है।', 'छोटी प्रगति भी यदि लगातार जमा होती रहे, तो अवश्य ही दृश्य परिवर्तन की ओर ले जाएगी, इसलिए जल्दबाजी किए बिना साथ मिलकर आगे बढ़ें।'],
+      'VI': ['Khó khăn hiện tại là giai đoạn mà bất kỳ ai cũng có thể trải qua trong quá trình tái thiết lập nền tảng, vì vậy tiếp tục tiến lên mà không từ bỏ là điều quan trọng nhất.', 'Ngay cả tiến bộ nhỏ, nếu tích lũy đều đặn, chắc chắn sẽ dẫn đến sự thay đổi rõ ràng, vì vậy hãy cùng nhau tiến bước mà không vội vàng.'],
+      'ES': ['La dificultad actual es una etapa por la que cualquiera puede pasar en el proceso de restablecer los fundamentos, por lo que seguir adelante sin rendirse es lo más importante.', 'Incluso un pequeño progreso, si se acumula de manera constante, sin duda conducirá a un cambio visible, así que avancemos juntos sin apresurarnos.'],
+      'TH': ['ความยากลำบากในปัจจุบันเป็นขั้นตอนที่ทุกคนอาจเผชิญได้ในกระบวนการปูพื้นฐานใหม่ การเดินหน้าต่อไปโดยไม่ยอมแพ้จึงสำคัญที่สุด', 'แม้ความก้าวหน้าเพียงเล็กน้อย หากสะสมอย่างสม่ำเสมอ ก็จะนำไปสู่การเปลี่ยนแปลงที่มองเห็นได้อย่างแน่นอน จึงขอให้ก้าวไปด้วยกันโดยไม่ต้องรีบร้อน'],
+    },
   };
 
-  static const Map<String, String> _extraGuidance = {
-    'good': ' 지속적인 정합성 확인 루틴을 스스로 사수하는 태도가 결국 흔들리지 않는 실력을 만듭니다.',
-    'mid': ' 조금의 임계점(다음 단계로 넘어가기 위해 필요한 최소한의 학업 밀도)만 넘어서면 상위권 진입은 시간 문제입니다.',
-    'seventy': ' 구조적 오인(개념의 뼈대를 잘못 이해해 오답을 도출하는 현상)만 바로잡으면 반등의 폭은 예상보다 클 수 있습니다.',
-    'sixty': ' 지금 다지는 기초가 앞으로의 모든 학습의 뼈대가 된다는 점을 기억해 주시길 바랍니다.',
-    'low': ' 가능성은 언제나 열려 있으니, 오늘의 작은 실천이 내일의 큰 변화로 이어질 것입니다.',
+  static const Map<String, Map<String, String>> _extraGuidance = {
+    'good': {'KO': ' 지속적인 정합성 확인 루틴을 스스로 사수하는 태도가 결국 흔들리지 않는 실력을 만듭니다.', 'EN': ' Maintaining a self-driven routine of continuous consistency checks is ultimately what builds unwavering skill.', 'JA': ' 継続的な整合性確認ルーティンを自ら守り抜く姿勢が結局揺るぎない実力を作ります。', 'ZH': ' 持续自我坚守一致性核查的常规，最终会铸就不可动摇的实力。', 'FR': " Maintenir une routine autonome de vérification continue de la cohérence est finalement ce qui construit une compétence inébranlable.", 'DE': ' Eine selbst durchgehaltene Routine kontinuierlicher Konsistenzprüfung schafft letztlich unerschütterliche Fähigkeiten.', 'RU': ' Самостоятельное поддержание постоянной проверки согласованности в конечном итоге создаёт непоколебимые навыки.', 'AR': ' الحفاظ الذاتي على روتين مستمر للتحقق من الاتساق هو في النهاية ما يبني مهارة ثابتة.', 'HI': ' निरंतरता की स्वयं-संचालित दिनचर्या बनाए रखना अंततः अटूट कौशल का निर्माण करता है।', 'VI': ' Duy trì thói quen tự thân kiểm tra tính nhất quán liên tục cuối cùng sẽ xây dựng nên năng lực vững chắc.', 'ES': ' Mantener una rutina autodirigida de verificación continua de la coherencia es, en última instancia, lo que construye una habilidad inquebrantable.', 'TH': ' การรักษากิจวัตรการตรวจสอบความสอดคล้องอย่างต่อเนื่องด้วยตนเองในที่สุดจะสร้างความสามารถที่มั่นคงไม่สั่นคลอน'},
+    'mid': {'KO': ' 조금의 임계점(다음 단계로 넘어가기 위해 필요한 최소한의 학업 밀도)만 넘어서면 상위권 진입은 시간 문제입니다.', 'EN': ' Just crossing a small threshold (the minimum study density needed to move to the next stage) makes entering the top tier only a matter of time.', 'JA': ' 少しの臨界点（次の段階に進むために必要な最小限の学習密度）さえ超えれば上位圏入りは時間の問題です。', 'ZH': ' 只要越过一点临界点（进入下一阶段所需的最低学习密度），进入上位圈就只是时间问题。', 'FR': " Franchir juste un petit seuil (la densité d'étude minimale nécessaire pour passer à l'étape suivante) rend l'entrée dans le premier rang une simple question de temps.", 'DE': ' Nur eine kleine Schwelle zu überschreiten (die minimale Lerndichte, die für den Übergang zur nächsten Stufe nötig ist), macht den Einstieg in die Spitzengruppe zu einer reinen Zeitfrage.', 'RU': ' Стоит лишь преодолеть небольшой порог (минимальную плотность учёбы, необходимую для перехода на следующий этап), и вход в верхний эшелон станет лишь вопросом времени.', 'AR': ' مجرد تجاوز عتبة صغيرة (الحد الأدنى من كثافة الدراسة اللازمة للانتقال إلى المرحلة التالية) يجعل الدخول إلى الفئة العليا مسألة وقت فقط.', 'HI': ' केवल एक छोटी सीमा (अगले चरण में जाने के लिए आवश्यक न्यूनतम अध्ययन घनत्व) पार करने से शीर्ष स्तर में प्रवेश केवल समय की बात बन जाता है।', 'VI': ' Chỉ cần vượt qua một ngưỡng nhỏ (mật độ học tập tối thiểu cần thiết để chuyển sang giai đoạn tiếp theo) là việc vào nhóm dẫn đầu chỉ còn là vấn đề thời gian.', 'ES': ' Cruzar solo un pequeño umbral (la densidad mínima de estudio necesaria para pasar a la siguiente etapa) hace que entrar al nivel superior sea solo cuestión de tiempo.', 'TH': ' เพียงข้ามผ่านจุดวิกฤตเล็กน้อย (ความเข้มข้นในการเรียนขั้นต่ำที่จำเป็นเพื่อก้าวสู่ขั้นถัดไป) การเข้าสู่กลุ่มบนก็เป็นเพียงเรื่องของเวลา'},
+    'seventy': {'KO': ' 구조적 오인(개념의 뼈대를 잘못 이해해 오답을 도출하는 현상)만 바로잡으면 반등의 폭은 예상보다 클 수 있습니다.', 'EN': ' Correcting just the structural misconception (a phenomenon where a wrong understanding of the conceptual framework leads to incorrect answers) alone could make the rebound larger than expected.', 'JA': ' 構造的誤認（概念の骨組みを誤って理解し誤答を導く現象）さえ正せば、反騰の幅は予想より大きくなり得ます。', 'ZH': ' 只要纠正结构性误解（对概念骨架理解错误而导出错误答案的现象），反弹幅度可能比预期更大。', 'FR': " Corriger seulement la méconception structurelle (un phénomène où une mauvaise compréhension du cadre conceptuel conduit à des réponses incorrectes) pourrait rendre le rebond plus important que prévu.", 'DE': ' Allein die Korrektur der strukturellen Fehlvorstellung (ein Phänomen, bei dem ein falsches Verständnis des konzeptionellen Rahmens zu falschen Antworten führt) könnte die Erholung größer als erwartet machen.', 'RU': ' Одно лишь исправление структурного заблуждения (явление, когда неверное понимание концептуального каркаса приводит к неправильным ответам) может сделать отскок больше, чем ожидалось.', 'AR': ' مجرد تصحيح سوء الفهم الهيكلي (ظاهرة يؤدي فيها الفهم الخاطئ للإطار المفاهيمي إلى إجابات غير صحيحة) وحده قد يجعل الانتعاش أكبر من المتوقع.', 'HI': ' केवल संरचनात्मक गलतफहमी (एक घटना जहां अवधारणात्मक ढांचे की गलत समझ गलत उत्तरों की ओर ले जाती है) को सुधारने से ही उछाल अपेक्षा से बड़ा हो सकता है।', 'VI': ' Chỉ cần sửa chữa hiểu lầm cấu trúc (hiện tượng hiểu sai khung khái niệm dẫn đến câu trả lời sai) là có thể khiến sự bật lại lớn hơn dự kiến.', 'ES': ' Corregir solo la concepción errónea estructural (un fenómeno en el que una comprensión incorrecta del marco conceptual conduce a respuestas incorrectas) por sí solo podría hacer que la recuperación sea mayor de lo esperado.', 'TH': ' เพียงแก้ไขความเข้าใจผิดเชิงโครงสร้าง (ปรากฏการณ์ที่เข้าใจโครงสร้างแนวคิดผิดจนได้คำตอบผิด) ก็อาจทำให้การฟื้นตัวมากกว่าที่คาดไว้'},
+    'sixty': {'KO': ' 지금 다지는 기초가 앞으로의 모든 학습의 뼈대가 된다는 점을 기억해 주시길 바랍니다.', 'EN': ' Please remember that the foundation being built now becomes the skeleton of all future learning.', 'JA': ' 今固めている基礎が今後のすべての学習の骨組みになることを覚えていてください。', 'ZH': ' 请记住，现在夯实的基础将成为今后一切学习的骨架。', 'FR': " Veuillez vous rappeler que les fondations construites maintenant deviennent le squelette de tout apprentissage futur.", 'DE': ' Bitte denken Sie daran, dass die jetzt aufgebaute Grundlage zum Gerüst allen zukünftigen Lernens wird.', 'RU': ' Пожалуйста, помните, что закладываемая сейчас основа станет каркасом всего будущего обучения.', 'AR': ' يرجى تذكر أن الأساس الذي يتم بناؤه الآن يصبح هيكل كل التعلم المستقبلي.', 'HI': ' कृपया याद रखें कि अभी बनाई जा रही नींव भविष्य के सभी अध्ययन का ढांचा बनेगी।', 'VI': ' Xin hãy nhớ rằng nền tảng đang được xây dựng bây giờ sẽ trở thành khung xương của mọi việc học trong tương lai.', 'ES': ' Recuerde que los cimientos que se construyen ahora se convierten en el esqueleto de todo el aprendizaje futuro.', 'TH': ' โปรดจำไว้ว่ารากฐานที่กำลังสร้างอยู่ตอนนี้จะกลายเป็นโครงสร้างของการเรียนรู้ทั้งหมดในอนาคต'},
+    'low': {'KO': ' 가능성은 언제나 열려 있으니, 오늘의 작은 실천이 내일의 큰 변화로 이어질 것입니다.', 'EN': ' Possibility is always open, so a small action today will lead to a big change tomorrow.', 'JA': ' 可能性はいつでも開かれているので、今日の小さな実践が明日の大きな変化につながるでしょう。', 'ZH': ' 可能性永远敞开，今天的一小步实践将带来明天的巨大变化。', 'FR': " La possibilité est toujours ouverte, donc une petite action aujourd'hui mènera à un grand changement demain.", 'DE': ' Möglichkeiten stehen immer offen, daher wird eine kleine Handlung heute zu einer großen Veränderung morgen führen.', 'RU': ' Возможность всегда открыта, поэтому маленькое действие сегодня приведёт к большим переменам завтра.', 'AR': ' الإمكانية مفتوحة دائمًا، لذا فإن خطوة صغيرة اليوم ستؤدي إلى تغيير كبير غدًا.', 'HI': ' संभावना हमेशा खुली है, इसलिए आज का एक छोटा कदम कल के बड़े बदलाव की ओर ले जाएगा।', 'VI': ' Khả năng luôn rộng mở, vì vậy một hành động nhỏ hôm nay sẽ dẫn đến sự thay đổi lớn vào ngày mai.', 'ES': ' La posibilidad siempre está abierta, así que una pequeña acción hoy conducirá a un gran cambio mañana.', 'TH': ' ความเป็นไปได้เปิดกว้างเสมอ การลงมือทำเล็กๆ วันนี้จะนำไปสู่การเปลี่ยนแปลงครั้งใหญ่ในวันพรุ่งนี้'},
   };
 
   // ── 저장/조회 로직 ──────────────────────────────────────────────────────
@@ -351,10 +655,14 @@ class DiagnosisService {
       }).toList();
       await prefs.setString(seenKey, jsonEncode(trimmedSeen));
 
-      return chosen['text'].toString();
+      // 🆕 [12개국어] 저장된 texts 맵에서 현재 언어 설정에 맞춰 표시 문자열 구성
+      final Map<String, dynamic> rawTexts = Map<String, dynamic>.from(chosen['texts'] as Map);
+      return _display(rawTexts.map((k, v) => MapEntry(k, v.toString())));
     } catch (e) {
       // 저장소 오류가 있어도 화면이 멈추지 않도록 즉석 생성 텍스트로 안전하게 대체
-      return _generateNewCombo(tierFor(score), type, subject, {})['text'].toString();
+      final fallback = _generateNewCombo(tierFor(score), type, subject, {});
+      final Map<String, dynamic> rawTexts = Map<String, dynamic>.from(fallback['texts'] as Map);
+      return _display(rawTexts.map((k, v) => MapEntry(k, v.toString())));
     }
   }
 
@@ -365,35 +673,41 @@ class DiagnosisService {
       Set<String> avoidIds,
       ) {
     final Random rnd = Random();
-    final List<String> openings = _openings[tier]!;
-    final List<String> observations = _observations[tier]!;
-    final List<String> advices = _advices[tier]!;
-    final List<String> closings = _closings[tier]!;
+    final List<String> koOpenings = _openings[tier]!['KO']!;
+    final List<String> koObservations = _observations[tier]!['KO']!;
+    final List<String> koAdvices = _advices[tier]!['KO']!;
+    final List<String> koClosings = _closings[tier]!['KO']!;
 
     String comboId = '';
-    String text = '';
+    int oi = 0, vi = 0, ai = 0, ci = 0;
     int attempts = 0;
     do {
-      final int oi = rnd.nextInt(openings.length);
-      final int vi = rnd.nextInt(observations.length);
-      final int ai = rnd.nextInt(advices.length);
-      final int ci = rnd.nextInt(closings.length);
+      oi = rnd.nextInt(koOpenings.length);
+      vi = rnd.nextInt(koObservations.length);
+      ai = rnd.nextInt(koAdvices.length);
+      ci = rnd.nextInt(koClosings.length);
       comboId = '${tier}_o${oi}_v${vi}_a${ai}_c$ci';
-
-      final String opening = openings[oi].replaceAll('{type}', type);
-      final String observation = observations[vi].replaceAll('{subject}', subject);
-
-      text = '$opening $observation ${advices[ai]} ${closings[ci]}';
       attempts++;
     } while (avoidIds.contains(comboId) && attempts < 30);
 
-    if (text.length < minLength) {
-      text += _extraGuidance[tier] ?? '';
+    final Map<String, String> texts = {};
+    for (final lang in _langCodes) {
+      final String opening = _openings[tier]![lang]![oi].replaceAll('{type}', _typeLabel(type, lang));
+      final String observation = _observations[tier]![lang]![vi].replaceAll('{subject}', subject);
+      String text = '$opening $observation ${_advices[tier]![lang]![ai]} ${_closings[tier]![lang]![ci]}';
+      // 🆕 [12개국어] 한글은 원장님 지시(최소 300자)를 그대로 지키기 위해 보강 문구 추가.
+      // 다른 언어는 스크립트 밀도가 달라 이 글자수 기준을 강제하지 않고 자연스러운 번역을 그대로 둡니다.
+      if (lang == 'KO' && text.length < minLength) {
+        text += _extraGuidance[tier]!['KO'] ?? '';
+      } else if (lang != 'KO') {
+        text += _extraGuidance[tier]![lang] ?? '';
+      }
+      texts[lang] = text;
     }
 
     return {
       'comboId': comboId,
-      'text': text,
+      'texts': texts,
       'createdAt': DateTime.now().toIso8601String(),
     };
   }

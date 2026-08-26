@@ -13,10 +13,16 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
   // 🆕 [12개국어 연동] foreignTitle(선택) 추가 - 외국어 선택 시 번역된 한 줄만 표시하기 위함
   final Widget Function(String, String, {required double fontSize, String? foreignTitle}) buildCustomSectionTitle;
 
-  // 🆕 [실데이터 연동] 오늘 하루 실제 학습 세션 목록 (강의+평가 전부 포함, 시간순 정렬됨)
-  final List<ParentSessionRecord> todaySessions;
+  // 🆕 [지난 일자 조회] 좌우 화살표로 하루씩 이동하며 조회할 날짜와 콜백
+  final DateTime selectedDate;
+  final VoidCallback onPreviousDay;
+  final VoidCallback onNextDay;
+  final bool isViewingToday; // true면 오른쪽(다음날) 화살표를 비활성화 (미래 날짜 조회 방지)
 
-  // 🆕 [실데이터 연동] 어제 대비 / 1주 평균 대비 학습시간 변화량 계산용
+  // 🆕 [실데이터 연동] 선택된 날짜의 실제 학습 세션 목록 (강의+평가 전부 포함, 시간순 정렬됨)
+  final List<ParentSessionRecord> sessionsForDate;
+
+  // 🆕 [실데이터 연동] 전날 대비 / 1주 평균 대비 학습시간 변화량 계산용 (선택된 날짜 기준)
   final int todayTotalMinutes;
   final int yesterdayTotalMinutes;
   final int weeklyAvgMinutesPerDay;
@@ -34,7 +40,11 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
     required this.onShowReportPopup,
     required this.onShowDetailedAnalysisPopup,
     required this.buildCustomSectionTitle,
-    required this.todaySessions,
+    required this.selectedDate,
+    required this.onPreviousDay,
+    required this.onNextDay,
+    required this.isViewingToday,
+    required this.sessionsForDate,
     required this.todayTotalMinutes,
     required this.yesterdayTotalMinutes,
     required this.weeklyAvgMinutesPerDay,
@@ -46,12 +56,15 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
   // 🆕 [12개국어 연동] UI 문구 카탈로그 + 조회 헬퍼 _t()/_tf()
   // ⚠️ rec.recordType('강의'/'평가') 등 내부 데이터 매칭/비교용 원본 값은 절대 번역하지 않음
   // (하드 룰 6번). 화면에 "표시"만 할 때는 _recordTypeDisplay()로 별도 변환.
+  // 🆕 [지난 일자 조회] "오늘"을 하드코딩한 문구들은 {day} 토큰으로 바꿔 선택된 날짜에
+  // 맞춰 "오늘" 또는 "2026.08.15"처럼 실제 날짜가 들어가도록 처리했습니다.
   // ============================================================================
   static const Map<String, Map<String, String>> _uiText = {
-    'sectionTitle1Foreign': {'KO': '{name} 오늘 자기주도 학습 성취도 상세보기', 'EN': "{name} - Today's Self-Directed Learning Achievement Details", 'JA': '{name} 本日の自己主導学習成果詳細', 'ZH': '{name} 今日自主学习成果详情', 'FR': "{name} - Détails de la réussite en apprentissage autonome aujourd'hui", 'DE': '{name} - Heutige Details zur selbstgesteuerten Lernleistung', 'RU': '{name} - Подробности сегодняшних успехов в самостоятельном обучении', 'AR': '{name} - تفاصيل إنجاز التعلم الذاتي اليوم', 'HI': '{name} - आज की स्व-निर्देशित शिक्षण उपलब्धि का विवरण', 'VI': '{name} - Chi tiết thành tích học tập tự định hướng hôm nay', 'ES': '{name} - Detalles del logro de aprendizaje autónomo de hoy', 'TH': '{name} - รายละเอียดผลสัมฤทธิ์การเรียนรู้ด้วยตนเองวันนี้'},
+    'todayWord': {'KO': '오늘', 'EN': 'Today', 'JA': '本日', 'ZH': '今天', 'FR': "Aujourd'hui", 'DE': 'Heute', 'RU': 'Сегодня', 'AR': 'اليوم', 'HI': 'आज', 'VI': 'Hôm nay', 'ES': 'Hoy', 'TH': 'วันนี้'},
+    'sectionTitle1Foreign': {'KO': '{name} {day} 자기주도 학습 성취도 상세보기', 'EN': "{name}'s Self-Directed Learning Achievement Details ({day})", 'JA': '{name} 自己主導学習成果詳細（{day}）', 'ZH': '{name} 自主学习成果详情（{day}）', 'FR': "Détails de la réussite en apprentissage autonome de {name} ({day})", 'DE': '{name} - Details zur selbstgesteuerten Lernleistung ({day})', 'RU': '{name} - Подробности успехов в самостоятельном обучении ({day})', 'AR': '{name} - تفاصيل إنجاز التعلم الذاتي ({day})', 'HI': '{name} - स्व-निर्देशित शिक्षण उपलब्धि का विवरण ({day})', 'VI': '{name} - Chi tiết thành tích học tập tự định hướng ({day})', 'ES': '{name} - Detalles del logro de aprendizaje autónomo ({day})', 'TH': '{name} - รายละเอียดผลสัมฤทธิ์การเรียนรู้ด้วยตนเอง ({day})'},
     'sectionTitle2Foreign': {'KO': '최근 학습 변화량 분석 데이터', 'EN': 'Recent Learning Change Analysis', 'JA': '最近の学習変化量分析データ', 'ZH': '近期学习变化量分析数据', 'FR': "Analyse récente des variations d'apprentissage", 'DE': 'Analyse der jüngsten Lernveränderungen', 'RU': 'Анализ недавних изменений в учёбе', 'AR': 'تحليل التغيّرات الأخيرة في التعلم', 'HI': 'हाल के अध्ययन परिवर्तन का विश्लेषण', 'VI': 'Phân tích biến động học tập gần đây', 'ES': 'Análisis reciente de la variación de aprendizaje', 'TH': 'การวิเคราะห์ความเปลี่ยนแปลงการเรียนล่าสุด'},
     'sectionTitle3Foreign': {'KO': '학습 기록 분석 진단 센터', 'EN': 'Learning Record Diagnostic Center', 'JA': '学習記録分析診断センター', 'ZH': '学习记录分析诊断中心', 'FR': "Centre de diagnostic des données d'apprentissage", 'DE': 'Diagnosezentrum für Lernaufzeichnungen', 'RU': 'Диагностический центр учебных записей', 'AR': 'مركز تشخيص سجلات التعلم', 'HI': 'अध्ययन रिकॉर्ड निदान केंद्र', 'VI': 'Trung tâm chẩn đoán hồ sơ học tập', 'ES': 'Centro de diagnóstico de registros de aprendizaje', 'TH': 'ศูนย์วินิจฉัยบันทึกการเรียนรู้'},
-    'todayEmptyMsg': {'KO': '오늘 아직 기록된 학습 세션이 없습니다.', 'EN': 'No study sessions have been recorded today yet.', 'JA': '本日はまだ記録された学習セッションがありません。', 'ZH': '今天还没有记录的学习记录。', 'FR': "Aucune session d'étude n'a encore été enregistrée aujourd'hui.", 'DE': 'Heute wurden noch keine Lerneinheiten aufgezeichnet.', 'RU': 'Сегодня пока не записано ни одной учебной сессии.', 'AR': 'لم يتم تسجيل أي جلسة دراسية اليوم بعد.', 'HI': 'आज अभी तक कोई अध्ययन सत्र दर्ज नहीं हुआ है।', 'VI': 'Hôm nay chưa có buổi học nào được ghi lại.', 'ES': 'Todavía no se ha registrado ninguna sesión de estudio hoy.', 'TH': 'วันนี้ยังไม่มีการบันทึกช่วงเรียน'},
+    'todayEmptyMsg': {'KO': '{day}에는 아직 기록된 학습 세션이 없습니다.', 'EN': '{day}: No study sessions have been recorded yet.', 'JA': '{day}はまだ記録された学習セッションがありません。', 'ZH': '{day}还没有记录的学习记录。', 'FR': "{day} : aucune session d'étude n'a encore été enregistrée.", 'DE': '{day}: Es wurden noch keine Lerneinheiten aufgezeichnet.', 'RU': '{day}: пока не записано ни одной учебной сессии.', 'AR': '{day}: لم يتم تسجيل أي جلسة دراسية بعد.', 'HI': '{day}: अभी तक कोई अध्ययन सत्र दर्ज नहीं हुआ है।', 'VI': '{day}: chưa có buổi học nào được ghi lại.', 'ES': '{day}: todavía no se ha registrado ninguna sesión de estudio.', 'TH': '{day}: ยังไม่มีการบันทึกช่วงเรียน'},
     'periodLabel': {'KO': '제{n}교시', 'EN': 'Period {n}', 'JA': '第{n}時限', 'ZH': '第{n}节', 'FR': '{n}e période', 'DE': '{n}. Einheit', 'RU': '{n}-й урок', 'AR': 'الحصة {n}', 'HI': '{n} पीरियड', 'VI': 'Tiết {n}', 'ES': 'Periodo {n}', 'TH': 'คาบที่ {n}'},
     'durationFocusedLabel': {'KO': '{min}분 집중완료', 'EN': '{min} min focused study completed', 'JA': '{min}分 集中学習完了', 'ZH': '专注学习{min}分钟完成', 'FR': "{min} min d'étude concentrée terminée", 'DE': '{min} Min. konzentriertes Lernen abgeschlossen', 'RU': '{min} мин сосредоточенной учёбы завершено', 'AR': 'اكتمال {min} دقيقة من الدراسة المركزة', 'HI': '{min} मिनट केंद्रित अध्ययन पूर्ण', 'VI': 'Hoàn thành {min} phút học tập trung', 'ES': '{min} min de estudio enfocado completados', 'TH': 'เรียนแบบตั้งใจครบ {min} นาที'},
     'lectureStudyDefault': {'KO': '강의 학습', 'EN': 'Lecture study', 'JA': '講義学習', 'ZH': '讲课学习', 'FR': 'Étude en cours', 'DE': 'Vorlesungslernen', 'RU': 'Изучение лекции', 'AR': 'دراسة المحاضرة', 'HI': 'व्याख्यान अध्ययन', 'VI': 'Học theo bài giảng', 'ES': 'Estudio de clase', 'TH': 'เรียนแบบบรรยาย'},
@@ -59,10 +72,10 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
     'scoreSuffix': {'KO': '{score}점', 'EN': '{score} pts', 'JA': '{score}点', 'ZH': '{score}分', 'FR': '{score} pts', 'DE': '{score} Pkt.', 'RU': '{score} баллов', 'AR': '{score} نقطة', 'HI': '{score} अंक', 'VI': '{score} điểm', 'ES': '{score} pts', 'TH': '{score} คะแนน'},
     'recordTypeLecture': {'KO': '강의', 'EN': 'Lecture', 'JA': '講義', 'ZH': '讲课', 'FR': 'Cours', 'DE': 'Vorlesung', 'RU': 'Лекция', 'AR': 'محاضرة', 'HI': 'व्याख्यान', 'VI': 'Bài giảng', 'ES': 'Clase', 'TH': 'บรรยาย'},
     'recordTypeEval': {'KO': '평가', 'EN': 'Evaluation', 'JA': '評価', 'ZH': '评估', 'FR': 'Évaluation', 'DE': 'Bewertung', 'RU': 'Оценка', 'AR': 'تقييم', 'HI': 'मूल्यांकन', 'VI': 'Đánh giá', 'ES': 'Evaluación', 'TH': 'ประเมิน'},
-    'todayStudyTimeLabel': {'KO': '오늘 학습시간', 'EN': "Today's Study Time", 'JA': '本日の学習時間', 'ZH': '今日学习时间', 'FR': "Temps d'étude aujourd'hui", 'DE': 'Heutige Lernzeit', 'RU': 'Учебное время сегодня', 'AR': 'وقت الدراسة اليوم', 'HI': 'आज का अध्ययन समय', 'VI': 'Thời gian học hôm nay', 'ES': 'Tiempo de estudio de hoy', 'TH': 'เวลาเรียนวันนี้'},
-    'vsYesterdayFormat': {'KO': '어제 대비 {pct}% {arrow}', 'EN': 'vs yesterday {pct}% {arrow}', 'JA': '昨日比 {pct}% {arrow}', 'ZH': '较昨日 {pct}% {arrow}', 'FR': "vs hier {pct}% {arrow}", 'DE': 'vs. gestern {pct}% {arrow}', 'RU': 'к вчера {pct}% {arrow}', 'AR': 'مقارنة بالأمس {pct}% {arrow}', 'HI': 'कल की तुलना में {pct}% {arrow}', 'VI': 'so với hôm qua {pct}% {arrow}', 'ES': 'vs ayer {pct}% {arrow}', 'TH': 'เทียบเมื่อวาน {pct}% {arrow}'},
+    'todayStudyTimeLabel': {'KO': '{day} 학습시간', 'EN': '{day} Study Time', 'JA': '{day}の学習時間', 'ZH': '{day}学习时间', 'FR': "Temps d'étude ({day})", 'DE': 'Lernzeit ({day})', 'RU': 'Учебное время ({day})', 'AR': 'وقت الدراسة ({day})', 'HI': '{day} का अध्ययन समय', 'VI': 'Thời gian học ({day})', 'ES': 'Tiempo de estudio ({day})', 'TH': 'เวลาเรียน ({day})'},
+    'vsYesterdayFormat': {'KO': '전날 대비 {pct}% {arrow}', 'EN': 'vs previous day {pct}% {arrow}', 'JA': '前日比 {pct}% {arrow}', 'ZH': '较前一日 {pct}% {arrow}', 'FR': "vs jour précédent {pct}% {arrow}", 'DE': 'vs. Vortag {pct}% {arrow}', 'RU': 'к предыдущему дню {pct}% {arrow}', 'AR': 'مقارنة باليوم السابق {pct}% {arrow}', 'HI': 'पिछले दिन की तुलना में {pct}% {arrow}', 'VI': 'so với ngày trước {pct}% {arrow}', 'ES': 'vs día anterior {pct}% {arrow}', 'TH': 'เทียบวันก่อนหน้า {pct}% {arrow}'},
     'vsWeeklyAvgFormat': {'KO': '1주 평균 대비 {pct}% {arrow}', 'EN': 'vs weekly avg {pct}% {arrow}', 'JA': '週平均比 {pct}% {arrow}', 'ZH': '较周平均 {pct}% {arrow}', 'FR': 'vs moyenne hebdo {pct}% {arrow}', 'DE': 'vs. Wochendurchschnitt {pct}% {arrow}', 'RU': 'к недельному среднему {pct}% {arrow}', 'AR': 'مقارنة بمتوسط الأسبوع {pct}% {arrow}', 'HI': 'साप्ताहिक औसत की तुलना में {pct}% {arrow}', 'VI': 'so với TB tuần {pct}% {arrow}', 'ES': 'vs promedio semanal {pct}% {arrow}', 'TH': 'เทียบค่าเฉลี่ยรายสัปดาห์ {pct}% {arrow}'},
-    'todaySessionCountLabel': {'KO': '오늘 학습 세션 수', 'EN': "Today's Session Count", 'JA': '本日の学習セッション数', 'ZH': '今日学习记录数', 'FR': "Nombre de sessions aujourd'hui", 'DE': 'Anzahl heutiger Lerneinheiten', 'RU': 'Количество сегодняшних сессий', 'AR': 'عدد جلسات اليوم', 'HI': 'आज के सत्रों की संख्या', 'VI': 'Số buổi học hôm nay', 'ES': 'Sesiones de hoy', 'TH': 'จำนวนช่วงเรียนวันนี้'},
+    'todaySessionCountLabel': {'KO': '{day} 학습 세션 수', 'EN': '{day} Session Count', 'JA': '{day}の学習セッション数', 'ZH': '{day}学习记录数', 'FR': "Nombre de sessions ({day})", 'DE': 'Anzahl Lerneinheiten ({day})', 'RU': 'Количество сессий ({day})', 'AR': 'عدد الجلسات ({day})', 'HI': '{day} के सत्रों की संख्या', 'VI': 'Số buổi học ({day})', 'ES': 'Sesiones ({day})', 'TH': 'จำนวนช่วงเรียน ({day})'},
     'sessionsRecordedFormat': {'KO': '{count}개 세션 기록됨', 'EN': '{count} sessions recorded', 'JA': '{count}件のセッション記録', 'ZH': '已记录{count}节', 'FR': '{count} sessions enregistrées', 'DE': '{count} Einheiten erfasst', 'RU': 'Записано сессий: {count}', 'AR': 'تم تسجيل {count} جلسة', 'HI': '{count} सत्र दर्ज', 'VI': 'Đã ghi {count} buổi', 'ES': '{count} sesiones registradas', 'TH': 'บันทึกแล้ว {count} ช่วง'},
     'totalFocusFormat': {'KO': '총 {min}분 집중', 'EN': 'Total {min} min focused', 'JA': '計{min}分集中', 'ZH': '共专注{min}分钟', 'FR': '{min} min de concentration au total', 'DE': 'Insgesamt {min} Min. konzentriert', 'RU': 'Всего {min} мин сосредоточенно', 'AR': 'إجمالي {min} دقيقة تركيز', 'HI': 'कुल {min} मिनट केंद्रित', 'VI': 'Tổng {min} phút tập trung', 'ES': 'Total {min} min enfocado', 'TH': 'รวมตั้งใจเรียน {min} นาที'},
     'noRecordYet': {'KO': '아직 기록 없음', 'EN': 'No record yet', 'JA': 'まだ記録なし', 'ZH': '暂无记录', 'FR': "Pas encore d'enregistrement", 'DE': 'Noch keine Aufzeichnung', 'RU': 'Записей пока нет', 'AR': 'لا يوجد سجل بعد', 'HI': 'अभी तक कोई रिकॉर्ड नहीं', 'VI': 'Chưa có ghi chú', 'ES': 'Aún sin registro', 'TH': 'ยังไม่มีบันทึก'},
@@ -100,6 +113,23 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
   // 🆕 [12개국어 연동] rec.recordType('강의'/'평가') 원본값을 화면 표시용 번역 문구로 변환
   static String _recordTypeDisplay(String raw) => raw == '평가' ? _t('recordTypeEval') : _t('recordTypeLecture');
 
+  // 🆕 [지난 일자 조회] 선택된 날짜가 오늘이면 "오늘"(각 언어), 아니면 "YYYY.MM.DD" 형식으로 표시
+  bool get _isToday {
+    final now = DateTime.now();
+    return selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day;
+  }
+
+  String get _dayLabel {
+    if (_isToday) return _t('todayWord');
+    return "${selectedDate.year}.${selectedDate.month.toString().padLeft(2, '0')}.${selectedDate.day.toString().padLeft(2, '0')}";
+  }
+
+  // 기본모드(KO/EN) korTitle 파라미터에 들어갈 한글 전용 날짜 라벨 (foreignTitle과 별개로 항상 필요)
+  String get _dayLabelKo {
+    if (_isToday) return '오늘';
+    return "${selectedDate.year}.${selectedDate.month.toString().padLeft(2, '0')}.${selectedDate.day.toString().padLeft(2, '0')}";
+  }
+
   int get _todayVsYesterdayPercent {
     if (yesterdayTotalMinutes <= 0) return todayTotalMinutes > 0 ? 100 : 0;
     return (((todayTotalMinutes - yesterdayTotalMinutes) / yesterdayTotalMinutes) * 100).round();
@@ -110,6 +140,42 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
     return (((todayTotalMinutes - weeklyAvgMinutesPerDay) / weeklyAvgMinutesPerDay) * 100).round();
   }
 
+  // 🆕 [지난 일자 조회] 좌우 화살표 + 현재 조회 중인 날짜 표시 헤더
+  Widget _buildDateNavHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          InkWell(
+            onTap: onPreviousDay,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(Icons.chevron_left_rounded, color: brandGolden, size: 24),
+            ),
+          ),
+          Container(
+            constraints: const BoxConstraints(minWidth: 100),
+            alignment: Alignment.center,
+            child: Text(
+              _dayLabel,
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ),
+          InkWell(
+            onTap: isViewingToday ? null : onNextDay,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(Icons.chevron_right_rounded, color: isViewingToday ? Colors.white24 : brandGolden, size: 24),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -117,14 +183,16 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
       children: [
         buildCustomSectionTitle(
           "Self-Directed Learning Records",
-          "$childName 오늘 자기주도 학습 성취도 상세보기",
+          "$childName $_dayLabelKo 자기주도 학습 성취도 상세보기",
           fontSize: 14.0,
-          foreignTitle: _tf('sectionTitle1Foreign', {'name': childName}),
+          foreignTitle: _tf('sectionTitle1Foreign', {'name': childName, 'day': _dayLabel}),
         ),
-        const SizedBox(height: 14),
+        // 🆕 [지난 일자 조회] 좌우 화살표로 하루씩 이동
+        _buildDateNavHeader(),
+        const SizedBox(height: 4),
 
-        // 🆕 [실데이터 연동] 오늘 실제 세션 목록을 제1교시부터 순서대로 표시 (강의/평가 전부 포함)
-        if (todaySessions.isEmpty)
+        // 🆕 [실데이터 연동] 선택된 날짜의 실제 세션 목록을 제1교시부터 순서대로 표시 (강의/평가 전부 포함)
+        if (sessionsForDate.isEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -134,14 +202,14 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
               border: Border.all(color: Colors.white12),
             ),
             child: Text(
-              _t('todayEmptyMsg'),
+              _tf('todayEmptyMsg', {'day': _dayLabel}),
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13),
             ),
           )
         else
-          ...List.generate(todaySessions.length, (idx) {
-            final rec = todaySessions[idx];
+          ...List.generate(sessionsForDate.length, (idx) {
+            final rec = sessionsForDate[idx];
             return _buildAdvancedTimelineCard(
               period: _tf('periodLabel', {'n': '${idx + 1}'}),
               subject: rec.subject,
@@ -177,14 +245,14 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
           child: Column(
             children: [
               _buildAlignedVariationRow(
-                _t('todayStudyTimeLabel'),
+                _tf('todayStudyTimeLabel', {'day': _dayLabel}),
                 _tf('vsYesterdayFormat', {'pct': '${_todayVsYesterdayPercent >= 0 ? '+' : ''}$_todayVsYesterdayPercent', 'arrow': _todayVsYesterdayPercent >= 0 ? '🔺' : '🔻'}),
                 _tf('vsWeeklyAvgFormat', {'pct': '${_todayVsWeeklyAvgPercent >= 0 ? '+' : ''}$_todayVsWeeklyAvgPercent', 'arrow': _todayVsWeeklyAvgPercent >= 0 ? '🔺' : '🔻'}),
               ),
               const Divider(color: Colors.white10, height: 20),
               _buildAlignedVariationRow(
-                _t('todaySessionCountLabel'),
-                _tf('sessionsRecordedFormat', {'count': '${todaySessions.length}'}),
+                _tf('todaySessionCountLabel', {'day': _dayLabel}),
+                _tf('sessionsRecordedFormat', {'count': '${sessionsForDate.length}'}),
                 todayTotalMinutes > 0 ? _tf('totalFocusFormat', {'min': '$todayTotalMinutes'}) : _t('noRecordYet'),
               ),
             ],
