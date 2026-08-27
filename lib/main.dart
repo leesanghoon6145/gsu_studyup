@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_localizations/flutter_localizations.dart'; // 🆕 [한국어 달력 등 시스템 위젯 현지화]
+import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'home_dashboard_screen.dart';
@@ -10,6 +12,9 @@ import 'timer/timer_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase 초기화 (학생-부모 기기 연결용 서버 연결)
+  await Firebase.initializeApp();
 
   // 웹에서는 포그라운드 태스크 초기화 건너뛰기
   if (!kIsWeb) {
@@ -53,6 +58,17 @@ class GsuStudyUpApp extends StatelessWidget {
       navigatorKey: Timer2Service.navigatorKey, // ← 이 줄만 추가
       title: 'GSU StudyUp',
       debugShowCheckedModeBanner: false,
+      // 🆕 [한국어 달력 등 시스템 위젯 현지화] 생년월일 선택 달력 등이 영어 대신 한국어로 표시되도록 등록
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ko'),
+        Locale('en'),
+      ],
+      locale: const Locale('ko'), // 기본 로케일 한국어
       theme: ThemeData(
         brightness: Brightness.dark,
         primaryColor: const Color(0xFFFDE047), // 황금색 포인트

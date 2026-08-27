@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'global_lang.dart';
 import 'parent/parent_main_dashboard_screen.dart';
 import 'services/user_profile_service.dart'; // 🆕 [실사용 전환 2026-07-29] 실제 가입자 이름/유형 저장용
+import 'services/family_link_service.dart'; // 🆕 [학생-부모 기기 연결] 6자리 코드 생성/연결
 import 'schedule/general_planner_home_screen.dart'; // 🆕 [임시 테스트용] 일반 플래너 진입
 // =============================================================================
 // 🆕 [12개국 다국어 연동] 2026-07-29 추가: signup_screen.dart 전용 렌더 헬퍼 함수 3종
@@ -112,7 +113,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool isStudent = true;
   bool isGeneral = false;
 
-  // 🆕 [법적 필수 수정] 2026-07-29: 자진 체크박스(isUnder14) 삭제.
+  // 🆕 [법적 필수 수정] 자진 체크박스(isUnder14) 삭제.
   // 생년월일을 직접 입력받아 만 나이를 계산하는 방식으로 교체 (임의 우회 방지).
   DateTime? _selectedBirthDate;
 
@@ -123,6 +124,15 @@ class _SignupScreenState extends State<SignupScreen> {
   // 🆕 [법적 필수 수정] 보호자 실제 인증 절차용 상태값
   bool _isParentAuthSent = false;
   bool _isParentVerified = false;
+
+  // 🆕 [학생-부모 기기 연결] 학생용 코드 생성 상태
+  String? _generatedLinkCode;
+  bool _generatingCode = false;
+
+  // 🆕 [학생-부모 기기 연결] 학부모용 코드 입력/연결 상태
+  bool _connectingCode = false;
+  bool _linkSuccess = false;
+  String? _linkStatusMessage;
 
   final TextEditingController _nationalityController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
@@ -136,6 +146,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _classCodeController = TextEditingController();
   final TextEditingController _childEmailController = TextEditingController();
   final TextEditingController _relationshipController = TextEditingController();
+  final TextEditingController _childLinkCodeController = TextEditingController(); // 🆕 [학생-부모 기기 연결]
 
   // 🆕 [법적 필수 수정] 보호자 연락처 및 인증번호 입력용 컨트롤러
   final TextEditingController _parentEmailController = TextEditingController();
@@ -173,6 +184,38 @@ class _SignupScreenState extends State<SignupScreen> {
     return '일반';
   }
 
+  // 🆕 [학생-부모 기기 연결] 학생용: 부모님께 알려줄 6자리 코드 생성
+  Future<void> _generateMyLinkCode() async {
+    setState(() => _generatingCode = true);
+    final code = await FamilyLinkService.generateLinkCode();
+    if (!mounted) return;
+    setState(() {
+      _generatedLinkCode = code;
+      _generatingCode = false;
+    });
+  }
+
+  // 🆕 [학생-부모 기기 연결] 학부모용: 자녀 코드 입력해서 연결 시도 (최대 5명)
+  Future<void> _connectChildCode() async {
+    final code = _childLinkCodeController.text.trim();
+    if (code.length != 6) {
+      setState(() {
+        _linkStatusMessage = '6자리 코드를 정확히 입력하세요';
+        _linkSuccess = false;
+      });
+      return;
+    }
+    setState(() => _connectingCode = true);
+    final ok = await FamilyLinkService.connectWithCode(code);
+    if (!mounted) return;
+    setState(() {
+      _connectingCode = false;
+      _linkSuccess = ok;
+      _linkStatusMessage = ok ? '연결 성공! (${_childLinkCodeController.text.trim()})' : '존재하지 않는 코드이거나 이미 5명이 연결되었습니다';
+      if (ok) _childLinkCodeController.clear();
+    });
+  }
+
   // 🆕 [법적 필수 수정] 생년월일 선택 다이얼로그
   Future<void> _pickBirthDate() async {
     const Color brandGolden = Color(0xFFE5C158);
@@ -182,6 +225,10 @@ class _SignupScreenState extends State<SignupScreen> {
       initialDate: DateTime(now.year - 15, now.month, now.day),
       firstDate: DateTime(now.year - 100),
       lastDate: now,
+      locale: const Locale('ko'), // 🆕 [한국어 달력] 월/요일/버튼 전부 한국어로 표시 (영어 어려운 부모님 배려)
+      helpText: '생년월일 선택',
+      cancelText: '취소',
+      confirmText: '확인',
       builder: (context, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
@@ -301,6 +348,7 @@ class _SignupScreenState extends State<SignupScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        toolbarHeight: 96, // 🆕 [헤더 로고 추가] 로고+글자 2줄이 다 들어가도록 기본 56→96으로 확장 (한글 짤림 방지)
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -308,12 +356,16 @@ class _SignupScreenState extends State<SignupScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: dkeColumnLines(
-            DkeLang.signupHeadingMap,
-            enStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 23, letterSpacing: 1.0, color: brandGolden),
-            koStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: brandGolden),
-            gapHeight: 15,
-          ),
+          children: [
+            Image.asset('assets/images/gsu_logo.png', height: 26), // 🆕 [헤더 로고] SIGNUP 글자 바로 위에 배치
+            const SizedBox(height: 2), // 🆕 [간격 최소화] 로고-글자 사이 간격
+            ...dkeColumnLines(
+              DkeLang.signupHeadingMap,
+              enStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 23, letterSpacing: 1.0, color: brandGolden),
+              koStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: brandGolden),
+              gapHeight: 2, // 🆕 [간격 최소화] 15 → 2 (회원가입/SIGNUP 사이 간격 최소화)
+            ),
+          ],
         ),
       ),
       body: SingleChildScrollView(
@@ -478,13 +530,120 @@ class _SignupScreenState extends State<SignupScreen> {
             if (isStudent && !isGeneral) ...[
               _buildInputField(hint: dkeInline(DkeLang.hintSchoolMap), icon: Icons.school, controller: _schoolController),
               _buildInputField(hint: dkeInline(DkeLang.hintGradeMap), icon: Icons.grade, controller: _gradeController),
-              _buildInputField(hint: dkeInline(DkeLang.hintClassCodeMap), icon: Icons.qr_code, controller: _classCodeController),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInputField(hint: dkeInline(DkeLang.hintClassCodeMap), icon: Icons.qr_code, controller: _classCodeController),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.help_outline, color: Colors.white38, size: 20),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          backgroundColor: const Color(0xFF0D1527),
+                          title: const Text('학급코드란?', style: TextStyle(color: brandGolden, fontWeight: FontWeight.bold)),
+                          content: const Text(
+                            '학급코드는 나중에 학원/학교 "반(클래스)" 기능이 추가될 때 사용할 코드입니다.\n\n지금은 비워두셔도 회원가입에 전혀 지장이 없습니다.',
+                            style: TextStyle(color: Colors.white70, height: 1.5),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('확인', style: TextStyle(color: brandGolden, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+
+              // 🆕 [학생-부모 기기 연결] 부모님께 알려줄 연결 코드 발급 UI
+              const SizedBox(height: 10),
+              if (_generatedLinkCode == null) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _generatingCode ? null : _generateMyLinkCode,
+                    icon: const Icon(Icons.family_restroom, color: brandGolden),
+                    label: Text(
+                      _generatingCode ? '생성 중...' : '부모님 연결 코드 발급받기',
+                      style: const TextStyle(color: brandGolden, fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: brandGolden),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: brandGolden.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: brandGolden.withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text('이 번호를 부모님께 알려주세요', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      Text(
+                        _generatedLinkCode!,
+                        style: const TextStyle(color: brandGolden, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 6),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
             ],
 
             // 학부모 전용 필드
             if (!isStudent && !isGeneral) ...[
               _buildInputField(hint: dkeInline(DkeLang.hintChildEmailMap), icon: Icons.child_care, controller: _childEmailController),
               _buildInputField(hint: dkeInline(DkeLang.hintRelationshipMap), icon: Icons.family_restroom, controller: _relationshipController),
+
+              // 🆕 [학생-부모 기기 연결] 자녀 코드 입력 → 연결 (최대 5명)
+              const SizedBox(height: 10),
+              _buildInputField(
+                hint: '자녀에게 받은 연결 코드 (6자리)',
+                icon: Icons.link,
+                controller: _childLinkCodeController,
+              ),
+              if (_linkStatusMessage != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    _linkStatusMessage!,
+                    style: TextStyle(
+                      color: _linkSuccess ? Colors.greenAccent : Colors.redAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _connectingCode ? null : _connectChildCode,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: brandGolden,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    _connectingCode ? '연결 중...' : '자녀와 연결하기 (최대 5명)',
+                    style: const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
             ],
 
             const SizedBox(height: 10),

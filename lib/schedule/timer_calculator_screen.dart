@@ -1,1231 +1,947 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+
+/// 일반 플래너 전용 타이머 계산기.
+/// 학생용 TimerScreen / Timer2Service / 학습기록과 완전히 분리한다.
 class TimerCalculatorScreen extends StatefulWidget {
   const TimerCalculatorScreen({super.key});
-
   @override
   State<TimerCalculatorScreen> createState() => _TimerCalculatorScreenState();
 }
 
-class _TimerCalculatorScreenState extends State<TimerCalculatorScreen> {
-  static const Color _bg = Color(0xFF050A14);
-  static const Color _panel = Color(0xFF0D1627);
-  static const Color _panelLight = Color(0xFF131F34);
-  static const Color _gold = Color(0xFFE5C158);
-  static const Color _goldLight = Color(0xFFFFF3C4);
-  static const Color _text = Color(0xFFF5F1E4);
-  static const Color _muted = Color(0xFF9DA8BA);
-
-  Timer? _timer;
-
-  int _timerSeconds = 5 * 60;
-  int _remainingSeconds = 5 * 60;
-  bool _timerRunning = false;
-
-  Stopwatch _stopwatch = Stopwatch();
-  Timer? _stopwatchTicker;
-  Duration _stopwatchDisplay = Duration.zero;
-
-  TimeOfDay? _alarmTime;
-  bool _alarmEnabled = false;
-
-  String _calculatorDisplay = '0';
-  double? _firstNumber;
-  String? _operation;
-  bool _waitingForSecondNumber = false;
-
-  final TextEditingController _amountController =
-  TextEditingController(text: '100');
-
-  final TextEditingController _rateController =
-  TextEditingController(text: '1350');
-
-  String _fromCurrency = 'USD';
-  String _toCurrency = 'KRW';
-
-  final List<String> _currencies = const [
-    'KRW',
-    'USD',
-    'JPY',
-    'EUR',
-    'CNY',
-    'GBP',
-    'AUD',
-    'CAD',
-  ];
+class _TimerCalculatorScreenState extends State<TimerCalculatorScreen>
+    with SingleTickerProviderStateMixin {
+  static const bg = Color(0xFF030712);
+  static const card = Color(0xFF0D1527);
+  static const gold = Color(0xFFE5C158);
+  late final TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-
-    _stopwatch = Stopwatch();
-    _stopwatchTicker = Timer.periodic(
-      const Duration(milliseconds: 30),
-          (_) {
-        if (!mounted) return;
-        if (_stopwatch.isRunning) {
-          setState(() {
-            _stopwatchDisplay = _stopwatch.elapsed;
-          });
-        }
-      },
-    );
+    _tabs = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _stopwatchTicker?.cancel();
-    _amountController.dispose();
-    _rateController.dispose();
+    _tabs.dispose();
     super.dispose();
   }
 
-  // --------------------------------------------------------------------------
-  // TIMER
-  // --------------------------------------------------------------------------
-
-  void _startTimer() {
-    if (_remainingSeconds <= 0) return;
-
-    _timer?.cancel();
-
-    setState(() {
-      _timerRunning = true;
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_remainingSeconds <= 1) {
-        timer.cancel();
-
-        setState(() {
-          _remainingSeconds = 0;
-          _timerRunning = false;
-        });
-
-        _showMessage('타이머가 종료되었습니다.');
-      } else {
-        setState(() {
-          _remainingSeconds--;
-        });
-      }
-    });
-  }
-
-  void _pauseTimer() {
-    _timer?.cancel();
-
-    setState(() {
-      _timerRunning = false;
-    });
-  }
-
-  void _resetTimer() {
-    _timer?.cancel();
-
-    setState(() {
-      _timerRunning = false;
-      _remainingSeconds = _timerSeconds;
-    });
-  }
-
-  Future<void> _setTimer() async {
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        int minutes = (_remainingSeconds ~/ 60).clamp(1, 999);
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: _panel,
-              title: Text(
-                '타이머 설정',
-                style: GoogleFonts.notoSansKr(
-                  color: _goldLight,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$minutes분',
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white,
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Slider(
-                    value: minutes.toDouble(),
-                    min: 1,
-                    max: 180,
-                    divisions: 179,
-                    activeColor: _gold,
-                    onChanged: (value) {
-                      setDialogState(() {
-                        minutes = value.round();
-                      });
-                    },
-                  ),
-                  Text(
-                    '1분 ~ 180분',
-                    style: GoogleFonts.notoSansKr(color: _muted),
-                  ),
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: bg,
+    appBar: AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: true,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+            color: Colors.white70, size: 19),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('TIMER CALCULATOR',
+            style: GoogleFonts.gowunBatang(
+                color: gold,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: .8)),
+        Text('타이머 계산기',
+            style: GoogleFonts.notoSansKr(
+                color: Colors.white70,
+                fontWeight: FontWeight.w600,
+                fontSize: 12)),
+      ]),
+    ),
+    body: Container(
+      decoration: const BoxDecoration(
+          gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [bg, Color(0xFF091225)])),
+      child: SafeArea(
+        top: false,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                  color: card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: gold.withOpacity(.35))),
+              child: TabBar(
+                controller: _tabs,
+                dividerColor: Colors.transparent,
+                indicator: BoxDecoration(
+                    color: gold.withOpacity(.14),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: gold.withOpacity(.55))),
+                indicatorPadding: const EdgeInsets.all(4),
+                labelColor: gold,
+                unselectedLabelColor: Colors.white54,
+                tabs: const [
+                  Tab(icon: Icon(Icons.timer_outlined, size: 23), text: 'TIMER'),
+                  Tab(icon: Icon(Icons.calculate_outlined, size: 23), text: 'CALCULATOR'),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('취소'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, minutes),
-                  child: Text(
-                    '설정',
-                    style: TextStyle(color: _gold),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (result == null) return;
-
-    _timer?.cancel();
-
-    setState(() {
-      _timerSeconds = result * 60;
-      _remainingSeconds = _timerSeconds;
-      _timerRunning = false;
-    });
-  }
-
-  String _formatTimer(int seconds) {
-    final hours = seconds ~/ 3600;
-    final minutes = (seconds % 3600) ~/ 60;
-    final secs = seconds % 60;
-
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:'
-          '${minutes.toString().padLeft(2, '0')}:'
-          '${secs.toString().padLeft(2, '0')}';
-    }
-
-    return '${minutes.toString().padLeft(2, '0')}:'
-        '${secs.toString().padLeft(2, '0')}';
-  }
-
-  // --------------------------------------------------------------------------
-  // STOPWATCH
-  // --------------------------------------------------------------------------
-
-  void _toggleStopwatch() {
-    setState(() {
-      if (_stopwatch.isRunning) {
-        _stopwatch.stop();
-      } else {
-        _stopwatch.start();
-      }
-    });
-  }
-
-  void _resetStopwatch() {
-    setState(() {
-      _stopwatch.stop();
-      _stopwatch.reset();
-      _stopwatchDisplay = Duration.zero;
-    });
-  }
-
-  String _formatStopwatch(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    final hundredths =
-    (duration.inMilliseconds.remainder(1000) ~/ 10);
-
-    return '${hours.toString().padLeft(2, '0')}:'
-        '${minutes.toString().padLeft(2, '0')}:'
-        '${seconds.toString().padLeft(2, '0')}.'
-        '${hundredths.toString().padLeft(2, '0')}';
-  }
-
-  // --------------------------------------------------------------------------
-  // ALARM
-  // --------------------------------------------------------------------------
-
-  Future<void> _selectAlarmTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _alarmTime ?? TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: _gold,
-              surface: _panel,
             ),
           ),
-          child: child!,
-        );
-      },
-    );
+          Expanded(child: TabBarView(controller: _tabs, children: const [
+            _TimerTab(),
+            _CalculatorTab(),
+          ])),
+        ]),
+      ),
+    ),
+  );
+}
 
-    if (picked == null) return;
+class _TimerTab extends StatelessWidget {
+  const _TimerTab();
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(18, 2, 18, 30),
+    children: const [
+      _IntroCard(),
+      SizedBox(height: 14),
+      _CountdownCard(),
+      SizedBox(height: 14),
+      _StopwatchCard(),
+      SizedBox(height: 14),
+      _AlarmCard(),
+      SizedBox(height: 14),
+      _WorldClockCard(),
+    ],
+  );
+}
 
-    setState(() {
-      _alarmTime = picked;
-      _alarmEnabled = true;
-    });
-  }
+class _IntroCard extends StatelessWidget {
+  const _IntroCard();
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(20),
+      gradient: const LinearGradient(
+          colors: [Color(0xFF111B31), Color(0xFF08101F)]),
+      border: Border.all(color: const Color(0x55E5C158)),
+      boxShadow: const [
+        BoxShadow(color: Color(0x26000000), blurRadius: 18, offset: Offset(0, 8))
+      ],
+    ),
+    child: Row(children: [
+      Container(
+          width: 55,
+          height: 55,
+          decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0x19E5C158),
+              border: Border.all(color: const Color(0x66E5C158))),
+          child: const Icon(Icons.auto_awesome_rounded,
+              color: Color(0xFFE5C158), size: 28)),
+      const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('EVERYDAY TIMER',
+            style: GoogleFonts.gowunBatang(
+                color: const Color(0xFFE5C158),
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 1.2)),
+        const SizedBox(height: 4),
+        Text('시간을 더 정확하게',
+            style: GoogleFonts.notoSansKr(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+        const SizedBox(height: 3),
+        Text('측정 · 알람 · 세계시간을 한곳에서',
+            style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5)),
+      ])),
+    ]),
+  );
+}
 
-  // --------------------------------------------------------------------------
-  // CALCULATOR
-  // --------------------------------------------------------------------------
+class _ToolCard extends StatelessWidget {
+  const _ToolCard({required this.icon, required this.title, required this.subtitle, required this.child, this.trailing});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final Widget? trailing;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+    decoration: BoxDecoration(
+        color: const Color(0xFF0D1527),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x35E5C158)),
+        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 14, offset: Offset(0, 6))]),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+                color: const Color(0x1AE5C158),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0x35E5C158))),
+            child: Icon(icon, color: const Color(0xFFE5C158), size: 23)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: GoogleFonts.gowunBatang(
+                  color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 14.5)),
+          const SizedBox(height: 2),
+          Text(subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9.5)),
+        ])),
+        if (trailing != null) trailing!,
+      ]),
+      const SizedBox(height: 11),
+      child,
+    ]),
+  );
+}
 
-  void _calculatorInput(String value) {
-    setState(() {
-      if (_calculatorDisplay == '0' || _waitingForSecondNumber) {
-        _calculatorDisplay = value;
-        _waitingForSecondNumber = false;
-      } else {
-        _calculatorDisplay += value;
-      }
-    });
-  }
+class _GoldButton extends StatelessWidget {
+  const _GoldButton(this.text, this.icon, this.onTap);
+  final String text;
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Ink(
+        height: 45,
+        decoration: BoxDecoration(color: const Color(0xFFE5C158), borderRadius: BorderRadius.circular(12)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: const Color(0xFF080F1E), size: 21),
+          const SizedBox(width: 4),
+          Text(text, style: GoogleFonts.notoSansKr(color: const Color(0xFF080F1E), fontWeight: FontWeight.bold, fontSize: 11.5)),
+        ]),
+      ),
+    ),
+  );
+}
 
-  void _calculatorDecimal() {
-    setState(() {
-      if (_waitingForSecondNumber) {
-        _calculatorDisplay = '0.';
-        _waitingForSecondNumber = false;
-      } else if (!_calculatorDisplay.contains('.')) {
-        _calculatorDisplay += '.';
-      }
-    });
-  }
+class _DarkButton extends StatelessWidget {
+  const _DarkButton(this.text, this.icon, this.onTap);
+  final String text;
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Ink(
+        height: 45,
+        decoration: BoxDecoration(color: const Color(0xFF111B31), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: Colors.white70, size: 21),
+          const SizedBox(width: 4),
+          Text(text, style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5)),
+        ]),
+      ),
+    ),
+  );
 
-  void _calculatorOperation(String operation) {
-    final current = double.tryParse(_calculatorDisplay);
+}
 
-    if (current == null) return;
+class _CountdownCard extends StatefulWidget {
+  const _CountdownCard();
+  @override
+  State<_CountdownCard> createState() => _CountdownCardState();
+}
 
-    setState(() {
-      if (_firstNumber != null && _operation != null) {
-        final result = _calculate(_firstNumber!, current, _operation!);
-        _calculatorDisplay = _formatNumber(result);
-        _firstNumber = result;
-      } else {
-        _firstNumber = current;
-      }
-
-      _operation = operation;
-      _waitingForSecondNumber = true;
-    });
-  }
-
-  void _calculatorEquals() {
-    final second = double.tryParse(_calculatorDisplay);
-
-    if (_firstNumber == null || _operation == null || second == null) {
-      return;
-    }
-
-    final result = _calculate(_firstNumber!, second, _operation!);
-
-    setState(() {
-      _calculatorDisplay = _formatNumber(result);
-      _firstNumber = null;
-      _operation = null;
-      _waitingForSecondNumber = true;
-    });
-  }
-
-  double _calculate(double a, double b, String operation) {
-    switch (operation) {
-      case '+':
-        return a + b;
-      case '-':
-        return a - b;
-      case '×':
-        return a * b;
-      case '÷':
-        return b == 0 ? 0 : a / b;
-      default:
-        return b;
-    }
-  }
-
-  String _formatNumber(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toInt().toString();
-    }
-
-    return value
-        .toStringAsFixed(8)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
-  }
-
-  void _calculatorClear() {
-    setState(() {
-      _calculatorDisplay = '0';
-      _firstNumber = null;
-      _operation = null;
-      _waitingForSecondNumber = false;
-    });
-  }
-
-  void _calculatorDelete() {
-    setState(() {
-      if (_calculatorDisplay.length <= 1) {
-        _calculatorDisplay = '0';
-      } else {
-        _calculatorDisplay =
-            _calculatorDisplay.substring(0, _calculatorDisplay.length - 1);
-      }
-    });
-  }
-
-  // --------------------------------------------------------------------------
-  // CURRENCY
-  // --------------------------------------------------------------------------
-
-  double _currencyResult() {
-    final amount = double.tryParse(_amountController.text) ?? 0;
-    final rate = double.tryParse(_rateController.text) ?? 0;
-
-    return amount * rate;
-  }
-
-  void _swapCurrency() {
-    setState(() {
-      final temp = _fromCurrency;
-      _fromCurrency = _toCurrency;
-      _toCurrency = temp;
-    });
-  }
-
-  // --------------------------------------------------------------------------
-  // WORLD TIME
-  // --------------------------------------------------------------------------
-
-  String _worldTime(int utcOffset) {
-    final utc = DateTime.now().toUtc();
-    final local = utc.add(Duration(hours: utcOffset));
-
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-
-    return '$hour:$minute';
-  }
-
-  // --------------------------------------------------------------------------
-  // UI
-  // --------------------------------------------------------------------------
+class _CountdownCardState extends State<_CountdownCard> {
+  final _h = FixedExtentScrollController();
+  final _m = FixedExtentScrollController(initialItem: 10);
+  final _s = FixedExtentScrollController();
+  Timer? _timer;
+  int _remaining = 0;
+  bool _running = false;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: _gold),
-        title: Column(
-          children: [
-            Text(
-              'TIMER CALCULATOR',
-              style: GoogleFonts.gowunBatang(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
-              ),
-            ),
-            Text(
-              '타이머 계산기',
-              style: GoogleFonts.notoSansKr(
-                color: _gold,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
-          child: Column(
-            children: [
-              _buildTimerCard(),
-              const SizedBox(height: 16),
-              _buildStopwatchCard(),
-              const SizedBox(height: 16),
-              _buildAlarmCard(),
-              const SizedBox(height: 16),
-              _buildWorldClockCard(),
-              const SizedBox(height: 16),
-              _buildCalculatorCard(),
-              const SizedBox(height: 16),
-              _buildCurrencyCard(),
-            ],
-          ),
-        ),
-      ),
-    );
+  void dispose() {
+    _timer?.cancel();
+    _h.dispose();
+    _m.dispose();
+    _s.dispose();
+    super.dispose();
   }
 
-  Widget _buildCard({
-    required Widget child,
-    EdgeInsets padding = const EdgeInsets.all(18),
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: _gold.withOpacity(0.18),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.28),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: child,
-    );
+  int _wheel(FixedExtentScrollController c, int max) => c.hasClients ? c.selectedItem % max : 0;
+  String _fmt(int n) {
+    final h = n ~/ 3600;
+    final m = (n % 3600) ~/ 60;
+    final s = n % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  Widget _sectionHeader(
-      String english,
-      String korean,
-      IconData icon,
-      ) {
-    return Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: _gold.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _gold.withOpacity(0.20),
-            ),
-          ),
-          child: Icon(
-            icon,
-            color: _gold,
-            size: 20,
+  void _setTime() => setState(() {
+    _remaining = _wheel(_h, 24) * 3600 + _wheel(_m, 60) * 60 + _wheel(_s, 60);
+    _running = false;
+    _timer?.cancel();
+  });
+
+  void _start() {
+    if (_remaining <= 0) _setTime();
+    if (_remaining <= 0) return;
+    _timer?.cancel();
+    setState(() => _running = true);
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_remaining <= 1) {
+        _timer?.cancel();
+        setState(() {
+          _remaining = 0;
+          _running = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('시간측정이 완료되었습니다.')));
+      } else {
+        setState(() => _remaining--);
+      }
+    });
+  }
+
+  void _pause() {
+    _timer?.cancel();
+    setState(() => _running = false);
+  }
+
+  void _reset() {
+    _timer?.cancel();
+    setState(() {
+      _remaining = 0;
+      _running = false;
+    });
+  }
+
+  Widget _wheelView(FixedExtentScrollController c, int count, String label) => SizedBox(
+    width: 78,
+    height: 118,
+    child: Column(children: [
+      Expanded(
+        child: ListWheelScrollView.useDelegate(
+          controller: c,
+          itemExtent: 34,
+          diameterRatio: 1.25,
+          physics: const FixedExtentScrollPhysics(),
+          childDelegate: ListWheelChildLoopingListDelegate(
+            children: List.generate(count, (i) => Center(
+              child: Text(i.toString().padLeft(2, '0'), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+            )),
           ),
         ),
-        const SizedBox(width: 11),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              english,
-              style: GoogleFonts.gowunBatang(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              korean,
-              style: GoogleFonts.notoSansKr(
-                color: _gold,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
+      ),
+      Text(label, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10)),
+    ]),
+  );
+
+  @override
+  Widget build(BuildContext context) => _ToolCard(
+    icon: Icons.timer_outlined,
+    title: '시간측정',
+    subtitle: '위아래로 직접 시간을 선택하세요',
+    child: Column(children: [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0x35E5C158))),
+        child: Column(children: [
+          Text(_fmt(_remaining), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w700, letterSpacing: 2)),
+          if (!_running) const SizedBox(height: 7),
+          if (!_running)
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _wheelView(_h, 24, '시간'),
+              _wheelView(_m, 60, '분'),
+              _wheelView(_s, 60, '초'),
+            ]),
+        ]),
+      ),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: _GoldButton('설정', Icons.check_rounded, _setTime)),
+        const SizedBox(width: 7),
+        Expanded(child: _GoldButton(_running ? '일시정지' : '시작', _running ? Icons.pause_rounded : Icons.play_arrow_rounded, _running ? _pause : _start)),
+        const SizedBox(width: 7),
+        Expanded(child: _DarkButton('초기화', Icons.refresh_rounded, _reset)),
+      ]),
+    ]),
+  );
+}
+
+class _StopwatchCard extends StatefulWidget {
+  const _StopwatchCard();
+  @override
+  State<_StopwatchCard> createState() => _StopwatchCardState();
+}
+
+class _StopwatchCardState extends State<_StopwatchCard> {
+  final _watch = Stopwatch();
+  Timer? _timer;
+  final List<String> _laps = [];
+  String _format(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    final cs = (d.inMilliseconds % 1000 ~/ 10).toString().padLeft(2, '0');
+    return '$h:$m:$s.$cs';
+  }
+  void _start() {
+    _watch.start();
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(milliseconds: 30), (_) { if (mounted) setState(() {}); });
+    setState(() {});
+  }
+  void _pause() { _watch.stop(); _timer?.cancel(); setState(() {}); }
+  void _lap() { if (_watch.elapsedMilliseconds > 0) setState(() => _laps.insert(0, _format(_watch.elapsed))); }
+  void _reset() { _watch.reset(); _timer?.cancel(); setState(() => _laps.clear()); }
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => _ToolCard(
+    icon: Icons.av_timer_rounded,
+    title: '스톱워치',
+    subtitle: '현재보다 약 30% 크게 확대된 숫자',
+    child: Column(children: [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 5),
+        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0x35E5C158))),
+        child: FittedBox(fit: BoxFit.scaleDown, child: Text(_format(_watch.elapsed), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w700, letterSpacing: 1.3))),
+      ),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: _GoldButton(_watch.isRunning ? '일시정지' : '시작', _watch.isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded, _watch.isRunning ? _pause : _start)),
+        const SizedBox(width: 7),
+        Expanded(child: _DarkButton('랩', Icons.flag_rounded, _lap)),
+        const SizedBox(width: 7),
+        Expanded(child: _DarkButton('초기화', Icons.refresh_rounded, _reset)),
+      ]),
+      if (_laps.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        SizedBox(height: 110, child: ListView.builder(itemCount: _laps.length, itemBuilder: (_, i) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 5),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('LAP ${_laps.length - i}', style: GoogleFonts.notoSans(color: const Color(0xFFE5C158), fontSize: 11, fontWeight: FontWeight.bold)),
+            Text(_laps[i], style: GoogleFonts.notoSans(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+          ]),
+        ))),
       ],
-    );
+    ]),
+  );
+}
+
+class _AlarmCard extends StatefulWidget {
+  const _AlarmCard();
+  @override
+  State<_AlarmCard> createState() => _AlarmCardState();
+}
+
+class _AlarmCardState extends State<_AlarmCard> {
+  final _plugin = FlutterLocalNotificationsPlugin();
+  final List<_AlarmItem> _alarms = [];
+  bool _ready = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
   }
 
-  Widget _buildTimerCard() {
-    final progress = _timerSeconds == 0
-        ? 0.0
-        : _remainingSeconds / _timerSeconds;
+  Future<void> _init() async {
+    try {
+      tz_data.initializeTimeZones();
+      final zone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zone));
+      const init = InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      );
+      await _plugin.initialize(init, onDidReceiveNotificationResponse: (_) {});
+      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await android?.requestNotificationsPermission();
+      await android?.requestExactAlarmsPermission();
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        'general_planner_alarm_v1', '일반 플래너 알람',
+        description: '일반인용 타이머 계산기 알람', importance: Importance.max, playSound: true,
+      ));
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('general_planner_alarm_list_v1');
+      if (raw != null) {
+        final list = (jsonDecode(raw) as List)
+            .map((e) => _AlarmItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        _alarms.addAll(list);
+      }
+      if (mounted) setState(() { _ready = true; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _ready = false; _loading = false; });
+    }
+  }
 
-    return _buildCard(
-      child: Column(
-        children: [
-          _sectionHeader(
-            'TIMER',
-            '시간 측정',
-            Icons.timer_outlined,
-          ),
-          const SizedBox(height: 22),
-          SizedBox(
-            width: 190,
-            height: 190,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 180,
-                  height: 180,
-                  child: CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 7,
-                    backgroundColor: Colors.white.withOpacity(0.06),
-                    valueColor:
-                    const AlwaysStoppedAnimation<Color>(_gold),
-                  ),
-                ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _formatTimer(_remainingSeconds),
-                      style: GoogleFonts.notoSans(
-                        color: _goldLight,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    Text(
-                      _timerRunning ? 'RUNNING' : 'READY',
-                      style: GoogleFonts.notoSans(
-                        color: _muted,
-                        fontSize: 10,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: _actionButton(
-                  label: _timerRunning ? '일시정지' : '시작',
-                  icon: _timerRunning
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  onTap:
-                  _timerRunning ? _pauseTimer : _startTimer,
-                  primary: true,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _actionButton(
-                  label: '설정',
-                  icon: Icons.tune_rounded,
-                  onTap: _setTimer,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _actionButton(
-                  label: '초기화',
-                  icon: Icons.refresh_rounded,
-                  onTap: _resetTimer,
-                ),
-              ),
-            ],
-          ),
-        ],
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('general_planner_alarm_list_v1', jsonEncode(_alarms.map((e) => e.toJson()).toList()));
+  }
+
+  NotificationDetails get _details => const NotificationDetails(
+    android: AndroidNotificationDetails(
+      'general_planner_alarm_v1', '일반 플래너 알람',
+      channelDescription: '일반인용 타이머 계산기 알람',
+      importance: Importance.max, priority: Priority.max,
+      playSound: true, enableVibration: true,
+      category: AndroidNotificationCategory.alarm,
+    ),
+    iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true, sound: 'default'),
+  );
+
+  int _id(String key, int suffix) => (key.hashCode.abs() % 100000) * 10 + suffix;
+
+  tz.TZDateTime _nextTime(int h, int m) {
+    final now = tz.TZDateTime.now(tz.local);
+    var d = tz.TZDateTime(tz.local, now.year, now.month, now.day, h, m);
+    if (!d.isAfter(now)) d = d.add(const Duration(days: 1));
+    return d;
+  }
+
+  tz.TZDateTime _nextWeekday(int weekday, int h, int m) {
+    final now = tz.TZDateTime.now(tz.local);
+    var d = tz.TZDateTime(tz.local, now.year, now.month, now.day, h, m);
+    var add = (weekday - now.weekday) % 7;
+    if (add < 0) add += 7;
+    d = d.add(Duration(days: add));
+    if (!d.isAfter(now)) d = d.add(const Duration(days: 7));
+    return d;
+  }
+
+  Future<void> _schedule(_AlarmItem a) async {
+    if (a.repeat == '1회') {
+      final id = _id(a.id, 0);
+      await _plugin.zonedSchedule(id, a.name, '알람 시간입니다.', _nextTime(a.hour, a.minute), _details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime);
+      a.ids..clear()..add(id);
+      return;
+    }
+    final ids = <int>[];
+    if (a.repeat == '매일') {
+      final id = _id(a.id, 0);
+      await _plugin.zonedSchedule(id, a.name, '알람 시간입니다.', _nextTime(a.hour, a.minute), _details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.time);
+      ids.add(id);
+    } else {
+      final days = a.repeat == '평일'
+          ? [1, 2, 3, 4, 5]
+          : a.repeat == '주말'
+          ? [6, 7]
+          : a.weekdays;
+      for (final day in days) {
+        final id = _id(a.id, day);
+        await _plugin.zonedSchedule(id, a.name, '알람 시간입니다.', _nextWeekday(day, a.hour, a.minute), _details,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime);
+        ids.add(id);
+      }
+    }
+    a.ids..clear()..addAll(ids);
+  }
+
+  Future<void> _cancel(_AlarmItem a) async {
+    for (final id in a.ids) {
+      await _plugin.cancel(id);
+    }
+  }
+
+  Future<void> _add() async {
+    final a = await showDialog<_AlarmItem>(context: context, builder: (_) => const _AlarmDialog());
+    if (a == null) return;
+    if (!_ready) {
+      _msg('알림 기능을 초기화하지 못했습니다. Android 알림 권한을 확인하세요.');
+      return;
+    }
+    try {
+      await _schedule(a);
+      setState(() => _alarms.add(a));
+      await _save();
+      _msg('알람이 저장되었습니다.');
+    } catch (_) {
+      _msg('알람 설정에 실패했습니다. 정확한 알람 권한을 확인하세요.');
+    }
+  }
+
+  Future<void> _toggle(_AlarmItem a, bool value) async {
+    try {
+      await _cancel(a);
+      if (value) await _schedule(a);
+      final i = _alarms.indexOf(a);
+      if (i >= 0) setState(() => _alarms[i] = a.copyWith(enabled: value));
+      await _save();
+    } catch (_) {
+      _msg('알람 상태 변경에 실패했습니다.');
+    }
+  }
+
+  Future<void> _remove(_AlarmItem a) async {
+    await _cancel(a);
+    setState(() => _alarms.remove(a));
+    await _save();
+  }
+
+  void _msg(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    behavior: SnackBarBehavior.floating,
+    backgroundColor: const Color(0xFF0D1527),
+    content: Text(s, style: GoogleFonts.notoSansKr(color: Colors.white)),
+  ));
+
+  @override
+  Widget build(BuildContext context) => _ToolCard(
+    icon: Icons.alarm_outlined,
+    title: '알람',
+    subtitle: '1회 · 매일 · 평일 · 주말 · 사용자 지정 / 소리·진동',
+    trailing: IconButton(onPressed: _loading ? null : _add, icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFFE5C158), size: 29)),
+    child: _loading
+        ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFFE5C158))))
+        : _alarms.isEmpty
+        ? Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 21),
+      decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14)),
+      child: Column(children: [
+        const Icon(Icons.alarm_add_rounded, color: Color(0xFFE5C158), size: 30),
+        const SizedBox(height: 7),
+        Text('등록된 알람이 없습니다.', style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+        Text('+ 버튼으로 알람을 추가하세요.', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10.5)),
+      ]),
+    )
+        : Column(children: _alarms.map((a) => _alarmTile(a)).toList()),
+  );
+
+  Widget _alarmTile(_AlarmItem a) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.fromLTRB(13, 10, 6, 10),
+    decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0x2EE5C158))),
+    child: Row(children: [
+      Container(width: 48, height: 48, decoration: BoxDecoration(color: const Color(0x19E5C158), borderRadius: BorderRadius.circular(13)), child: const Icon(Icons.alarm_rounded, color: Color(0xFFE5C158), size: 26)),
+      const SizedBox(width: 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('${a.hour.toString().padLeft(2, '0')}:${a.minute.toString().padLeft(2, '0')}', style: GoogleFonts.notoSans(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w700)),
+        Text('${a.name} · ${a.repeat}', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10.5)),
+      ])),
+      Switch(value: a.enabled, activeColor: const Color(0xFFE5C158), onChanged: (v) => _toggle(a, v)),
+      IconButton(onPressed: () => _remove(a), icon: const Icon(Icons.delete_outline_rounded, color: Colors.white38, size: 22)),
+    ]),
+  );
+}
+
+class _AlarmDialog extends StatefulWidget {
+  const _AlarmDialog();
+  @override
+  State<_AlarmDialog> createState() => _AlarmDialogState();
+}
+
+class _AlarmDialogState extends State<_AlarmDialog> {
+  TimeOfDay _time = TimeOfDay.now();
+  String _repeat = '1회';
+  String _name = '일반 알람';
+  final Set<int> _days = {};
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: const Color(0xFF0D1527),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    title: Text('알람 설정', style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold)),
+    content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      InkWell(
+        onTap: () async {
+          final t = await showTimePicker(context: context, initialTime: _time);
+          if (t != null && mounted) setState(() => _time = t);
+        },
+        child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 15), decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0x55E5C158))), child: Center(child: Text(_time.format(context), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700)))),
       ),
-    );
-  }
-
-  Widget _buildStopwatchCard() {
-    return _buildCard(
-      child: Column(
-        children: [
-          _sectionHeader(
-            'STOPWATCH',
-            '스톱워치',
-            Icons.speed_rounded,
-          ),
-          const SizedBox(height: 22),
-          Text(
-            _formatStopwatch(_stopwatchDisplay),
-            style: GoogleFonts.notoSans(
-              color: _goldLight,
-              fontSize: 32,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _actionButton(
-                  label: _stopwatch.isRunning ? '일시정지' : '시작',
-                  icon: _stopwatch.isRunning
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  onTap: _toggleStopwatch,
-                  primary: true,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _actionButton(
-                  label: '초기화',
-                  icon: Icons.refresh_rounded,
-                  onTap: _resetStopwatch,
-                ),
-              ),
-            ],
-          ),
-        ],
+      const SizedBox(height: 12),
+      TextField(style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: '알람명', labelStyle: TextStyle(color: Colors.white54)), onChanged: (v) => _name = v.trim().isEmpty ? '일반 알람' : v.trim()),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: _repeat,
+        dropdownColor: const Color(0xFF111B31),
+        style: const TextStyle(color: Colors.white),
+        decoration: const InputDecoration(labelText: '반복', labelStyle: TextStyle(color: Colors.white54)),
+        items: const ['1회', '매일', '평일', '주말', '사용자 지정'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+        onChanged: (v) => setState(() => _repeat = v ?? '1회'),
       ),
-    );
-  }
-
-  Widget _buildAlarmCard() {
-    return _buildCard(
-      child: Column(
-        children: [
-          _sectionHeader(
-            'ALARM',
-            '알람',
-            Icons.alarm_rounded,
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: _selectAlarmTime,
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _panelLight,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.access_time_rounded,
-                          color: _gold,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _alarmTime == null
-                              ? '--:--'
-                              : _alarmTime!.format(context),
-                          style: GoogleFonts.notoSans(
-                            color: Colors.white,
-                            fontSize: 25,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Switch(
-                value: _alarmEnabled,
-                activeColor: _gold,
-                onChanged: _alarmTime == null
-                    ? null
-                    : (value) {
-                  setState(() {
-                    _alarmEnabled = value;
-                  });
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              _alarmTime == null
-                  ? '알람 시간을 설정해 주세요.'
-                  : _alarmEnabled
-                  ? '알람이 설정되었습니다.'
-                  : '알람이 꺼져 있습니다.',
-              style: GoogleFonts.notoSansKr(
-                color: _muted,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
+      if (_repeat == '사용자 지정') ...[
+        const SizedBox(height: 9),
+        Wrap(spacing: 5, children: List.generate(7, (i) {
+          final day = i + 1;
+          const names = ['월', '화', '수', '목', '금', '토', '일'];
+          final selected = _days.contains(day);
+          return FilterChip(label: Text(names[i]), selected: selected, selectedColor: const Color(0x44E5C158), labelStyle: TextStyle(color: selected ? const Color(0xFFE5C158) : Colors.white70), onSelected: (v) => setState(() => v ? _days.add(day) : _days.remove(day)));
+        })),
+      ],
+    ])),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소', style: TextStyle(color: Colors.white54))),
+      ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158), foregroundColor: const Color(0xFF080F1E)),
+        onPressed: () {
+          if (_repeat == '사용자 지정' && _days.isEmpty) return;
+          Navigator.pop(context, _AlarmItem(id: DateTime.now().microsecondsSinceEpoch.toString(), hour: _time.hour, minute: _time.minute, name: _name, repeat: _repeat, weekdays: _days.toList()..sort(), enabled: true));
+        },
+        child: const Text('저장'),
       ),
-    );
+    ],
+  );
+}
+
+class _AlarmItem {
+  _AlarmItem({required this.id, required this.hour, required this.minute, required this.name, required this.repeat, required this.weekdays, required this.enabled, List<int>? ids}) : ids = ids ?? [];
+  final String id;
+  final int hour;
+  final int minute;
+  final String name;
+  final String repeat;
+  final List<int> weekdays;
+  final bool enabled;
+  final List<int> ids;
+  _AlarmItem copyWith({bool? enabled}) => _AlarmItem(id: id, hour: hour, minute: minute, name: name, repeat: repeat, weekdays: List<int>.from(weekdays), enabled: enabled ?? this.enabled, ids: List<int>.from(ids));
+  Map<String, dynamic> toJson() => {'id': id, 'hour': hour, 'minute': minute, 'name': name, 'repeat': repeat, 'weekdays': weekdays, 'enabled': enabled, 'ids': ids};
+  factory _AlarmItem.fromJson(Map<String, dynamic> j) => _AlarmItem(
+    id: j['id']?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString(),
+    hour: (j['hour'] as num?)?.toInt() ?? 0,
+    minute: (j['minute'] as num?)?.toInt() ?? 0,
+    name: j['name']?.toString() ?? '일반 알람',
+    repeat: j['repeat']?.toString() ?? '1회',
+    weekdays: ((j['weekdays'] as List?) ?? const []).map((e) => (e as num).toInt()).toList(),
+    enabled: j['enabled'] as bool? ?? true,
+    ids: ((j['ids'] as List?) ?? const []).map((e) => (e as num).toInt()).toList(),
+  );
+}
+
+class _WorldClockCard extends StatefulWidget {
+  const _WorldClockCard();
+  @override
+  State<_WorldClockCard> createState() => _WorldClockCardState();
+}
+
+class _WorldClockCardState extends State<_WorldClockCard> {
+  Timer? _ticker;
+  DateTime _now = DateTime.now();
+  static const cities = [
+    ['서울', 'Seoul', 'Asia/Seoul', '🇰🇷'], ['도쿄', 'Tokyo', 'Asia/Tokyo', '🇯🇵'], ['싱가포르', 'Singapore', 'Asia/Singapore', '🇸🇬'],
+    ['홍콩', 'Hong Kong', 'Asia/Hong_Kong', '🇭🇰'], ['방콕', 'Bangkok', 'Asia/Bangkok', '🇹🇭'], ['델리', 'Delhi', 'Asia/Kolkata', '🇮🇳'],
+    ['두바이', 'Dubai', 'Asia/Dubai', '🇦🇪'], ['시드니', 'Sydney', 'Australia/Sydney', '🇦🇺'], ['파리', 'Paris', 'Europe/Paris', '🇫🇷'],
+    ['런던', 'London', 'Europe/London', '🇬🇧'], ['베를린', 'Berlin', 'Europe/Berlin', '🇩🇪'], ['모스크바', 'Moscow', 'Europe/Moscow', '🇷🇺'],
+    ['요하네스버그', 'Johannesburg', 'Africa/Johannesburg', '🇿🇦'], ['상파울루', 'São Paulo', 'America/Sao_Paulo', '🇧🇷'], ['뉴욕', 'New York', 'America/New_York', '🇺🇸'],
+    ['토론토', 'Toronto', 'America/Toronto', '🇨🇦'], ['시카고', 'Chicago', 'America/Chicago', '🇺🇸'], ['로스앤젤레스', 'Los Angeles', 'America/Los_Angeles', '🇺🇸'],
+    ['멕시코시티', 'Mexico City', 'America/Mexico_City', '🇲🇽'], ['오클랜드', 'Auckland', 'Pacific/Auckland', '🇳🇿'],
+  ];
+  @override
+  void initState() {
+    super.initState();
+    tz_data.initializeTimeZones();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() => _now = DateTime.now()); });
   }
-
-  Widget _buildWorldClockCard() {
-    const cities = [
-      ('서울', 'SEOUL', 9),
-      ('도쿄', 'TOKYO', 9),
-      ('런던', 'LONDON', 0),
-      ('파리', 'PARIS', 1),
-      ('두바이', 'DUBAI', 4),
-      ('뉴욕', 'NEW YORK', -4),
-      ('LA', 'LOS ANGELES', -7),
-      ('싱가포르', 'SINGAPORE', 8),
-    ];
-
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionHeader(
-            'WORLD CLOCK',
-            '세계시간',
-            Icons.public_rounded,
-          ),
-          const SizedBox(height: 18),
-          GridView.builder(
-            itemCount: cities.length,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate:
-            const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 2.15,
-            ),
-            itemBuilder: (context, index) {
-              final city = cities[index];
-
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: _panelLight,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      city.$1,
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      city.$2,
-                      style: GoogleFonts.notoSans(
-                        color: _muted,
-                        fontSize: 8,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _worldTime(city.$3),
-                      style: GoogleFonts.notoSans(
-                        color: _gold,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
+  @override
+  void dispose() { _ticker?.cancel(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => _ToolCard(
+    icon: Icons.public_rounded,
+    title: '세계시간',
+    subtitle: '좌우로 스크롤하여 전 세계 주요 도시 확인',
+    child: SizedBox(
+      height: 148,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: cities.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          final c = cities[i];
+          final local = tz.TZDateTime.from(_now, tz.getLocation(c[2]));
+          final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+          return Container(
+            width: 158,
+            padding: const EdgeInsets.fromLTRB(13, 12, 13, 10),
+            decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0x33E5C158))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${c[3]}  ${c[0]}', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 3),
+              Text(c[1], style: GoogleFonts.notoSans(color: Colors.white38, fontSize: 9.5)),
+              const Spacer(),
+              Text(time, style: GoogleFonts.notoSans(color: const Color(0xFFE5C158), fontSize: 26, fontWeight: FontWeight.w700)),
+              Text('${local.month}/${local.day}', style: GoogleFonts.notoSans(color: Colors.white54, fontSize: 10)),
+            ]),
+          );
+        },
       ),
-    );
+    ),
+  );
+}
+
+class _CalculatorTab extends StatefulWidget {
+  const _CalculatorTab();
+  @override
+  State<_CalculatorTab> createState() => _CalculatorTabState();
+}
+
+class _CalculatorTabState extends State<_CalculatorTab> {
+  String display = '0';
+  double? first;
+  String? op;
+  bool fresh = true;
+  bool currency = false;
+  final amount = TextEditingController(text: '10000');
+  String from = 'KRW';
+  String to = 'USD';
+  double rate = .00074;
+
+  static const currencies = [
+    ['대한민국', 'KRW', '원', '🇰🇷', '1350'], ['미국', 'USD', '달러', '🇺🇸', '1'], ['일본', 'JPY', '엔', '🇯🇵', '148'], ['유럽연합', 'EUR', '유로', '🇪🇺', '.86'],
+    ['중국', 'CNY', '위안', '🇨🇳', '7.18'], ['영국', 'GBP', '파운드', '🇬🇧', '.74'], ['호주', 'AUD', '호주 달러', '🇦🇺', '1.54'], ['캐나다', 'CAD', '캐나다 달러', '🇨🇦', '1.38'],
+    ['스위스', 'CHF', '프랑', '🇨🇭', '.80'], ['홍콩', 'HKD', '홍콩 달러', '🇭🇰', '7.82'], ['싱가포르', 'SGD', '싱가포르 달러', '🇸🇬', '1.28'], ['대만', 'TWD', '대만 달러', '🇹🇼', '32.4'],
+    ['태국', 'THB', '바트', '🇹🇭', '35.2'], ['베트남', 'VND', '동', '🇻🇳', '25500'], ['인도', 'INR', '루피', '🇮🇳', '83.8'], ['뉴질랜드', 'NZD', '뉴질랜드 달러', '🇳🇿', '1.68'],
+    ['스웨덴', 'SEK', '크로나', '🇸🇪', '9.45'], ['노르웨이', 'NOK', '크로네', '🇳🇴', '10.2'], ['덴마크', 'DKK', '크로네', '🇩🇰', '6.42'], ['아랍에미리트', 'AED', '디르함', '🇦🇪', '3.6725'],
+  ];
+
+  @override
+  void dispose() { amount.dispose(); super.dispose(); }
+
+  String fmt(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(10).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  void key(String k) {
+    setState(() {
+      if (k == 'AC') { display = '0'; first = null; op = null; fresh = true; return; }
+      if (k == '+/-') { if (display != '0') display = display.startsWith('-') ? display.substring(1) : '-$display'; return; }
+      if (k == '%') { display = fmt((double.tryParse(display) ?? 0) / 100); fresh = true; return; }
+      if ('0123456789.'.contains(k)) {
+        if (fresh || display == '0') { display = k == '.' ? '0.' : k; fresh = false; }
+        else if (k != '.' || !display.contains('.')) display += k;
+        return;
+      }
+      if ('+-×÷'.contains(k)) {
+        final cur = double.tryParse(display) ?? 0;
+        if (first != null && op != null && !fresh) display = fmt(calc(first!, cur, op!));
+        first = double.tryParse(display) ?? 0; op = k; fresh = true; return;
+      }
+      if (k == '=' && first != null && op != null) {
+        display = fmt(calc(first!, double.tryParse(display) ?? 0, op!)); first = null; op = null; fresh = true;
+      }
+    });
+  }
+  double calc(double a, double b, String o) => o == '+' ? a + b : o == '-' ? a - b : o == '×' ? a * b : b == 0 ? 0 : a / b;
+  double referenceRate(String a, String b) {
+    double usd(String code) => double.parse(currencies.firstWhere((x) => x[1] == code)[4]);
+    return usd(b) / usd(a);
   }
 
-  Widget _buildCalculatorCard() {
-    final buttons = [
-      'AC',
-      '⌫',
-      '÷',
-      '×',
-      '7',
-      '8',
-      '9',
-      '-',
-      '4',
-      '5',
-      '6',
-      '+',
-      '1',
-      '2',
-      '3',
-      '=',
-      '0',
-      '.',
-    ];
-
-    return _buildCard(
-      child: Column(
-        children: [
-          _sectionHeader(
-            'CALCULATOR',
-            '계산기',
-            Icons.calculate_outlined,
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 20,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF080E19),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Text(
-              _calculatorDisplay,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.notoSans(
-                color: _goldLight,
-                fontSize: 30,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          GridView.builder(
-            itemCount: buttons.length,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate:
-            const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.45,
-            ),
-            itemBuilder: (context, index) {
-              final value = buttons[index];
-
-              return _calculatorButton(value);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _calculatorButton(String value) {
-    final isOperator =
-    ['÷', '×', '-', '+', '='].contains(value);
-
-    final isClear = value == 'AC' || value == '⌫';
-
-    return InkWell(
-      onTap: () {
-        if (value == 'AC') {
-          _calculatorClear();
-        } else if (value == '⌫') {
-          _calculatorDelete();
-        } else if (value == '.') {
-          _calculatorDecimal();
-        } else if (isOperator) {
-          if (value == '=') {
-            _calculatorEquals();
-          } else {
-            _calculatorOperation(value);
-          }
-        } else {
-          _calculatorInput(value);
-        }
-      },
-      borderRadius: BorderRadius.circular(13),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isOperator
-              ? _gold.withOpacity(0.15)
-              : isClear
-              ? Colors.white.withOpacity(0.07)
-              : _panelLight,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: isOperator
-                ? _gold.withOpacity(0.20)
-                : Colors.white.withOpacity(0.04),
-          ),
-        ),
-        child: Text(
-          value,
-          style: GoogleFonts.notoSans(
-            color: isOperator ? _gold : Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-          ),
+  Future<void> pickCurrency(bool isFrom) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF0D1527),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (_) => ListView.separated(
+        padding: const EdgeInsets.fromLTRB(15, 12, 15, 30),
+        itemCount: currencies.length,
+        separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+        itemBuilder: (_, i) => ListTile(
+          leading: Text(currencies[i][3], style: const TextStyle(fontSize: 23)),
+          title: Text('${currencies[i][0]} · ${currencies[i][1]}', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          subtitle: Text(currencies[i][2], style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10)),
+          onTap: () => Navigator.pop(context, currencies[i][1]),
         ),
       ),
     );
+    if (selected == null) return;
+    setState(() { if (isFrom) from = selected; else to = selected; rate = referenceRate(from, to); });
   }
 
-  Widget _buildCurrencyCard() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionHeader(
-            'CURRENCY',
-            '환율 계산',
-            Icons.currency_exchange_rounded,
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _currencyDropdown(
-                  value: _fromCurrency,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _fromCurrency = value;
-                    });
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: IconButton(
-                  onPressed: _swapCurrency,
-                  icon: const Icon(
-                    Icons.swap_horiz_rounded,
-                    color: _gold,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _currencyDropdown(
-                  value: _toCurrency,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _toCurrency = value;
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _amountController,
-            keyboardType:
-            const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration('금액'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _rateController,
-            keyboardType:
-            const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration(
-              '환율  1 $_fromCurrency = ? $_toCurrency',
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _gold.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _gold.withOpacity(0.16),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '계산 결과',
-                  style: GoogleFonts.notoSansKr(
-                    color: _muted,
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_formatNumber(_currencyResult())} $_toCurrency',
-                  style: GoogleFonts.notoSans(
-                    color: _goldLight,
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '※ 현재 환율은 직접 입력하여 계산합니다. 실시간 환율 API는 별도 연결 단계에서 적용합니다.',
-            style: GoogleFonts.notoSansKr(
-              color: _muted,
-              fontSize: 10,
-            ),
-          ),
-        ],
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(18, 2, 18, 30),
+    children: [
+      Container(
+        height: 116,
+        padding: const EdgeInsets.all(16),
+        alignment: Alignment.bottomRight,
+        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x44E5C158))),
+        child: FittedBox(fit: BoxFit.scaleDown, child: Text(display, style: GoogleFonts.notoSans(color: Colors.white, fontSize: 39, fontWeight: FontWeight.w700)),),
       ),
-    );
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: _mode('일반 계산', !currency, () => setState(() => currency = false))),
+        const SizedBox(width: 8),
+        Expanded(child: _mode('환율 계산', currency, () => setState(() => currency = true))),
+      ]),
+      const SizedBox(height: 10),
+      currency ? _currencyView() : _calculatorView(),
+    ],
+  );
+
+  Widget _mode(String text, bool selected, VoidCallback tap) => GestureDetector(
+    onTap: tap,
+    child: Container(height: 46, alignment: Alignment.center, decoration: BoxDecoration(color: selected ? const Color(0x24E5C158) : const Color(0xFF0D1527), borderRadius: BorderRadius.circular(13), border: Border.all(color: selected ? const Color(0x99E5C158) : Colors.white12)), child: Text(text, style: GoogleFonts.notoSansKr(color: selected ? const Color(0xFFE5C158) : Colors.white54, fontWeight: FontWeight.bold, fontSize: 12.5))),
+  );
+
+  Widget _calculatorView() {
+    const rows = [['AC', '+/-', '%', '÷'], ['7', '8', '9', '×'], ['4', '5', '6', '-'], ['1', '2', '3', '+'], ['0', '.', '=']];
+    return Column(children: rows.map((row) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: row.map((k) {
+        final operator = '+-×÷='.contains(k);
+        return Expanded(flex: k == '0' ? 2 : 1, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Material(color: Colors.transparent, child: InkWell(onTap: () => key(k), borderRadius: BorderRadius.circular(16), child: Ink(height: 67, decoration: BoxDecoration(color: operator ? const Color(0x22E5C158) : const Color(0xFF0D1527), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)), child: Center(child: Text(k, style: GoogleFonts.notoSans(color: operator ? const Color(0xFFE5C158) : Colors.white, fontSize: operator ? 32 : 25, fontWeight: FontWeight.w700))))))));
+      }).toList()),
+    )).toList());
   }
 
-  Widget _currencyDropdown({
-    required String value,
-    required ValueChanged<String?> onChanged,
-  }) {
+  Widget _currencyView() {
+    final input = double.tryParse(amount.text.replaceAll(',', '')) ?? 0;
+    final output = input * rate;
+    final f = currencies.firstWhere((x) => x[1] == from);
+    final t = currencies.firstWhere((x) => x[1] == to);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: _panelLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          dropdownColor: _panel,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: _gold,
-          ),
-          style: GoogleFonts.notoSans(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-          items: _currencies.map((currency) {
-            return DropdownMenuItem(
-              value: currency,
-              child: Text(currency),
-            );
-          }).toList(),
-          onChanged: onChanged,
-        ),
-      ),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(color: const Color(0xFF0D1527), borderRadius: BorderRadius.circular(17), border: Border.all(color: const Color(0x4DE5C158))),
+      child: Column(children: [
+        _currencyRow(f, true),
+        IconButton(onPressed: () => setState(() { final x = from; from = to; to = x; rate = referenceRate(from, to); }), icon: const Icon(Icons.swap_vert_rounded, color: Color(0xFFE5C158), size: 34)),
+        _currencyRow(t, false),
+        const SizedBox(height: 12),
+        Text('1 $from = ${rate.toStringAsFixed(6)} $to', style: GoogleFonts.notoSans(color: const Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 5),
+        Text('20개 주요 통화를 표시합니다. 현재는 참고 환율로 계산하며, 최신 환율 API 연결 시 자동 갱신 구조로 확장합니다.', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9.5, height: 1.4)),
+      ]),
     );
   }
 
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: GoogleFonts.notoSansKr(
-        color: _muted,
-        fontSize: 11,
-      ),
-      filled: true,
-      fillColor: _panelLight,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: Colors.white.withOpacity(0.06),
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: _gold,
-        ),
-      ),
-    );
-  }
+  Widget _currencyRow(List<String> c, bool input) => Row(children: [
+    InkWell(onTap: () => pickCurrency(input), borderRadius: BorderRadius.circular(12), child: Container(width: 145, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10), decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)), child: Row(children: [Text(c[3], style: const TextStyle(fontSize: 21)), const SizedBox(width: 7), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(c[1], style: GoogleFonts.notoSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)), Text(c[0], overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9.5))])), const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white38, size: 18)]))),
+    const SizedBox(width: 9),
+    Expanded(child: input ? TextField(controller: amount, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 25, fontWeight: FontWeight.w700), decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: '0')) : Text(outputText(c), textAlign: TextAlign.right, style: GoogleFonts.notoSans(color: const Color(0xFFE5C158), fontSize: 25, fontWeight: FontWeight.w700))),
+  ]);
 
-  Widget _actionButton({
-    required String label,
-    required IconData icon,
-    required VoidCallback onTap,
-    bool primary = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: primary
-                ? _gold.withOpacity(0.16)
-                : Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: primary
-                  ? _gold.withOpacity(0.28)
-                  : Colors.white.withOpacity(0.07),
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: primary ? _gold : Colors.white70,
-                size: 19,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: GoogleFonts.notoSansKr(
-                  color: primary ? _goldLight : Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: GoogleFonts.notoSansKr(),
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  String outputText(List<String> _) {
+    final v = (double.tryParse(amount.text.replaceAll(',', '')) ?? 0) * rate;
+    return v >= 100 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
   }
 }

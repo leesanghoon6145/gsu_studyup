@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations: # 🆕 [한국어 달력 등 시스템 위젯 현지화]
+    sdk: flutter
   google_fonts: ^6.1.0
   audioplayers: ^6.0.0
   timezone: ^0.9.4  # ✅ [2026-08-15 원복] 0.11.1로 올렸다가, flutter_local_notifications 21.0.0의 API가 너무 크게 바뀌어(initialize/zonedSchedule 시그니처 전면 변경) timer2_services.dart 등 다른 파일까지 깨져서 원래 버전으로 되돌림
@@ -41,6 +43,8 @@ dependencies:
   flutter_local_notifications: ^18.0.1  # ✅ [2026-08-15 원복] 21.0.0으로 올렸다가 API 대규모 변경(initialize/zonedSchedule 시그니처 전면 named-param 방식으로 변경)으로 timer2_services.dart, learning_screen.dart 등 손대면 안 되는 파일까지 깨져서 원래 버전으로 되돌림
   flutter_timezone: ^3.0.1          # ← 여기 (42번 줄 자리)
   flutter_foreground_task: ^8.14.0
+  firebase_core: ^4.14.0
+  cloud_firestore: ^6.9.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

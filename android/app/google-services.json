@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "760215340473",
+    "project_id": "gke-studyup",
+    "storage_bucket": "gke-studyup.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:760215340473:android:0cc4f11ec1886235382268",
+        "android_client_info": {
+          "package_name": "com.kery.gsu_studyup"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfJvpeB97yCOhzs9muZ56lvJlLy5zkKbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

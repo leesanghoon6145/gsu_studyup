@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/family_link_service.dart';
 
 // ============================================================================
 // 👑 [별 경제 시스템] DkeStars
@@ -8,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // - 다른 화면(member_achievement_screen.dart 등)은 항상 이 클래스를 통해서만
 //   별/레벨을 읽고 씁니다. (여러 화면이 각자 SharedPreferences를 직접 건드리면
 //   나중에 값이 어긋나는 사고가 나기 쉬워서, 이 파일 하나로 창구를 통일합니다.)
+// 🆕 [Firebase 연동] addStars() 호출 시, 부모와 연결되어 있으면(family_link_code 존재)
+//   자동으로 최신 별/레벨을 Firestore에도 함께 올립니다. 연결 안 되어 있으면 조용히 스킵.
 // ============================================================================
 class DkeStars {
   // ==========================================================================
@@ -48,6 +52,14 @@ class DkeStars {
       final int newSubjectTotal = (prefs.getInt(subjectKey) ?? 0) + count;
       await prefs.setInt(subjectKey, newSubjectTotal);
     }
+
+    // 🆕 [Firebase 연동] 부모와 연결되어 있으면 최신 수치를 서버로 전송 (연결 안 됐으면 내부에서 조용히 스킵)
+    // 실패해도(오프라인 등) 로컬 저장은 이미 끝났으므로 앱 사용에는 지장 없음.
+    unawaited(FamilyLinkService.pushStudentStats(
+      totalStars: newAllTimeTotal,
+      todayStars: newTodayTotal,
+      level: levelForStars(newAllTimeTotal),
+    ));
 
     return newAllTimeTotal;
   }
