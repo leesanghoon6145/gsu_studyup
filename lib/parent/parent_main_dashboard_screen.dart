@@ -8,6 +8,7 @@ import 'parent_evaluation_analysis_widget.dart';
 import 'parent_grade_management_widget.dart'; // 🆕 [성적 관리] 학부모 조회 전용 4번째 탭
 import '../services/parent_data_service.dart';
 import '../services/diagnosis_service.dart'; // 🆕 [요청] 300자 이상 AI 진단문 + 재사용 규칙 서비스
+import '../services/family_link_service.dart'; // 🆕 [자녀 추가] 가족 연결 코드 서비스
 import '../global_lang.dart';
 
 // ---------------------------------------------------------------------------
@@ -164,6 +165,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   String _selectedMidUnit = "중단원 1";
   int _selectedSemesterFilter = 1;
 
+  // 🆕 [자녀 추가] 연결된 자녀 코드 목록 (최대 5명, 언제든 추가 가능)
+  List<String> _linkedChildCodes = [];
+  bool _loadingLinkedChildren = true;
+  final TextEditingController _addChildCodeController = TextEditingController();
+
   // 🆕 [버그 수정] 주평가 전용 년/월/주차 상태 신설 - 기존엔 단원평가용 변수(_selectedBigUnit/
   // _selectedMidUnit)를 그대로 빌려쓰고 있어서 월/주차 선택이 서로 충돌하고 필터링도 안 됐음.
   // 오늘 날짜를 기준으로 자동 초기화(member_achievement_screen.dart의 주차 계산과 동일한 방식).
@@ -239,6 +245,159 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     _timeTabController = TabController(length: 4, vsync: this);
     _timeTabController.addListener(() { if (!_timeTabController.indexIsChanging) setState(() {}); });
     _loadRealData();
+    _loadLinkedChildren(); // 🆕 [자녀 추가] 연결된 자녀 코드 목록 불러오기
+  }
+
+  // 🆕 [자녀 추가] 이 계정에 연결된 자녀 코드 목록을 불러옴
+  Future<void> _loadLinkedChildren() async {
+    final codes = await FamilyLinkService.getLinkedCodes();
+    if (!mounted) return;
+    setState(() {
+      _linkedChildCodes = codes;
+      _loadingLinkedChildren = false;
+    });
+  }
+
+  // 🆕 [자녀 추가] 코드 입력 다이얼로그를 띄우고, 연결 성공하면 목록을 새로고침
+  Future<void> _showAddChildDialog() async {
+    _addChildCodeController.clear();
+    String? errorText;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: premiumCardBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('자녀 추가', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('자녀에게 받은 6자리 연결 코드를 입력하세요',
+                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _addChildCodeController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSans(color: Colors.white, fontSize: 22, letterSpacing: 4),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    errorText: errorText,
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: brandGolden.withValues(alpha: 0.4))),
+                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: brandGolden)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('취소', style: TextStyle(color: Colors.white54)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: brandGolden),
+                onPressed: () async {
+                  final code = _addChildCodeController.text.trim();
+                  if (code.length != 6) {
+                    setDialogState(() => errorText = '6자리 숫자를 입력하세요');
+                    return;
+                  }
+                  final bool ok = await FamilyLinkService.connectWithCode(code);
+                  if (ok) {
+                    if (context.mounted) Navigator.pop(dialogContext);
+                    await _loadLinkedChildren();
+                  } else {
+                    setDialogState(() => errorText = '존재하지 않는 코드이거나 이미 5명이 연결되었습니다');
+                  }
+                },
+                child: const Text('연결하기', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 🆕 [자녀 추가] 대시보드 상단에 표시할 "연결된 자녀 명단 + 추가" 가로 바
+  Widget _buildLinkedChildrenBar() {
+    if (_loadingLinkedChildren) {
+      return const SizedBox(
+        height: 78,
+        child: Center(child: CircularProgressIndicator(color: brandGolden, strokeWidth: 2)),
+      );
+    }
+    return SizedBox(
+      height: 78,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        children: [
+          ..._linkedChildCodes.map((code) => _buildChildChip(code)),
+          if (_linkedChildCodes.length < FamilyLinkService.maxChildren) _buildAddChildChip(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChildChip(String code) {
+    return StreamBuilder(
+      stream: FamilyLinkService.watch(code),
+      builder: (context, snapshot) {
+        final data = (snapshot.data as dynamic)?.data();
+        final totalStars = data?['totalStars'];
+        final level = data?['level'];
+        return Container(
+          width: 130,
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: premiumCardBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: brandGolden.withValues(alpha: 0.4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('코드 $code', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9)),
+              const SizedBox(height: 4),
+              Text(
+                totalStars != null ? '⭐ $totalStars개' : '데이터 없음',
+                style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              if (level != null)
+                Text('레벨 $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAddChildChip() {
+    return GestureDetector(
+      onTap: _showAddChildDialog,
+      child: Container(
+        width: 90,
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: brandGolden.withValues(alpha: 0.6), style: BorderStyle.solid),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.add_circle_outline, color: brandGolden, size: 22),
+            const SizedBox(height: 4),
+            Text('자녀 추가', style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
   }
 
   // 🆕 [실데이터 연동] ParentDataService를 통해 학생의 실제 학습 데이터를 불러옵니다.
@@ -448,6 +607,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   @override
   void dispose() {
     _timeTabController.dispose();
+    _addChildCodeController.dispose();
     super.dispose();
   }
 
@@ -529,157 +689,165 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
         centerTitle: true,
       ),
 
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Column(
         children: [
-          ParentLiveStatusWidget(
-            childName: _realChildName,
-            lastSessionSubject: _todaySessions.isNotEmpty ? _todaySessions.last.subject : null,
-            lastSessionDurationMinutes: _todaySessions.isNotEmpty ? _todaySessions.last.durationMinutes : 0,
-            totalCollectedStars: _totalCollectedStars,
-            isMonitoringActive: _isMonitoringActive,
-            monitoringCountdown: _monitoringCountdown,
-            premiumCardBg: premiumCardBg,
-            brandGolden: brandGolden,
-            luxuryDarkBg: luxuryDarkBg,
-            lastSentTimeText: _lastSentTimeText,
-            buildCustomSectionTitle: _buildCustomSectionTitle,
-            onSendEmojiMessage: (emoji, message) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: premiumCardBg,
-                  content: Text(
-                    "${_t(kEmojiSentMap)}\n($message)",
-                    style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold),
-                  ),
+          _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 상단에 항상 표시되는 연결된 자녀 명단 + 추가 버튼
+          const Divider(color: Colors.white10, height: 1),
+          Expanded(
+            child: IndexedStack(
+              index: _currentIndex,
+              children: [
+                ParentLiveStatusWidget(
+                  childName: _realChildName,
+                  lastSessionSubject: _todaySessions.isNotEmpty ? _todaySessions.last.subject : null,
+                  lastSessionDurationMinutes: _todaySessions.isNotEmpty ? _todaySessions.last.durationMinutes : 0,
+                  totalCollectedStars: _totalCollectedStars,
+                  isMonitoringActive: _isMonitoringActive,
+                  monitoringCountdown: _monitoringCountdown,
+                  premiumCardBg: premiumCardBg,
+                  brandGolden: brandGolden,
+                  luxuryDarkBg: luxuryDarkBg,
+                  lastSentTimeText: _lastSentTimeText,
+                  buildCustomSectionTitle: _buildCustomSectionTitle,
+                  onSendEmojiMessage: (emoji, message) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: premiumCardBg,
+                        content: Text(
+                          "${_t(kEmojiSentMap)}\n($message)",
+                          style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    );
+                  },
+                  onSendCustomMessage: (customText) {
+                    final now = DateTime.now();
+                    final hourText = now.hour < 10 ? '0${now.hour}' : '${now.hour}';
+                    final minText = now.minute < 10 ? '0${now.minute}' : '${now.minute}';
+
+                    setState(() {
+                      _lastSentTimeText = "$hourText:$minText";
+                    });
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: const Color(0xFF040B19),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                          side: BorderSide(color: brandGolden, width: 1),
+                        ),
+                        duration: const Duration(seconds: 4),
+                        content: Text(
+                          "${_t(kForceInterventionMap)}\n${_t(kMessageContentLabelMap)}: \"$customText\"",
+                          style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    );
+                  },
+                  onStartMonitoring: () {
+                    setState(() {
+                      _isMonitoringActive = true;
+                      _monitoringCountdown = 60;
+                    });
+                    Timer.periodic(const Duration(seconds: 1), (timer) {
+                      if (!mounted || !_isMonitoringActive) {
+                        timer.cancel();
+                        return;
+                      }
+                      setState(() {
+                        if (_monitoringCountdown > 1) {
+                          _monitoringCountdown--;
+                        } else {
+                          _isMonitoringActive = false;
+                          timer.cancel();
+                          _showMonitorTimeoutSnackbar();
+                        }
+                      });
+                    });
+                  },
                 ),
-              );
-            },
-            onSendCustomMessage: (customText) {
-              final now = DateTime.now();
-              final hourText = now.hour < 10 ? '0${now.hour}' : '${now.hour}';
-              final minText = now.minute < 10 ? '0${now.minute}' : '${now.minute}';
 
-              setState(() {
-                _lastSentTimeText = "$hourText:$minText";
-              });
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF040B19),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                    side: BorderSide(color: brandGolden, width: 1),
-                  ),
-                  duration: const Duration(seconds: 4),
-                  content: Text(
-                    "${_t(kForceInterventionMap)}\n${_t(kMessageContentLabelMap)}: \"$customText\"",
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
+                ParentDetailedAnalysisWidget(
+                  childName: _realChildName,
+                  premiumCardBg: premiumCardBg,
+                  brandGolden: brandGolden,
+                  luxuryDarkBg: luxuryDarkBg,
+                  buildCustomSectionTitle: _buildCustomSectionTitle,
+                  onShowReportPopup: () async {
+                    final String content = await _buildSummaryReportText();
+                    if (!mounted) return;
+                    _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
+                  },
+                  onShowDetailedAnalysisPopup: () => _showReportPopup(context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisText()),
+                  // 🆕 [지난 일자 조회] 좌우 화살표로 하루씩 이동하며 조회
+                  selectedDate: _detailedViewDate,
+                  onPreviousDay: _goToPreviousDetailDay,
+                  onNextDay: _goToNextDetailDay,
+                  isViewingToday: _isViewingToday,
+                  sessionsForDate: _sessionsForDetailedDate,
+                  todayTotalMinutes: _detailedDayTotalMinutes,
+                  yesterdayTotalMinutes: _detailedDayBeforeMinutes,
+                  weeklyAvgMinutesPerDay: _detailedWeeklyAvgMinutes,
+                  strongestSubject: _strongestSubject,
+                  weakestSubject: _weakestSubject,
                 ),
-              );
-            },
-            onStartMonitoring: () {
-              setState(() {
-                _isMonitoringActive = true;
-                _monitoringCountdown = 60;
-              });
-              Timer.periodic(const Duration(seconds: 1), (timer) {
-                if (!mounted || !_isMonitoringActive) {
-                  timer.cancel();
-                  return;
-                }
-                setState(() {
-                  if (_monitoringCountdown > 1) {
-                    _monitoringCountdown--;
-                  } else {
-                    _isMonitoringActive = false;
-                    timer.cancel();
-                    _showMonitorTimeoutSnackbar();
-                  }
-                });
-              });
-            },
-          ),
 
-          ParentDetailedAnalysisWidget(
-            childName: _realChildName,
-            premiumCardBg: premiumCardBg,
-            brandGolden: brandGolden,
-            luxuryDarkBg: luxuryDarkBg,
-            buildCustomSectionTitle: _buildCustomSectionTitle,
-            onShowReportPopup: () async {
-              final String content = await _buildSummaryReportText();
-              if (!mounted) return;
-              _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
-            },
-            onShowDetailedAnalysisPopup: () => _showReportPopup(context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisText()),
-            // 🆕 [지난 일자 조회] 좌우 화살표로 하루씩 이동하며 조회
-            selectedDate: _detailedViewDate,
-            onPreviousDay: _goToPreviousDetailDay,
-            onNextDay: _goToNextDetailDay,
-            isViewingToday: _isViewingToday,
-            sessionsForDate: _sessionsForDetailedDate,
-            todayTotalMinutes: _detailedDayTotalMinutes,
-            yesterdayTotalMinutes: _detailedDayBeforeMinutes,
-            weeklyAvgMinutesPerDay: _detailedWeeklyAvgMinutes,
-            strongestSubject: _strongestSubject,
-            weakestSubject: _weakestSubject,
-          ),
+                ParentEvaluationAnalysisWidget(
+                  childName: _realChildName,
+                  selectedEvaluationType: _selectedEvaluationType,
+                  selectedBigUnit: _selectedBigUnit,
+                  selectedMidUnit: _selectedMidUnit,
+                  selectedSemesterFilter: _selectedSemesterFilter,
+                  selectedYear: _selectedYear,
+                  selectedMonth: _selectedMonth,
+                  selectedWeek: _selectedWeek,
+                  timeTabController: _timeTabController,
+                  mirroredExamRecords: _examRecords,
+                  parentMasterTimeData: _subjectAggregates,
+                  premiumCardBg: premiumCardBg,
+                  brandGolden: brandGolden,
+                  luxuryDarkBg: luxuryDarkBg,
+                  buildCustomSectionTitle: _buildCustomSectionTitle,
+                  onEvaluationTypeChanged: (type) => setState(() => _selectedEvaluationType = type),
+                  onBigUnitChanged: (unit) => setState(() => _selectedBigUnit = unit),
+                  onMidUnitChanged: (unit) => setState(() => _selectedMidUnit = unit),
+                  onSemesterFilterChanged: (filter) => setState(() => _selectedSemesterFilter = filter),
+                  onYearChanged: (year) => setState(() => _selectedYear = year),
+                  onMonthChanged: (month) => setState(() => _selectedMonth = month),
+                  onWeekChanged: (week) => setState(() => _selectedWeek = week),
+                  onShowDetailAnalysisReport: () async {
+                    // 🆕 [요청] 300자 이상 상세 진단 + 같은 사람에게 3개월 내 재사용 금지 + 생성된 문구는
+                    // 반드시 저장 후 유사한 사람(같은 점수 구간)에게 재사용. DiagnosisService가 전담 관리.
+                    if (_examRecords.isEmpty) {
+                      _showReportPopup(
+                        context,
+                        _t(kDiagReportTitleMap),
+                        _t(kNoExamDataMap),
+                      );
+                      return;
+                    }
+                    final lastExam = _examRecords.last;
+                    final String content = await DiagnosisService.getAnalysis(
+                      personKey: 'student_$_realChildName',
+                      type: lastExam.type,
+                      subject: lastExam.subject,
+                      score: lastExam.score,
+                    );
+                    if (!mounted) return;
+                    _showReportPopup(context, _t(kDiagReportTitleMap), content);
+                  },
+                ),
 
-          ParentEvaluationAnalysisWidget(
-            childName: _realChildName,
-            selectedEvaluationType: _selectedEvaluationType,
-            selectedBigUnit: _selectedBigUnit,
-            selectedMidUnit: _selectedMidUnit,
-            selectedSemesterFilter: _selectedSemesterFilter,
-            selectedYear: _selectedYear,
-            selectedMonth: _selectedMonth,
-            selectedWeek: _selectedWeek,
-            timeTabController: _timeTabController,
-            mirroredExamRecords: _examRecords,
-            parentMasterTimeData: _subjectAggregates,
-            premiumCardBg: premiumCardBg,
-            brandGolden: brandGolden,
-            luxuryDarkBg: luxuryDarkBg,
-            buildCustomSectionTitle: _buildCustomSectionTitle,
-            onEvaluationTypeChanged: (type) => setState(() => _selectedEvaluationType = type),
-            onBigUnitChanged: (unit) => setState(() => _selectedBigUnit = unit),
-            onMidUnitChanged: (unit) => setState(() => _selectedMidUnit = unit),
-            onSemesterFilterChanged: (filter) => setState(() => _selectedSemesterFilter = filter),
-            onYearChanged: (year) => setState(() => _selectedYear = year),
-            onMonthChanged: (month) => setState(() => _selectedMonth = month),
-            onWeekChanged: (week) => setState(() => _selectedWeek = week),
-            onShowDetailAnalysisReport: () async {
-              // 🆕 [요청] 300자 이상 상세 진단 + 같은 사람에게 3개월 내 재사용 금지 + 생성된 문구는
-              // 반드시 저장 후 유사한 사람(같은 점수 구간)에게 재사용. DiagnosisService가 전담 관리.
-              if (_examRecords.isEmpty) {
-                _showReportPopup(
-                  context,
-                  _t(kDiagReportTitleMap),
-                  _t(kNoExamDataMap),
-                );
-                return;
-              }
-              final lastExam = _examRecords.last;
-              final String content = await DiagnosisService.getAnalysis(
-                personKey: 'student_$_realChildName',
-                type: lastExam.type,
-                subject: lastExam.subject,
-                score: lastExam.score,
-              );
-              if (!mounted) return;
-              _showReportPopup(context, _t(kDiagReportTitleMap), content);
-            },
-          ),
-
-          // 🆕 [성적 관리] 4번째 탭 - 조회 전용 (Plan A: 같은 기기 SharedPreferences 직접 조회)
-          ParentGradeManagementWidget(
-            childName: _realChildName,
-            premiumCardBg: premiumCardBg,
-            brandGolden: brandGolden,
-            luxuryDarkBg: luxuryDarkBg,
-            buildCustomSectionTitle: _buildCustomSectionTitle,
+                // 🆕 [성적 관리] 4번째 탭 - 조회 전용 (Plan A: 같은 기기 SharedPreferences 직접 조회)
+                ParentGradeManagementWidget(
+                  childName: _realChildName,
+                  premiumCardBg: premiumCardBg,
+                  brandGolden: brandGolden,
+                  luxuryDarkBg: luxuryDarkBg,
+                  buildCustomSectionTitle: _buildCustomSectionTitle,
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'global_lang.dart';
-import 'parent/parent_main_dashboard_screen.dart';
 import 'services/user_profile_service.dart'; // 🆕 [실사용 전환 2026-07-29] 실제 가입자 이름/유형 저장용
 import 'services/family_link_service.dart'; // 🆕 [학생-부모 기기 연결] 6자리 코드 생성/연결
-import 'schedule/general_planner_home_screen.dart'; // 🆕 [임시 테스트용] 일반 플래너 진입
+import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
 // =============================================================================
 // 🆕 [12개국 다국어 연동] 2026-07-29 추가: signup_screen.dart 전용 렌더 헬퍼 함수 3종
 // 기존 위젯 구조(폰트/색상/크기/레이아웃)는 전혀 변경하지 않고, 텍스트 소스만
@@ -118,12 +118,14 @@ class _SignupScreenState extends State<SignupScreen> {
   DateTime? _selectedBirthDate;
 
   bool parentConsent = false;
-  bool isEmailSent = false;
   bool isPasswordVisible = false;
 
-  // 🆕 [법적 필수 수정] 보호자 실제 인증 절차용 상태값
-  bool _isParentAuthSent = false;
-  bool _isParentVerified = false;
+  // 🆕 [보호자 인증 재설계] 가짜 SMS/이메일 코드 대신, 이미 검증된 "가족 연결 코드" 방식으로 통일.
+  // 자녀가 코드를 발급받아 보호자에게 알려주고, 보호자가 실제로 연결하면(=Firestore status가 connected로
+  // 바뀌면) 그걸 실제 보호자 확인으로 간주합니다.
+  String? _consentLinkCode;
+  bool _consentConnected = false;
+  StreamSubscription? _consentSub;
 
   // 🆕 [학생-부모 기기 연결] 학생용 코드 생성 상태
   String? _generatedLinkCode;
@@ -137,7 +139,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _nationalityController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _emailAuthOpacityController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -147,11 +148,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _childEmailController = TextEditingController();
   final TextEditingController _relationshipController = TextEditingController();
   final TextEditingController _childLinkCodeController = TextEditingController(); // 🆕 [학생-부모 기기 연결]
-
-  // 🆕 [법적 필수 수정] 보호자 연락처 및 인증번호 입력용 컨트롤러
-  final TextEditingController _parentEmailController = TextEditingController();
-  final TextEditingController _parentPhoneController = TextEditingController();
-  final TextEditingController _parentAuthCodeController = TextEditingController();
 
   // 🆕 [법적 필수 수정] 생년월일 기반 만 나이 계산 (국제 표준 만 나이 방식)
   int? get _calculatedAge {
@@ -171,7 +167,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool get _canProceedToNextStep {
     if (_selectedBirthDate == null) return false; // 생년월일 미입력 시 진행 불가
     if (_isUnder14) {
-      return _isParentVerified && parentConsent; // 보호자 인증 + 동의 체크 모두 필요
+      return _consentConnected && parentConsent; // 실제 보호자 연결 + 동의 체크 모두 필요
     }
     return true;
   }
@@ -182,6 +178,22 @@ class _SignupScreenState extends State<SignupScreen> {
     if (isStudent && !isGeneral) return '학생';
     if (!isStudent && !isGeneral) return '학부모';
     return '일반';
+  }
+
+  // 🆕 [입력값 검증] 이메일 형식 / 비밀번호 길이 / 비밀번호-확인 일치 여부를 한 번에 확인
+  String? _validateAccountFields() {
+    final email = _emailController.text.trim();
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailRegex.hasMatch(email)) {
+      return '올바른 이메일 형식을 입력해주세요. (예: name@example.com)';
+    }
+    if (_passwordController.text.length < 6) {
+      return '비밀번호는 6자 이상이어야 합니다.';
+    }
+    if (_passwordController.text != _confirmPasswordController.text) {
+      return '비밀번호와 비밀번호 확인이 일치하지 않습니다.';
+    }
+    return null; // 문제 없음
   }
 
   // 🆕 [학생-부모 기기 연결] 학생용: 부모님께 알려줄 6자리 코드 생성
@@ -243,13 +255,13 @@ class _SignupScreenState extends State<SignupScreen> {
       },
     );
     if (picked != null) {
+      _consentSub?.cancel();
       setState(() {
         _selectedBirthDate = picked;
-        // 생년월일이 바뀌면 이전 보호자 인증 상태는 초기화 (안전을 위한 재검증 요구)
-        _isParentAuthSent = false;
-        _isParentVerified = false;
+        // 생년월일이 바뀌면 이전 보호자 연결 상태는 초기화 (안전을 위한 재검증 요구)
+        _consentLinkCode = null;
+        _consentConnected = false;
         parentConsent = false;
-        _parentAuthCodeController.clear();
       });
     }
   }
@@ -262,80 +274,28 @@ class _SignupScreenState extends State<SignupScreen> {
     return '$y-$m-$d';
   }
 
-  // 🚨 [법적 필수사항] 아래 보호자 인증번호 발송/확인 함수는 현재 UI 목업(시뮬레이션)입니다.
-  // 실제 스토어 출시 전 반드시 실서버(SMS 발송 API 또는 이메일 발송 API)와 연동하여
-  // 진짜 인증번호를 발송하고 서버에서 검증하는 로직으로 교체해야 법적 효력이 발생합니다.
-  void _sendParentAuthCode() {
-    if (_parentEmailController.text.trim().isEmpty && _parentPhoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            dkeInline(DkeLang.snackParentContactMissingMap),
-            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
-          ),
-        ),
-      );
-      return;
-    }
-    setState(() => _isParentAuthSent = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          dkeInline(DkeLang.snackParentCodeSentMap),
-          style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-
-  void _verifyParentAuthCode() {
-    if (_parentAuthCodeController.text.trim().length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            dkeInline(DkeLang.snackInvalidCodeMap),
-            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
-          ),
-        ),
-      );
-      return;
-    }
-    setState(() => _isParentVerified = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          dkeInline(DkeLang.snackParentVerifiedMap),
-          style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
+  // 🆕 [보호자 인증 재설계] 보호자에게 알려줄 연결 코드 발급 + 실시간으로 연결 여부 감지
+  Future<void> _generateConsentCode() async {
+    final code = await FamilyLinkService.generateLinkCode();
+    if (!mounted) return;
+    setState(() => _consentLinkCode = code);
+    _consentSub?.cancel();
+    _consentSub = FamilyLinkService.watch(code).listen((snap) {
+      final status = snap.data()?['status'];
+      if (status == 'connected' && mounted) {
+        setState(() => _consentConnected = true);
+      }
+    });
   }
 
   // ✅ 학부모 대시보드 진입 함수 (build 밖으로 분리)
-  void _goToParentDashboard() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ParentMainDashboardScreen(
-          parentEmail: _emailController.text.isNotEmpty
-              ? _emailController.text
-              : "parent@test.com",
-          childName: _nameController.text.isNotEmpty
-              ? _nameController.text
-              : "홍길동",
-        ),
-      ),
-    );
-  }
+  // 🚨 [출시 전 제거됨 2026-08-28] 실제 사용자용 화면에서 정상 로그인/가입 절차를 건너뛰는
+  // 개발용 임시 버튼이었습니다. 개발 중 다시 필요하면 이 함수와 아래 호출부를 복원하세요.
 
-  // ✅ [임시 테스트용] 일반 플래너 진입 함수
-  void _goToGeneralPlanner() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const GeneralPlannerHomeScreen(),
-      ),
-    );
+  @override
+  void dispose() {
+    _consentSub?.cancel(); // 🆕 [보호자 인증 재설계] 화면 나갈 때 실시간 감지 정리
+    super.dispose();
   }
 
   @override
@@ -454,52 +414,12 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
 
-            // 이메일 + 인증 버튼
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInputField(
-                    hint: dkeInline(DkeLang.hintEmailMap),
-                    icon: Icons.email,
-                    controller: _emailController,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      setState(() => isEmailSent = true);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            dkeInline(DkeLang.snackCodeSentMap),
-                            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: brandGolden,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: dkeBilineText(
-                      DkeLang.btnAuthMap,
-                      const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
+            // 이메일 입력 (🆕 [A안] 가짜 '인증' 버튼/코드 입력창 삭제 — 가입 완료 시 Firebase가 실제 인증 메일을 자동 발송)
+            _buildInputField(
+              hint: dkeInline(DkeLang.hintEmailMap),
+              icon: Icons.email,
+              controller: _emailController,
             ),
-
-            if (isEmailSent) ...[
-              _buildInputField(
-                hint: dkeInline(DkeLang.hintEmailAuthCodeMap),
-                icon: Icons.lock_clock,
-                controller: _emailAuthOpacityController,
-              ),
-            ],
 
             _buildInputField(hint: dkeInline(DkeLang.hintPhoneMap), icon: Icons.phone, controller: _phoneController),
 
@@ -692,97 +612,89 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // 보호자 이메일 입력
-                    _buildInputField(
-                      hint: dkeInline(DkeLang.hintParentEmailMap),
-                      icon: Icons.email_outlined,
-                      controller: _parentEmailController,
-                    ),
-                    // 보호자 전화번호 입력
-                    _buildInputField(
-                      hint: dkeInline(DkeLang.hintParentPhoneMap),
-                      icon: Icons.phone_iphone,
-                      controller: _parentPhoneController,
-                    ),
-
-                    // 인증번호 발송 버튼
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _isParentVerified ? null : _sendParentAuthCode,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: brandGolden,
-                          disabledBackgroundColor: Colors.white10,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          _isParentVerified
-                              ? dkeInline(DkeLang.btnParentVerifiedMap)
-                              : dkeInline(DkeLang.btnSendCodeToParentMap),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis, // 🆕 [오버플로우 방지 2026-07-29]
-                          style: GoogleFonts.gowunBatang(
-                            color: _isParentVerified ? Colors.white38 : const Color(0xFF030712),
-                            fontWeight: FontWeight.bold,
+                    // 🆕 [보호자 인증 재설계] 실제 가족 연결 코드로 보호자 확인
+                    if (_consentLinkCode == null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: _generateConsentCode,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: brandGolden,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
+                          child: const Text('보호자 연결 코드 발급받기', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
                         ),
                       ),
-                    ),
-
-                    // 인증번호 입력 + 확인 버튼 (인증번호 발송 후에만 노출)
-                    if (_isParentAuthSent && !_isParentVerified) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildInputField(
-                              hint: dkeInline(DkeLang.hintParentAuthCodeMap),
-                              icon: Icons.lock_clock,
-                              controller: _parentAuthCodeController,
+                    ] else if (!_consentConnected) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: brandGolden.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('이 코드를 보호자님께 알려드리고,\n보호자님이 GKE StudyUp 앱에서 입력하도록 안내해주세요',
+                                textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 8),
+                            Text(_consentLinkCode!,
+                                style: const TextStyle(color: brandGolden, fontSize: 30, fontWeight: FontWeight.bold, letterSpacing: 5)),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: brandGolden)),
+                                SizedBox(width: 8),
+                                Text('보호자님의 연결을 기다리는 중...', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            height: 55,
-                            child: ElevatedButton(
-                              onPressed: _verifyParentAuthCode,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: brandGolden,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              child: dkeBilineText(
-                                DkeLang.btnVerifyMap,
-                                const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
+                            SizedBox(width: 8),
+                            Text('보호자 연결이 확인되었습니다!', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                     ],
 
-                    // 최종 동의 체크박스 - 보호자 인증이 완료된 후에만 체크 가능하도록 제한
+                    const SizedBox(height: 12),
+                    // 최종 동의 체크박스 - 보호자가 실제로 연결된 후에만 체크 가능
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       title: dkeBilingualRich(
                         DkeLang.checkboxParentConsentMap,
                         enStyle: TextStyle(
-                          color: _isParentVerified ? Colors.white : Colors.white24,
+                          color: _consentConnected ? Colors.white : Colors.white24,
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                         koStyle: TextStyle(
-                          color: _isParentVerified ? Colors.white : Colors.white24,
+                          color: _consentConnected ? Colors.white : Colors.white24,
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       value: parentConsent,
-                      // 🆕 [법적 필수 수정] 보호자 인증(_isParentVerified)이 완료되기 전에는
+                      // 🆕 [보호자 인증 재설계] 실제 연결(_consentConnected)이 되기 전에는
                       // 이 체크박스를 아예 누를 수 없도록 비활성화 (셀프 체크 우회 원천 차단)
-                      onChanged: _isParentVerified
+                      onChanged: _consentConnected
                           ? (val) => setState(() => parentConsent = val!)
                           : null,
                       activeColor: brandGolden,
@@ -800,6 +712,14 @@ class _SignupScreenState extends State<SignupScreen> {
             ElevatedButton(
               onPressed: _canProceedToNextStep
                   ? () {
+                // 🆕 [입력값 검증] 이메일 형식/비밀번호 길이/비밀번호 일치 여부를 여기서 먼저 확인
+                final String? validationError = _validateAccountFields();
+                if (validationError != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(validationError)),
+                  );
+                  return;
+                }
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -807,8 +727,10 @@ class _SignupScreenState extends State<SignupScreen> {
                     builder: (context) => TermsAgreementScreen(
                       realName: _nameController.text.trim(),
                       userType: _userTypeLabel,
+                      email: _emailController.text.trim(), // 🆕 [실제 계정 생성용]
+                      password: _passwordController.text, // 🆕 [실제 계정 생성용]
                       childEmail: (!isStudent && !isGeneral) ? _childEmailController.text.trim() : null,
-                      parentEmail: _isUnder14 ? _parentEmailController.text.trim() : null,
+                      parentEmail: null, // 🆕 [보호자 인증 재설계] 이메일 대신 연결 코드 방식으로 대체되어 더 이상 수집하지 않음
                     ),
                   ),
                 );
@@ -852,54 +774,6 @@ class _SignupScreenState extends State<SignupScreen> {
             ],
 
             const SizedBox(height: 12),
-
-            // ✅ 임시 학부모 대시보드 진입 버튼
-            ElevatedButton(
-              onPressed: _goToParentDashboard,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A5F),
-                minimumSize: const Size(double.infinity, 55),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Color(0xFF38BDF8), width: 1.5),
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: dkeColumnLines(
-                  DkeLang.btnParentLoginTempMap,
-                  enStyle: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 18),
-                  koStyle: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // ✅ [임시 테스트용] 일반 플래너 진입 버튼
-            ElevatedButton(
-              onPressed: _goToGeneralPlanner,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A5F),
-                minimumSize: const Size(double.infinity, 55),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Color(0xFFE5C158), width: 1.5),
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'GENERAL PLANNER (Temporary)',
-                    style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  Text(
-                    '일반 플래너 진입 (임시)',
-                    style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -983,6 +857,8 @@ class TermsAgreementScreen extends StatefulWidget {
   // 🆕 [실사용 전환 2026-07-29] signup_screen.dart에서 실제 입력한 값을 그대로 전달받음
   final String realName;
   final String userType;
+  final String email; // 🆕 [실제 계정 생성용]
+  final String password; // 🆕 [실제 계정 생성용]
   final String? childEmail;
   final String? parentEmail;
 
@@ -990,6 +866,8 @@ class TermsAgreementScreen extends StatefulWidget {
     super.key,
     required this.realName,
     required this.userType,
+    required this.email,
+    required this.password,
     this.childEmail,
     this.parentEmail,
   });
@@ -1109,6 +987,19 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
             ElevatedButton(
               onPressed: isAgreed
                   ? () async {
+                // 🆕 [실제 계정 생성] 진짜 이메일/비밀번호로 Firebase 계정을 먼저 만듦.
+                // 실패하면(이메일 중복, 비밀번호 약함 등) 프로필 저장/화면 이동 없이 에러만 안내.
+                try {
+                  await AuthService.signUp(email: widget.email, password: widget.password);
+                  await AuthService.sendVerificationEmail(); // 🆕 [A안] 실제 인증 메일 발송 (링크 클릭 방식)
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString())),
+                  );
+                  return;
+                }
+
                 // 🆕 [실사용 전환 2026-07-29] 가상 데이터 아님 - 실제 입력한 이름/유형/연동 정보를
                 // user_profile_service.dart 창구를 통해 저장. 이후 성취도 화면 등에서 실제 이름 표시됨.
                 await DkeUserProfile.saveProfileOnSignup(
@@ -1119,12 +1010,14 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
                 );
 
                 if (!mounted) return;
+                // 🆕 [A안] "가입 완료"가 아니라 "메일함에서 링크를 확인하라"는 정확한 안내로 교체
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      dkeInline(DkeLang.snackRegistrationCompleteMap),
-                      style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 16),
+                      '가입이 완료되었습니다! ${widget.email}로 보낸 인증 메일의 링크를 눌러 이메일 인증을 완료해주세요.',
+                      style: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
+                    duration: const Duration(seconds: 5),
                   ),
                 );
                 Navigator.of(context).pop();

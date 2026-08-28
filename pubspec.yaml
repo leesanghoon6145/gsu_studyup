@@ -45,6 +45,7 @@ dependencies:
   flutter_foreground_task: ^8.14.0
   firebase_core: ^4.14.0
   cloud_firestore: ^6.9.0
+  firebase_auth: ^6.6.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

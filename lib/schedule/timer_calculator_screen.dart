@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http; // 🆕 [실시간 환율 API 연동]
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
@@ -43,23 +44,29 @@ class _TimerCalculatorScreenState extends State<TimerCalculatorScreen>
       backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
+      toolbarHeight: 100, // 🆕 [헤더 로고 추가] 로고+글자 2줄이 다 들어가도록 확장
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded,
             color: Colors.white70, size: 19),
         onPressed: () => Navigator.pop(context),
       ),
       title: Column(mainAxisSize: MainAxisSize.min, children: [
+        Image.asset('assets/images/gsu_logo.png', height: 26), // 🆕 [헤더 로고] 제목 바로 위
+        const SizedBox(height: 2), // 🆕 [간격 최소화]
+        // 🆕 [글자체/크기 변경] 영문 10% 확대 + 진한 명조체(nanumMyeongjo)
         Text('TIMER CALCULATOR',
-            style: GoogleFonts.gowunBatang(
+            style: GoogleFonts.nanumMyeongjo(
                 color: gold,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                fontSize: 20, // 18 → 20 (10% 확대)
                 letterSpacing: .8)),
+        const SizedBox(height: 2), // 🆕 [간격 최소화]
+        // 🆕 [글자체/크기 변경] 한글 70% 확대 + 진하게 + 노토산스체
         Text('타이머 계산기',
             style: GoogleFonts.notoSansKr(
-                color: Colors.white70,
-                fontWeight: FontWeight.w600,
-                fontSize: 12)),
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20)), // 12 → 20 (약 70% 확대)
       ]),
     ),
     body: Container(
@@ -74,24 +81,44 @@ class _TimerCalculatorScreenState extends State<TimerCalculatorScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
             child: Container(
-              height: 52,
+              height: 56,
               decoration: BoxDecoration(
                   color: card,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: gold.withOpacity(.35))),
+                  // 🆕 [고급스러운 테두리] 옅은 투명도 대신 진한 황금색 테두리
+                  border: Border.all(color: gold, width: 1.8)),
               child: TabBar(
                 controller: _tabs,
                 dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
-                    color: gold.withOpacity(.14),
+                    color: gold.withOpacity(.18),
                     borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: gold.withOpacity(.55))),
+                    border: Border.all(color: gold, width: 1.8)),
                 indicatorPadding: const EdgeInsets.all(4),
                 labelColor: gold,
                 unselectedLabelColor: Colors.white54,
-                tabs: const [
-                  Tab(icon: Icon(Icons.timer_outlined, size: 23), text: 'TIMER'),
-                  Tab(icon: Icon(Icons.calculate_outlined, size: 23), text: 'CALCULATOR'),
+                // 🆕 [탭 레이아웃 변경] 아이콘이 글자 위가 아니라, 글자 왼쪽에 나란히 배치
+                tabs: [
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.timer_outlined, size: 20),
+                        const SizedBox(width: 6),
+                        Text('TIMER', style: GoogleFonts.nanumMyeongjo(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.calculate_outlined, size: 20),
+                        const SizedBox(width: 6),
+                        Text('CALCULATOR', style: GoogleFonts.nanumMyeongjo(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -134,7 +161,8 @@ class _IntroCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       gradient: const LinearGradient(
           colors: [Color(0xFF111B31), Color(0xFF08101F)]),
-      border: Border.all(color: const Color(0x55E5C158)),
+      // 🆕 [고급스러운 테두리] 진한 황금색
+      border: Border.all(color: const Color(0xFFE5C158), width: 1.6),
       boxShadow: const [
         BoxShadow(color: Color(0x26000000), blurRadius: 18, offset: Offset(0, 8))
       ],
@@ -146,13 +174,14 @@ class _IntroCard extends StatelessWidget {
           decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0x19E5C158),
-              border: Border.all(color: const Color(0x66E5C158))),
+              border: Border.all(color: const Color(0xFFE5C158), width: 1.4)),
           child: const Icon(Icons.auto_awesome_rounded,
               color: Color(0xFFE5C158), size: 28)),
       const SizedBox(width: 14),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // 🆕 [글자체 변경] 영문 → 진한 명조체
         Text('EVERYDAY TIMER',
-            style: GoogleFonts.gowunBatang(
+            style: GoogleFonts.nanumMyeongjo(
                 color: const Color(0xFFE5C158),
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
@@ -182,7 +211,8 @@ class _ToolCard extends StatelessWidget {
     decoration: BoxDecoration(
         color: const Color(0xFF0D1527),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x35E5C158)),
+        // 🆕 [고급스러운 테두리] 진한 황금색
+        border: Border.all(color: const Color(0xFFE5C158), width: 1.5),
         boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 14, offset: Offset(0, 6))]),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
@@ -192,12 +222,13 @@ class _ToolCard extends StatelessWidget {
             decoration: BoxDecoration(
                 color: const Color(0x1AE5C158),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0x35E5C158))),
+                border: Border.all(color: const Color(0xFFE5C158), width: 1.2)),
             child: Icon(icon, color: const Color(0xFFE5C158), size: 23)),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // 🆕 [글자체 변경] 한글 제목(시간측정/스톱워치/알람/세계시간) → 노토산스체
           Text(title,
-              style: GoogleFonts.gowunBatang(
+              style: GoogleFonts.notoSansKr(
                   color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 14.5)),
           const SizedBox(height: 2),
           Text(subtitle,
@@ -250,7 +281,7 @@ class _DarkButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         height: 45,
-        decoration: BoxDecoration(color: const Color(0xFF111B31), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+        decoration: BoxDecoration(color: const Color(0xFF111B31), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE5C158), width: 1.1)),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(icon, color: Colors.white70, size: 21),
           const SizedBox(width: 4),
@@ -362,7 +393,7 @@ class _CountdownCardState extends State<_CountdownCard> {
       Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0x35E5C158))),
+        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFFE5C158), width: 1.3)),
         child: Column(children: [
           Text(_fmt(_remaining), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w700, letterSpacing: 2)),
           if (!_running) const SizedBox(height: 7),
@@ -424,7 +455,7 @@ class _StopwatchCardState extends State<_StopwatchCard> {
       Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 5),
-        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0x35E5C158))),
+        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFFE5C158), width: 1.3)),
         child: FittedBox(fit: BoxFit.scaleDown, child: Text(_format(_watch.elapsed), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 43, fontWeight: FontWeight.w700, letterSpacing: 1.3))),
       ),
       const SizedBox(height: 10),
@@ -460,6 +491,8 @@ class _AlarmCardState extends State<_AlarmCard> {
   final List<_AlarmItem> _alarms = [];
   bool _ready = false;
   bool _loading = true;
+  // 🆕 [권한 재확인] 요청만 하고 끝내지 않고, 실제로 켜졌는지 재확인해서 저장 (timer2_services.dart와 동일한 안전장치)
+  bool _exactAlarmPermissionGranted = false;
 
   @override
   void initState() {
@@ -479,7 +512,15 @@ class _AlarmCardState extends State<_AlarmCard> {
       await _plugin.initialize(init, onDidReceiveNotificationResponse: (_) {});
       final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       await android?.requestNotificationsPermission();
-      await android?.requestExactAlarmsPermission();
+      // 🆕 [권한 재확인] "요청했다"와 "실제로 켜져 있다"는 다름 — 반드시 재확인해서 저장
+      try {
+        await android?.requestExactAlarmsPermission();
+        final bool? granted = await android?.canScheduleExactNotifications();
+        _exactAlarmPermissionGranted = granted ?? false;
+      } catch (e) {
+        // 권한 확인 자체를 지원하지 않는 구버전 기기/OS는 일단 시도 가능한 것으로 간주
+        _exactAlarmPermissionGranted = true;
+      }
       await android?.createNotificationChannel(const AndroidNotificationChannel(
         'general_planner_alarm_v1', '일반 플래너 알람',
         description: '일반인용 타이머 계산기 알람', importance: Importance.max, playSound: true,
@@ -581,6 +622,17 @@ class _AlarmCardState extends State<_AlarmCard> {
       _msg('알림 기능을 초기화하지 못했습니다. Android 알림 권한을 확인하세요.');
       return;
     }
+    // 🆕 [권한 재확인] 정확한 알람 권한이 꺼져 있으면 조용히 실패하는 대신, 저장 전에 명확히 안내하고 설정 화면으로 유도
+    if (!_exactAlarmPermissionGranted) {
+      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      _msg('정확한 알람 권한이 꺼져 있어 알람이 울리지 않습니다. 설정에서 권한을 켜주세요.');
+      try {
+        await android?.requestExactAlarmsPermission();
+        final bool? granted = await android?.canScheduleExactNotifications();
+        _exactAlarmPermissionGranted = granted ?? false;
+      } catch (_) {}
+      if (!_exactAlarmPermissionGranted) return; // 여전히 꺼져있으면 저장하지 않고 종료
+    }
     try {
       await _schedule(a);
       setState(() => _alarms.add(a));
@@ -641,7 +693,7 @@ class _AlarmCardState extends State<_AlarmCard> {
   Widget _alarmTile(_AlarmItem a) => Container(
     margin: const EdgeInsets.only(bottom: 8),
     padding: const EdgeInsets.fromLTRB(13, 10, 6, 10),
-    decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0x2EE5C158))),
+    decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE5C158), width: 1.1)),
     child: Row(children: [
       Container(width: 48, height: 48, decoration: BoxDecoration(color: const Color(0x19E5C158), borderRadius: BorderRadius.circular(13)), child: const Icon(Icons.alarm_rounded, color: Color(0xFFE5C158), size: 26)),
       const SizedBox(width: 10),
@@ -678,7 +730,7 @@ class _AlarmDialogState extends State<_AlarmDialog> {
           final t = await showTimePicker(context: context, initialTime: _time);
           if (t != null && mounted) setState(() => _time = t);
         },
-        child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 15), decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0x55E5C158))), child: Center(child: Text(_time.format(context), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700)))),
+        child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 15), decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE5C158), width: 1.2)), child: Center(child: Text(_time.format(context), style: GoogleFonts.notoSans(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700)))),
       ),
       const SizedBox(height: 12),
       TextField(style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: '알람명', labelStyle: TextStyle(color: Colors.white54)), onChanged: (v) => _name = v.trim().isEmpty ? '일반 알람' : v.trim()),
@@ -784,7 +836,7 @@ class _WorldClockCardState extends State<_WorldClockCard> {
           return Container(
             width: 158,
             padding: const EdgeInsets.fromLTRB(13, 12, 13, 10),
-            decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0x33E5C158))),
+            decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFFE5C158), width: 1.2)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${c[3]}  ${c[0]}', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
               const SizedBox(height: 3),
@@ -815,18 +867,57 @@ class _CalculatorTabState extends State<_CalculatorTab> {
   final amount = TextEditingController(text: '10000');
   String from = 'KRW';
   String to = 'USD';
-  double rate = .00074;
 
+  // 🆕 [실시간 환율 API 연동] 고정 환율 대신 무료 API(open.er-api.com)에서 실시간으로 받아옴.
+  // 여러 국가의 공식 환율 데이터를 종합해 하루 1회 이상 갱신되는 무료 서비스이며, API 키가 필요 없음.
+  double rate = 0.0;
+  bool _loadingRate = false;
+  String? _rateError;
+  String? _rateUpdatedText;
+
+  // 🆕 [국가 목록] 20개국 유지, 고정 환율 숫자는 더 이상 쓰지 않으므로 목록에서 제거
   static const currencies = [
-    ['대한민국', 'KRW', '원', '🇰🇷', '1350'], ['미국', 'USD', '달러', '🇺🇸', '1'], ['일본', 'JPY', '엔', '🇯🇵', '148'], ['유럽연합', 'EUR', '유로', '🇪🇺', '.86'],
-    ['중국', 'CNY', '위안', '🇨🇳', '7.18'], ['영국', 'GBP', '파운드', '🇬🇧', '.74'], ['호주', 'AUD', '호주 달러', '🇦🇺', '1.54'], ['캐나다', 'CAD', '캐나다 달러', '🇨🇦', '1.38'],
-    ['스위스', 'CHF', '프랑', '🇨🇭', '.80'], ['홍콩', 'HKD', '홍콩 달러', '🇭🇰', '7.82'], ['싱가포르', 'SGD', '싱가포르 달러', '🇸🇬', '1.28'], ['대만', 'TWD', '대만 달러', '🇹🇼', '32.4'],
-    ['태국', 'THB', '바트', '🇹🇭', '35.2'], ['베트남', 'VND', '동', '🇻🇳', '25500'], ['인도', 'INR', '루피', '🇮🇳', '83.8'], ['뉴질랜드', 'NZD', '뉴질랜드 달러', '🇳🇿', '1.68'],
-    ['스웨덴', 'SEK', '크로나', '🇸🇪', '9.45'], ['노르웨이', 'NOK', '크로네', '🇳🇴', '10.2'], ['덴마크', 'DKK', '크로네', '🇩🇰', '6.42'], ['아랍에미리트', 'AED', '디르함', '🇦🇪', '3.6725'],
+    ['대한민국', 'KRW', '원', '🇰🇷'], ['미국', 'USD', '달러', '🇺🇸'], ['일본', 'JPY', '엔', '🇯🇵'], ['유럽연합', 'EUR', '유로', '🇪🇺'],
+    ['중국', 'CNY', '위안', '🇨🇳'], ['영국', 'GBP', '파운드', '🇬🇧'], ['호주', 'AUD', '호주 달러', '🇦🇺'], ['캐나다', 'CAD', '캐나다 달러', '🇨🇦'],
+    ['스위스', 'CHF', '프랑', '🇨🇭'], ['홍콩', 'HKD', '홍콩 달러', '🇭🇰'], ['싱가포르', 'SGD', '싱가포르 달러', '🇸🇬'], ['대만', 'TWD', '대만 달러', '🇹🇼'],
+    ['태국', 'THB', '바트', '🇹🇭'], ['베트남', 'VND', '동', '🇻🇳'], ['인도', 'INR', '루피', '🇮🇳'], ['뉴질랜드', 'NZD', '뉴질랜드 달러', '🇳🇿'],
+    ['스웨덴', 'SEK', '크로나', '🇸🇪'], ['노르웨이', 'NOK', '크로네', '🇳🇴'], ['덴마크', 'DKK', '크로네', '🇩🇰'], ['아랍에미리트', 'AED', '디르함', '🇦🇪'],
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _fetchRate(); // 🆕 화면 진입 시 바로 최신 환율 조회
+  }
+
+  @override
   void dispose() { amount.dispose(); super.dispose(); }
+
+  // 🆕 [실시간 환율 조회] open.er-api.com — 무료, API 키 불필요, 하루 단위로 최신 공식 환율 갱신
+  Future<void> _fetchRate() async {
+    setState(() { _loadingRate = true; _rateError = null; });
+    try {
+      final resp = await http
+          .get(Uri.parse('https://open.er-api.com/v6/latest/$from'))
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) throw Exception('네트워크 오류(${resp.statusCode})');
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (data['result'] != 'success') throw Exception('환율 조회 실패');
+      final rates = data['rates'] as Map<String, dynamic>;
+      final r = (rates[to] as num?)?.toDouble();
+      if (r == null) throw Exception('$to 환율 정보 없음');
+      if (!mounted) return;
+      setState(() {
+        rate = r;
+        _rateUpdatedText = data['time_last_update_utc']?.toString();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _rateError = '환율을 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
+    } finally {
+      if (mounted) setState(() => _loadingRate = false);
+    }
+  }
 
   String fmt(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(10).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
   void key(String k) {
@@ -850,10 +941,6 @@ class _CalculatorTabState extends State<_CalculatorTab> {
     });
   }
   double calc(double a, double b, String o) => o == '+' ? a + b : o == '-' ? a - b : o == '×' ? a * b : b == 0 ? 0 : a / b;
-  double referenceRate(String a, String b) {
-    double usd(String code) => double.parse(currencies.firstWhere((x) => x[1] == code)[4]);
-    return usd(b) / usd(a);
-  }
 
   Future<void> pickCurrency(bool isFrom) async {
     final selected = await showModalBottomSheet<String>(
@@ -873,7 +960,8 @@ class _CalculatorTabState extends State<_CalculatorTab> {
       ),
     );
     if (selected == null) return;
-    setState(() { if (isFrom) from = selected; else to = selected; rate = referenceRate(from, to); });
+    setState(() { if (isFrom) from = selected; else to = selected; });
+    _fetchRate(); // 🆕 국가 변경 시 실시간 환율 다시 조회
   }
 
   @override
@@ -884,7 +972,7 @@ class _CalculatorTabState extends State<_CalculatorTab> {
         height: 116,
         padding: const EdgeInsets.all(16),
         alignment: Alignment.bottomRight,
-        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0x44E5C158))),
+        decoration: BoxDecoration(color: const Color(0xFF080F1E), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE5C158), width: 1.6)),
         child: FittedBox(fit: BoxFit.scaleDown, child: Text(display, style: GoogleFonts.notoSans(color: Colors.white, fontSize: 39, fontWeight: FontWeight.w700)),),
       ),
       const SizedBox(height: 10),
@@ -898,9 +986,10 @@ class _CalculatorTabState extends State<_CalculatorTab> {
     ],
   );
 
+  // 🆕 [글자 크기 30% 확대] 12.5 → 16
   Widget _mode(String text, bool selected, VoidCallback tap) => GestureDetector(
     onTap: tap,
-    child: Container(height: 46, alignment: Alignment.center, decoration: BoxDecoration(color: selected ? const Color(0x24E5C158) : const Color(0xFF0D1527), borderRadius: BorderRadius.circular(13), border: Border.all(color: selected ? const Color(0x99E5C158) : Colors.white12)), child: Text(text, style: GoogleFonts.notoSansKr(color: selected ? const Color(0xFFE5C158) : Colors.white54, fontWeight: FontWeight.bold, fontSize: 12.5))),
+    child: Container(height: 46, alignment: Alignment.center, decoration: BoxDecoration(color: selected ? const Color(0x24E5C158) : const Color(0xFF0D1527), borderRadius: BorderRadius.circular(13), border: Border.all(color: selected ? const Color(0xFFE5C158) : Colors.white24, width: selected ? 1.5 : 1)), child: Text(text, style: GoogleFonts.notoSansKr(color: selected ? const Color(0xFFE5C158) : Colors.white54, fontWeight: FontWeight.bold, fontSize: 16))),
   );
 
   Widget _calculatorView() {
@@ -921,15 +1010,41 @@ class _CalculatorTabState extends State<_CalculatorTab> {
     final t = currencies.firstWhere((x) => x[1] == to);
     return Container(
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: const Color(0xFF0D1527), borderRadius: BorderRadius.circular(17), border: Border.all(color: const Color(0x4DE5C158))),
+      decoration: BoxDecoration(color: const Color(0xFF0D1527), borderRadius: BorderRadius.circular(17), border: Border.all(color: const Color(0xFFE5C158), width: 1.6)),
       child: Column(children: [
         _currencyRow(f, true),
-        IconButton(onPressed: () => setState(() { final x = from; from = to; to = x; rate = referenceRate(from, to); }), icon: const Icon(Icons.swap_vert_rounded, color: Color(0xFFE5C158), size: 34)),
+        IconButton(
+          onPressed: () {
+            setState(() { final x = from; from = to; to = x; });
+            _fetchRate();
+          },
+          icon: const Icon(Icons.swap_vert_rounded, color: Color(0xFFE5C158), size: 34),
+        ),
         _currencyRow(t, false),
         const SizedBox(height: 12),
-        Text('1 $from = ${rate.toStringAsFixed(6)} $to', style: GoogleFonts.notoSans(color: const Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 5),
-        Text('20개 주요 통화를 표시합니다. 현재는 참고 환율로 계산하며, 최신 환율 API 연결 시 자동 갱신 구조로 확장합니다.', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9.5, height: 1.4)),
+        if (_loadingRate)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE5C158))),
+          )
+        else if (_rateError != null)
+          Column(children: [
+            Text(_rateError!, style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontSize: 11.5), textAlign: TextAlign.center),
+            TextButton(onPressed: _fetchRate, child: Text('다시 시도', style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold))),
+          ])
+        else ...[
+            Text('1 $from = ${rate.toStringAsFixed(6)} $to', style: GoogleFonts.notoSans(color: const Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(
+              '실시간 공식 환율 기준 (매일 갱신)${_rateUpdatedText != null ? ' · $_rateUpdatedText' : ''}',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9.5, height: 1.4),
+            ),
+          ],
+        const SizedBox(height: 6),
+        output > 0 && !_loadingRate && _rateError == null
+            ? Text('= ${outputText(t)} ${t[1]}', style: GoogleFonts.notoSans(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold))
+            : const SizedBox.shrink(),
       ]),
     );
   }

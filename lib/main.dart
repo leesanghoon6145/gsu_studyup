@@ -6,8 +6,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
+import 'parent/parent_main_dashboard_screen.dart'; // 🆕 [유형별 라우팅] 학부모 화면
+import 'schedule/general_planner_home_screen.dart'; // 🆕 [유형별 라우팅] 일반 사용자 화면
 import 'package:gsu_studyup/global_lang.dart';
 import 'services/timer2_services.dart';
+import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
+import 'services/user_profile_service.dart'; // 🆕 [유형별 라우팅] 가입 시 저장한 회원 유형 조회
 import 'timer/timer_screen.dart';
 
 void main() async {
@@ -327,6 +331,68 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   // 🗺️ [선배님 지시: 로그인 전용 계정 기억하기 단일 상태 레버 변수 안착]
   bool _isRememberMeChecked = false;
 
+  // 🆕 [실제 로그인 연결] 이메일/비밀번호 입력값을 실제로 붙잡아두는 컨트롤러
+  final TextEditingController _loginEmailController = TextEditingController();
+  final TextEditingController _loginPasswordController = TextEditingController();
+  bool _isLoggingIn = false;
+
+  // 🆕 [실제 로그인 연결] 이메일/비밀번호를 Firebase Authentication으로 실제 검증
+  Future<void> _handleSignIn(BuildContext context) async {
+    if (_isLoggingIn) return;
+    final email = _loginEmailController.text.trim();
+    final password = _loginPasswordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')),
+      );
+      return;
+    }
+    setState(() => _isLoggingIn = true);
+    try {
+      await AuthService.signIn(email: email, password: password);
+      if (!mounted) return;
+
+      // 🆕 [유형별 라우팅] 가입할 때 저장해둔 회원 유형(학생/학부모/일반)에 따라 다른 화면으로 이동
+      final String? userType = await DkeUserProfile.getUserType();
+      if (!mounted) return;
+
+      if (userType == '학부모') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ParentMainDashboardScreen(
+              parentEmail: email,
+              childName: '', // 🆕 대시보드 내부에서 실제 연결된 자녀 목록을 직접 불러오도록 추후 개선 예정
+            ),
+          ),
+        );
+      } else if (userType == '일반') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const GeneralPlannerHomeScreen()),
+        );
+      } else {
+        // 기본값(학생 또는 유형 정보 없음)은 기존과 동일하게 학생용 대시보드로
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (dashboardContext) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showOverlayWelcomeBar(dashboardContext);
+              });
+              return const HomeDashboardScreen();
+            },
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _isLoggingIn = false);
+    }
+  }
+
   void _showOverlayWelcomeBar(BuildContext targetContext) {
     final OverlayState overlayState = Overlay.of(targetContext);
     late OverlayEntry overlayEntry;
@@ -438,12 +504,14 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   _buildCustomTextField(
                     hintText: DkeLang.emailHint, // 🆕 [12개국 다국어] 원문: 'Email Address'
                     icon: Icons.mail_outline_rounded,
+                    controller: _loginEmailController,
                   ),
                   const SizedBox(height: 15),
                   _buildCustomTextField(
                     hintText: DkeLang.passwordHint, // 🆕 [12개국 다국어] 원문: 'Password'
                     icon: Icons.lock_outline,
                     isPassword: true,
+                    controller: _loginPasswordController,
                   ),
 
                   // 📐 기존 45 간격을 네모 박스 배치를 위해 슬림하게 10으로 축소 조율
@@ -499,20 +567,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   ),
                   const SizedBox(height: 15),
                   _buildOutlineButton(
-                    title: DkeLang.signInBtn, // 🆕 [12개국 다국어] 원문: 'SIGN IN (로그인)'
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (dashboardContext) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _showOverlayWelcomeBar(dashboardContext);
-                            });
-                            return const HomeDashboardScreen();
-                          },
-                        ),
-                      );
-                    },
+                    title: _isLoggingIn ? '로그인 중...' : DkeLang.signInBtn, // 🆕 [12개국 다국어] 원문: 'SIGN IN (로그인)'
+                    onPressed: () => _handleSignIn(context),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -528,6 +584,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
     required String hintText,
     required IconData icon,
     bool isPassword = false,
+    TextEditingController? controller,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -536,6 +593,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
         border: Border.all(color: Colors.white12),
       ),
       child: TextField(
+        controller: controller,
         obscureText: isPassword,
         style: const TextStyle(
           color: Colors.white,

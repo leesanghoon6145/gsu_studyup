@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [본인 데이터만 접근] 소유자 확인용
 import 'package:shared_preferences/shared_preferences.dart';
 
 // 학생↔부모 기기 연결을 담당하는 서비스
@@ -12,8 +13,11 @@ class FamilyLinkService {
   // [학생] 6자리 코드를 새로 만들어서 Firestore에 등록하고, 내 기기에도 저장(자동 동기화용)
   static Future<String> generateLinkCode() async {
     final String code = (100000 + Random().nextInt(900000)).toString();
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
     await _db.collection(_collection).doc(code).set({
       'status': 'waiting', // waiting → connected
+      'ownerUid': myUid, // 🆕 [본인 데이터만 접근] 이 데이터의 진짜 주인(학생) uid
+      'parentUids': <String>[], // 🆕 [본인 데이터만 접근] 연결 허용된 부모 uid 목록
       'createdAt': FieldValue.serverTimestamp(),
     });
     await saveMyLinkCode(code);
@@ -49,6 +53,9 @@ class FamilyLinkService {
 
   // [부모] 코드를 입력해서 연결 시도. 성공하면 true 반환 (내 자녀 목록에도 자동 추가)
   static Future<bool> connectWithCode(String code) async {
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return false; // 로그인 안 된 상태면 연결 불가 (본인 확인 불가능)
+
     final docRef = _db.collection(_collection).doc(code);
     final doc = await docRef.get();
     if (!doc.exists) {
@@ -57,6 +64,7 @@ class FamilyLinkService {
     await docRef.update({
       'status': 'connected',
       'connectedAt': FieldValue.serverTimestamp(),
+      'parentUids': FieldValue.arrayUnion([myUid]), // 🆕 [본인 데이터만 접근] 나를 허용 목록에 추가
     });
     await addLinkedCode(code);
     return true;
