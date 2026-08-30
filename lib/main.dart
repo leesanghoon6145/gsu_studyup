@@ -352,6 +352,15 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
       await AuthService.signIn(email: email, password: password);
       if (!mounted) return;
 
+      // 🆕 [이메일 인증 필수화] 인증 안 된 계정은 여기서 막고, 대시보드로 못 들어가게 함
+      final bool verified = await AuthService.isEmailVerified();
+      if (!verified) {
+        if (!mounted) return;
+        await _showEmailVerificationRequiredDialog(email);
+        setState(() => _isLoggingIn = false);
+        return; // 인증 전에는 절대 다음 화면으로 안 보냄
+      }
+
       // 🆕 [유형별 라우팅] 가입할 때 저장해둔 회원 유형(학생/학부모/일반)에 따라 다른 화면으로 이동
       final String? userType = await DkeUserProfile.getUserType();
       if (!mounted) return;
@@ -391,6 +400,56 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
     } finally {
       if (mounted) setState(() => _isLoggingIn = false);
     }
+  }
+
+  // 🆕 [이메일 인증 필수화] 인증 안 된 계정으로 로그인 시도했을 때 보여주는 안내창
+  Future<void> _showEmailVerificationRequiredDialog(String email) async {
+    bool isResending = false;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: const Color(0xFF0D1527),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('이메일 인증이 필요합니다', style: TextStyle(color: Color(0xFFE5C158), fontWeight: FontWeight.bold)),
+            content: Text(
+              '$email 주소로 보낸 인증 메일의 링크를 눌러주세요.\n\n인증을 완료하신 뒤, 이 창을 닫고 다시 "SIGN IN" 버튼을 눌러주세요.',
+              style: const TextStyle(color: Colors.white70, height: 1.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isResending
+                    ? null
+                    : () async {
+                  setDialogState(() => isResending = true);
+                  try {
+                    await AuthService.sendVerificationEmail();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('인증 메일을 다시 보냈습니다. 메일함(스팸함 포함)을 확인해주세요.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                    }
+                  } finally {
+                    setDialogState(() => isResending = false);
+                  }
+                },
+                child: Text(isResending ? '발송 중...' : '인증 메일 재발송', style: const TextStyle(color: Colors.white54)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158)),
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('확인', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _showOverlayWelcomeBar(BuildContext targetContext) {
