@@ -57,6 +57,25 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1  # ← 이 줄 추가
+  flutter_native_splash: ^2.4.1  # 🆕 [스플래시 화면 설정 2026-08-31] 앱 실행 시 뜨는 흰 화면을 브랜드 색으로 교체
+
+# 🆕 [런처 아이콘 설정 2026-08-31] flutter_launcher_icons 패키지 설정.
+# assets/images/app_icon.png (512x512, 완전 불투명)을 Android/iOS 런처 아이콘으로 사용.
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_icon.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true
+
+# 🆕 [스플래시 화면 설정 2026-08-31] flutter_native_splash 패키지 설정.
+# 앱 실행 시 잠깐 뜨는 기본 흰 화면을, 앱과 동일한 다크 네이비 배경(#030712) + 로고로 교체.
+flutter_native_splash:
+  color: "#030712"
+  image: "assets/images/app_icon.png"
+  android_12:
+    image: "assets/images/app_icon.png"
+    color: "#030712"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -79,6 +98,7 @@ flutter:
     - assets/images/light_blue_btn.png
     - assets/images/gsu_logo.png
     - assets/images/timer_play_btn.png
+    - assets/images/app_icon.png
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
