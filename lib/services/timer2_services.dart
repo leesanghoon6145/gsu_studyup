@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [12개국어 지원 2026-09-02] 저장된 언어 설정을 읽기 위함
 
 class Timer2Service {
   Timer2Service._();
@@ -18,8 +19,75 @@ class Timer2Service {
   static void Function(Map<String, dynamic> data)? onNotificationStartTapped;
 
   static const String _channelId = 'studyup_timeline_channel';
-  static const String _channelName = 'StudyUp 학습 타임라인 알림';
-  static const String _channelDesc = '오늘 하루 전체 시작 시 각 시간표 항목의 시작/종료를 알려줍니다';
+  // 🆕 [12개국어 지원 2026-09-02] 채널 이름/설명은 더 이상 고정 문자열이 아니라
+  // _notif 카탈로그 + _getCurrentLangCode()로 매번 언어에 맞게 구성됩니다.
+  // (기존 _channelName/_channelDesc 상수는 더 이상 쓰지 않아 제거함)
+
+  // ============================================================================
+  // 🆕 [12개국어 완전 지원 2026-09-02] 이 서비스는 화면(Widget)이 아니라 정적(static)
+  // 클래스라서, 다른 화면들처럼 State의 _currentLanguageCode를 바로 쓸 수 없습니다.
+  // 대신 다른 화면들과 완전히 동일한 저장 키('saved_language_code')를 SharedPreferences에서
+  // 직접 읽어와 판단합니다 - 화면 어디서 저장했든 항상 최신 값을 그대로 따라갑니다.
+  // ============================================================================
+  static const List<String> _foreignLangs = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+
+  static Future<String> _getCurrentLangCode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return (prefs.getString('saved_language_code') ?? 'ko').toUpperCase();
+    } catch (e) {
+      return 'KO';
+    }
+  }
+
+  // 🆕 [12개국어] 알림 채널 이름/설명, 시작/종료 알림 제목·본문 카탈로그
+  static const Map<String, Map<String, String>> _notif = {
+    'channelName': {
+      'EN': 'StudyUp Timeline Notification', 'KO': 'StudyUp 학습 타임라인 알림',
+      'JA': 'StudyUp学習タイムライン通知', 'ZH': 'StudyUp学习时间表通知', 'FR': 'Notification chronologie StudyUp',
+      'DE': 'StudyUp Zeitplan-Benachrichtigung', 'RU': 'Уведомление о расписании StudyUp',
+      'AR': 'إشعار الجدول الزمني لـ StudyUp', 'HI': 'StudyUp समयरेखा सूचना', 'VI': 'Thông báo dòng thời gian StudyUp',
+      'ES': 'Notificación de cronograma StudyUp', 'TH': 'การแจ้งเตือนไทม์ไลน์ StudyUp',
+    },
+    'channelDesc': {
+      'EN': 'Notifies the start/end of each timetable item when "Start Full Day" is used.',
+      'KO': '오늘 하루 전체 시작 시 각 시간표 항목의 시작/종료를 알려줍니다',
+      'JA': '「1日全体を開始」使用時、各時間割項目の開始・終了をお知らせします。',
+      'ZH': '使用"开始全天"时，通知每个时间表项目的开始/结束。',
+      'FR': 'Notifie le début/fin de chaque créneau lorsque "Démarrer la journée complète" est utilisé.',
+      'DE': 'Benachrichtigt über Beginn/Ende jedes Zeitplanpunkts bei Nutzung von "Ganzen Tag starten".',
+      'RU': 'Уведомляет о начале/окончании каждого пункта расписания при использовании "Начать весь день".',
+      'AR': 'يُعلم ببداية/نهاية كل عنصر في الجدول عند استخدام "بدء اليوم بالكامل".',
+      'HI': '"पूरा दिन शुरू करें" का उपयोग करते समय प्रत्येक समय-सारणी आइटम की शुरुआत/समाप्ति की सूचना देता है।',
+      'VI': 'Thông báo bắt đầu/kết thúc mỗi mục trong lịch trình khi dùng "Bắt đầu cả ngày".',
+      'ES': 'Notifica el inicio/fin de cada elemento del horario al usar "Iniciar día completo".',
+      'TH': 'แจ้งเตือนการเริ่ม/สิ้นสุดของแต่ละรายการตารางเวลาเมื่อใช้ "เริ่มทั้งวัน"',
+    },
+    'startTitle': {
+      'EN': '📖 Study Start', 'KO': '📖 학습 시작', 'JA': '📖 学習開始', 'ZH': '📖 学习开始', 'FR': '📖 Début de l\'étude',
+      'DE': '📖 Lernbeginn', 'RU': '📖 Начало занятия', 'AR': '📖 بدء الدراسة', 'HI': '📖 अध्ययन प्रारंभ',
+      'VI': '📖 Bắt đầu học', 'ES': '📖 Inicio del estudio', 'TH': '📖 เริ่มเรียน',
+    },
+    'startBody': {
+      'EN': 'Time to start now', 'KO': '지금 시작할 시간입니다', 'JA': '今が開始の時間です', 'ZH': '现在是开始的时间',
+      'FR': 'C\'est le moment de commencer', 'DE': 'Es ist Zeit anzufangen', 'RU': 'Пора начинать',
+      'AR': 'حان وقت البدء الآن', 'HI': 'अभी शुरू करने का समय है', 'VI': 'Đã đến giờ bắt đầu',
+      'ES': 'Es hora de empezar', 'TH': 'ถึงเวลาเริ่มแล้ว',
+    },
+    'endTitle': {
+      'EN': '✅ Study End', 'KO': '✅ 학습 종료', 'JA': '✅ 学習終了', 'ZH': '✅ 学习结束', 'FR': '✅ Fin de l\'étude',
+      'DE': '✅ Lernen beendet', 'RU': '✅ Конец занятия', 'AR': '✅ انتهاء الدراسة', 'HI': '✅ अध्ययन समाप्त',
+      'VI': '✅ Kết thúc học', 'ES': '✅ Fin del estudio', 'TH': '✅ เรียนจบแล้ว',
+    },
+    'endBody': {
+      'EN': 'Completed - get ready for the next item', 'KO': '완료 · 다음 항목을 준비하세요',
+      'JA': '完了・次の項目の準備をしましょう', 'ZH': '已完成 · 请准备下一项', 'FR': 'Terminé · préparez l\'élément suivant',
+      'DE': 'Abgeschlossen · bereiten Sie den nächsten Punkt vor', 'RU': 'Завершено · подготовьтесь к следующему пункту',
+      'AR': 'اكتمل · استعد للعنصر التالي', 'HI': 'पूर्ण · अगली वस्तु के लिए तैयार हों',
+      'VI': 'Hoàn thành · chuẩn bị cho mục tiếp theo', 'ES': 'Completado · prepárate para el siguiente elemento',
+      'TH': 'เสร็จสิ้น · เตรียมพร้อมสำหรับรายการถัดไป',
+    },
+  };
 
   // 🆕 [버그 수정] 정확한 알람 권한이 실제로 허용됐는지 마지막으로 확인한 결과를 기억해둠.
   // false면 scheduleFullDaySchedule()이 zonedSchedule을 시도조차 하지 않고 바로 결과를 반환해서
@@ -61,10 +129,24 @@ class Timer2Service {
       _exactAlarmPermissionGranted = true;
     }
 
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    // 🆕 [12개국어 지원] 채널 생성 시점의 언어로 이름/설명을 정합니다.
+    // ⚠️ [Android 제약] 안드로이드 알림 채널은 한 번 만들어지면 이름/설명이 코드로
+    // 다시 안 바뀌는 특성이 있습니다(notification_service.dart에도 동일 메모 있음).
+    // 그래서 앱을 처음 설치했을 때의 언어로 고정되며, 이후 언어를 바꿔도 이미 생성된
+    // 채널의 표시 이름은 안 바뀔 수 있습니다(안드로이드 OS 자체의 한계).
+    final String langCode = await _getCurrentLangCode();
+    final bool isForeign = _foreignLangs.contains(langCode);
+    final String channelName = isForeign
+        ? (_notif['channelName']![langCode] ?? _notif['channelName']!['EN']!)
+        : '${_notif['channelName']!['EN']} (${_notif['channelName']!['KO']})';
+    final String channelDesc = isForeign
+        ? (_notif['channelDesc']![langCode] ?? _notif['channelDesc']!['EN']!)
+        : '${_notif['channelDesc']!['EN']} (${_notif['channelDesc']!['KO']})';
+
+    final AndroidNotificationChannel channel = AndroidNotificationChannel(
       _channelId,
-      _channelName,
-      description: _channelDesc,
+      channelName,
+      description: channelDesc,
       importance: Importance.high,
     );
     await androidImpl?.createNotificationChannel(channel);
@@ -98,6 +180,13 @@ class Timer2Service {
     int skippedCount = 0;
     int failedCount = 0;
     final DateTime now = DateTime.now();
+
+    // 🆕 [12개국어 지원] 이번 예약 작업 전체에 쓸 언어를 한 번만 조회 (항목마다 반복 조회하지 않도록)
+    final String langCode = await _getCurrentLangCode();
+    final bool isForeign = _foreignLangs.contains(langCode);
+    String tr(String key) => isForeign ? (_notif[key]![langCode] ?? _notif[key]!['EN']!) : '${_notif[key]!['EN']} (${_notif[key]!['KO']})';
+    final String channelNameLocalized = tr('channelName');
+    final String channelDescLocalized = tr('channelDesc');
 
     // 🆕 [버그 수정] 권한이 없으면 아예 시도하지 않고 즉시 반환 -> "무한 대기"처럼 보이는 현상 방지
     if (!_exactAlarmPermissionGranted) {
@@ -147,14 +236,14 @@ class Timer2Service {
       try {
         await _plugin.zonedSchedule(
           startId,
-          '📖 학습 시작 / $taskText',
-          '$timeStr · 지금 시작할 시간입니다',
+          '${tr('startTitle')} / $taskText',
+          '$timeStr · ${tr('startBody')}',
           tz.TZDateTime.from(startDt, tz.local),
-          const NotificationDetails(
+          NotificationDetails(
             android: AndroidNotificationDetails(
               _channelId,
-              _channelName,
-              channelDescription: _channelDesc,
+              channelNameLocalized,
+              channelDescription: channelDescLocalized,
               importance: Importance.high,
               priority: Priority.high,
             ),
@@ -173,14 +262,14 @@ class Timer2Service {
 
         await _plugin.zonedSchedule(
           endId,
-          '✅ 학습 종료 / $taskText',
-          '$timeStr 완료 · 다음 항목을 준비하세요',
+          '${tr('endTitle')} / $taskText',
+          '$timeStr ${tr('endBody')}',
           tz.TZDateTime.from(endDt, tz.local),
-          const NotificationDetails(
+          NotificationDetails(
             android: AndroidNotificationDetails(
               _channelId,
-              _channelName,
-              channelDescription: _channelDesc,
+              channelNameLocalized,
+              channelDescription: channelDescLocalized,
               importance: Importance.high,
               priority: Priority.high,
             ),

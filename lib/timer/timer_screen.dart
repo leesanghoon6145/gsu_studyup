@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../square/my_page_screen.dart';
 import '../planner/widgets/study_timelines.dart'; // 타임라인 연동용 임포트
 import '../star_economy.dart'; // 🆕 [별 경제 시스템] 별 적립 속도/누적저장/레벨계산을 한 곳에서 관리
+import '../services/family_link_service.dart'; // 🆕 [학부모 가시성 확보 2026-09-02] 학습 기록을 Firestore에도 함께 올리기 위함
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -45,7 +46,7 @@ class TimerScreen extends StatefulWidget {
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin {
+class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   // 타임라인 관련 상태 변수
   late DateTime _currentSelectedDate;
   List<Map<String, String>> _activeTimeline = [];
@@ -76,9 +77,408 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   // 👑 하단 자식 애니메이션 엔진을 타이머 화면에서 직접 흔들어 깨우기 위한 고유 Key 부품 신설
   final GlobalKey<_DkeBigStarTargetAnimationModuleState> _animKey = GlobalKey<_DkeBigStarTargetAnimationModuleState>();
 
+  // ============================================================================
+  // 🆕 [12개국어 완전 지원 2026-09-02] 이 화면(timer_screen.dart) 전용 번역 카탈로그.
+  // DkeBigStarTargetAnimationModule이 이미 쓰던 방식(_currentLanguageCode 대문자 비교)과
+  // 완전히 동일한 방식으로 동작함 - 전역 DkeLang 대신 이 화면 자체 상태값(_currentLanguageCode)을
+  // 기준으로 판단하므로 별도 import 없이 안전하게 적용됨.
+  // 기본모드(EN+KO 병기): "EN (KO)" 형태 또는 EN 굵게+KO 작게 2줄. 10개국어 선택 시: 해당 언어만 표시.
+  // ============================================================================
+  static const List<String> _foreignLangs = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
+  bool get _isForeign => _foreignLangs.contains(_currentLanguageCode.toUpperCase());
+  String get _cur => _currentLanguageCode.toUpperCase();
+
+  // (A) 인라인 "EN (KO)" 또는 선택 언어 단독 문자열 반환 (버튼/칩/힌트용)
+  String _bi(Map<String, String> m) {
+    if (_isForeign) return m[_cur] ?? m['EN'] ?? m['KO'] ?? '';
+    return "${m['EN']} (${m['KO']})";
+  }
+
+  // (B) 다이얼로그 제목처럼 EN(굵게, gowunBatang) + KO(작게, notoSansKr) 2줄 구성.
+  // 10개국어 선택 시: 번역문 하나만 단일 Text로 표시.
+  List<Widget> _biLines(Map<String, String> m, {required TextStyle enStyle, TextStyle? koStyle}) {
+    if (_isForeign) {
+      return [
+        Text(
+          m[_cur] ?? m['EN'] ?? m['KO'] ?? '',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.notoSans(textStyle: enStyle),
+        ),
+      ];
+    }
+    return [
+      Text(m['EN'] ?? '', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(textStyle: enStyle)),
+      const SizedBox(height: 6),
+      Text('(${m['KO']})', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(textStyle: koStyle ?? enStyle)),
+    ];
+  }
+
+  // (C) 원래 한글 단독으로만 표시되던 칩/라벨(영문 병기 없던 것들) 전용.
+  // 기본모드(EN+KO 병기 상태)에서는 원본 그대로 한글만 표시(디자인 100% 유지),
+  // 10개국어 선택시에만 해당 언어로 전환.
+  String _koOnly(Map<String, String> m) {
+    if (_isForeign) return m[_cur] ?? m['EN'] ?? m['KO'] ?? '';
+    return m['KO'] ?? '';
+  }
+
+  // 🆕 [12개국어] "필수" 표시 - 라벨 뒤에 붙는 접미사
+  static const Map<String, String> _requiredMap = {
+    'EN': '*Required', 'KO': '*필수', 'JA': '*必須', 'ZH': '*必填', 'FR': '*Requis', 'DE': '*Erforderlich',
+    'RU': '*Обязательно', 'AR': '*مطلوب', 'HI': '*आवश्यक', 'VI': '*Bắt buộc', 'ES': '*Obligatorio', 'TH': '*จำเป็น',
+  };
+  String get _required => _isForeign ? (_requiredMap[_cur] ?? _requiredMap['EN']!) : _requiredMap['KO']!;
+
+  // 🆕 [12개국어] "분" (시간 단위)
+  static const Map<String, String> _minuteUnitMap = {
+    'EN': 'min', 'KO': '분', 'JA': '分', 'ZH': '分钟', 'FR': 'min', 'DE': 'Min',
+    'RU': 'мин', 'AR': 'دقيقة', 'HI': 'मिनट', 'VI': 'phút', 'ES': 'min', 'TH': 'นาที',
+  };
+  String get _minuteUnit => _isForeign ? (_minuteUnitMap[_cur] ?? _minuteUnitMap['EN']!) : _minuteUnitMap['KO']!;
+
+  // 🆕 [12개국어] 다이얼로그/버튼 텍스트 카탈로그
+  static const Map<String, Map<String, String>> _dlg = {
+    'continuePrompt': {
+      'EN': 'Would you like to continue from where you left off?', 'KO': '이어서 학습하시겠습니까?',
+      'JA': '続きから学習しますか？', 'ZH': '要从上次的地方继续吗？', 'FR': 'Voulez-vous continuer où vous en étiez ?',
+      'DE': 'Möchten Sie dort weitermachen, wo Sie aufgehört haben?', 'RU': 'Хотите продолжить с того места, где остановились?',
+      'AR': 'هل تريد المتابعة من حيث توقفت؟', 'HI': 'क्या आप वहीं से जारी रखना चाहते हैं जहाँ आपने छोड़ा था?',
+      'VI': 'Bạn có muốn tiếp tục từ nơi đã dừng lại không?', 'ES': '¿Deseas continuar desde donde lo dejaste?', 'TH': 'คุณต้องการเรียนต่อจากที่ค้างไว้หรือไม่?',
+    },
+    'no': {
+      'EN': 'NO', 'KO': '아니오', 'JA': 'いいえ', 'ZH': '否', 'FR': 'NON', 'DE': 'NEIN',
+      'RU': 'НЕТ', 'AR': 'لا', 'HI': 'नहीं', 'VI': 'KHÔNG', 'ES': 'NO', 'TH': 'ไม่ใช่',
+    },
+    'yes': {
+      'EN': 'YES', 'KO': '예', 'JA': 'はい', 'ZH': '是', 'FR': 'OUI', 'DE': 'JA',
+      'RU': 'ДА', 'AR': 'نعم', 'HI': 'हाँ', 'VI': 'CÓ', 'ES': 'SÍ', 'TH': 'ใช่',
+    },
+    'stopConfirm': {
+      'EN': 'Are you sure you want to stop learning?', 'KO': '학습을 중단하시겠습니까?',
+      'JA': '学習を中止しますか？', 'ZH': '确定要停止学习吗？', 'FR': 'Voulez-vous vraiment arrêter d\'étudier ?',
+      'DE': 'Möchten Sie das Lernen wirklich beenden?', 'RU': 'Вы уверены, что хотите прекратить обучение?',
+      'AR': 'هل أنت متأكد من أنك تريد التوقف عن التعلم؟', 'HI': 'क्या आप वाकई सीखना बंद करना चाहते हैं?',
+      'VI': 'Bạn có chắc muốn dừng học không?', 'ES': '¿Seguro que deseas dejar de estudiar?', 'TH': 'คุณแน่ใจหรือไม่ว่าต้องการหยุดเรียน?',
+    },
+    'resume': {
+      'EN': 'RESUME', 'KO': '재시작', 'JA': '再開', 'ZH': '继续', 'FR': 'REPRENDRE', 'DE': 'FORTSETZEN',
+      'RU': 'ПРОДОЛЖИТЬ', 'AR': 'استئناف', 'HI': 'फिर से शुरू करें', 'VI': 'TIẾP TỤC', 'ES': 'REANUDAR', 'TH': 'เริ่มต่อ',
+    },
+    'finish': {
+      'EN': 'FINISH', 'KO': '끝내기', 'JA': '終了', 'ZH': '结束', 'FR': 'TERMINER', 'DE': 'BEENDEN',
+      'RU': 'ЗАВЕРШИТЬ', 'AR': 'إنهاء', 'HI': 'समाप्त करें', 'VI': 'KẾT THÚC', 'ES': 'FINALIZAR', 'TH': 'เสร็จสิ้น',
+    },
+    'recordWarn': {
+      'EN': 'Please leave a record of your efforts! The more records you have, the more accurate the learning analysis will be.',
+      'KO': '노력의 기록을 남겨주세요! 기록이 많을 수록 학습분석이 더욱 정확해집니다.',
+      'JA': '努力の記録を残してください！記録が多いほど学習分析がより正確になります。',
+      'ZH': '请留下你努力的记录！记录越多，学习分析越准确。',
+      'FR': 'Veuillez laisser une trace de vos efforts ! Plus vous avez d\'enregistrements, plus l\'analyse sera précise.',
+      'DE': 'Bitte hinterlassen Sie einen Nachweis Ihrer Bemühungen! Je mehr Aufzeichnungen, desto genauer die Lernanalyse.',
+      'RU': 'Пожалуйста, оставьте запись о своих усилиях! Чем больше записей, тем точнее анализ обучения.',
+      'AR': 'يرجى ترك سجل لجهودك! كلما زادت السجلات، كان تحليل التعلم أكثر دقة.',
+      'HI': 'कृपया अपने प्रयासों का रिकॉर्ड छोड़ें! जितने अधिक रिकॉर्ड होंगे, विश्लेषण उतना ही सटीक होगा।',
+      'VI': 'Hãy để lại ghi chép về nỗ lực của bạn! Càng nhiều ghi chép, phân tích học tập càng chính xác.',
+      'ES': '¡Deja un registro de tu esfuerzo! Cuantos más registros tengas, más preciso será el análisis.',
+      'TH': 'กรุณาบันทึกความพยายามของคุณ! ยิ่งมีบันทึกมาก การวิเคราะห์การเรียนก็ยิ่งแม่นยำ',
+    },
+    'writeRecord': {
+      'EN': 'WRITE RECORD', 'KO': '기록하기', 'JA': '記録する', 'ZH': '写记录', 'FR': 'ÉCRIRE UN RAPPORT', 'DE': 'EINTRAG SCHREIBEN',
+      'RU': 'ЗАПИСАТЬ', 'AR': 'كتابة سجل', 'HI': 'रिकॉर्ड लिखें', 'VI': 'GHI LẠI', 'ES': 'ESCRIBIR REGISTRO', 'TH': 'บันทึกข้อมูล',
+    },
+    'completion': {
+      'EN': 'Good job! You have successfully achieved your learning goals.', 'KO': '수고 하셨습니다. 학습 목표를 성공적으로 달성 하였습니다.',
+      'JA': 'よく頑張りました！学習目標を達成しました。', 'ZH': '做得好！你已成功达成学习目标。',
+      'FR': 'Bravo ! Vous avez atteint vos objectifs d\'apprentissage.', 'DE': 'Gut gemacht! Sie haben Ihre Lernziele erfolgreich erreicht.',
+      'RU': 'Отличная работа! Вы успешно достигли своих учебных целей.', 'AR': 'أحسنت! لقد حققت أهدافك التعليمية بنجاح.',
+      'HI': 'शाबाश! आपने अपने सीखने के लक्ष्य सफलतापूर्वक हासिल कर लिए हैं।', 'VI': 'Làm tốt lắm! Bạn đã đạt được mục tiêu học tập.',
+      'ES': '¡Buen trabajo! Has alcanzado tus objetivos de aprendizaje.', 'TH': 'เยี่ยมมาก! คุณบรรลุเป้าหมายการเรียนสำเร็จแล้ว',
+    },
+    'ok': {
+      'EN': 'OK', 'KO': '확인', 'JA': 'OK', 'ZH': '确定', 'FR': 'OK', 'DE': 'OK',
+      'RU': 'ОК', 'AR': 'موافق', 'HI': 'ठीक है', 'VI': 'OK', 'ES': 'OK', 'TH': 'ตกลง',
+    },
+    'growthStep': {
+      'EN': 'Record a step of your growth.\nThe more records you have, the more accurate the learning analysis will be.',
+      'KO': '성장의 한 걸음을 기록해 보세요\n기록이 많을 수록 학습분석이 더욱 정확해집니다.',
+      'JA': '成長の一歩を記録しましょう\n記録が多いほど学習分析がより正確になります。',
+      'ZH': '记录你成长的一步\n记录越多，学习分析越准确。',
+      'FR': 'Enregistrez une étape de votre progression.\nPlus vous avez d\'enregistrements, plus l\'analyse sera précise.',
+      'DE': 'Halten Sie einen Schritt Ihres Wachstums fest.\nJe mehr Aufzeichnungen, desto genauer die Lernanalyse.',
+      'RU': 'Запишите шаг своего роста.\nЧем больше записей, тем точнее анализ обучения.',
+      'AR': 'سجّل خطوة من نموك.\nكلما زادت السجلات، كان تحليل التعلم أكثر دقة.',
+      'HI': 'अपनी प्रगति का एक कदम रिकॉर्ड करें\nजितने अधिक रिकॉर्ड होंगे, विश्लेषण उतना ही सटीक होगा।',
+      'VI': 'Hãy ghi lại một bước trưởng thành của bạn\nCàng nhiều ghi chép, phân tích càng chính xác.',
+      'ES': 'Registra un paso de tu crecimiento.\nCuantos más registros tengas, más preciso será el análisis.',
+      'TH': 'บันทึกก้าวหนึ่งของการเติบโตของคุณ\nยิ่งมีบันทึกมาก การวิเคราะห์ก็ยิ่งแม่นยำ',
+    },
+    'studyRecord': {
+      'EN': 'STUDY RECORD', 'KO': '학습 기록 작성', 'JA': '学習記録作成', 'ZH': '撰写学习记录', 'FR': 'FICHE D\'ÉTUDE', 'DE': 'LERNPROTOKOLL',
+      'RU': 'ЗАПИСЬ ОБУЧЕНИЯ', 'AR': 'سجل الدراسة', 'HI': 'अध्ययन रिकॉर्ड', 'VI': 'GHI CHÉP HỌC TẬP', 'ES': 'REGISTRO DE ESTUDIO', 'TH': 'บันทึกการเรียน',
+    },
+    'subject': {
+      'EN': 'SUBJECT', 'KO': '과목', 'JA': '科目', 'ZH': '科目', 'FR': 'MATIÈRE', 'DE': 'FACH',
+      'RU': 'ПРЕДМЕТ', 'AR': 'المادة', 'HI': 'विषय', 'VI': 'MÔN HỌC', 'ES': 'ASIGNATURA', 'TH': 'วิชา',
+    },
+    'recordType': {
+      'EN': 'RECORD TYPE', 'KO': '기록 유형', 'JA': '記録タイプ', 'ZH': '记录类型', 'FR': 'TYPE D\'ENREGISTREMENT', 'DE': 'EINTRAGSTYP',
+      'RU': 'ТИП ЗАПИСИ', 'AR': 'نوع السجل', 'HI': 'रिकॉर्ड प्रकार', 'VI': 'LOẠI GHI CHÉP', 'ES': 'TIPO DE REGISTRO', 'TH': 'ประเภทบันทึก',
+    },
+    'lecture': {
+      'EN': 'Lecture', 'KO': '강의', 'JA': '講義', 'ZH': '讲课', 'FR': 'Cours', 'DE': 'Vorlesung',
+      'RU': 'Лекция', 'AR': 'محاضرة', 'HI': 'व्याख्यान', 'VI': 'Bài giảng', 'ES': 'Clase', 'TH': 'บรรยาย',
+    },
+    'evaluation': {
+      'EN': 'Evaluation', 'KO': '평가', 'JA': '評価', 'ZH': '评估', 'FR': 'Évaluation', 'DE': 'Bewertung',
+      'RU': 'Оценка', 'AR': 'تقييم', 'HI': 'मूल्यांकन', 'VI': 'Đánh giá', 'ES': 'Evaluación', 'TH': 'ประเมิน',
+    },
+    'lectureType': {
+      'EN': 'LECTURE TYPE', 'KO': '강의 세부 유형', 'JA': '講義の種類', 'ZH': '讲课细类', 'FR': 'TYPE DE COURS', 'DE': 'VORLESUNGSART',
+      'RU': 'ТИП ЛЕКЦИИ', 'AR': 'نوع المحاضرة', 'HI': 'व्याख्यान प्रकार', 'VI': 'LOẠI BÀI GIẢNG', 'ES': 'TIPO DE CLASE', 'TH': 'ประเภทการบรรยาย',
+    },
+    'conceptLecture': {
+      'EN': 'Concept Lecture', 'KO': '개념강의', 'JA': '概念講義', 'ZH': '概念讲解', 'FR': 'Cours théorique', 'DE': 'Konzeptvorlesung',
+      'RU': 'Лекция по теории', 'AR': 'محاضرة مفاهيمية', 'HI': 'अवधारणा व्याख्यान', 'VI': 'Bài giảng khái niệm', 'ES': 'Clase teórica', 'TH': 'บรรยายแนวคิด',
+    },
+    'unitReview': {
+      'EN': 'Unit Review & Problems', 'KO': '단원정리 및 문제해설', 'JA': '単元整理と問題解説', 'ZH': '单元整理与题目讲解', 'FR': 'Révision & Exercices',
+      'DE': 'Einheit & Übungen', 'RU': 'Повторение и задачи', 'AR': 'مراجعة الوحدة وحل المسائل', 'HI': 'इकाई समीक्षा और समस्याएं',
+      'VI': 'Ôn tập & Bài tập', 'ES': 'Repaso y ejercicios', 'TH': 'ทบทวนบทและโจทย์',
+    },
+    'details': {
+      'EN': 'DETAILS', 'KO': '상세 내용', 'JA': '詳細内容', 'ZH': '详细内容', 'FR': 'DÉTAILS', 'DE': 'DETAILS',
+      'RU': 'ДЕТАЛИ', 'AR': 'التفاصيل', 'HI': 'विवरण', 'VI': 'CHI TIẾT', 'ES': 'DETALLES', 'TH': 'รายละเอียด',
+    },
+    'detailsHint': {
+      'EN': 'e.g., Solved concepts and problems.', 'KO': '예: 개념 및 문제풀이 함', 'JA': '例：概念と問題を解いた',
+      'ZH': '例如：完成了概念与解题', 'FR': 'ex : Concepts et exercices résolus', 'DE': 'z. B. Konzepte und Aufgaben gelöst',
+      'RU': 'напр., изучил теорию и решил задачи', 'AR': 'مثال: تم حل المفاهيم والمسائل', 'HI': 'उदा., अवधारणाएँ और समस्याएँ हल कीं',
+      'VI': 'VD: Đã giải khái niệm và bài tập', 'ES': 'ej. Conceptos y ejercicios resueltos', 'TH': 'เช่น แก้แนวคิดและโจทย์แล้ว',
+    },
+    'score': {
+      'EN': 'SCORE', 'KO': '점수', 'JA': '点数', 'ZH': '分数', 'FR': 'SCORE', 'DE': 'PUNKTZAHL',
+      'RU': 'БАЛЛ', 'AR': 'الدرجة', 'HI': 'स्कोर', 'VI': 'ĐIỂM SỐ', 'ES': 'PUNTUACIÓN', 'TH': 'คะแนน',
+    },
+    'points': {
+      'EN': 'Points', 'KO': '점', 'JA': '点', 'ZH': '分', 'FR': 'Points', 'DE': 'Punkte',
+      'RU': 'баллов', 'AR': 'نقاط', 'HI': 'अंक', 'VI': 'điểm', 'ES': 'Puntos', 'TH': 'คะแนน',
+    },
+    'examCategory': {
+      'EN': 'EXAM CATEGORY', 'KO': '시험 유형', 'JA': '試験種別', 'ZH': '考试类型', 'FR': 'TYPE D\'EXAMEN', 'DE': 'PRÜFUNGSART',
+      'RU': 'ТИП ЭКЗАМЕНА', 'AR': 'نوع الاختبار', 'HI': 'परीक्षा प्रकार', 'VI': 'LOẠI KỲ THI', 'ES': 'TIPO DE EXAMEN', 'TH': 'ประเภทการสอบ',
+    },
+    'weeklyAssess': {
+      'EN': 'Weekly Assessment', 'KO': '주평가', 'JA': '週間評価', 'ZH': '周评估', 'FR': 'Éval. hebdo', 'DE': 'Wochentest',
+      'RU': 'Недельная оценка', 'AR': 'تقييم أسبوعي', 'HI': 'साप्ताहिक मूल्यांकन', 'VI': 'Đánh giá tuần', 'ES': 'Evaluación semanal', 'TH': 'ประเมินรายสัปดาห์',
+    },
+    'unitTest': {
+      'EN': 'Unit Test', 'KO': '단원평가', 'JA': '単元テスト', 'ZH': '单元测验', 'FR': 'Contrôle d\'unité', 'DE': 'Einheitstest',
+      'RU': 'Тест по разделу', 'AR': 'اختبار الوحدة', 'HI': 'इकाई परीक्षण', 'VI': 'Kiểm tra bài', 'ES': 'Examen de unidad', 'TH': 'ทดสอบบท',
+    },
+    'midterm': {
+      'EN': 'Midterm Exam', 'KO': '중간고사', 'JA': '中間試験', 'ZH': '期中考试', 'FR': 'Examen partiel', 'DE': 'Zwischenprüfung',
+      'RU': 'Промежуточный экзамен', 'AR': 'اختبار منتصف الفصل', 'HI': 'मध्यावधि परीक्षा', 'VI': 'Thi giữa kỳ', 'ES': 'Examen parcial', 'TH': 'สอบกลางภาค',
+    },
+    'final': {
+      'EN': 'Final Exam', 'KO': '기말고사', 'JA': '期末試験', 'ZH': '期末考试', 'FR': 'Examen final', 'DE': 'Abschlussprüfung',
+      'RU': 'Итоговый экзамен', 'AR': 'اختبار نهائي', 'HI': 'अंतिम परीक्षा', 'VI': 'Thi cuối kỳ', 'ES': 'Examen final', 'TH': 'สอบปลายภาค',
+    },
+    'mock': {
+      'EN': 'Mock Exam', 'KO': '모의고사', 'JA': '模擬試験', 'ZH': '模拟考试', 'FR': 'Examen blanc', 'DE': 'Probeprüfung',
+      'RU': 'Пробный экзамен', 'AR': 'اختبار تجريبي', 'HI': 'मॉक परीक्षा', 'VI': 'Thi thử', 'ES': 'Examen simulacro', 'TH': 'สอบจำลอง',
+    },
+    'bigUnit': {
+      'EN': 'Big Unit', 'KO': '대단원', 'JA': '大単元', 'ZH': '大单元', 'FR': 'Grande unité', 'DE': 'Hauptkapitel',
+      'RU': 'Раздел', 'AR': 'الوحدة الكبرى', 'HI': 'बड़ी इकाई', 'VI': 'Chương lớn', 'ES': 'Unidad principal', 'TH': 'บทใหญ่',
+    },
+    'midUnit': {
+      'EN': 'Mid Unit', 'KO': '중단원', 'JA': '中単元', 'ZH': '中单元', 'FR': 'Sous-unité', 'DE': 'Unterkapitel',
+      'RU': 'Подраздел', 'AR': 'الوحدة الفرعية', 'HI': 'मध्य इकाई', 'VI': 'Chương nhỏ', 'ES': 'Subunidad', 'TH': 'บทย่อย',
+    },
+    'mockMonth': {
+      'EN': 'MOCK EXAM MONTH', 'KO': '몇 월 모의고사', 'JA': '模試の月', 'ZH': '模拟考试月份', 'FR': 'MOIS DE L\'EXAMEN BLANC',
+      'DE': 'MONAT DER PROBEPRÜFUNG', 'RU': 'МЕСЯЦ ПРОБНОГО ЭКЗАМЕНА', 'AR': 'شهر الاختبار التجريبي', 'HI': 'मॉक परीक्षा का महीना',
+      'VI': 'THÁNG THI THỬ', 'ES': 'MES DEL SIMULACRO', 'TH': 'เดือนที่สอบจำลอง',
+    },
+    'mockMonthHint': {
+      'EN': 'e.g., June', 'KO': '예: 6월', 'JA': '例：6月', 'ZH': '例如：6月', 'FR': 'ex : Juin', 'DE': 'z. B. Juni',
+      'RU': 'напр., июнь', 'AR': 'مثال: يونيو', 'HI': 'उदा., जून', 'VI': 'VD: Tháng 6', 'ES': 'ej. Junio', 'TH': 'เช่น มิถุนายน',
+    },
+    'mockRank': {
+      'EN': 'GRADE OR RANK', 'KO': '등급 또는 석차', 'JA': '等級または順位', 'ZH': '等级或名次', 'FR': 'NIVEAU OU RANG',
+      'DE': 'NOTE ODER RANG', 'RU': 'УРОВЕНЬ ИЛИ РЕЙТИНГ', 'AR': 'الدرجة أو الترتيب', 'HI': 'ग्रेड या रैंक',
+      'VI': 'HẠNG HOẶC XẾP HẠNG', 'ES': 'NIVEL O RANGO', 'TH': 'เกรดหรืออันดับ',
+    },
+    'mockRankHint': {
+      'EN': 'e.g., Grade 1', 'KO': '예: 1등급', 'JA': '例：1等級', 'ZH': '例如：1级', 'FR': 'ex : Niveau 1', 'DE': 'z. B. Note 1',
+      'RU': 'напр., 1 уровень', 'AR': 'مثال: الدرجة 1', 'HI': 'उदा., ग्रेड 1', 'VI': 'VD: Hạng 1', 'ES': 'ej. Nivel 1', 'TH': 'เช่น เกรด 1',
+    },
+    'grade': {
+      'EN': 'GRADE', 'KO': '학년', 'JA': '学年', 'ZH': '年级', 'FR': 'NIVEAU SCOLAIRE', 'DE': 'KLASSENSTUFE',
+      'RU': 'КЛАСС', 'AR': 'الصف الدراسي', 'HI': 'कक्षा', 'VI': 'LỚP', 'ES': 'GRADO', 'TH': 'ชั้นปี',
+    },
+    'gradeWord': {
+      'EN': 'Grade', 'KO': '학년', 'JA': '学年', 'ZH': '年级', 'FR': 'Niveau', 'DE': 'Klasse',
+      'RU': 'Класс', 'AR': 'الصف', 'HI': 'कक्षा', 'VI': 'Lớp', 'ES': 'Grado', 'TH': 'ชั้นปี',
+    },
+    'incorrectNoteStatus': {
+      'EN': 'INCORRECT NOTE STATUS', 'KO': '오답노트 상태', 'JA': '誤答ノート状態', 'ZH': '错题本状态', 'FR': 'STATUT DU CAHIER D\'ERREURS',
+      'DE': 'FEHLERNOTIZ-STATUS', 'RU': 'СТАТУС ЗАПИСИ ОШИБОК', 'AR': 'حالة دفتر الأخطاء', 'HI': 'गलत उत्तर नोट स्थिति',
+      'VI': 'TRẠNG THÁI SỔ TAY SAI', 'ES': 'ESTADO DEL CUADERNO DE ERRORES', 'TH': 'สถานะสมุดข้อผิดพลาด',
+    },
+    'completed': {
+      'EN': 'COMPLETED', 'KO': '정리함', 'JA': '整理済み', 'ZH': '已整理', 'FR': 'TERMINÉ', 'DE': 'ERLEDIGT',
+      'RU': 'ЗАВЕРШЕНО', 'AR': 'تم الإنجاز', 'HI': 'पूर्ण किया गया', 'VI': 'ĐÃ HOÀN THÀNH', 'ES': 'COMPLETADO', 'TH': 'จัดการแล้ว',
+    },
+    'notYet': {
+      'EN': 'NOT YET', 'KO': '정리 안함', 'JA': '未整理', 'ZH': '未整理', 'FR': 'PAS ENCORE', 'DE': 'NOCH NICHT',
+      'RU': 'ЕЩЁ НЕТ', 'AR': 'ليس بعد', 'HI': 'अभी नहीं', 'VI': 'CHƯA', 'ES': 'AÚN NO', 'TH': 'ยังไม่จัดการ',
+    },
+    'understanding': {
+      'EN': 'UNDERSTANDING', 'KO': '이해도', 'JA': '理解度', 'ZH': '理解程度', 'FR': 'COMPRÉHENSION', 'DE': 'VERSTÄNDNIS',
+      'RU': 'ПОНИМАНИЕ', 'AR': 'مستوى الفهم', 'HI': 'समझ', 'VI': 'MỨC ĐỘ HIỂU', 'ES': 'COMPRENSIÓN', 'TH': 'ความเข้าใจ',
+    },
+    'difficulty': {
+      'EN': 'DIFFICULTY', 'KO': '난이도', 'JA': '難易度', 'ZH': '难度', 'FR': 'DIFFICULTÉ', 'DE': 'SCHWIERIGKEIT',
+      'RU': 'СЛОЖНОСТЬ', 'AR': 'مستوى الصعوبة', 'HI': 'कठिनाई', 'VI': 'ĐỘ KHÓ', 'ES': 'DIFICULTAD', 'TH': 'ความยาก',
+    },
+    'veryHard': {
+      'EN': 'Very Hard', 'KO': '매우어려움', 'JA': '非常に難しい', 'ZH': '非常难', 'FR': 'Très difficile', 'DE': 'Sehr schwer',
+      'RU': 'Очень сложно', 'AR': 'صعب جدًا', 'HI': 'बहुत कठिन', 'VI': 'Rất khó', 'ES': 'Muy difícil', 'TH': 'ยากมาก',
+    },
+    'hard': {
+      'EN': 'Hard', 'KO': '어려움', 'JA': '難しい', 'ZH': '难', 'FR': 'Difficile', 'DE': 'Schwer',
+      'RU': 'Сложно', 'AR': 'صعب', 'HI': 'कठिन', 'VI': 'Khó', 'ES': 'Difícil', 'TH': 'ยาก',
+    },
+    'normal': {
+      'EN': 'Normal', 'KO': '보통', 'JA': '普通', 'ZH': '一般', 'FR': 'Normal', 'DE': 'Normal',
+      'RU': 'Средне', 'AR': 'متوسط', 'HI': 'सामान्य', 'VI': 'Bình thường', 'ES': 'Normal', 'TH': 'ปานกลาง',
+    },
+    'easy': {
+      'EN': 'Easy', 'KO': '쉬움', 'JA': '簡単', 'ZH': '容易', 'FR': 'Facile', 'DE': 'Leicht',
+      'RU': 'Легко', 'AR': 'سهل', 'HI': 'आसान', 'VI': 'Dễ', 'ES': 'Fácil', 'TH': 'ง่าย',
+    },
+    'concentration': {
+      'EN': 'CONCENTRATION', 'KO': '집중도', 'JA': '集中度', 'ZH': '专注度', 'FR': 'CONCENTRATION', 'DE': 'KONZENTRATION',
+      'RU': 'КОНЦЕНТРАЦИЯ', 'AR': 'مستوى التركيز', 'HI': 'एकाग्रता', 'VI': 'MỨC ĐỘ TẬP TRUNG', 'ES': 'CONCENTRACIÓN', 'TH': 'สมาธิ',
+    },
+    'high': {
+      'EN': 'High', 'KO': '높음', 'JA': '高い', 'ZH': '高', 'FR': 'Élevé', 'DE': 'Hoch',
+      'RU': 'Высокая', 'AR': 'مرتفع', 'HI': 'उच्च', 'VI': 'Cao', 'ES': 'Alta', 'TH': 'สูง',
+    },
+    'low': {
+      'EN': 'Low', 'KO': '낮음', 'JA': '低い', 'ZH': '低', 'FR': 'Faible', 'DE': 'Niedrig',
+      'RU': 'Низкая', 'AR': 'منخفض', 'HI': 'कम', 'VI': 'Thấp', 'ES': 'Baja', 'TH': 'ต่ำ',
+    },
+    'learningCondition': {
+      'EN': 'LEARNING CONDITION', 'KO': '학습 컨디션', 'JA': '学習コンディション', 'ZH': '学习状态', 'FR': 'CONDITION D\'ÉTUDE',
+      'DE': 'LERNZUSTAND', 'RU': 'СОСТОЯНИЕ ОБУЧЕНИЯ', 'AR': 'حالة الاستعداد للدراسة', 'HI': 'अध्ययन स्थिति',
+      'VI': 'TÌNH TRẠNG HỌC TẬP', 'ES': 'CONDICIÓN DE ESTUDIO', 'TH': 'สภาพการเรียน',
+    },
+    'good': {
+      'EN': 'Good', 'KO': '좋음', 'JA': '良い', 'ZH': '好', 'FR': 'Bien', 'DE': 'Gut',
+      'RU': 'Хорошо', 'AR': 'جيد', 'HI': 'अच्छा', 'VI': 'Tốt', 'ES': 'Bien', 'TH': 'ดี',
+    },
+    'tired': {
+      'EN': 'Tired', 'KO': '피곤함', 'JA': '疲れた', 'ZH': '疲惫', 'FR': 'Fatigué', 'DE': 'Müde',
+      'RU': 'Устал', 'AR': 'متعب', 'HI': 'थका हुआ', 'VI': 'Mệt mỏi', 'ES': 'Cansado', 'TH': 'เหนื่อย',
+    },
+    'nextGoal': {
+      'EN': 'NEXT GOAL', 'KO': '다음 목표', 'JA': '次の目標', 'ZH': '下一个目标', 'FR': 'PROCHAIN OBJECTIF', 'DE': 'NÄCHSTES ZIEL',
+      'RU': 'СЛЕДУЮЩАЯ ЦЕЛЬ', 'AR': 'الهدف التالي', 'HI': 'अगला लक्ष्य', 'VI': 'MỤC TIÊU TIẾP THEO', 'ES': 'SIGUIENTE OBJETIVO', 'TH': 'เป้าหมายถัดไป',
+    },
+    'nextGoalHint': {
+      'EN': 'e.g., Advanced function problems', 'KO': '예: 함수 심화문제', 'JA': '例：関数の応用問題', 'ZH': '例如：函数深化题目',
+      'FR': 'ex : Problèmes avancés de fonctions', 'DE': 'z. B. Fortgeschrittene Funktionsaufgaben',
+      'RU': 'напр., сложные задачи по функциям', 'AR': 'مثال: مسائل متقدمة في الدوال', 'HI': 'उदा., फ़ंक्शन के उन्नत प्रश्न',
+      'VI': 'VD: Bài tập hàm số nâng cao', 'ES': 'ej. Problemas avanzados de funciones', 'TH': 'เช่น โจทย์ฟังก์ชันขั้นสูง',
+    },
+    'saveRecord': {
+      'EN': 'SAVE RECORD', 'KO': '성장 데이터 저장', 'JA': '成長データ保存', 'ZH': '保存成长数据', 'FR': 'ENREGISTRER LES DONNÉES', 'DE': 'DATEN SPEICHERN',
+      'RU': 'СОХРАНИТЬ ДАННЫЕ', 'AR': 'حفظ بيانات النمو', 'HI': 'रिकॉर्ड सहेजें', 'VI': 'LƯU DỮ LIỆU', 'ES': 'GUARDAR DATOS', 'TH': 'บันทึกข้อมูลการเติบโต',
+    },
+    'nextSubjectTitle': {
+      'EN': 'Set your next learning subject and target time.\nPlanned learning is the beginning of steady growth.',
+      'KO': '다음 학습 과목과 목표 시간을 설정해 보세요\n계획적인 학습은 꾸준한 성장의 시작입니다.',
+      'JA': '次の学習科目と目標時間を設定しましょう\n計画的な学習は着実な成長の始まりです。',
+      'ZH': '设置下一个学习科目和目标时间吧\n有计划的学习是稳步成长的开始。',
+      'FR': 'Définissez votre prochaine matière et votre temps cible.\nUn apprentissage planifié est le début d\'une croissance régulière.',
+      'DE': 'Legen Sie Ihr nächstes Lernfach und Ihre Zielzeit fest.\nGeplantes Lernen ist der Beginn stetigen Wachstums.',
+      'RU': 'Задайте следующий предмет и целевое время.\nПланомерное обучение - начало устойчивого роста.',
+      'AR': 'حدد مادتك التالية ووقتك المستهدف.\nالتعلم المخطط هو بداية النمو المستمر.',
+      'HI': 'अपना अगला विषय और लक्ष्य समय निर्धारित करें\nसुनियोजित अध्ययन निरंतर विकास की शुरुआत है।',
+      'VI': 'Hãy đặt môn học và thời gian mục tiêu tiếp theo\nHọc tập có kế hoạch là khởi đầu của sự phát triển bền vững.',
+      'ES': 'Establece tu próxima materia y tiempo objetivo.\nEl aprendizaje planificado es el inicio de un crecimiento constante.',
+      'TH': 'ตั้งวิชาถัดไปและเวลาเป้าหมายของคุณ\nการเรียนอย่างมีแผนคือจุดเริ่มต้นของการเติบโตที่มั่นคง',
+    },
+    'startFocus': {
+      'EN': 'START FOCUS', 'KO': '공부 시작', 'JA': '集中開始', 'ZH': '开始学习', 'FR': 'COMMENCER', 'DE': 'STARTEN',
+      'RU': 'НАЧАТЬ', 'AR': 'ابدأ التركيز', 'HI': 'शुरू करें', 'VI': 'BẮT ĐẦU', 'ES': 'EMPEZAR', 'TH': 'เริ่มเรียน',
+    },
+    'pauseBtn': {
+      'EN': 'PAUSE', 'KO': '일시 중지', 'JA': '一時停止', 'ZH': '暂停', 'FR': 'PAUSE', 'DE': 'PAUSE',
+      'RU': 'ПАУЗА', 'AR': 'إيقاف مؤقت', 'HI': 'रोकें', 'VI': 'TẠM DỪNG', 'ES': 'PAUSA', 'TH': 'หยุดชั่วคราว',
+    },
+    'realtimeFocusMode': {
+      'EN': 'Real-time Focus Mode', 'KO': '실시간 집중 모드', 'JA': 'リアルタイム集中モード', 'ZH': '实时专注模式',
+      'FR': 'Mode concentration en direct', 'DE': 'Echtzeit-Fokusmodus', 'RU': 'Режим концентрации в реальном времени',
+      'AR': 'وضع التركيز الفوري', 'HI': 'रीयल-टाइम फोकस मोड', 'VI': 'Chế độ tập trung trực tiếp', 'ES': 'Modo enfoque en tiempo real', 'TH': 'โหมดสมาธิเรียลไทม์',
+    },
+    'targetLabel': {
+      'EN': 'Target', 'KO': '목표', 'JA': '目標', 'ZH': '目标', 'FR': 'Objectif', 'DE': 'Ziel',
+      'RU': 'Цель', 'AR': 'الهدف', 'HI': 'लक्ष्य', 'VI': 'Mục tiêu', 'ES': 'Objetivo', 'TH': 'เป้าหมาย',
+    },
+    'targetTimeLabel': {
+      'EN': 'Target Time', 'KO': '목표 시간', 'JA': '目標時間', 'ZH': '目标时间', 'FR': 'Temps cible', 'DE': 'Zielzeit',
+      'RU': 'Целевое время', 'AR': 'الوقت المستهدف', 'HI': 'लक्ष्य समय', 'VI': 'Thời gian mục tiêu', 'ES': 'Tiempo objetivo', 'TH': 'เวลาเป้าหมาย',
+    },
+    'liveStars': {
+      'EN': 'Live Stars', 'KO': '실시간 별', 'JA': 'リアルタイムスター', 'ZH': '实时星星', 'FR': 'Étoiles en direct', 'DE': 'Live-Sterne',
+      'RU': 'Звёзды в реальном времени', 'AR': 'النجوم الفورية', 'HI': 'लाइव सितारे', 'VI': 'Sao trực tiếp', 'ES': 'Estrellas en vivo', 'TH': 'ดาวเรียลไทม์',
+    },
+    'starsCountUnit': {
+      'EN': '', 'KO': '개', 'JA': '個', 'ZH': '颗', 'FR': '', 'DE': '',
+      'RU': '', 'AR': '', 'HI': '', 'VI': '', 'ES': '', 'TH': 'ดวง',
+    },
+    'starsEarned': {
+      'EN': 'stars earned.', 'KO': '개의 별을 획득했습니다.', 'JA': '個の星を獲得しました。', 'ZH': '颗星星。', 'FR': 'étoiles gagnées.', 'DE': 'Sterne verdient.',
+      'RU': 'звёзд получено.', 'AR': 'نجوم تم كسبها.', 'HI': 'सितारे अर्जित किए।', 'VI': 'ngôi sao nhận được.', 'ES': 'estrellas ganadas.', 'TH': 'ดาวที่ได้รับ',
+    },
+    'cumulative': {
+      'EN': 'Total', 'KO': '누적', 'JA': '累積', 'ZH': '累计', 'FR': 'Total', 'DE': 'Gesamt',
+      'RU': 'Всего', 'AR': 'الإجمالي', 'HI': 'कुल', 'VI': 'Tổng cộng', 'ES': 'Total', 'TH': 'สะสม',
+    },
+    'leaveWarnTitle': {
+      'EN': 'Please Stay on This Screen', 'KO': '이 화면에 머물러 주세요',
+      'JA': 'この画面にとどまってください', 'ZH': '请留在此屏幕', 'FR': 'Veuillez rester sur cet écran',
+      'DE': 'Bitte bleiben Sie auf diesem Bildschirm', 'RU': 'Пожалуйста, оставайтесь на этом экране',
+      'AR': 'يرجى البقاء في هذه الشاشة', 'HI': 'कृपया इसी स्क्रीन पर बने रहें',
+      'VI': 'Vui lòng ở lại màn hình này', 'ES': 'Por favor, permanece en esta pantalla', 'TH': 'กรุณาอยู่ที่หน้าจอนี้',
+    },
+    'leaveWarnBody': {
+      'EN': 'Leaving this screen or switching apps while studying may cause your progress to be lost. For a safe, uninterrupted session, please keep this screen open until you finish.',
+      'KO': '학습 중 다른 화면으로 이동하거나 다른 앱을 사용하면 진행 상황이 사라질 수 있어요. 안전한 학습을 위해 끝날 때까지 이 화면을 열어 두어 주세요.',
+      'JA': '学習中に他の画面へ移動したり他のアプリを使用すると、進行状況が失われることがあります。安全に学習するため、終わるまでこの画面を開いたままにしてください。',
+      'ZH': '学习过程中切换画面或使用其他应用可能导致进度丢失。为了安全学习，请在结束前保持此画面开启。',
+      'FR': 'Quitter cet écran ou changer d\'application pendant l\'étude peut entraîner la perte de votre progression. Pour une session sûre et ininterrompue, veuillez garder cet écran ouvert jusqu\'à la fin.',
+      'DE': 'Das Verlassen dieses Bildschirms oder der Wechsel der App während des Lernens kann zum Verlust Ihres Fortschritts führen. Bitte lassen Sie diesen Bildschirm bis zum Ende geöffnet.',
+      'RU': 'Уход с этого экрана или переключение приложений во время учёбы может привести к потере прогресса. Для безопасного занятия держите этот экран открытым до конца.',
+      'AR': 'قد يؤدي ترك هذه الشاشة أو التبديل بين التطبيقات أثناء الدراسة إلى فقدان تقدمك. للحصول على جلسة آمنة وغير منقطعة، يرجى إبقاء هذه الشاشة مفتوحة حتى الانتهاء.',
+      'HI': 'अध्ययन के दौरान इस स्क्रीन को छोड़ने या ऐप बदलने से आपकी प्रगति खो सकती है। सुरक्षित और निर्बाध सत्र के लिए, कृपया समाप्त होने तक इस स्क्रीन को खुला रखें।',
+      'VI': 'Rời khỏi màn hình này hoặc chuyển sang ứng dụng khác trong khi học có thể làm mất tiến trình của bạn. Để có một buổi học an toàn, không bị gián đoạn, vui lòng giữ màn hình này mở cho đến khi kết thúc.',
+      'ES': 'Salir de esta pantalla o cambiar de aplicación mientras estudias puede hacer que se pierda tu progreso. Para una sesión segura e ininterrumpida, mantén esta pantalla abierta hasta terminar.',
+      'TH': 'การออกจากหน้าจอนี้หรือสลับแอปขณะเรียนอาจทำให้ความคืบหน้าหายไป เพื่อการเรียนที่ปลอดภัยและไม่สะดุด กรุณาเปิดหน้าจอนี้ไว้จนกว่าจะเสร็จสิ้น',
+    },
+    'gotIt': {
+      'EN': 'Got It', 'KO': '확인했습니다', 'JA': '了解しました', 'ZH': '知道了', 'FR': 'Compris', 'DE': 'Verstanden',
+      'RU': 'Понятно', 'AR': 'حسنًا', 'HI': 'समझ गया', 'VI': 'Đã hiểu', 'ES': 'Entendido', 'TH': 'เข้าใจแล้ว',
+    },
+  };
+
   @override
   void initState() {
     super.initState();
+    // 🆕 [데이터 보호 2026-09-02] 앱이 백그라운드로 가는 순간(최근 앱 화면 등)을 감지하기 위해 등록.
+    WidgetsBinding.instance.addObserver(this);
     _totalSeconds = widget.selectedDurationMinutes * 60; // 🆕 [버그 수정 2026-07-29] 1초=1분 테스트모드 폐기, 정상적으로 분→초 변환
 
     // 초기값 셋팅
@@ -179,11 +579,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
             backgroundColor: const Color(0xFF0D1527),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Column(
-              children: [
-                Text('Would you like to continue from where you left off?', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 6),
-                Text('(이어서 학습하시겠습니까?)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
+              children: _biLines(
+                _dlg['continuePrompt']!,
+                enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+                koStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
             ),
             actionsAlignment: MainAxisAlignment.spaceEvenly,
             actions: [
@@ -194,7 +594,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                   await prefs.remove('dke_temp_elapsed');
                   Navigator.of(context).pop();
                 },
-                child: Text('NO (아니오)', style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(_bi(_dlg['no']!), style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold)),
               ) : const SizedBox.shrink(),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
@@ -209,7 +609,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                   });
                   Navigator.of(context).pop();
                 },
-                child: Text('YES (예)', style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+                child: Text(_bi(_dlg['yes']!), style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -249,11 +649,56 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // 🆕 [데이터 보호] 감시 해제
     _timer?.cancel();
     _timerAudioPlayer.stop();
     _timerAudioPlayer.dispose();
     _cueAudioPlayer.dispose(); // [추가]
     super.dispose();
+  }
+
+  // ============================================================================
+  // 🆕 [데이터 보호 2026-09-02] 최근 앱(멀티태스킹) 화면으로 나가거나, 다른 앱으로
+  // 전환되거나, 화면이 꺼지는 등 "이 화면이 더 이상 최상단에서 보이지 않는 순간"을
+  // 감지합니다. 이때 타이머를 자동으로 멈추고(=몰래 계속 흐르지 않게), 진행 상황을
+  // SharedPreferences에 즉시 저장해둡니다. 복귀했을 때는 자동으로 다시 흐르지 않고,
+  // 사용자가 직접 "START FOCUS/PAUSE" 버튼을 눌러야만 다시 작동합니다
+  // (검색하거나 다른 앱을 쓰면서 몰래 타이머만 흘러가는 것을 방지).
+  // ============================================================================
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      _autoPauseAndSaveOnLeave();
+    }
+  }
+
+  Future<void> _autoPauseAndSaveOnLeave() async {
+    if (!_isRunning) return; // 이미 멈춰있으면 할 일 없음
+    _timer?.cancel();
+    setState(() => _isRunning = false);
+    await _timerAudioPlayer.pause();
+    _animKey.currentState?.pauseEngine();
+    await _persistTempProgress(); // 🆕 프로세스가 완전히 종료되는 최악의 경우에도 대비해 즉시 저장
+  }
+
+  // 🆕 [데이터 보호] "이어서 학습" 기능이 이미 조회하는 것과 동일한 키에 저장 →
+  // 다음에 같은 과목으로 다시 들어오면 자동으로 "이어서 하시겠습니까?" 안내가 뜸.
+  Future<void> _persistTempProgress() async {
+    if (_elapsedSeconds <= 0) return; // 아직 시작 안 했으면 저장할 것 없음
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('dke_temp_subject', widget.selectedSubject);
+      await prefs.setInt('dke_temp_elapsed', _elapsedSeconds);
+    } catch (e) {
+      debugPrint("[TimerScreen] 임시저장 실패: $e");
+    }
+  }
+
+  // 🆕 [데이터 보호 2026-09-02] 뒤로가기(< 버튼, 스와이프 등) 눌렀을 때, 화면이 그냥
+  // 사라지기 전에 먼저 진행 상황을 저장합니다. 저장이 끝난 뒤에 실제로 화면을 닫습니다.
+  Future<void> _handleBackPressed() async {
+    await _persistTempProgress();
+    if (mounted) Navigator.of(context).pop();
   }
 
   // 👑 🎯 10분 주기 무한 루프 제어 엔진 교차 검증 완료판
@@ -329,6 +774,66 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     }
   }
 
+  // ============================================================================
+  // 🆕 [고급스러운 안내 팝업 2026-09-02] 학습을 처음 시작할 때 한 번 보여주는
+  // 우아한 안내창. 골드 테두리 + 은은한 아이콘으로 앱의 다크 네이비/골드 톤과
+  // 통일된 디자인이며, 12개국어를 모두 지원함.
+  // ============================================================================
+  Future<void> _showLeaveWarningDialog() async {
+    const Color brandGolden = Color(0xFFE5C158);
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 30),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+            border: Border.all(color: brandGolden.withOpacity(0.5), width: 1.2),
+            boxShadow: [
+              BoxShadow(color: brandGolden.withOpacity(0.15), blurRadius: 30, spreadRadius: 1),
+              const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.shield_moon_outlined, color: brandGolden, size: 34),
+              const SizedBox(height: 14),
+              ..._biLines(
+                _dlg['leaveWarnTitle']!,
+                enStyle: const TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+                koStyle: const TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              ..._biLines(
+                _dlg['leaveWarnBody']!,
+                enStyle: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12.5, height: 1.5),
+                koStyle: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 11.5, height: 1.5),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: brandGolden,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(_bi(_dlg['gotIt']!), style: const TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _toggleTimer() async {
     try {
       if (_isRunning) {
@@ -339,6 +844,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         _showPauseChoiceDialog();
       } else {
         setState(() => _isRunning = true);
+        // 🆕 [고급 안내 팝업] 처음 시작할 때만 한 번, 다른 화면으로 이동 시 데이터가
+        // 사라질 수 있음을 부드럽게 안내
+        if (_elapsedSeconds == 0) {
+          await _showLeaveWarningDialog();
+        }
         // 🆕 [알람 순서 보장] 학습 시작 알림음이 실제로 끝날 때까지 기다린 뒤 백색소음 재생
         if (_elapsedSeconds == 0) {
           await _playStartBellAndWait();
@@ -389,18 +899,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         backgroundColor: const Color(0xFF0D1527),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Column(
-          children: [
-            Text('Are you sure you want to stop learning?', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 6),
-            Text('(학습을 중단하시겠습니까?)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
+          children: _biLines(
+            _dlg['stopConfirm']!,
+            enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+            koStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
         ),
         actionsAlignment: MainAxisAlignment.spaceEvenly,
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
             onPressed: () { Navigator.of(context).pop(); _toggleTimer(); },
-            child: Text('RESUME (재시작)', style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(_bi(_dlg['resume']!), style: GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
@@ -413,7 +923,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               Navigator.of(context).pop();
               _showRecordWarningDialog();
             },
-            child: Text('FINISH (끝내기)', style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+            child: Text(_bi(_dlg['finish']!), style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -429,18 +939,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         backgroundColor: const Color(0xFF0D1527),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Column(
-          children: [
-            Text('Please leave a record of your efforts! The more records you have, the more accurate the learning analysis will be.', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 6),
-            Text('(노력의 기록을 남겨주세요! 기록이 많을 수록 학습분석이 더욱 정확해집니다.)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-          ],
+          children: _biLines(
+            _dlg['recordWarn']!,
+            enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+            koStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: brandGolden, minimumSize: const Size(140, 40), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
             onPressed: () { Navigator.of(context).pop(); _showStudyInputFieldForm(); },
-            child: Text('WRITE RECORD (기록하기)', style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+            child: Text(_bi(_dlg['writeRecord']!), style: GoogleFonts.gowunBatang(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -456,11 +966,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         backgroundColor: const Color(0xFF0D1527),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Column(
-          children: [
-            Text('Good job! You have successfully achieved your learning goals.', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 6),
-            Text('(수고 하셨습니다. 학습 목표를 성공적으로 달성 하였습니다.)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
+          children: _biLines(
+            _dlg['completion']!,
+            enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+            koStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
@@ -469,7 +979,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                 Navigator.of(context).pop();
                 _showGrowthBridgeDialog();
               },
-              child: Text("OK (확인)", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16))
+              child: Text(_bi(_dlg['ok']!), style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16))
           ),
         ],
       ),
@@ -485,11 +995,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         backgroundColor: const Color(0xFF0D1527),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Column(
-          children: [
-            Text('Record a step of your growth.\nThe more records you have, the more accurate the learning analysis will be.', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 8),
-            Text('(성장의 한 걸음을 기록해 보세요\n기록이 많을 수록 학습분석이 더욱 정확해집니다.)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-          ],
+          children: _biLines(
+            _dlg['growthStep']!,
+            enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+            koStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
@@ -498,7 +1008,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                 Navigator.of(context).pop();
                 _showStudyInputFieldForm();
               },
-              child: Text("OK (확인)", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16))
+              child: Text(_bi(_dlg['ok']!), style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16))
           ),
         ],
       ),
@@ -690,10 +1200,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               backgroundColor: const Color(0xFF0D1527),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: isAllFilled ? brandGolden : Colors.white12, width: 1)),
               title: Column(
-                children: [
-                  Text('STUDY RECORD', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23)),
-                  Text('(학습 기록 작성)', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-                ],
+                children: _biLines(
+                  _dlg['studyRecord']!,
+                  enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 23),
+                  koStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
               ),
               content: Container(
                 width: double.maxFinite,
@@ -706,7 +1217,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text('SUBJECT (과목) : ', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+                          Text('${_bi(_dlg['subject']!)} : ', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
                           Text(widget.selectedSubject, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), softWrap: true),
                         ],
                       ),
@@ -714,7 +1225,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
                       // 🆕 [기록 유형 구분] 강의(개념강의/단원정리)만 들은 경우엔 점수가 없을 수 있으므로,
                       // 먼저 "강의"인지 "평가"인지 선택하게 하고, 이에 따라 아래 항목이 달라짐.
-                      Text('RECORD TYPE (기록 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                      Text('${_bi(_dlg['recordType']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       // 🆕 [버그 수정 2026-08-10] Row → Wrap 교체.
                       // "강의 (Lecture)" / "평가 (Evaluation)" 라벨이 길어서, 화면이 좁은 기기에서
@@ -727,7 +1238,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           final bool isSel = selectedRecordType == type;
                           return ChoiceChip(
                             label: Text(
-                              type == '강의' ? '강의 (Lecture)' : '평가 (Evaluation)',
+                              _bi(type == '강의' ? _dlg['lecture']! : _dlg['evaluation']!),
                               style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             selected: isSel,
@@ -756,7 +1267,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           key: keyLectureType,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('LECTURE TYPE (강의 세부 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text('${_bi(_dlg['lectureType']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             Wrap(
                               spacing: 6.0,
@@ -764,7 +1275,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                               children: ['개념강의', '단원정리 및 문제해설'].map((val) {
                                 final bool isSel = selectedLectureSubType == val;
                                 return ChoiceChip(
-                                  label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  label: Text(_koOnly(val == '개념강의' ? _dlg['conceptLecture']! : _dlg['unitReview']!), style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                   selected: isSel,
                                   selectedColor: brandGolden,
                                   backgroundColor: const Color(0xFF050B14),
@@ -784,7 +1295,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         key: keyDetails,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('DETAILS (상세 내용) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${_bi(_dlg['details']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
                           TextField(
                             controller: detailController,
@@ -794,7 +1305,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                             onSubmitted: (_) => scrollToNext(
                                 selectedRecordType == '평가' ? keyScore : (needsIncorrectNoteField ? keyIncorrectNote : keyUnderstanding)),
                             decoration: InputDecoration(
-                              hintText: 'e.g., Solved concepts and problems. (예: 개념 및 문제풀이 함)',
+                              hintText: _bi(_dlg['detailsHint']!),
                               hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
                               filled: true,
                               fillColor: const Color(0xFF050B14),
@@ -812,7 +1323,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           key: keyScore,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('SCORE (점수) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text('${_bi(_dlg['score']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             TextField(
                               controller: scoreController,
@@ -823,7 +1334,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                               decoration: InputDecoration(
                                 hintText: '100',
                                 hintStyle: GoogleFonts.rajdhani(color: Colors.white24, fontSize: 18),
-                                suffixText: 'Points (점)',
+                                suffixText: _bi(_dlg['points']!),
                                 suffixStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
                                 filled: true,
                                 fillColor: const Color(0xFF050B14),
@@ -841,15 +1352,19 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           key: keyExamCategory,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('EXAM CATEGORY (시험 유형) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text('${_bi(_dlg['examCategory']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             Wrap(
                               spacing: 6.0,
                               runSpacing: 6.0,
                               children: ['주평가', '단원평가', '중간고사', '기말고사', '모의고사'].map((cat) {
                                 final bool isSel = selectedExamCategory == cat;
+                                final Map<String, Map<String, String>> catMap = {
+                                  '주평가': _dlg['weeklyAssess']!, '단원평가': _dlg['unitTest']!, '중간고사': _dlg['midterm']!,
+                                  '기말고사': _dlg['final']!, '모의고사': _dlg['mock']!,
+                                };
                                 return ChoiceChip(
-                                  label: Text(cat, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  label: Text(_koOnly(catMap[cat]!), style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                   selected: isSel,
                                   selectedColor: brandGolden,
                                   backgroundColor: const Color(0xFF050B14),
@@ -881,7 +1396,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                             key: keyUnitDetail,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('BIG UNIT (대단원) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['bigUnit']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 6.0,
@@ -889,7 +1404,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 children: [1, 2, 3, 4].map((n) {
                                   final bool isSel = selectedBigUnitNum == n;
                                   return ChoiceChip(
-                                    label: Text('대단원 $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    label: Text('${_koOnly(_dlg['bigUnit']!)} $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                     selected: isSel,
                                     selectedColor: brandGolden,
                                     backgroundColor: const Color(0xFF050B14),
@@ -901,7 +1416,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 }).toList(),
                               ),
                               const SizedBox(height: 12),
-                              Text('MID UNIT (중단원) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['midUnit']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 6.0,
@@ -909,7 +1424,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 children: [1, 2, 3, 4].map((n) {
                                   final bool isSel = selectedMidUnitNum == n;
                                   return ChoiceChip(
-                                    label: Text('중단원 $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    label: Text('${_koOnly(_dlg['midUnit']!)} $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                     selected: isSel,
                                     selectedColor: brandGolden,
                                     backgroundColor: const Color(0xFF050B14),
@@ -931,7 +1446,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                             key: keyUnitDetail,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('MOCK MONTH (몇 월 모의고사) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['mockMonth']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               TextField(
                                 controller: mockMonthController,
@@ -939,7 +1454,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 onChanged: (_) => setDialogState(() {}),
                                 onSubmitted: (_) => scrollToNext(keyGrade),
                                 decoration: InputDecoration(
-                                  hintText: 'e.g., 6월 (예: 6월)',
+                                  hintText: _bi(_dlg['mockMonthHint']!),
                                   hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
                                   filled: true,
                                   fillColor: const Color(0xFF050B14),
@@ -948,7 +1463,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              Text('MOCK RANK (등급 또는 석차) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['mockRank']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               TextField(
                                 controller: mockRankController,
@@ -956,7 +1471,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 onChanged: (_) => setDialogState(() {}),
                                 onSubmitted: (_) => scrollToNext(keyGrade),
                                 decoration: InputDecoration(
-                                  hintText: 'e.g., 1등급 (예: 1등급)',
+                                  hintText: _bi(_dlg['mockRankHint']!),
                                   hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
                                   filled: true,
                                   fillColor: const Color(0xFF050B14),
@@ -975,7 +1490,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                             key: keyGrade,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('GRADE (학년) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['grade']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 6.0,
@@ -983,7 +1498,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                 children: [1, 2, 3].map((n) {
                                   final bool isSel = selectedGradeNum == n;
                                   return ChoiceChip(
-                                    label: Text('$n학년', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    label: Text(_isForeign ? '${_koOnly(_dlg['gradeWord']!)} $n' : '$n${_koOnly(_dlg['gradeWord']!)}', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                     selected: isSel,
                                     selectedColor: brandGolden,
                                     backgroundColor: const Color(0xFF050B14),
@@ -1006,7 +1521,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           key: keyIncorrectNote,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('INCORRECT NOTE STATUS (오답노트 상태) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text('${_bi(_dlg['incorrectNoteStatus']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             Container(
                               decoration: BoxDecoration(color: const Color(0xFF050B14), borderRadius: BorderRadius.circular(8)),
@@ -1025,7 +1540,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                             color: isIncorrectNoted == true ? brandGolden : Colors.transparent,
                                             borderRadius: BorderRadius.circular(8)
                                         ),
-                                        child: Text('COMPLETED (정리함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        child: Text(_bi(_dlg['completed']!), style: GoogleFonts.notoSansKr(color: isIncorrectNoted == true ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                       ),
                                     ),
                                   ),
@@ -1042,7 +1557,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                             color: isIncorrectNoted == false ? brandGolden : Colors.transparent,
                                             borderRadius: BorderRadius.circular(8)
                                         ),
-                                        child: Text('NOT YET (정리 안함)', style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        child: Text(_bi(_dlg['notYet']!), style: GoogleFonts.notoSansKr(color: isIncorrectNoted == false ? const Color(0xFF030712) : Colors.white60, fontWeight: FontWeight.bold, fontSize: 12)),
                                       ),
                                     ),
                                   ),
@@ -1058,7 +1573,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         key: keyUnderstanding,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('UNDERSTANDING (이해도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${_bi(_dlg['understanding']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -1089,15 +1604,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         key: keyDifficulty,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('DIFFICULTY (난이도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${_bi(_dlg['difficulty']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
                           Wrap(
                             spacing: 6.0,
                             runSpacing: 6.0,
                             children: ['매우어려움', '어려움', '보통', '쉬움'].map((val) {
                               final bool isSel = selectedDifficulty == val;
+                              final Map<String, Map<String, String>> diffMap = {
+                                '매우어려움': _dlg['veryHard']!, '어려움': _dlg['hard']!, '보통': _dlg['normal']!, '쉬움': _dlg['easy']!,
+                              };
                               return ChoiceChip(
-                                label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                label: Text(_koOnly(diffMap[val]!), style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                 selected: isSel,
                                 selectedColor: brandGolden,
                                 backgroundColor: const Color(0xFF050B14),
@@ -1116,15 +1634,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         key: keyFocus,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('CONCENTRATION (집중도) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${_bi(_dlg['concentration']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
                           Wrap(
                             spacing: 6.0,
                             runSpacing: 6.0,
                             children: ['높음', '보통', '낮음'].map((val) {
                               final bool isSel = selectedFocus == val;
+                              final Map<String, Map<String, String>> focusMap = {
+                                '높음': _dlg['high']!, '보통': _dlg['normal']!, '낮음': _dlg['low']!,
+                              };
                               return ChoiceChip(
-                                label: Text(val, style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                label: Text(_koOnly(focusMap[val]!), style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                 selected: isSel,
                                 selectedColor: brandGolden,
                                 backgroundColor: const Color(0xFF050B14),
@@ -1143,7 +1664,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         key: keyCondition,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('LEARNING CONDITION (학습 컨디션) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${_bi(_dlg['learningCondition']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
                           Wrap(
                             spacing: 6.0,
@@ -1156,8 +1677,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                               final String val = item['label']!;
                               final String emoji = item['emoji']!;
                               final bool isSel = selectedCondition == val;
+                              final Map<String, Map<String, String>> condMap = {
+                                '좋음': _dlg['good']!, '보통': _dlg['normal']!, '피곤함': _dlg['tired']!,
+                              };
                               return ChoiceChip(
-                                label: Text('$emoji $val', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                label: Text('$emoji ${_koOnly(condMap[val]!)}', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                 selected: isSel,
                                 selectedColor: brandGolden,
                                 backgroundColor: const Color(0xFF050B14),
@@ -1176,7 +1700,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         key: keyNextGoal,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('NEXT GOAL (다음 목표) *필수', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${_bi(_dlg['nextGoal']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 6),
                           TextField(
                             controller: nextGoalController,
@@ -1184,7 +1708,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                             onChanged: (_) => setDialogState(() {}),
                             onSubmitted: (_) => scrollToNext(keySaveButton),
                             decoration: InputDecoration(
-                              hintText: 'e.g., Advanced function problems (예: 함수 심화문제)',
+                              hintText: _bi(_dlg['nextGoalHint']!),
                               hintStyle: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.24), fontSize: 12),
                               filled: true,
                               fillColor: const Color(0xFF050B14),
@@ -1245,6 +1769,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       subjectHistoryList.add(jsonEncode(dkeFinalPacket));
                       await prefs.setStringList(subjectKey, subjectHistoryList);
 
+                      // 🆕 [학부모 가시성 확보 2026-09-02] 로컬 저장은 그대로 두고,
+                      // 같은 기록 요약을 Firestore(학생 코드 문서의 sessionHistory 배열)에도
+                      // 함께 올림. 실패해도 로컬 저장은 이미 끝난 상태라 학생 화면엔 영향 없음.
+                      await FamilyLinkService.pushSessionRecord(dkeFinalPacket);
+
                       // 🆕 [연동 2026-08-10] "평가" 기록이면서 시험 유형(주평가/단원평가/중간고사/기말고사/모의고사)이
                       // 선택된 경우, 같은 점수를 member_achievement_screen.dart의 "나의 성적 기록"(gke_exam_records)에도
                       // 자동으로 이어붙여 저장함. 이제 학생이 같은 점수를 두 번 입력할 필요가 없음.
@@ -1273,11 +1802,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('SAVE RECORD', style: GoogleFonts.gowunBatang(color: isAllFilled ? const Color(0xFF030712) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 15)),
-                        const SizedBox(height: 2),
-                        Text('(성장 데이터 저장)', style: GoogleFonts.notoSansKr(color: isAllFilled ? const Color(0xFF030712) : Colors.white24, fontWeight: FontWeight.bold, fontSize: 11)),
-                      ],
+                      children: _biLines(
+                        _dlg['saveRecord']!,
+                        enStyle: TextStyle(color: isAllFilled ? const Color(0xFF030712) : Colors.white38, fontWeight: FontWeight.bold, fontSize: 15),
+                        koStyle: TextStyle(color: isAllFilled ? const Color(0xFF030712) : Colors.white24, fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
                     ),
                   ),
                 ),
@@ -1301,13 +1830,27 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
           children: [
             Icon(Icons.star, color: brandGolden, size: 32),
             const SizedBox(height: 8),
-            Text('$earnedStars 개의 별을 획득했습니다.', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(
+              _isForeign
+                  ? '$earnedStars ${_dlg['starsEarned']![_cur] ?? _dlg['starsEarned']!['EN']}'
+                  : '$earnedStars${_dlg['starsCountUnit']!['KO']}의 별을 획득했습니다.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
             const SizedBox(height: 4),
-            Text('누적 $allTimeTotalStars 개', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12)),
+            Text(
+              '${_bi(_dlg['cumulative']!)} $allTimeTotalStars${_koOnly(_dlg['starsCountUnit']!)}',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12),
+            ),
             const Divider(color: Colors.white24, height: 24),
-            Text('Set your next learning subject and target time.\nPlanned learning is the beginning of steady growth.', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 8),
-            Text('(다음 학습 과목과 목표 시간을 설정해 보세요\n계획적인 학습은 꾸준한 성장의 시작입니다.)', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+            Column(
+              children: _biLines(
+                _dlg['nextSubjectTitle']!,
+                enStyle: TextStyle(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                koStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+            ),
           ],
         ),
         actionsAlignment: MainAxisAlignment.center,
@@ -1317,7 +1860,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               Navigator.of(context).pop();
               Navigator.of(context).pop(allTimeTotalStars);
             },
-            child: Text("OK (확인)", style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
+            child: Text(_bi(_dlg['ok']!), style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
         ],
       ),
@@ -1335,193 +1878,216 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     const Color brandGolden = Color(0xFFE5C158);
-    return Scaffold(
-      backgroundColor: const Color(0xFF050B14),
-      body: Container(
-        width: double.infinity, height: double.infinity,
-        decoration: const BoxDecoration(image: DecorationImage(image: AssetImage('assets/images/timer.png'), fit: BoxFit.cover)),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 163),
+    return PopScope(
+      // 🆕 [데이터 보호 2026-09-02] 뒤로가기(< 버튼, 스와이프 등)를 직접 가로채서,
+      // 화면이 사라지기 전에 진행 상황을 먼저 저장한 뒤에 실제로 닫히게 함.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackPressed();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF050B14),
+        body: Container(
+          width: double.infinity, height: double.infinity,
+          decoration: const BoxDecoration(image: DecorationImage(image: AssetImage('assets/images/timer.png'), fit: BoxFit.cover)),
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 163),
 // 🆕 [2026-07-29] 시험준비/시험당일 트랙에서 실행된 경우에만 시험명+D-day 표시.
-                    // 평상시/방학/개인시간표에서 실행된 경우에는 마이페이지에서 설정한 실제 목표
-                    // (예: 서울대학교, 민족사관고등학교, 사법고시 등)를 그대로 표시하고 D-day는 제거.
-                    widget.isExamTrackMode
-                        ? Builder(builder: (context) {
-                      final DateTime baseDate = widget.targetExamDate ?? DateTime.now();
-                      final DateTime nowUtc = DateTime.now().toUtc();
-                      final tz.Location targetLocation = tz.getLocation('Asia/Seoul');
-                      final tz.TZDateTime examTargetLocal = tz.TZDateTime(targetLocation, baseDate.year, baseDate.month, baseDate.day);
-                      final int difference = (examTargetLocal.toUtc().difference(nowUtc).inHours / 24).ceil();
-                      String dDayString = difference < 0 ? "D+${difference.abs()}" : (difference == 0 ? "D-Day" : "D-$difference");
-                      return Column(mainAxisSize: MainAxisSize.min, children: [
+                      // 평상시/방학/개인시간표에서 실행된 경우에는 마이페이지에서 설정한 실제 목표
+                      // (예: 서울대학교, 민족사관고등학교, 사법고시 등)를 그대로 표시하고 D-day는 제거.
+                      widget.isExamTrackMode
+                          ? Builder(builder: (context) {
+                        final DateTime baseDate = widget.targetExamDate ?? DateTime.now();
+                        final DateTime nowUtc = DateTime.now().toUtc();
+                        final tz.Location targetLocation = tz.getLocation('Asia/Seoul');
+                        final tz.TZDateTime examTargetLocal = tz.TZDateTime(targetLocation, baseDate.year, baseDate.month, baseDate.day);
+                        final int difference = (examTargetLocal.toUtc().difference(nowUtc).inHours / 24).ceil();
+                        String dDayString = difference < 0 ? "D+${difference.abs()}" : (difference == 0 ? "D-Day" : "D-$difference");
+                        return Column(mainAxisSize: MainAxisSize.min, children: [
+                          Image.asset('assets/images/crown_wings.png', width: 100, fit: BoxFit.contain),
+                          const SizedBox(height: 2),
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            const Text("✧───  ", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(widget.dynamicTestTitle, style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
+                            const Text("  ───✧", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Text(dDayString, style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 34, fontWeight: FontWeight.bold, height: 1.0, letterSpacing: 0.5)),
+                        ]);
+                      })
+                          : Column(mainAxisSize: MainAxisSize.min, children: [
                         Image.asset('assets/images/crown_wings.png', width: 100, fit: BoxFit.contain),
                         const SizedBox(height: 2),
                         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                           const Text("✧───  ", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
-                          Text(widget.dynamicTestTitle, style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
+                          Text(_koOnly(_dlg['targetLabel']!), style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
                           const Text("  ───✧", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
                         ]),
                         const SizedBox(height: 4),
-                        Text(dDayString, style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 34, fontWeight: FontWeight.bold, height: 1.0, letterSpacing: 0.5)),
-                      ]);
-                    })
-                        : Column(mainAxisSize: MainAxisSize.min, children: [
-                      Image.asset('assets/images/crown_wings.png', width: 100, fit: BoxFit.contain),
-                      const SizedBox(height: 2),
-                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Text("✧───  ", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
-                        Text("목표", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
-                        const Text("  ───✧", style: TextStyle(color: Color(0xFFE5C158), fontSize: 12, fontWeight: FontWeight.bold)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          child: Text(
+                            _currentUniversity, // 🆕 마이페이지에서 실제 저장한 목표 (대학/고교/고시 등 무엇이든 그대로 표시)
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 24, fontWeight: FontWeight.bold, height: 1.0, letterSpacing: 0.5),
+                          ),
+                        ),
                       ]),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 260),
+                      Column(mainAxisSize: MainAxisSize.min, children: [
+                        // 🆕 [정리 2026-07-29] "배속 실험 모드 가동" 디버그 표시줄 삭제함
+                        // (테스트용 임시 문구였고, 바로 아래 큰 타이머와 중복 표시였음)
+                        Text(_formatDisplayTime(_elapsedSeconds), style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9)),
+                      ]),
+                      const Spacer(),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Text(
-                          _currentUniversity, // 🆕 마이페이지에서 실제 저장한 목표 (대학/고교/고시 등 무엇이든 그대로 표시)
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 24, fontWeight: FontWeight.bold, height: 1.0, letterSpacing: 0.5),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 260),
-                    Column(mainAxisSize: MainAxisSize.min, children: [
-                      // 🆕 [정리 2026-07-29] "배속 실험 모드 가동" 디버그 표시줄 삭제함
-                      // (테스트용 임시 문구였고, 바로 아래 큰 타이머와 중복 표시였음)
-                      Text(_formatDisplayTime(_elapsedSeconds), style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 78, fontWeight: FontWeight.w700, letterSpacing: 1.0, height: 0.9)),
-                    ]),
-                    const Spacer(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Row(children: [Expanded(child: Text("🔊 ${widget.selectedSubject}", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))]),
-                        const SizedBox(height: 4),
-                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                          Text("실시간 집중 모드", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
-                          Text("목표 시간: ${widget.selectedDurationMinutes}분", textAlign: TextAlign.end, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ]),
-                        const SizedBox(height: 10),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [Expanded(child: Text("🔊 ${widget.selectedSubject}", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))]),
+                          const SizedBox(height: 4),
+                          // 🆕 [실시간 별 표시 2026-09-02] 아이콘 없이 순수 텍스트로만 표시.
+                          // 세션 중 실시간으로 쌓이는 별 개수(_starsEarnedThisSession)를 그대로 보여줌.
+                          // DkeStars에는 이미 실시간으로 저장되고 있으므로 여기서는 화면 표시만 추가함
+                          // (저장 로직 변경 없음).
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _isForeign
+                                  ? '${_koOnly(_dlg['liveStars']!)}: $_starsEarnedThisSession'
+                                  : '${_koOnly(_dlg['liveStars']!)} $_starsEarnedThisSession${_koOnly(_dlg['starsCountUnit']!)}',
+                              style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                            Text(_koOnly(_dlg['realtimeFocusMode']!), style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text('${_koOnly(_dlg['targetTimeLabel']!)}: ${widget.selectedDurationMinutes}$_minuteUnit', textAlign: TextAlign.end, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 10),
 
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final List<Color> rainbowColors = [
-                              const Color(0xFFFF3B30),
-                              const Color(0xFFFF9500),
-                              const Color(0xFFFFCC00),
-                              const Color(0xFF34C759),
-                              const Color(0xFF007AFF),
-                              const Color(0xFF5856D6),
-                            ];
-                            return Container(
-                              width: constraints.maxWidth,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                  color: const Color(0xFF0D1527),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.3), width: 1.0)
-                              ),
-                              child: Row(
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final List<Color> rainbowColors = [
+                                const Color(0xFFFF3B30),
+                                const Color(0xFFFF9500),
+                                const Color(0xFFFFCC00),
+                                const Color(0xFF34C759),
+                                const Color(0xFF007AFF),
+                                const Color(0xFF5856D6),
+                              ];
+                              return Container(
+                                width: constraints.maxWidth,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                    color: const Color(0xFF0D1527),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: const Color(0xFFE5C158).withOpacity(0.3), width: 1.0)
+                                ),
+                                child: Row(
+                                  children: List.generate(6, (index) {
+                                    double itemWidth = (constraints.maxWidth - 2.0) / 6;
+                                    double startFactor = index / 6.0;
+                                    double endFactor = (index + 1) / 6.0;
+                                    double itemProgress = 0.0;
+
+                                    if (progressPercent >= endFactor) {
+                                      itemProgress = 1.0;
+                                    } else if (progressPercent <= startFactor) {
+                                      itemProgress = 0.0;
+                                    } else {
+                                      itemProgress = (progressPercent - startFactor) / (endFactor - startFactor);
+                                    }
+
+                                    return Container(
+                                      width: itemWidth,
+                                      height: double.infinity,
+                                      decoration: BoxDecoration(
+                                          border: index < 5 ? Border(right: BorderSide(color: const Color(0xFFE5C158).withOpacity(0.25), width: 1.0)) : null
+                                      ),
+                                      child: Stack(
+                                        children: [
+                                          if (itemProgress > 0)
+                                            FractionallySizedBox(
+                                              widthFactor: itemProgress,
+                                              child: Container(color: rainbowColors[index]),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 6),
+
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              double interval = widget.selectedDurationMinutes / 6.0;
+                              return Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: List.generate(6, (index) {
-                                  double itemWidth = (constraints.maxWidth - 2.0) / 6;
-                                  double startFactor = index / 6.0;
-                                  double endFactor = (index + 1) / 6.0;
-                                  double itemProgress = 0.0;
-
-                                  if (progressPercent >= endFactor) {
-                                    itemProgress = 1.0;
-                                  } else if (progressPercent <= startFactor) {
-                                    itemProgress = 0.0;
-                                  } else {
-                                    itemProgress = (progressPercent - startFactor) / (endFactor - startFactor);
-                                  }
-
-                                  return Container(
+                                  double currentInterval = interval * (index + 1);
+                                  int currentPercentage = ((index + 1) / 6.0 * 100).round();
+                                  double itemWidth = constraints.maxWidth / 6;
+                                  return SizedBox(
                                     width: itemWidth,
-                                    height: double.infinity,
-                                    decoration: BoxDecoration(
-                                        border: index < 5 ? Border(right: BorderSide(color: const Color(0xFFE5C158).withOpacity(0.25), width: 1.0)) : null
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        if (itemProgress > 0)
-                                          FractionallySizedBox(
-                                            widthFactor: itemProgress,
-                                            child: Container(color: rainbowColors[index]),
-                                          ),
-                                      ],
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                          "${currentInterval.toStringAsFixed(1)}$_minuteUnit\n($currentPercentage%)",
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.2)
+                                      ),
                                     ),
                                   );
                                 }),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 6),
-
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            double interval = widget.selectedDurationMinutes / 6.0;
-                            return Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: List.generate(6, (index) {
-                                double currentInterval = interval * (index + 1);
-                                int currentPercentage = ((index + 1) / 6.0 * 100).round();
-                                double itemWidth = constraints.maxWidth / 6;
-                                return SizedBox(
-                                  width: itemWidth,
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                        "${currentInterval.toStringAsFixed(1)}분\n($currentPercentage%)",
-                                        textAlign: TextAlign.center,
-                                        style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.2)
-                                    ),
-                                  ),
-                                );
-                              }),
-                            );
-                          },
-                        ),
-                      ]),
-                    ),
-                    const Spacer(flex: 6),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 50.0),
-                      child: GestureDetector(
-                        onTap: _toggleTimer,
-                        child: Container(
-                          width: double.infinity, height: 60,
-                          decoration: const BoxDecoration(image: DecorationImage(image: AssetImage('assets/images/btn_start.png'), fit: BoxFit.fill)),
-                          child: Center(child: Text(_isRunning ? "PAUSE (일시 중지)" : "START FOCUS (공부 시작)", style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 17, fontWeight: FontWeight.bold))),
+                              );
+                            },
+                          ),
+                        ]),
+                      ),
+                      const Spacer(flex: 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 50.0),
+                        child: GestureDetector(
+                          onTap: _toggleTimer,
+                          child: Container(
+                            width: double.infinity, height: 60,
+                            decoration: const BoxDecoration(image: DecorationImage(image: AssetImage('assets/images/btn_start.png'), fit: BoxFit.fill)),
+                            child: Center(child: Text(_isRunning ? _bi(_dlg['pauseBtn']!) : _bi(_dlg['startFocus']!), style: GoogleFonts.gowunBatang(color: const Color(0xFFFFF6D6), fontSize: 17, fontWeight: FontWeight.bold))),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
-              ),
-              if (_currentIsVip && _showVipOverlay) // 👈 🎯 수정한 부분: widget.isVipMember 대신 실시간 강제 복원된 _currentIsVip 사용!
-                Positioned.fill(
-                  child: Center(
-                    child: SizedBox(
-                      width: 340,
-                      height: 300,
-                      child: DkeBigStarTargetAnimationModule(
-                        key: _animKey,
-                        targetUniversityName: _currentUniversity,
-                        currentLanguageCode: _currentLanguageCode,
+                if (_currentIsVip && _showVipOverlay) // 👈 🎯 수정한 부분: widget.isVipMember 대신 실시간 강제 복원된 _currentIsVip 사용!
+                  Positioned.fill(
+                    child: Center(
+                      child: SizedBox(
+                        width: 340,
+                        height: 300,
+                        child: DkeBigStarTargetAnimationModule(
+                          key: _animKey,
+                          targetUniversityName: _currentUniversity,
+                          currentLanguageCode: _currentLanguageCode,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
