@@ -17,17 +17,12 @@ const Map<String, Map<String, String>> kEvalTypeLabelMap = {
 };
 String evalTypeLabel(String koType) => bi(kEvalTypeLabelMap[koType] ?? {'KO': koType, 'EN': koType});
 
-String childRecordTitle(String childName) {
-  final Map<String, String> map = {
-    'KO': '"$childName" 성적 기록 보기', 'EN': 'Viewing "$childName" Grade Records',
-    'JA': '「$childName」の成績記録を見る', 'ZH': '查看"$childName"的成绩记录',
-    'FR': 'Voir les notes de "$childName"', 'DE': 'Noten von "$childName" ansehen',
-    'RU': 'Просмотр оценок «$childName»', 'AR': 'عرض درجات "$childName"',
-    'HI': '"$childName" के ग्रेड रिकॉर्ड देखें', 'VI': 'Xem điểm của "$childName"',
-    'ES': 'Ver calificaciones de "$childName"', 'TH': 'ดูบันทึกคะแนนของ "$childName"',
-  };
-  return t(map);
-}
+const Map<String, String> kChildRecordTitleMap = {
+  'KO': '성적기록보기', 'EN': 'Grade Records', 'JA': '成績記録', 'ZH': '成绩记录',
+  'FR': 'Relevé de notes', 'DE': 'Notenübersicht', 'RU': 'Записи оценок', 'AR': 'سجل الدرجات',
+  'HI': 'ग्रेड रिकॉर्ड', 'VI': 'Hồ sơ điểm', 'ES': 'Registro de notas', 'TH': 'บันทึกคะแนน',
+};
+String childRecordTitle() => bi(kChildRecordTitleMap);
 
 const Map<String, String> kWeeklyPastFilterMap = {'KO': '[주평가 과거 선택 조회]', 'EN': '[Browse Past Weekly Evaluations]', 'JA': '[週評価 過去照会]', 'ZH': '[查询过往周评价]', 'FR': '[Consulter les évaluations hebdo passées]', 'DE': '[Frühere wöchentliche Bewertungen]', 'RU': '[Просмотр прошлых недельных оценок]', 'AR': '[استعراض التقييمات الأسبوعية السابقة]', 'HI': '[पिछली साप्ताहिक समीक्षाएं देखें]', 'VI': '[Xem đánh giá tuần trước]', 'ES': '[Ver evaluaciones semanales anteriores]', 'TH': '[ดูการประเมินรายสัปดาห์ที่ผ่านมา]'};
 const Map<String, String> kYearSelectLabelMap = {'KO': '년도 선택', 'EN': 'Select Year', 'JA': '年度選択', 'ZH': '选择年份', 'FR': "Sélectionner l'année", 'DE': 'Jahr auswählen', 'RU': 'Выбор года', 'AR': 'اختيار السنة', 'HI': 'वर्ष चुनें', 'VI': 'Chọn năm', 'ES': 'Seleccionar año', 'TH': 'เลือกปี'};
@@ -35,14 +30,6 @@ const Map<String, String> kMonthSelectLabelMap = {'KO': '월 선택', 'EN': 'Sel
 const Map<String, String> kWeekSelectLabelMap = {'KO': '주 평가 선택', 'EN': 'Select Week', 'JA': '週選択', 'ZH': '选择周次', 'FR': 'Sélectionner la semaine', 'DE': 'Woche auswählen', 'RU': 'Выбор недели', 'AR': 'اختيار الأسبوع', 'HI': 'सप्ताह चुनें', 'VI': 'Chọn tuần', 'ES': 'Seleccionar semana', 'TH': 'เลือกสัปดาห์'};
 const Map<String, String> kBigUnitSelectLabelMap = {'KO': '대단원 선택', 'EN': 'Select Unit', 'JA': '大単元選択', 'ZH': '选择大单元', 'FR': "Sélectionner l'unité", 'DE': 'Einheit auswählen', 'RU': 'Выбор раздела', 'AR': 'اختيار الوحدة', 'HI': 'इकाई चुनें', 'VI': 'Chọn chương lớn', 'ES': 'Seleccionar unidad', 'TH': 'เลือกหน่วยใหญ่'};
 const Map<String, String> kMidUnitSelectLabelMap = {'KO': '중단원 선택', 'EN': 'Select Sub-unit', 'JA': '中単元選択', 'ZH': '选择中单元', 'FR': "Sélectionner la sous-unité", 'DE': 'Untereinheit auswählen', 'RU': 'Выбор подраздела', 'AR': 'اختيار الوحدة الفرعية', 'HI': 'उप-इकाई चुनें', 'VI': 'Chọn chương nhỏ', 'ES': 'Seleccionar subunidad', 'TH': 'เลือกหน่วยย่อย'};
-const Map<String, String> kGradeThenSemesterHintMap = {
-  'KO': '학년 선택하면 해당 학기가 활성화됩니다', 'EN': 'Select a grade to activate its semesters',
-  'JA': '学年を選択すると該当学期が有効になります', 'ZH': '选择年级后将激活对应学期',
-  'FR': 'Sélectionnez un niveau pour activer ses semestres', 'DE': 'Klasse auswählen, um die Semester zu aktivieren',
-  'RU': 'Выберите класс, чтобы активировать его семестры', 'AR': 'اختر الصف لتفعيل فصوله الدراسية',
-  'HI': 'सेमेस्टर सक्रिय करने के लिए कक्षा चुनें', 'VI': 'Chọn khối để kích hoạt học kỳ tương ứng',
-  'ES': 'Seleccione un grado para activar sus semestres', 'TH': 'เลือกระดับชั้นเพื่อเปิดใช้งานภาคเรียน',
-};
 const Map<String, String> kSemesterSelectLabelMap = {'KO': '학기 선택', 'EN': 'Select Semester', 'JA': '学期選択', 'ZH': '选择学期', 'FR': 'Sélectionner le semestre', 'DE': 'Semester auswählen', 'RU': 'Выбор семестра', 'AR': 'اختيار الفصل الدراسي', 'HI': 'सेमेस्टर चुनें', 'VI': 'Chọn học kỳ', 'ES': 'Seleccionar semestre', 'TH': 'เลือกภาคเรียน'};
 const Map<String, String> kGraphTargetInfraMap = {
   'KO': '그래프 출력 타겟 지정 (학년/학기 연동 인프라 대기 완료)', 'EN': 'Graph output target set (grade/semester integration ready)',
@@ -98,7 +85,6 @@ const Map<String, String> kSecSubjectRatioMap = {'FR': '[ Répartition par mati�
 
 // ---------------------------------------------------------------------------
 // 🆕 [12개국어] 연/월/주 칩 - 숫자+단어 어순은 grade_language.dart의 isNumberFirstLang 재사용
-// [요청] "2026년/2026" 같은 한글+영문 병기 대신, 현재 선택된 언어 하나로만 "2026 year" 형태로 표시
 // ---------------------------------------------------------------------------
 const Map<String, String> kYearWordMap = {'KO': '년', 'EN': 'year', 'JA': '年', 'ZH': '年', 'FR': 'an', 'DE': 'Jahr', 'RU': 'год', 'AR': 'عام', 'HI': 'वर्ष', 'VI': 'năm', 'ES': 'año', 'TH': 'ปี'};
 const Map<String, String> kMonthWordMap = {'KO': '월', 'EN': '', 'JA': '月', 'ZH': '月', 'FR': '', 'DE': '', 'RU': '', 'AR': '', 'HI': '', 'VI': '', 'ES': '', 'TH': ''};
@@ -106,12 +92,9 @@ const Map<String, String> kWeekWordMap = {'KO': '주차', 'EN': 'Week', 'JA': '�
 const Map<String, String> kBigUnitWordMap = {'KO': '대단원', 'EN': 'Unit', 'JA': '大単元', 'ZH': '大单元', 'FR': 'Unité', 'DE': 'Einheit', 'RU': 'Раздел', 'AR': 'الوحدة', 'HI': 'इकाई', 'VI': 'Chương', 'ES': 'Unidad', 'TH': 'หน่วยใหญ่'};
 const Map<String, String> kMidUnitWordMap = {'KO': '중단원', 'EN': 'Sub-unit', 'JA': '中単元', 'ZH': '中单元', 'FR': 'Sous-unité', 'DE': 'Untereinheit', 'RU': 'Подраздел', 'AR': 'الوحدة الفرعية', 'HI': 'उप-इकाई', 'VI': 'Chương nhỏ', 'ES': 'Subunidad', 'TH': 'หน่วยย่อย'};
 
-// 🆕 [요청] 월 표기는 KO/JA/ZH만 "N월/N月" 그대로 두고, 나머지 전 언어는
-// "07 Jul"처럼 2자리 숫자 + 영문 약어로 통일 (국제적으로 통용되는 날짜 표기 관례)
 const List<String> kEnMonthAbbrev = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 String yearChipLabel(int year) {
-  // 🆕 [요청] "2026년/2026" 병기 대신 현재 언어로만 "2026 year"/"2026년" 형태로 단일 표시
   final w = t(kYearWordMap);
   return isNumberFirstLang ? "$year$w" : "$year $w";
 }
@@ -144,9 +127,9 @@ String midUnitChipLabel(int n) {
 class ParentEvaluationAnalysisWidget extends StatelessWidget {
   final String childName;
   final String selectedEvaluationType;
-  final String selectedBigUnit;
-  final String selectedMidUnit;
-  final int selectedSemesterFilter;
+  // 🆕 [다중선택] 단일 String → Set<String>으로 변경 (대단원/중단원 복수 선택 지원)
+  final Set<String> selectedBigUnits;
+  final Set<String> selectedMidUnits;
   // 🆕 [버그 수정] 주평가 전용 년/월/주차 상태 - 기존엔 단원평가용 selectedBigUnit/selectedMidUnit을
   // 그대로 빌려쓰고 있어서 월/주차가 서로 덮어쓰며 충돌했고, 애초에 필터링에 반영도 안 되고 있었음.
   final String selectedYear;
@@ -159,9 +142,8 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
   final Color brandGolden;
   final Color luxuryDarkBg;
   final Function(String) onEvaluationTypeChanged;
-  final Function(String) onBigUnitChanged;
-  final Function(String) onMidUnitChanged;
-  final Function(int) onSemesterFilterChanged;
+  final Function(String) onBigUnitChanged; // 탭한 값을 토글(선택/해제)하는 콜백
+  final Function(String) onMidUnitChanged; // 탭한 값을 토글(선택/해제)하는 콜백
   final Function(String) onYearChanged;
   final Function(String) onMonthChanged;
   final Function(String) onWeekChanged;
@@ -172,9 +154,8 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
     Key? key,
     required this.childName,
     required this.selectedEvaluationType,
-    required this.selectedBigUnit,
-    required this.selectedMidUnit,
-    required this.selectedSemesterFilter,
+    required this.selectedBigUnits,
+    required this.selectedMidUnits,
     required this.selectedYear,
     required this.selectedMonth,
     required this.selectedWeek,
@@ -187,7 +168,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
     required this.onEvaluationTypeChanged,
     required this.onBigUnitChanged,
     required this.onMidUnitChanged,
-    required this.onSemesterFilterChanged,
     required this.onYearChanged,
     required this.onMonthChanged,
     required this.onWeekChanged,
@@ -208,10 +188,10 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
             children: [
               Flexible(child: buildCustomSectionTitle("Academic Evaluation Matrix", "[ 평가 결과 ]", fontSize: 14.0, foreignTitle: t(kSecEvalResultMap))),
               const SizedBox(width: 8),
-              // 🆕 [오버플로우 수정] 영문 등 긴 언어에서 이름이 길어지면 오른쪽 끝으로 말줄임 처리
+              // 🆕 [요청] 자녀 이름을 큰따옴표로 감싸 보여주던 방식 대신, 언어별 고정 문구("성적기록보기")로 단순화
               Flexible(
                 child: Text(
-                  childRecordTitle(childName),
+                  childRecordTitle(),
                   textAlign: TextAlign.right,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -225,7 +205,8 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: ["주평가", "단원평가", "중간고사", "기말고사", "모의고사"].map((type) {
+              // 🆕 [요청] 평가결과에서 중간고사/기말고사/모의고사 삭제 - 주평가/단원평가만 남김
+              children: ["주평가", "단원평가"].map((type) {
                 bool isSelected = selectedEvaluationType == type;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6.0),
@@ -297,9 +278,9 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                       }).toList(),
                     ),
                   ),
-                ] else if (selectedEvaluationType == "단원평가") ...[
-                  // 🆕 [단원 확장] 과목마다 대단원 개수가 다름(4단원짜리도, 12단원짜리도 있음)을 고려해
-                  // 대단원 1~12까지 전부 노출하고 가로 스크롤로 넘겨볼 수 있게 함.
+                ] else ...[
+                  // 🆕 [다중선택] 대단원/중단원 모두 selectedBigUnits.contains(v) / selectedMidUnits.contains(v)로
+                  // 비교하도록 변경 - 탭할 때마다 onBigUnitChanged/onMidUnitChanged가 토글(선택↔해제)합니다.
                   Text(t(kBigUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
@@ -307,7 +288,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                     child: Row(
                       children: List.generate(12, (i) => "대단원 ${i + 1}").map((v) {
                         final int n = int.parse(v.replaceAll('대단원 ', ''));
-                        return Padding(padding: const EdgeInsets.only(right:4), child: _buildInlineFilterChip(bigUnitChipLabel(n), selectedBigUnit == v, () => onBigUnitChanged(v)));
+                        return Padding(padding: const EdgeInsets.only(right:4), child: _buildInlineFilterChip(bigUnitChipLabel(n), selectedBigUnits.contains(v), () => onBigUnitChanged(v)));
                       }).toList(),
                     ),
                   ),
@@ -319,34 +300,9 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                     child: Row(
                       children: ["중단원 1", "중단원 2", "중단원 3", "중단원 4"].map((v) {
                         final int n = int.parse(v.replaceAll('중단원 ', ''));
-                        return Padding(padding: const EdgeInsets.only(right:4), child: _buildInlineFilterChip(midUnitChipLabel(n), selectedMidUnit == v, () => onMidUnitChanged(v)));
+                        return Padding(padding: const EdgeInsets.only(right:4), child: _buildInlineFilterChip(midUnitChipLabel(n), selectedMidUnits.contains(v), () => onMidUnitChanged(v)));
                       }).toList(),
                     ),
-                  ),
-                ] else ...[
-                  Text(t(kGradeThenSemesterHintMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
-                  const SizedBox(height: 6),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: ["1학년", "2학년", "3학년"].map((g) {
-                        final int n = int.parse(g.replaceAll('학년', ''));
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: _buildInlineFilterChip(gradeChipLabel(n), selectedBigUnit == g, () { onBigUnitChanged(g); onSemesterFilterChanged(1); }),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(t(kSemesterSelectLabelMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _buildInlineFilterChip(semesterChipLabel(1), selectedSemesterFilter == 1, () => onSemesterFilterChanged(1)),
-                      const SizedBox(width: 6),
-                      _buildInlineFilterChip(semesterChipLabel(2), selectedSemesterFilter == 2, () => onSemesterFilterChanged(2)),
-                    ],
                   ),
                 ],
                 const Divider(color: Colors.white10, height: 16),
@@ -456,28 +412,18 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
       const Color(0xFF0500FF),
     ];
 
-    // 🆕 [버그 수정] 막대 스케일과 Y축 라벨 위치가 서로 다른 기준으로 계산되어 어긋나던 문제 -
-    // Y축 세로 폭을 줄이고(220→190) 카드 전체 높이는 넉넉하게 늘려서(275→300) 막대가 X축을 넘지 않도록 함
     const double chartMaxHeight = 210.0;
-    // 🆕 [12개국어] "점" 단위는 언어마다 표기가 달라 숫자만 표시(전 언어 공통)
     final List<String> scores = ["100", "90", "80", "70", "60"];
-    // 🆕 [원장님 최종 확정] 막대 폭 32 / 20 고정 (member_achievement_screen.dart와 동일 원칙)
     const double barWidth = 20.0;
-    // 🆕 [요청] X축 아래 과목명칭 영역이 좁아서 조금 넓힘 (6→9)
     const double barMargin = 9.0;
 
     return Container(
       height: 300,
       padding: const EdgeInsets.only(top: 24, bottom: 4, left: 12, right: 12),
       decoration: BoxDecoration(color: premiumCardBg, borderRadius: BorderRadius.circular(12)),
-      // 🆕 [버그 수정] 막대+라벨을 스크롤 하나로 합치는 과정에서 실수로 빠졌던 X축 기준선(60점 가로선)을
-      // Stack + Positioned로 복원. 스크롤 여부와 무관하게 항상 고정된 위치(60점 높이)에 표시됩니다.
       child: Stack(
         children: [
           Row(
-            // 🆕 [버그 수정] stretch로 인해 Y축 라벨/세로선이 카드 전체 높이만큼 늘어나서
-            // "60점" 라벨이 실제 막대 스케일(chartMaxHeight)보다 훨씬 아래에 표시되던 근본 원인 수정.
-            // 이제 Y축도 막대와 정확히 같은 chartMaxHeight를 기준으로 그려서 눈금과 막대가 딱 맞습니다.
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
@@ -519,8 +465,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // 🆕 [버그 수정] 막대와 과목명 라벨을 같은 스크롤 안에 하나로 합쳐서, 막대만 스크롤되고
-              // 라벨은 고정된 채 화면 밖으로 튕겨나가던(오른쪽 오버플로우) 문제를 근본적으로 해결
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -532,8 +476,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                       Color barColor = scoreColors[idx % scoreColors.length];
 
                       double normalizedScore = (rec.score - 60).clamp(0.0, 40.0);
-                      // 🆕 [요청] 100점일 때 점수 숫자가 위쪽 여백 부족으로 안 보이던 문제 수정 -
-                      // 막대 최대 높이를 chartMaxHeight의 82%로 제한해서 점수 라벨이 들어갈 여유 공간을 확보
                       double finalBarHeight = (normalizedScore / 40) * (chartMaxHeight * 0.99);
 
                       return Container(
@@ -573,7 +515,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                               child: Text(
                                 rec.subject,
                                 textAlign: TextAlign.center,
-                                maxLines: 2, // 🆕 [요청] 과목명이 길어도 2줄까지 허용, 넘치면 말줄임
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, height: 1.2),
                               ),
@@ -587,7 +529,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
               ),
             ],
           ),
-          // 🆕 [버그 수정] X축 기준선(60점 라인) - 세로선이 시작하는 지점부터 오른쪽 끝까지, 60점 높이에 고정 표시
           Positioned(
             left: 37,
             right: 0,
@@ -599,9 +540,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
     );
   }
 
-  // 🆕 [실데이터 연동] parentMasterTimeData(ParentDataService.loadSubjectAggregates() 결과)를
-  // 사용해 실제 학습시간 막대그래프를 그립니다. "평균"은 다른 학생과 비교할 서버 데이터가 없는
-  // 현재로서는 본인 과목들의 평균값으로 표시합니다(member_achievement_screen.dart와 동일한 처리 방식).
   Widget _buildParentTimeChartDashboard(int tabIndex) {
     final List<String> flagKeys = ["hasStudiedToday", "hasStudiedWeekly", "hasStudiedMonthly", "hasStudiedYearly"];
     final String flagKey = flagKeys[tabIndex];
@@ -644,7 +582,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
 
     const double barW = 17.0;
     const double pairGap = 0.7;
-    const double groupGap = 8.4; // 🆕 [요청] 과목 간 간격 40% 축소 (14 → 8.4)
+    const double groupGap = 8.4;
     const double chartH = 190.0;
 
     int totalMinutes = subjectData.fold<int>(0, (sum, e) => sum + (e["value"] as double).round());
@@ -660,14 +598,9 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
 
     double calcBarH(double val) {
       double delta = (yMax - yMin) == 0 ? 1 : (yMax - yMin);
-      // 🆕 [버그 수정] 막대가 꽉 차면 그 위의 숫자 라벨이 위쪽 밖으로 넘치던(overflow) 문제 -
-      // 최대 높이를 85%로 제한해서 라벨이 들어갈 여유 공간을 항상 확보
       return ((val - yMin) / delta * chartH).clamp(2.0, chartH * 0.85);
     }
 
-    // 🆕 [요청] "2)수학(A급) 집중 학습 (50분)"처럼 긴 원본 과목명을
-    // "2)수학(A급)" / "집중 학습 50분" 두 줄로 자동 정리. "집중 학습" 표현이 없는
-    // 과목명은 그대로 두고 화면에서 2줄까지만 허용(넘치면 말줄임).
     List<String> shortSubjectLines(String raw) {
       const marker = '집중 학습';
       final idx = raw.indexOf(marker);
@@ -701,8 +634,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              // 🆕 [버그 수정] Y축(왼쪽 눈금)+막대 스크롤 영역을 Stack으로 감싸서, 병합 과정에서
-              // 실수로 빠졌던 X축 기준선(0 높이 가로선)을 다시 그려 넣습니다.
               Stack(
                 children: [
                   Row(
@@ -797,9 +728,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(height: 6),
-                                    // 🆕 [버그 수정] 라벨이 1줄이든 2줄이든 항상 같은 높이(28)를 차지하도록 고정 -
-                                    // 라벨 줄 수가 다르면 Row(crossAxisAlignment:end) 때문에 막대 자체가
-                                    // 위아래로 어긋나 보이던(연간 탭 맨 끝 "수학" 막대만 아래로 처짐) 문제 해결
                                     SizedBox(
                                       width: 64,
                                       height: 28,
@@ -824,8 +752,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                  // 🆕 [버그 수정] X축 기준선(0 높이 가로선) - Y축 눈금 컬럼(55) 바로 옆부터 오른쪽 끝까지,
-                  // 막대 그래프 영역(chartH) 바닥과 정확히 일치하는 위치에 고정 표시
                   Positioned(
                     left: 57,
                     right: 0,
@@ -895,7 +821,6 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        // 🆕 [버그 수정] 과목명이 길어 오른쪽으로 넘치던 문제 - Expanded + 2줄 허용으로 해결
                         Expanded(
                           child: Text(
                             "${shortSubjectLines(item["subject"] as String).join(' ')} ($percent%)",

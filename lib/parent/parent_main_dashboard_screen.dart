@@ -161,9 +161,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   String _lastSentTimeText = "";
 
   String _selectedEvaluationType = "주평가";
-  String _selectedBigUnit = "대단원 1";
-  String _selectedMidUnit = "중단원 1";
-  int _selectedSemesterFilter = 1;
+  // 🆕 [다중선택] 대단원/중단원을 String 단일값 대신 Set<String>으로 관리 - 복수 선택 지원
+  // (평가결과에서 중간고사/기말고사/모의고사가 삭제되면서 학년/학기 필터(_selectedSemesterFilter)는
+  //  더 이상 쓰이지 않아 함께 제거했습니다.)
+  Set<String> _selectedBigUnits = {"대단원 1"};
+  Set<String> _selectedMidUnits = {"중단원 1"};
 
   // 🆕 [자녀 추가] 연결된 자녀 코드 목록 (최대 5명, 언제든 추가 가능)
   List<String> _linkedChildCodes = [];
@@ -795,9 +797,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                 ParentEvaluationAnalysisWidget(
                   childName: _realChildName,
                   selectedEvaluationType: _selectedEvaluationType,
-                  selectedBigUnit: _selectedBigUnit,
-                  selectedMidUnit: _selectedMidUnit,
-                  selectedSemesterFilter: _selectedSemesterFilter,
+                  selectedBigUnits: _selectedBigUnits,
+                  selectedMidUnits: _selectedMidUnits,
                   selectedYear: _selectedYear,
                   selectedMonth: _selectedMonth,
                   selectedWeek: _selectedWeek,
@@ -809,9 +810,21 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                   luxuryDarkBg: luxuryDarkBg,
                   buildCustomSectionTitle: _buildCustomSectionTitle,
                   onEvaluationTypeChanged: (type) => setState(() => _selectedEvaluationType = type),
-                  onBigUnitChanged: (unit) => setState(() => _selectedBigUnit = unit),
-                  onMidUnitChanged: (unit) => setState(() => _selectedMidUnit = unit),
-                  onSemesterFilterChanged: (filter) => setState(() => _selectedSemesterFilter = filter),
+                  // 🆕 [다중선택] 탭한 값을 토글(이미 선택돼 있으면 해제, 아니면 추가) - 최소 1개는 항상 유지
+                  onBigUnitChanged: (unit) => setState(() {
+                    if (_selectedBigUnits.contains(unit)) {
+                      if (_selectedBigUnits.length > 1) _selectedBigUnits.remove(unit);
+                    } else {
+                      _selectedBigUnits.add(unit);
+                    }
+                  }),
+                  onMidUnitChanged: (unit) => setState(() {
+                    if (_selectedMidUnits.contains(unit)) {
+                      if (_selectedMidUnits.length > 1) _selectedMidUnits.remove(unit);
+                    } else {
+                      _selectedMidUnits.add(unit);
+                    }
+                  }),
                   onYearChanged: (year) => setState(() => _selectedYear = year),
                   onMonthChanged: (month) => setState(() => _selectedMonth = month),
                   onWeekChanged: (week) => setState(() => _selectedWeek = week),

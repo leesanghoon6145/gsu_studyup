@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../global_lang.dart';
+import 'parent_scholarship_widget.dart'; // 🆕 [자기주도학습 장학금] 별 수집 현황 하단에 삽입
 
 // ---------------------------------------------------------------------------
 // 🆕 [12개국어] 이 화면 전용 번역 헬퍼/사전. 기본모드(KO/EN)는 한글+영문 동시,
@@ -354,6 +355,13 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
           const SizedBox(height: 24),
 
           widget.buildCustomSectionTitle("Today's Accumulated Stars", "오늘의 별 수집 현황 : ${widget.totalCollectedStars}개", fontSize: 14.0, foreignTitle: starsSectionForeignTitle(widget.totalCollectedStars)),
+          const SizedBox(height: 12),
+          // 🆕 [자기주도학습 장학금] 유형 선택 + 탭하면 펼쳐지는 세부내역 + 안내 팝업(ⓘ)
+          ParentScholarshipWidget(
+            premiumCardBg: widget.premiumCardBg,
+            brandGolden: widget.brandGolden,
+            luxuryDarkBg: widget.luxuryDarkBg,
+          ),
           const SizedBox(height: 10),
         ],
       ),

@@ -4,8 +4,9 @@ import 'dart:math' as math;
 import 'dart:convert'; // 🆕 [데이터 연결] 성적 기록 JSON 직렬화용
 import 'package:shared_preferences/shared_preferences.dart';
 import '../global_lang.dart'; // 👑 글로벌 사전 연결
-import '../star_economy.dart'; // 🆕 [별 경제 시스템] 실제 누적 별/레벨 조회용
 import '../services/user_profile_service.dart'; // 🆕 [실사용 전환] 실제 가입자 이름 조회용
+import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [반복 방지] 사람 구분(uid)용
+import '../star_economy.dart'; // 🆕 [버그 수정] DkeStars 클래스 사용을 위한 import 누락 수정 (Undefined name 'DkeStars' 에러의 원인)
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -182,6 +183,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     'totalReport': {'KO': '종합 리포트', 'EN': 'Total Report', 'JA': '総合レポート', 'ZH': '综合报告', 'FR': 'Rapport global', 'DE': 'Gesamtbericht', 'RU': 'Общий отчёт', 'AR': 'التقرير الشامل', 'HI': 'समग्र रिपोर्ट', 'VI': 'Báo cáo tổng hợp', 'ES': 'Informe general', 'TH': 'รายงานสรุป'},
     'detailedAnalytics': {'KO': '상세분석기록', 'EN': 'Detailed Analytics', 'JA': '詳細分析記録', 'ZH': '详细分析记录', 'FR': 'Analyse détaillée', 'DE': 'Detaillierte Analyse', 'RU': 'Подробная аналитика', 'AR': 'تحليل تفصيلي', 'HI': 'विस्तृत विश्लेषण', 'VI': 'Phân tích chi tiết', 'ES': 'Análisis detallado', 'TH': 'บันทึกวิเคราะห์เชิงลึก'},
     'nextLevelRoad': {'KO': '학습레벨로드', 'EN': 'Next Level Road', 'JA': '次のレベルへの道', 'ZH': '下一等级之路', 'FR': 'Vers le niveau suivant', 'DE': 'Weg zum nächsten Level', 'RU': 'Путь к следующему уровню', 'AR': 'الطريق إلى المستوى التالي', 'HI': 'अगले स्तर की राह', 'VI': 'Lộ trình cấp độ tiếp theo', 'ES': 'Camino al siguiente nivel', 'TH': 'เส้นทางสู่เลเวลถัดไป'},
+    'todaySessionsTitle': {'KO': '오늘 학습한 과목', 'EN': "Today's Study Sessions", 'JA': '本日の学習科目', 'ZH': '今日学习科目', 'FR': "Sessions d'étude du jour", 'DE': 'Heutige Lernsitzungen', 'RU': 'Сегодняшние занятия', 'AR': 'جلسات الدراسة اليوم', 'HI': 'आज के अध्ययन सत्र', 'VI': 'Buổi học hôm nay', 'ES': 'Sesiones de estudio de hoy', 'TH': 'วิชาที่เรียนวันนี้'},
+    'noSessionsToday': {'KO': '오늘 진행한 학습 세션이 아직 없습니다.', 'EN': 'No study sessions recorded today yet.', 'JA': '本日の学習セッションはまだありません。', 'ZH': '今天还没有学习记录。', 'FR': "Aucune session d'étude aujourd'hui pour l'instant.", 'DE': 'Heute wurden noch keine Lernsitzungen aufgezeichnet.', 'RU': 'Сегодня пока нет записанных занятий.', 'AR': 'لا توجد جلسات دراسة مسجلة اليوم بعد.', 'HI': 'आज तक कोई अध्ययन सत्र दर्ज नहीं हुआ।', 'VI': 'Hôm nay chưa có buổi học nào được ghi lại.', 'ES': 'Aún no se han registrado sesiones de estudio hoy.', 'TH': 'วันนี้ยังไม่มีการบันทึกการเรียน'},
+    'sessionOrdinal': {'KO': '교시', 'EN': 'Session', 'JA': '時限目', 'ZH': '节', 'FR': 'Séance', 'DE': 'Einheit', 'RU': 'Занятие', 'AR': 'حصة', 'HI': 'सत्र', 'VI': 'Tiết', 'ES': 'Sesión', 'TH': 'คาบ'},
+    'minutesUnitSuffix': {'KO': '분', 'EN': 'min', 'JA': '分', 'ZH': '分钟', 'FR': 'min', 'DE': 'Min', 'RU': 'мин', 'AR': 'دقيقة', 'HI': 'मिनट', 'VI': 'phút', 'ES': 'min', 'TH': 'นาที'},
     'starsCount': {'KO': '23,487 개', 'EN': '23,487 Stars', 'JA': '23,487個', 'ZH': '23,487颗', 'FR': '23 487 étoiles', 'DE': '23.487 Sterne', 'RU': '23 487 звёзд', 'AR': '23,487 نجمة', 'HI': '23,487 स्टार्स', 'VI': '23.487 sao', 'ES': '23.487 estrellas', 'TH': '23,487 ดาว'},
     // 🆕 [데이터 연결] 아래 4개는 실제 숫자와 조합해서 쓰는 "단위/접두어" 문구 (숫자 자체는 더 이상 하드코딩하지 않음)
     'levelPrefix': {'KO': '학습레벨 ', 'EN': 'Lv.', 'JA': 'レベル', 'ZH': '等级', 'FR': 'Niv. ', 'DE': 'Lvl. ', 'RU': 'Уровень ', 'AR': 'المستوى ', 'HI': 'लेवल ', 'VI': 'Cấp ', 'ES': 'Nivel ', 'TH': 'เลเวล '},
@@ -703,11 +708,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     }
   }
 
-  // 🆕 [5번] 진단 리포트 캐시: 유사한 점수 구간(10점 단위 버킷)에 대해 이미 생성한 진단문이 있으면
-  // 재사용하고, 없을 때만 새로 생성해서 저장한다. (SharedPreferences 기반, 서버 연동 전 임시 캐시)
-  // 🆕 [7번] AI Pro / AI Light 배정 포인트: 지금은 자리만 마련해두고 실제 AI 호출은 아직 연결하지 않음.
-  //    - AiTier.pro   : 고난도 상담/정밀 분석 (향후 실제 AI Pro API 연결 예정)
-  //    - AiTier.light : 일반 요약/짧은 피드백 (향후 실제 AI Light API 연결 예정)
+  // 🆕 [반복 방지 라이브러리 시스템 2026-09-02] 예전엔 "점수 구간 하나당 진단문 1개"만 만들어서
+  // 영구 캐시했기 때문에, 같은 점수대에 속하는 모든 학생(심지어 같은 학생이 여러 번 봐도)이
+  // 항상 완전히 동일한 문장을 보게 되는 문제가 있었음.
+  //
+  // 수정 내용: 점수 구간별로 "라이브러리"(여러 개의 진단문 목록)를 저장해두고,
+  // 사람(uid)별로 "이미 본 문장 번호"를 따로 기록함. 요청이 오면:
+  //  1) 이 사람이 아직 못 본 라이브러리 항목이 있으면 그걸 재사용 (다른 학생에게는 재사용되어도 됨)
+  //  2) 이 사람이 라이브러리를 전부 이미 봤거나 라이브러리가 비어있으면, 새로 생성해서
+  //     라이브러리에 추가하고 그것을 "본 것"으로 기록
+  // 이렇게 하면 "유사한 학생들에게는 재사용되지만, 같은 사람에게는 절대 같은 내용이 다시 나타나지 않음".
   Future<String> _generateOrReuseDiagnosis({
     required String type,
     required double score,
@@ -715,19 +725,32 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     required AiTier tier,
   }) async {
     final int bucket = (score ~/ 10) * 10; // 10점 단위 버킷 (예: 83점 -> 80)
-    final String cacheKey = 'dke_diagnosis_cache_${DkeLang.current}_${type}_$bucket'; // 언어별로 캐시 분리 (한/영 혼동 방지)
-
+    final String lang = DkeLang.current;
     final prefs = await SharedPreferences.getInstance();
-    final String? cached = prefs.getString(cacheKey);
-    if (cached != null && cached.isNotEmpty) {
-      return cached;
+    // 🆕 사람을 구분하는 키. 로그인 계정(uid) 기준이며, 계정 정보가 없으면 'guest'로 처리.
+    final String personKey = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+
+    final String libraryKey = 'dke_diagnosis_library_${lang}_${type}_$bucket';
+    final String seenKey = 'dke_diagnosis_seen_${personKey}_${lang}_${type}_$bucket';
+
+    final List<String> library = prefs.getStringList(libraryKey) ?? [];
+    final List<String> seenIndices = prefs.getStringList(seenKey) ?? [];
+
+    for (int i = 0; i < library.length; i++) {
+      if (!seenIndices.contains('$i')) {
+        seenIndices.add('$i');
+        await prefs.setStringList(seenKey, seenIndices);
+        return library[i];
+      }
     }
 
     // TODO(향후 플스토어 출시 직전): tier == AiTier.pro / AiTier.light 분기에 따라
     // 실제 AI API 호출로 교체. 지금은 기존 규칙 기반(랜덤 문구 조합) 생성 로직을 그대로 사용.
     final String generated = _buildRuleBasedDiagnosisText(type: type, score: score, subject: subject);
-
-    await prefs.setString(cacheKey, generated);
+    library.add(generated);
+    await prefs.setStringList(libraryKey, library);
+    seenIndices.add('${library.length - 1}');
+    await prefs.setStringList(seenKey, seenIndices);
     return generated;
   }
 
@@ -790,6 +813,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     }
     return diagnosisText;
   }
+
 
 
   @override
@@ -1273,10 +1297,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   @override
   Widget build(BuildContext context) {
-    final String summaryDynamicContent = _t('summaryReportBody');
-
-    final String detailedDynamicContent = _t('detailedReportBody');
-
     return Scaffold(
       backgroundColor: _ThemeColors.luxuryDarkBg,
       appBar: AppBar(
@@ -1382,12 +1402,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
               Row(
                 children: [
-                  _buildTopButton(_t('totalReport'), 40, summaryDynamicContent, isTotalReport: true),
+                  _buildTopButton(_t('totalReport'), 40, _buildTotalReportContent, isTotalReport: true),
                   const SizedBox(width: 8),
-                  _buildTopButton(_t('detailedAnalytics'), 60, detailedDynamicContent),
+                  _buildTopButton(_t('detailedAnalytics'), 60, _buildDetailedReportContent),
                 ],
               ),
               const SizedBox(height: 12),
+
+              // 🆕 [⑤⑥⑦번] 오늘 학습한 과목 카드 - 타이머에서 기록한 오늘 세션이 이 화면에 실시간으로 보이도록 추가
+              _buildTodaySessionsCard(),
 
               IntrinsicHeight(
                 child: Row(
@@ -2116,11 +2139,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     );
   }
 
-  Widget _buildTopButton(String title, int flex, String contentText, {bool isTotalReport = false}) {
+  // 🆕 [⑧번] 시그니처 변경: String contentText -> Future<String> Function() contentBuilder
+  // 버튼을 누르는 시점에 실시간으로 실제 데이터 기반 리포트를 생성하도록 변경.
+  Widget _buildTopButton(String title, int flex, Future<String> Function() contentBuilder, {bool isTotalReport = false}) {
     return Expanded(
       flex: flex,
       child: InkWell(
-        onTap: () => _showReportPopup(context, title, contentText, isTotalReport: isTotalReport),
+        onTap: () async {
+          final String content = await contentBuilder();
+          if (!mounted) return;
+          _showReportPopup(context, title, content, isTotalReport: isTotalReport);
+        },
         borderRadius: BorderRadius.circular(10),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -2354,6 +2383,170 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   // 축(눈금)과 막대그래프가 어떤 화면 크기에서도 정확히 일치합니다. (수정 절대 금지 영역)
   static const double _kChartTopPad = 25.0;
   static const double _kChartBottomPad = 44.0;
+
+  // 🆕 [⑤번] 오늘 학습한 과목 목록 (timer_screen.dart가 저장한 dke_history_* 기록 중 오늘 것만 필터링)
+  List<Map<String, dynamic>> _todaySessions = [];
+
+  // 🆕 [⑤번] 오늘 진행한 학습 세션을 시간순으로 불러오는 함수.
+  // dke_history_{과목명} 키를 전부 훑어서 오늘 날짜에 해당하는 기록만 추출합니다.
+  Future<void> _loadTodaySessions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final Set<String> allKeys = prefs.getKeys();
+      final Iterable<String> historyKeys = allKeys.where((k) => k.startsWith('dke_history_'));
+      final DateTime now = DateTime.now();
+      final DateTime todayStart = DateTime(now.year, now.month, now.day);
+
+      final List<Map<String, dynamic>> sessions = [];
+
+      for (final key in historyKeys) {
+        final String subjectName = key.substring('dke_history_'.length);
+        final List<String>? entries = prefs.getStringList(key);
+        if (entries == null) continue;
+        for (final raw in entries) {
+          try {
+            final Map<String, dynamic> item = jsonDecode(raw);
+            final DateTime ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal() ?? now;
+            if (ts.isBefore(todayStart)) continue;
+            final int durationSeconds = (item['durationSeconds'] as num?)?.toInt() ?? 0;
+            final int minutes = (durationSeconds / 60).round();
+            sessions.add({
+              "subject": subjectName,
+              "minutes": minutes,
+              "timestamp": ts,
+            });
+          } catch (_) {
+            // 손상된 기록 하나는 건너뛰고 나머지는 계속 집계
+          }
+        }
+      }
+
+      sessions.sort((a, b) => (a["timestamp"] as DateTime).compareTo(b["timestamp"] as DateTime));
+
+      if (!mounted) return;
+      setState(() {
+        _todaySessions = sessions;
+      });
+    } catch (e) {
+      debugPrint("[MemberAchievement] 오늘 학습 세션 불러오기 실패: $e");
+    }
+  }
+
+  // 🆕 [⑤번] "오늘 학습한 과목" 카드 위젯. 오늘 진행한 세션이 없으면 안내 문구, 있으면 교시별 목록을 보여줍니다.
+  Widget _buildTodaySessionsCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _ThemeColors.premiumCardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _t('todaySessionsTitle'),
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            maxLines: 1,
+            style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 10),
+          if (_todaySessions.isEmpty)
+            Text(_t('noSessionsToday'), style: const TextStyle(color: Colors.white38, fontSize: 12))
+          else
+            ..._todaySessions.asMap().entries.map((entry) {
+              final int idx = entry.key;
+              final Map<String, dynamic> s = entry.value;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)}",
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Text(
+                      "${s["minutes"]}${_t('minutesUnitSuffix')}",
+                      style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [⑤⑦번] "종합 리포트" 버튼용 실시간 콘텐츠 생성 함수.
+  // 기존의 "이규현" 가짜 고정 텍스트(summaryReportBody)를 대체하며, 오늘 실제 학습 세션과
+  // 실제 목표 달성도를 반영한 진단 피드백을 실시간으로 구성합니다.
+  Future<String> _buildTotalReportContent() async {
+    if (_todaySessions.isEmpty) {
+      return _t('noSessionsToday');
+    }
+
+    final buffer = StringBuffer();
+    buffer.write(DkeLang.current == 'KO' ? '[종합 리포트]\n\n' : '[Total Report]\n\n');
+
+    for (int i = 0; i < _todaySessions.length; i++) {
+      final s = _todaySessions[i];
+      final DateTime ts = s["timestamp"] as DateTime;
+      final String timeStr = "${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}";
+      buffer.write(DkeLang.current == 'KO'
+          ? "${i + 1}${_t('sessionOrdinal')}\n"
+          : "${_t('sessionOrdinal')} ${i + 1}\n");
+      buffer.write("• ${_subjectName(s["subject"] as String)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n");
+    }
+
+    final String topSubject = _todaySessions.first["subject"] as String;
+    final String diagnosis = await _generateOrReuseDiagnosis(
+      type: "일일종합",
+      score: _realGoalAttainmentPercent.toDouble(),
+      subject: topSubject,
+      tier: AiTier.light,
+    );
+    buffer.write(DkeLang.current == 'KO' ? '[종합 진단 피드백]\n' : '[Overall Diagnostic Feedback]\n');
+    buffer.write(diagnosis);
+
+    return buffer.toString();
+  }
+
+  // 🆕 [⑤⑦번] "상세분석기록" 버튼용 실시간 콘텐츠 생성 함수.
+  // 기존의 "이규현" 가짜 고정 텍스트(detailedReportBody)를 대체하며, 오늘 실제 학습시간과
+  // 가장 많이 학습한 과목을 반영한 상세 진단을 실시간으로 구성합니다.
+  Future<String> _buildDetailedReportContent() async {
+    if (_todaySessions.isEmpty) {
+      return _t('noSessionsToday');
+    }
+
+    final int totalTodayMin = _todaySessions.fold<int>(0, (sum, s) => sum + (s["minutes"] as int));
+    final String topSubject = _todaySessions.first["subject"] as String;
+
+    final buffer = StringBuffer();
+    buffer.write(DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n');
+    buffer.write("• ${_t('studyTime')}: $totalTodayMin${_t('minutesUnitSuffix')}\n");
+    buffer.write("• ${_t('mostStudiedSubject').replaceAll('\n', '')}: ${_subjectName(topSubject)}\n\n");
+
+    final String diagnosis = await _generateOrReuseDiagnosis(
+      type: "일일상세",
+      score: _realGoalAttainmentPercent.toDouble(),
+      subject: topSubject,
+      tier: AiTier.pro,
+    );
+    buffer.write(diagnosis);
+
+    return buffer.toString();
+  }
 
   // 🆕 [데이터 연결] 일일 목표 학습시간(분) — "목표 달성도"와 "어제 대비 오늘" 계산의 기준값.
   // 지금은 200분(약 3시간)으로 설정. 나중에 마이페이지 등에서 유저가 직접 설정하게 바꿀 수도 있음.

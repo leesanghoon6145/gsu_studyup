@@ -294,6 +294,10 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
       'EN': 'Mid Unit', 'KO': '중단원', 'JA': '中単元', 'ZH': '中单元', 'FR': 'Sous-unité', 'DE': 'Unterkapitel',
       'RU': 'Подраздел', 'AR': 'الوحدة الفرعية', 'HI': 'मध्य इकाई', 'VI': 'Chương nhỏ', 'ES': 'Subunidad', 'TH': 'บทย่อย',
     },
+    'multiSelectHint': {
+      'EN': 'multi-select', 'KO': '복수 선택 가능', 'JA': '複数選択可', 'ZH': '可多选', 'FR': 'choix multiple', 'DE': 'Mehrfachauswahl',
+      'RU': 'можно выбрать несколько', 'AR': 'اختيار متعدد', 'HI': 'बहु-चयन', 'VI': 'chọn nhiều', 'ES': 'selección múltiple', 'TH': 'เลือกได้หลายข้อ',
+    },
     'mockMonth': {
       'EN': 'MOCK EXAM MONTH', 'KO': '몇 월 모의고사', 'JA': '模試の月', 'ZH': '模拟考试月份', 'FR': 'MOIS DE L\'EXAMEN BLANC',
       'DE': 'MONAT DER PROBEPRÜFUNG', 'RU': 'МЕСЯЦ ПРОБНОГО ЭКЗАМЕНА', 'AR': 'شهر الاختبار التجريبي', 'HI': 'मॉक परीक्षा का महीना',
@@ -319,6 +323,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     'gradeWord': {
       'EN': 'Grade', 'KO': '학년', 'JA': '学年', 'ZH': '年级', 'FR': 'Niveau', 'DE': 'Klasse',
       'RU': 'Класс', 'AR': 'الصف', 'HI': 'कक्षा', 'VI': 'Lớp', 'ES': 'Grado', 'TH': 'ชั้นปี',
+    },
+    'semesterLabel': {
+      'EN': 'SEMESTER', 'KO': '학기', 'JA': '学期', 'ZH': '学期', 'FR': 'SEMESTRE', 'DE': 'SEMESTER',
+      'RU': 'СЕМЕСТР', 'AR': 'الفصل الدراسي', 'HI': 'सेमेस्टर', 'VI': 'HỌC KỲ', 'ES': 'SEMESTRE', 'TH': 'ภาคเรียน',
+    },
+    'semester1': {
+      'EN': 'Semester 1', 'KO': '1학기', 'JA': '1学期', 'ZH': '第一学期', 'FR': 'Semestre 1', 'DE': 'Semester 1',
+      'RU': 'Семестр 1', 'AR': 'الفصل 1', 'HI': 'सेमेस्टर 1', 'VI': 'Học kỳ 1', 'ES': 'Semestre 1', 'TH': 'ภาคเรียนที่ 1',
+    },
+    'semester2': {
+      'EN': 'Semester 2', 'KO': '2학기', 'JA': '2学期', 'ZH': '第二学期', 'FR': 'Semestre 2', 'DE': 'Semester 2',
+      'RU': 'Семестр 2', 'AR': 'الفصل 2', 'HI': 'सेमेस्टर 2', 'VI': 'Học kỳ 2', 'ES': 'Semestre 2', 'TH': 'ภาคเรียนที่ 2',
     },
     'incorrectNoteStatus': {
       'EN': 'INCORRECT NOTE STATUS', 'KO': '오답노트 상태', 'JA': '誤答ノート状態', 'ZH': '错题本状态', 'FR': 'STATUT DU CAHIER D\'ERREURS',
@@ -1052,8 +1068,10 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     // 🆕 [연동 2026-08-10] 타이머에서 [평가] 기록 시, 그 점수를 '나의 성적 기록'(gke_exam_records,
     // 주평가/단원평가/중간고사/기말고사/모의고사)에도 자동으로 반영하기 위한 추가 상태값들.
     String? selectedExamCategory; // 주평가/단원평가/중간고사/기말고사/모의고사
-    int? selectedBigUnitNum; // 단원평가일 때만 사용 (1~4)
-    int? selectedMidUnitNum; // 단원평가일 때만 사용 (1~4)
+    // 🆕 [요청 #3 2026-09-03] 대단원/중단원 모두 다중 선택 가능하도록 int? -> Set<int>로 전환
+    // (member_achievement_screen.dart의 _inputBigUnits/_inputMidUnits와 동일한 패턴)
+    Set<int> selectedBigUnitNums = {}; // 단원평가일 때만 사용 (1~12로 확장)
+    Set<int> selectedMidUnitNums = {}; // 단원평가일 때만 사용 (1~4 유지)
     int selectedGradeNum = 2; // 학년 (기본값 2학년 - member_achievement_screen.dart 기본값과 동일)
     final TextEditingController mockMonthController = TextEditingController(); // 모의고사일 때만 사용
     final TextEditingController mockRankController = TextEditingController(); // 모의고사일 때만 사용
@@ -1072,12 +1090,27 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     }
 
     // 🆕 [연동] 3~8월=1학기, 9~2월=2학기로 자동 판별 (한국 학사일정 기준 근사치).
+    // 🆕 [요청 #3] 이 자동계산 값은 이제 "학기 선택 UI"의 기본값으로만 사용되고,
+    // 실제 저장 시에는 selectedSemesterLabel(사용자가 직접 바꿀 수 있는 값)을 사용함.
     String computeSemesterLabel(DateTime now) {
       return (now.month >= 3 && now.month <= 8) ? "1학기" : "2학기";
     }
 
-    int computeSemesterInt(DateTime now) {
-      return (now.month >= 3 && now.month <= 8) ? 1 : 2;
+    // 🆕 [요청 #3 2026-09-03] "학기" 선택 항목이 아예 없던 문제 수정.
+    // 학년(GRADE) 바로 아래에 1학기/2학기를 직접 선택할 수 있는 UI를 추가함.
+    // 기본값은 위 computeSemesterLabel()의 자동 판별값으로 미리 채워두되, 사용자가 바꿀 수 있음.
+    String selectedSemesterLabel = computeSemesterLabel(DateTime.now());
+
+    // 🆕 [요청 #3/#4 2026-09-03] member_achievement_screen.dart의 다중선택 라벨 조합 로직과
+    // 같은 목적(대단원/중단원 여러 개 선택)을 갖되, 그 화면의 필터링 로직(rec.unit.contains(bu))과
+    // 100% 확실히 호환되도록 범위 압축("대단원 1~대단원 3") 없이 선택된 번호를 전부 개별
+    // 나열합니다("대단원 1, 대단원 2, 대단원 3"). 압축 표기를 쓰면 중간 번호(예: 2)가 문자열에
+    // 그대로 남지 않아서, 학부모/학생이 "대단원 2"만 필터링했을 때 이 기록이 조회되지 않는
+    // 문제가 생길 수 있어 안전한 방식으로 저장합니다.
+    String formatUnitLabelForSave(Set<int> selected, String unitWord) {
+      if (selected.isEmpty) return "";
+      final List<int> nums = selected.toList()..sort();
+      return nums.map((n) => "$unitWord $n").join(", ");
     }
 
     // 🆕 [연동] 시험 유형별로 member_achievement_screen.dart가 저장/조회에 사용하는 것과
@@ -1089,13 +1122,17 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         case '주평가':
           return "${now.year}년 ${now.month}월 ${computeWeekOfMonthLabel(now)}";
         case '단원평가':
-          return "대단원 ${selectedBigUnitNum ?? 1} (중단원 ${selectedMidUnitNum ?? 1})";
+          return "${formatUnitLabelForSave(selectedBigUnitNums, '대단원')} (${formatUnitLabelForSave(selectedMidUnitNums, '중단원')})";
         case '모의고사':
           return "${mockMonthController.text.trim()} 모의고사 (${mockRankController.text.trim()})";
         default: // 중간고사, 기말고사
-          return computeSemesterLabel(now);
+          return selectedSemesterLabel; // 🆕 [요청 #3] 자동계산 대신 사용자가 선택한 학기 값을 그대로 사용
       }
     }
+
+    // 🆕 [요청 #3] 저장 시 학기 문자열("1학기"/"2학기")을 member_achievement_screen.dart와
+    // 동일한 정수(1/2) 형식으로 변환.
+    int semesterLabelToInt(String label) => label == '1학기' ? 1 : 2;
 
     // 🆕 [연동] member_achievement_screen.dart의 _ExamRecord.toJson()과 완전히 동일한 필드 구조로
     // gke_exam_records(SharedPreferences, 단일 JSON 배열 문자열)에 새 레코드를 이어붙여 저장.
@@ -1127,7 +1164,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'type': category,
         'grade': selectedGradeNum,
-        'semester': computeSemesterInt(DateTime.now()),
+        'semester': semesterLabelToInt(selectedSemesterLabel), // 🆕 [요청 #3] 사용자가 선택한 학기값 사용
         'date': DateTime.now().toIso8601String(),
         'subject': subject,
         'unit': buildExamUnitLabel(category),
@@ -1176,10 +1213,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                 (selectedRecordType == '강의' && selectedLectureSubType == '단원정리 및 문제해설');
 
             // 🆕 [연동 2026-08-10] "평가" 기록일 때 시험 유형 선택 + 유형별 상세 입력까지 필수로 검증.
+            // 🆕 [요청 #3] 단원평가는 이제 다중선택(Set)이므로 isNotEmpty로 검증.
             final bool examCategoryDetailFilled = selectedExamCategory == null
                 ? false
                 : (selectedExamCategory == '단원평가'
-                ? (selectedBigUnitNum != null && selectedMidUnitNum != null)
+                ? (selectedBigUnitNums.isNotEmpty && selectedMidUnitNums.isNotEmpty)
                 : (selectedExamCategory == '모의고사'
                 ? (mockMonthController.text.trim().isNotEmpty && mockRankController.text.trim().isNotEmpty)
                 : true));
@@ -1372,8 +1410,8 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                     setDialogState(() {
                                       selectedExamCategory = cat;
                                       // 시험 유형이 바뀌면 이전에 입력해둔 단원평가/모의고사 전용 값은 초기화
-                                      selectedBigUnitNum = null;
-                                      selectedMidUnitNum = null;
+                                      selectedBigUnitNums = {}; // 🆕 [요청 #3] 다중선택 Set 초기화
+                                      selectedMidUnitNums = {};
                                       mockMonthController.clear();
                                       mockRankController.clear();
                                     });
@@ -1389,48 +1427,60 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           ],
                         ),
 
-                        // 🆕 [연동] "단원평가" 선택 시에만 대단원/중단원 번호 선택 노출
+                        // 🆕 [요청 #3] "단원평가" 선택 시에만 대단원(1~12, 다중선택)/중단원(1~4, 다중선택) 노출
                         if (selectedExamCategory == '단원평가') ...[
                           const SizedBox(height: 16),
                           Column(
                             key: keyUnitDetail,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${_bi(_dlg['bigUnit']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['bigUnit']!)} $_required (${_bi(_dlg['multiSelectHint']!)})', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 6.0,
                                 runSpacing: 6.0,
-                                children: [1, 2, 3, 4].map((n) {
-                                  final bool isSel = selectedBigUnitNum == n;
+                                children: List.generate(12, (i) => i + 1).map((n) {
+                                  final bool isSel = selectedBigUnitNums.contains(n);
                                   return ChoiceChip(
                                     label: Text('${_koOnly(_dlg['bigUnit']!)} $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                     selected: isSel,
                                     selectedColor: brandGolden,
                                     backgroundColor: const Color(0xFF050B14),
                                     onSelected: (_) {
-                                      setDialogState(() => selectedBigUnitNum = n);
-                                      if (selectedMidUnitNum != null) scrollToNext(keyGrade);
+                                      setDialogState(() {
+                                        if (isSel) {
+                                          selectedBigUnitNums.remove(n);
+                                        } else {
+                                          selectedBigUnitNums.add(n);
+                                        }
+                                      });
+                                      if (selectedMidUnitNums.isNotEmpty) scrollToNext(keyGrade);
                                     },
                                   );
                                 }).toList(),
                               ),
                               const SizedBox(height: 12),
-                              Text('${_bi(_dlg['midUnit']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${_bi(_dlg['midUnit']!)} $_required (${_bi(_dlg['multiSelectHint']!)})', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               Wrap(
                                 spacing: 6.0,
                                 runSpacing: 6.0,
                                 children: [1, 2, 3, 4].map((n) {
-                                  final bool isSel = selectedMidUnitNum == n;
+                                  final bool isSel = selectedMidUnitNums.contains(n);
                                   return ChoiceChip(
                                     label: Text('${_koOnly(_dlg['midUnit']!)} $n', style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
                                     selected: isSel,
                                     selectedColor: brandGolden,
                                     backgroundColor: const Color(0xFF050B14),
                                     onSelected: (_) {
-                                      setDialogState(() => selectedMidUnitNum = n);
-                                      scrollToNext(keyGrade);
+                                      setDialogState(() {
+                                        if (isSel) {
+                                          selectedMidUnitNums.remove(n);
+                                        } else {
+                                          selectedMidUnitNums.add(n);
+                                        }
+                                      });
+                                      if (selectedBigUnitNums.isNotEmpty) scrollToNext(keyGrade);
                                     },
                                   );
                                 }).toList(),
@@ -1483,7 +1533,8 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                           ),
                         ],
 
-                        // 🆕 [연동] 시험 유형이 선택된 이후, 학년 선택 (grade 필드는 filter 매칭에 필요)
+                        // 🆕 [연동] 시험 유형이 선택된 이후, 학년 + 학기 선택
+                        // (grade/semester 필드는 member_achievement_screen.dart의 filter 매칭에 필요)
                         if (selectedExamCategory != null) ...[
                           const SizedBox(height: 16),
                           Column(
@@ -1504,6 +1555,30 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                                     backgroundColor: const Color(0xFF050B14),
                                     onSelected: (_) {
                                       setDialogState(() => selectedGradeNum = n);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                              // 🆕 [요청 #3 2026-09-03] 학년 옆에 학기(1학기/2학기) 선택 UI 신규 추가.
+                              // 기본값은 오늘 날짜 기준 자동 판별값이며, 필요 시 직접 변경 가능.
+                              const SizedBox(height: 12),
+                              Text('${_bi(_dlg['semesterLabel']!)} $_required', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6.0,
+                                runSpacing: 6.0,
+                                children: ['1학기', '2학기'].map((sem) {
+                                  final bool isSel = selectedSemesterLabel == sem;
+                                  final Map<String, Map<String, String>> semMap = {
+                                    '1학기': _dlg['semester1']!, '2학기': _dlg['semester2']!,
+                                  };
+                                  return ChoiceChip(
+                                    label: Text(_koOnly(semMap[sem]!), style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    selected: isSel,
+                                    selectedColor: brandGolden,
+                                    backgroundColor: const Color(0xFF050B14),
+                                    onSelected: (_) {
+                                      setDialogState(() => selectedSemesterLabel = sem);
                                       scrollToNext(needsIncorrectNoteField ? keyIncorrectNote : keyUnderstanding);
                                     },
                                   );
