@@ -11,6 +11,10 @@
 // 울리는 원인이 됐습니다. 그래서 앱의 진입점인 이 홈 화면에서부터 감시자를
 // 시작하도록 옮겼습니다(리마인더/약속 화면에서도 계속 start()를 호출하지만,
 // 싱글턴이라 중복 시작은 안전하게 무시됩니다).
+//
+// ✅ [2026-09-04 추가] SCHEDULE 섹션에 "운동(EXERCISE)" 메뉴 추가.
+// 탭하면 ExerciseTypeScreen(운동 종목 리스트)으로 이동. 캘린더/알림/일정분석과
+// 데이터가 연동되도록 exercise_data_service.dart를 공용 게이트웨이로 사용.
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -43,6 +47,7 @@ import 'weekly_report_screen.dart';
 import 'monthly_report_screen.dart';
 import 'yearly_report_screen.dart';
 import 'statistics_screen.dart';
+import 'exercise_type_screen.dart'; // 🆕 [2026-09-04 추가] 운동 종목 리스트 화면
 
 class GeneralPlannerHomeScreen extends StatefulWidget {
   const GeneralPlannerHomeScreen({super.key});
@@ -110,6 +115,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
               _MenuEntry('⏰', 'APPOINTMENT', '약속', () => _navigate(context, const AppointmentScreen())),
               _MenuEntry('📌', 'PROJECT', '프로젝트', () => _navigate(context, const ProjectScreen())),
               _MenuEntry('🔔', 'REMINDER', '알림', () => _navigate(context, const ReminderScreen())),
+              _MenuEntry('🏃', 'EXERCISE', '운동', () => _navigate(context, const ExerciseTypeScreen())), // 🆕 [2026-09-04 추가]
               _MenuEntry('📈', 'SCHEDULE ANALYSIS', '일정 분석', () => _navigate(context, const ScheduleAnalysisScreen())),
             ]),
             const SizedBox(height: 30),
@@ -164,12 +170,13 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     'TIMELINE': {'JA': 'タイムライン', 'ZH': '时间线', 'FR': 'Chronologie', 'DE': 'Zeitleiste', 'RU': 'Хронология', 'AR': 'الجدول الزمني', 'HI': 'समयरेखा', 'VI': 'Dòng thời gian', 'ES': 'Cronología', 'TH': 'ไทม์ไลน์'},
     'GOAL': {'JA': '目標', 'ZH': '目标', 'FR': 'Objectif', 'DE': 'Ziel', 'RU': 'Цель', 'AR': 'الهدف', 'HI': 'लक्ष्य', 'VI': 'Mục tiêu', 'ES': 'Objetivo', 'TH': 'เป้าหมาย'},
     'REPORT': {'JA': 'レポート', 'ZH': '报告', 'FR': 'Rapport', 'DE': 'Bericht', 'RU': 'Отчёт', 'AR': 'التقرير', 'HI': 'रिपोर्ट', 'VI': 'Báo cáo', 'ES': 'Informe', 'TH': 'รายงาน'},
-    // 일정 6개
+    // 일정 7개 (🆕 운동 추가)
     'CALENDAR': {'JA': 'カレンダー', 'ZH': '日历', 'FR': 'Calendrier', 'DE': 'Kalender', 'RU': 'Календарь', 'AR': 'التقويم', 'HI': 'कैलेंडर', 'VI': 'Lịch', 'ES': 'Calendario', 'TH': 'ปฏิทิน'},
     "TODAY'S SCHEDULE": {'JA': '今日の予定', 'ZH': '今日日程', 'FR': "Programme du jour", 'DE': 'Heutiger Zeitplan', 'RU': 'Расписание на сегодня', 'AR': 'جدول اليوم', 'HI': 'आज का शेड्यूल', 'VI': 'Lịch hôm nay', 'ES': 'Horario de hoy', 'TH': 'ตารางวันนี้'},
     'APPOINTMENT': {'JA': '約束', 'ZH': '约会', 'FR': 'Rendez-vous', 'DE': 'Termin', 'RU': 'Встреча', 'AR': 'موعد', 'HI': 'नियुक्ति', 'VI': 'Cuộc hẹn', 'ES': 'Cita', 'TH': 'นัดหมาย'},
     'PROJECT': {'JA': 'プロジェクト', 'ZH': '项目', 'FR': 'Projet', 'DE': 'Projekt', 'RU': 'Проект', 'AR': 'مشروع', 'HI': 'परियोजना', 'VI': 'Dự án', 'ES': 'Proyecto', 'TH': 'โครงการ'},
     'REMINDER': {'JA': 'リマインダー', 'ZH': '提醒', 'FR': 'Rappel', 'DE': 'Erinnerung', 'RU': 'Напоминание', 'AR': 'تذكير', 'HI': 'रिमाइंडर', 'VI': 'Nhắc nhở', 'ES': 'Recordatorio', 'TH': 'การแจ้งเตือน'},
+    'EXERCISE': {'JA': '運動', 'ZH': '运动', 'FR': 'Exercice', 'DE': 'Sport', 'RU': 'Упражнение', 'AR': 'تمرين', 'HI': 'व्यायाम', 'VI': 'Tập thể dục', 'ES': 'Ejercicio', 'TH': 'ออกกำลังกาย'}, // 🆕 [2026-09-04 추가]
     'SCHEDULE ANALYSIS': {'JA': 'スケジュール分析', 'ZH': '日程分析', 'FR': 'Analyse du planning', 'DE': 'Zeitplananalyse', 'RU': 'Анализ расписания', 'AR': 'تحليل الجدول', 'HI': 'शेड्यूल विश्लेषण', 'VI': 'Phân tích lịch trình', 'ES': 'Análisis de horario', 'TH': 'วิเคราะห์ตารางเวลา'},
     // 타임라인 5개
     "TODAY'S TIMELINE": {'JA': '今日のタイムライン', 'ZH': '今日时间线', 'FR': "Chronologie du jour", 'DE': 'Heutige Zeitleiste', 'RU': 'Хронология на сегодня', 'AR': 'الجدول الزمني لليوم', 'HI': 'आज की समयरेखा', 'VI': 'Dòng thời gian hôm nay', 'ES': 'Cronología de hoy', 'TH': 'ไทม์ไลน์วันนี้'},

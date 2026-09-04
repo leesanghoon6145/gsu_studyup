@@ -3,6 +3,9 @@
 // 오늘의 완료율(캘린더+타임라인 실데이터), 분류별 실제 사용 시간, 어제 대비
 // 변화, 오늘 달성한 목표 개수를 보여줍니다. 전부 실제 저장된 데이터로만
 // 계산되며, 기록이 없으면 가짜 숫자 대신 빈 상태 안내를 보여줍니다.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 오늘 운동 요약(세션 수/총 시간/
+// 평균 RPE) 카드를 추가. 완료율 등 기존 지표 계산 방식은 그대로 유지.
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -10,6 +13,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'report_data_service.dart';
 import 'bilingual_text.dart';
 import 'ai_comment_service.dart'; // 🆕 [AI 코치 코멘트 MVP]
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
+import 'exercise_theme.dart' show ExerciseTheme; // 🆕 [운동 연동] 종목 아이콘 매핑 재사용
 
 class DailyReportScreen extends StatefulWidget {
   const DailyReportScreen({super.key});
@@ -27,6 +33,8 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
   ReportSummary? _yesterday;
   int _achievedGoalCount = 0;
   int _completedProjectCount = 0; // 🆕 [프로젝트 연동]
+  List<ExerciseRecord> _todayExercises = []; // 🆕 [운동 연동]
+  Map<String, ExerciseType> _exerciseTypesById = {}; // 🆕 [운동 연동]
   AiComment? _aiComment; // 🆕 [AI 코치] 눌러서 불러온 오늘의 코멘트
   List<AiComment> _aiHistory = []; // 🆕 [AI 코치] 최근 기록 (날짜별로 계속 쌓이는지 바로 확인용)
   bool _showAiHistory = false;
@@ -48,12 +56,22 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     final projectCount = await ReportDataService.countProjectsCompletedInRange(now, now);
     final achievedCount = await ReportDataService.countAchievementsInRange(now, now);
 
+    // 🆕 [운동 연동] 오늘 운동 기록 + 종목(아이콘/이름 조회용) 로드
+    final exerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
+    final typesById = {for (final t in exerciseTypes) t.id: t};
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final todayExercises = allExerciseRecords.where((r) {
+      return r.date.year == now.year && r.date.month == now.month && r.date.day == now.day;
+    }).toList();
+
     if (!mounted) return;
     setState(() {
       _today = today;
       _yesterday = yesterdaySummary;
       _achievedGoalCount = achievedCount;
       _completedProjectCount = projectCount;
+      _todayExercises = todayExercises; // 🆕 [운동 연동]
+      _exerciseTypesById = typesById; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -110,6 +128,9 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     const weekdayNames = ['월', '화', '수', '목', '금', '토', '일'];
     final String todayDisplay = '${now.month}/${now.day} (${weekdayNames[now.weekday - 1]})';
 
+    // 🆕 [운동 연동] 일정/타임라인 기록이 없어도 오늘 운동 기록만 있으면 빈 상태를 건너뛴다.
+    final bool hasReportableData = (_today != null && _today!.hasData) || _todayExercises.isNotEmpty;
+
     return Scaffold(
       backgroundColor: _pageBg,
       appBar: AppBar(
@@ -124,7 +145,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
-          : (_today == null || !_today!.hasData)
+          : !hasReportableData
           ? Center(
         child: BiInline(
           en: 'No schedule or timeline records for today.\nAdd and complete some to see your report.', ko: '오늘 등록된 일정이나 타임라인이 없습니다.\n일정을 추가하고 완료해 보세요.', color: Colors.white38, fontSize: 13, textAlign: TextAlign.center,
@@ -147,16 +168,26 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         children: [
           Text(todayDisplay, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _buildCompletionCard(),
-          const SizedBox(height: 16),
+          if (_today != null && _today!.hasData) ...[
+            _buildCompletionCard(),
+            const SizedBox(height: 16),
+          ],
+          if (_todayExercises.isNotEmpty) ...[
+            _buildExerciseSummaryCard(), // 🆕 [운동 연동]
+            const SizedBox(height: 16),
+          ],
           _buildGoalAchievedCard(),
           const SizedBox(height: 16),
           _buildProjectCompletedCard(),
           const SizedBox(height: 16),
-          _buildCategoryCard(),
-          const SizedBox(height: 16),
-          _buildCommentCard(),
-          const SizedBox(height: 16),
+          if (_today != null && _today!.hasData) ...[
+            _buildCategoryCard(),
+            const SizedBox(height: 16),
+          ],
+          if (_today != null && _today!.hasData) ...[
+            _buildCommentCard(),
+            const SizedBox(height: 16),
+          ],
           _buildAiCoachCard(), // 🆕 [AI 코치 MVP]
         ],
       ),
@@ -195,6 +226,81 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // 🆕 [운동 연동] 오늘의 운동 요약 카드 - 세션 수 / 총 시간 / 평균 RPE + 종목 아이콘 나열
+  Widget _buildExerciseSummaryCard() {
+    final totalMinutes = _todayExercises.fold<int>(0, (sum, r) => sum + r.durationMin);
+    final rpeValues = _todayExercises.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
+    final avgRpe = rpeValues.isEmpty ? null : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BiInline(
+                  en: "Today's Exercise", ko: '오늘의 운동', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                  translations: const {'JA': '今日の運動', 'ZH': '今日运动', 'FR': "Exercice du jour", 'DE': 'Heutiges Training', 'RU': 'Тренировка сегодня', 'AR': 'تمرين اليوم', 'HI': 'आज का व्यायाम', 'VI': 'Tập luyện hôm nay', 'ES': 'Ejercicio de hoy', 'TH': 'ออกกำลังกายวันนี้'},
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _exerciseStat('SESSIONS', '세션', '${_todayExercises.length}')),
+              Expanded(child: _exerciseStat('MINUTES', '시간(분)', '$totalMinutes')),
+              Expanded(child: _exerciseStat('AVG RPE', '평균 강도', avgRpe == null ? '-' : avgRpe.toStringAsFixed(1))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _todayExercises.map((r) {
+              final type = _exerciseTypesById[r.exerciseTypeId];
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _pageBg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _brandGolden.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(ExerciseTheme.iconForType(r.exerciseTypeId), color: _brandGolden, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${type?.name ?? '운동'} · ${r.durationMin}min',
+                      style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _exerciseStat(String en, String ko, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(color: _brandGolden, fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        BiInline(en: en, ko: ko, color: Colors.white54, fontSize: 10),
+      ],
     );
   }
 
@@ -367,9 +473,6 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                   Text(_aiComment!.textEn, style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 12.5, height: 1.5)),
                   const SizedBox(height: 6),
                   Text(_aiComment!.textKo, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.5)),
-                  // 🆕 [10개국어 확장 참고] AI 코멘트 본문 자체는 아직 규칙기반 생성기가
-                  // 영/한만 만들기 때문에 외국어 자동 번역은 지원하지 않습니다.
-                  // (실제 문장 생성 로직이 10개국어를 만들도록 확장되면 그때 연결)
                   const SizedBox(height: 8),
                   BiInline(
                     en: 'Generated: ${_aiComment!.generatedAt}', ko: '생성됨: ${_aiComment!.generatedAt}', color: Colors.white24, fontSize: 10,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'family_link_service.dart'; // 🆕 [학부모 가시성 확보 2026-09-04] 성적 데이터를 Firestore에도 함께 올리기 위함
 
 /// ============================================================================
 /// [GKE StudyUp] 성적관리 (Grade Management) 데이터 모델 + 저장/계산 서비스
@@ -257,6 +258,26 @@ class GradeManagementService {
   }
 
   // ------------------------------------------------------------------------
+  // 🆕 [학부모 가시성 확보 2026-09-04] Firestore 동기화
+  // - 성적관리 데이터는 세션/평가 기록처럼 이어붙이는 로그가 아니라 "현재 전체 스냅샷"이라,
+  //   추가/수정/삭제/이름변경 등 어떤 변경이든 전체를 다시 읽어서 통째로 덮어쓰는 방식으로 동기화합니다.
+  // - 아직 학부모 화면(ParentGradeManagementWidget)이 이 필드를 읽어서 보여주는 부분은
+  //   별도 작업이 필요합니다. 여기서는 "서버에 데이터를 올리는 것"까지만 담당합니다.
+  // ------------------------------------------------------------------------
+  static Future<void> _syncToFirestore() async {
+    try {
+      final records = await loadAll();
+      final configs = await loadAllConfigs();
+      await FamilyLinkService.pushGradeManagementSnapshot(
+        records: records.map((r) => r.toJson()).toList(),
+        configs: configs.map((c) => c.toJson()).toList(),
+      );
+    } catch (e) {
+      // 실패해도 로컬 저장은 이미 끝난 상태라 학생 화면/데이터에는 영향 없음. 조용히 무시.
+    }
+  }
+
+  // ------------------------------------------------------------------------
   // 과목 설정 (연 1회 입력)
   // ------------------------------------------------------------------------
   static Future<List<SubjectConfig>> loadAllConfigs() async {
@@ -308,6 +329,8 @@ class GradeManagementService {
     await _recalculateRecordsForSubject(
       schoolLevel: config.schoolLevel, grade: config.grade, semester: config.semester, subject: config.subject, config: config,
     );
+
+    await _syncToFirestore(); // 🆕 [학부모 가시성 확보] 설정 변경 + 재계산 결과를 Firestore에도 반영
   }
 
   static Future<void> _recalculateRecordsForSubject({
@@ -374,6 +397,7 @@ class GradeManagementService {
     final DateTime now = DateTime.now();
 
     final all = await loadAll();
+    GradeRecord result;
     if (existingId != null) {
       final idx = all.indexWhere((r) => r.id == existingId);
       if (idx != -1) {
@@ -387,6 +411,7 @@ class GradeManagementService {
         );
         all[idx] = updated;
         await _saveAll(all);
+        await _syncToFirestore(); // 🆕 [학부모 가시성 확보]
         return updated;
       }
     }
@@ -400,13 +425,16 @@ class GradeManagementService {
     );
     all.add(newRecord);
     await _saveAll(all);
-    return newRecord;
+    await _syncToFirestore(); // 🆕 [학부모 가시성 확보]
+    result = newRecord;
+    return result;
   }
 
   static Future<void> deleteRecord(String id) async {
     final all = await loadAll();
     all.removeWhere((r) => r.id == id);
     await _saveAll(all);
+    await _syncToFirestore(); // 🆕 [학부모 가시성 확보]
   }
 
   static List<GradeRecord> filterBy(List<GradeRecord> records, {
@@ -557,6 +585,8 @@ class GradeManagementService {
       }
     }
     await _saveAllConfigs(allConfigs);
+
+    await _syncToFirestore(); // 🆕 [학부모 가시성 확보] 과목명 변경 반영
   }
 
   // ------------------------------------------------------------------------

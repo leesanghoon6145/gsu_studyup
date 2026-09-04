@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [자녀 선택 UI] DocumentSnapshot 타입 참조용
 
 import 'parent_live_status_widget.dart';
 import 'parent_detailed_analysis_widget.dart';
@@ -9,6 +10,7 @@ import 'parent_grade_management_widget.dart'; // 🆕 [성적 관리] 학부모 
 import '../services/parent_data_service.dart';
 import '../services/diagnosis_service.dart'; // 🆕 [요청] 300자 이상 AI 진단문 + 재사용 규칙 서비스
 import '../services/family_link_service.dart'; // 🆕 [자녀 추가] 가족 연결 코드 서비스
+import '../services/grade_management_service.dart'; // 🆕 [성적 관리] GradeRecord/SubjectConfig 타입 참조용
 import '../global_lang.dart';
 
 // ---------------------------------------------------------------------------
@@ -172,6 +174,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   bool _loadingLinkedChildren = true;
   final TextEditingController _addChildCodeController = TextEditingController();
 
+  // 🆕 [자녀 선택 UI + Firestore 연동] 상단 자녀 칩 중 현재 선택된 자녀 코드.
+  // null이면 "연결된 자녀 없음" 상태 - 이때는 기존처럼 이 기기의 로컬 데이터를 그대로 보여줌
+  // (기존 단일기기 사용자 하위호환을 위해 유지).
+  String? _selectedChildCode;
+
   // 🆕 [버그 수정] 주평가 전용 년/월/주차 상태 신설 - 기존엔 단원평가용 변수(_selectedBigUnit/
   // _selectedMidUnit)를 그대로 빌려쓰고 있어서 월/주차 선택이 서로 충돌하고 필터링도 안 됐음.
   // 오늘 날짜를 기준으로 자동 초기화(member_achievement_screen.dart의 주차 계산과 동일한 방식).
@@ -257,6 +264,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     setState(() {
       _linkedChildCodes = codes;
       _loadingLinkedChildren = false;
+      // 🆕 [자녀 선택 UI] 연결된 자녀가 있고 아직 선택된 자녀가 없으면 첫 번째 자녀를 기본 선택
+      if (_selectedChildCode == null && codes.isNotEmpty) {
+        _selectedChildCode = codes.first;
+      }
     });
   }
 
@@ -344,38 +355,50 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     );
   }
 
+  // 🆕 [자녀 선택 UI] 칩을 탭하면 해당 자녀가 선택되어, 실시간현황 탭이 이 자녀의
+  // Firestore 데이터를 보여주도록 전환됩니다. 선택된 칩은 골드 테두리로 강조 표시.
   Widget _buildChildChip(String code) {
-    return StreamBuilder(
-      stream: FamilyLinkService.watch(code),
-      builder: (context, snapshot) {
-        final data = (snapshot.data as dynamic)?.data();
-        final totalStars = data?['totalStars'];
-        final level = data?['level'];
-        return Container(
-          width: 130,
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: premiumCardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: brandGolden.withValues(alpha: 0.4)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('코드 $code', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 9)),
-              const SizedBox(height: 4),
-              Text(
-                totalStars != null ? '⭐ $totalStars개' : '데이터 없음',
-                style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              if (level != null)
-                Text('레벨 $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
-            ],
-          ),
-        );
-      },
+    final bool isSelected = _selectedChildCode == code;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedChildCode = code),
+      child: StreamBuilder(
+        stream: FamilyLinkService.watch(code),
+        builder: (context, snapshot) {
+          final data = (snapshot.data as dynamic)?.data();
+          final totalStars = data?['totalStars'];
+          final level = data?['level'];
+          final String? studentName = data?['studentName'] as String?;
+          return Container(
+            width: 130,
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? brandGolden.withValues(alpha: 0.15) : premiumCardBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: brandGolden.withValues(alpha: isSelected ? 1.0 : 0.4), width: isSelected ? 1.6 : 1.0),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  studentName != null && studentName.isNotEmpty ? studentName : '코드 $code',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.notoSansKr(color: isSelected ? brandGolden : Colors.white38, fontSize: isSelected ? 11 : 9, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  totalStars != null ? '⭐ $totalStars개' : '데이터 없음',
+                  style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                if (level != null)
+                  Text('레벨 $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -460,28 +483,34 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   }
 
   // 🆕 [실데이터 연동] 오늘 세션 목록 + 실제 AI 종합 총평(150~200자, DiagnosisService)을 함께 보여줍니다.
-  Future<String> _buildSummaryReportText() async {
-    if (_todaySessions.isEmpty) {
+  // 🆕 [자녀 선택 UI] 매개변수화된 버전(_buildSummaryReportTextFor)에 위임 - 로컬 모드는 자신의
+  // state(_realChildName/_todaySessions/_todayTotalMinutes)를 그대로 넘기므로 동작 변경 없음.
+  Future<String> _buildSummaryReportText() =>
+      _buildSummaryReportTextFor(_realChildName, _todaySessions, _todayTotalMinutes);
+
+  Future<String> _buildSummaryReportTextFor(
+      String childName, List<ParentSessionRecord> todaySessions, int todayTotalMinutes) async {
+    if (todaySessions.isEmpty) {
       return _biLong(kNoSessionTodayMap);
     }
     final buffer = StringBuffer();
     buffer.writeln("${_t(kReportHeaderMap)}\n");
-    for (int i = 0; i < _todaySessions.length; i++) {
-      final rec = _todaySessions[i];
+    for (int i = 0; i < todaySessions.length; i++) {
+      final rec = todaySessions[i];
       final String periodLabel = _isNumberFirstLang ? "제${i + 1}${_t(kPeriodWordMap)}" : "${_t(kPeriodWordMap)} ${i + 1}";
       buffer.writeln("$periodLabel · ${rec.subject} · ${rec.durationMinutes}${_t(kMinutesUnitMap)} ${_t(kFocusCompletedMap)}");
       if (rec.recordType == '평가' && rec.score != null) {
         buffer.writeln("  ${_t(kScoreLabelMap)}: ${rec.score}");
       }
     }
-    buffer.writeln("\n${_t(kTodayTotalTimeMap)}: $_todayTotalMinutes${_t(kMinutesUnitMap)}");
+    buffer.writeln("\n${_t(kTodayTotalTimeMap)}: $todayTotalMinutes${_t(kMinutesUnitMap)}");
 
     // 🆕 [요청] 오늘 학습한 과목 전체를 종합한 150~200자 AI 총평을 별도 문단으로 추가
-    final int subjectCount = _todaySessions.map((r) => r.subject).toSet().length;
+    final int subjectCount = todaySessions.map((r) => r.subject).toSet().length;
     final String dailySummary = await DiagnosisService.getDailySummary(
-      personKey: 'student_$_realChildName',
+      personKey: 'student_$childName',
       subjectCount: subjectCount,
-      totalMinutes: _todayTotalMinutes,
+      totalMinutes: todayTotalMinutes,
     );
     buffer.writeln("\n${_t(kTodaySummaryHeaderMap)}");
     buffer.writeln(dailySummary);
@@ -491,14 +520,17 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
 
   // 🆕 [버그 수정] 기존엔 가장 최근 세션 1건만 보여줬음 -> 오늘 학습한 모든 세션을
   // 제1교시, 제2교시... 순서대로 전부 나열하도록 수정 (요청사항)
-  String _buildDetailedAnalysisText() {
-    if (_todaySessions.isEmpty) {
+  // 🆕 [자녀 선택 UI] 매개변수화된 버전(_buildDetailedAnalysisTextFor)에 위임
+  String _buildDetailedAnalysisText() => _buildDetailedAnalysisTextFor(_todaySessions);
+
+  String _buildDetailedAnalysisTextFor(List<ParentSessionRecord> todaySessions) {
+    if (todaySessions.isEmpty) {
       return _t(kNoDetailTodayMap);
     }
     final buffer = StringBuffer();
     buffer.writeln("${_t(kDetailHeaderMap)}\n");
-    for (int i = 0; i < _todaySessions.length; i++) {
-      final rec = _todaySessions[i];
+    for (int i = 0; i < todaySessions.length; i++) {
+      final rec = todaySessions[i];
       final String periodLabel = _isNumberFirstLang ? "제${i + 1}${_t(kPeriodWordMap)}" : "${_t(kPeriodWordMap)} ${i + 1}";
       buffer.writeln("■ $periodLabel · ${rec.subject} (${_recordTypeLabel(rec.recordType)})");
       buffer.writeln("  ${_t(kDetailContentLabelMap)}: ${rec.details.isNotEmpty ? rec.details : _t(kNoRecordMap)}");
@@ -606,6 +638,500 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     );
   }
 
+  // 🆕 [정리] 대단원/중단원 토글 로직을 공용 메서드로 분리 - 로컬 모드/Firestore 모드
+  // 양쪽의 ParentEvaluationAnalysisWidget 인스턴스가 동일하게 재사용합니다.
+  void _toggleBigUnit(String unit) {
+    setState(() {
+      if (_selectedBigUnits.contains(unit)) {
+        if (_selectedBigUnits.length > 1) _selectedBigUnits.remove(unit);
+      } else {
+        _selectedBigUnits.add(unit);
+      }
+    });
+  }
+
+  void _toggleMidUnit(String unit) {
+    setState(() {
+      if (_selectedMidUnits.contains(unit)) {
+        if (_selectedMidUnits.length > 1) _selectedMidUnits.remove(unit);
+      } else {
+        _selectedMidUnits.add(unit);
+      }
+    });
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] Firestore 문서의 sessionHistory 배열을
+  // ParentSessionRecord 리스트로 파싱 (로컬 파싱 로직과 동일한 모델을 그대로 재사용)
+  List<ParentSessionRecord> _parseSessionHistory(Map<String, dynamic> data) {
+    final List<dynamic> raw = (data['sessionHistory'] as List<dynamic>?) ?? [];
+    final List<ParentSessionRecord> list = [];
+    for (final e in raw) {
+      try {
+        list.add(ParentSessionRecord.fromJson(Map<String, dynamic>.from(e as Map)));
+      } catch (_) {
+        // 손상된 기록 1건은 건너뛰고 나머지는 계속 집계
+      }
+    }
+    list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return list;
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] Firestore 문서의 examRecords 배열을
+  // ParentExamRecord 리스트로 파싱
+  List<ParentExamRecord> _parseExamRecords(Map<String, dynamic> data) {
+    final List<dynamic> raw = (data['examRecords'] as List<dynamic>?) ?? [];
+    final List<ParentExamRecord> list = [];
+    for (final e in raw) {
+      try {
+        list.add(ParentExamRecord.fromJson(Map<String, dynamic>.from(e as Map)));
+      } catch (_) {}
+    }
+    return list;
+  }
+
+  bool _isSameDateHelper(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+  List<ParentSessionRecord> _todaySessionsFrom(List<ParentSessionRecord> all) {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    return all.where((r) => !r.timestamp.isBefore(start)).toList();
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] ParentDataService.loadSubjectAggregates()와
+  // 동일한 집계 로직을 Firestore에서 받아온 세션 리스트에 대해 그대로 적용
+  // (로컬 SharedPreferences 대신 이미 메모리에 있는 리스트를 입력으로 받는 순수 함수 버전)
+  List<Map<String, dynamic>> _computeSubjectAggregatesFrom(List<ParentSessionRecord> all) {
+    final DateTime now = DateTime.now();
+    final DateTime todayStart = DateTime(now.year, now.month, now.day);
+    final DateTime weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+    final DateTime monthStart = DateTime(now.year, now.month, 1);
+    final DateTime yearStart = DateTime(now.year, 1, 1);
+
+    final Map<String, List<ParentSessionRecord>> bySubject = {};
+    for (final r in all) {
+      bySubject.putIfAbsent(r.subject, () => []).add(r);
+    }
+
+    final List<Map<String, dynamic>> aggregated = [];
+    bySubject.forEach((subject, sessions) {
+      bool studiedToday = false, studiedWeekly = false, studiedMonthly = false, studiedYearly = false;
+      int totalMinutesAllTime = 0;
+      final Set<String> activeDayKeys = {};
+
+      for (final s in sessions) {
+        final DateTime ts = s.timestamp;
+        if (!ts.isBefore(yearStart)) studiedYearly = true;
+        if (!ts.isBefore(monthStart)) studiedMonthly = true;
+        if (!ts.isBefore(weekStart)) studiedWeekly = true;
+        if (!ts.isBefore(todayStart)) studiedToday = true;
+        totalMinutesAllTime += s.durationMinutes;
+        activeDayKeys.add("${ts.year}-${ts.month}-${ts.day}");
+      }
+
+      if (!(studiedToday || studiedWeekly || studiedMonthly || studiedYearly)) return;
+
+      final int activeDays = activeDayKeys.isEmpty ? 1 : activeDayKeys.length;
+      final int avgMinutesPerActiveDay = (totalMinutesAllTime / activeDays).round();
+
+      aggregated.add({
+        "subject": subject,
+        "hasStudiedToday": studiedToday,
+        "hasStudiedWeekly": studiedWeekly,
+        "hasStudiedMonthly": studiedMonthly,
+        "hasStudiedYearly": studiedYearly,
+        "baseMinutes": avgMinutesPerActiveDay,
+      });
+    });
+    return aggregated;
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] 상세보기 탭 - 자녀가 선택되어 있으면 Firestore의
+  // sessionHistory를 기반으로 지난 일자 조회를, 없으면 기존처럼 로컬 데이터를 사용합니다.
+  Widget _buildDetailedAnalysisTabContent() {
+    if (_selectedChildCode == null) {
+      return ParentDetailedAnalysisWidget(
+        childName: _realChildName,
+        premiumCardBg: premiumCardBg,
+        brandGolden: brandGolden,
+        luxuryDarkBg: luxuryDarkBg,
+        buildCustomSectionTitle: _buildCustomSectionTitle,
+        onShowReportPopup: () async {
+          final String content = await _buildSummaryReportText();
+          if (!mounted) return;
+          _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
+        },
+        onShowDetailedAnalysisPopup: () => _showReportPopup(context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisText()),
+        selectedDate: _detailedViewDate,
+        onPreviousDay: _goToPreviousDetailDay,
+        onNextDay: _goToNextDetailDay,
+        isViewingToday: _isViewingToday,
+        sessionsForDate: _sessionsForDetailedDate,
+        todayTotalMinutes: _detailedDayTotalMinutes,
+        yesterdayTotalMinutes: _detailedDayBeforeMinutes,
+        weeklyAvgMinutesPerDay: _detailedWeeklyAvgMinutes,
+        strongestSubject: _strongestSubject,
+        weakestSubject: _weakestSubject,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(_selectedChildCode!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !(snapshot.data?.exists ?? false)) {
+          return const Center(child: CircularProgressIndicator(color: brandGolden));
+        }
+        final Map<String, dynamic> data = snapshot.data!.data() ?? {};
+        final String childName = (data['studentName'] as String?)?.trim().isNotEmpty == true
+            ? (data['studentName'] as String)
+            : '학습자';
+        final List<ParentSessionRecord> allSessions = _parseSessionHistory(data);
+        final List<ParentExamRecord> examRecords = _parseExamRecords(data);
+
+        final DateTime d = DateTime(_detailedViewDate.year, _detailedViewDate.month, _detailedViewDate.day);
+        final int todayTotal = ParentDataService.totalMinutesForDay(allSessions, d);
+        final int yesterdayTotal = ParentDataService.totalMinutesForDay(allSessions, d.subtract(const Duration(days: 1)));
+        int weeklyTotal = 0;
+        for (int i = 1; i <= 7; i++) {
+          weeklyTotal += ParentDataService.totalMinutesForDay(allSessions, d.subtract(Duration(days: i)));
+        }
+        final int weeklyAvg = (weeklyTotal / 7).round();
+
+        final Map<String, double> subjectAvgScores = ParentDataService.computeSubjectAverageScores(examRecords);
+        String? strongest;
+        String? weakest;
+        if (subjectAvgScores.isNotEmpty) {
+          final sorted = subjectAvgScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          strongest = "${sorted.first.key} (${_t(kAvgWordMap)} ${sorted.first.value.toStringAsFixed(0)})";
+          weakest = "${sorted.last.key} (${_t(kAvgWordMap)} ${sorted.last.value.toStringAsFixed(0)})";
+        }
+
+        final List<ParentSessionRecord> sessionsForDate =
+        allSessions.where((r) => _isSameDateHelper(r.timestamp, _detailedViewDate)).toList();
+        final bool isToday = _isSameDateHelper(_detailedViewDate, DateTime.now());
+
+        return ParentDetailedAnalysisWidget(
+          childName: childName,
+          premiumCardBg: premiumCardBg,
+          brandGolden: brandGolden,
+          luxuryDarkBg: luxuryDarkBg,
+          buildCustomSectionTitle: _buildCustomSectionTitle,
+          onShowReportPopup: () async {
+            final String content = await _buildSummaryReportTextFor(childName, _todaySessionsFrom(allSessions), todayTotal);
+            if (!mounted) return;
+            _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
+          },
+          onShowDetailedAnalysisPopup: () => _showReportPopup(
+              context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisTextFor(_todaySessionsFrom(allSessions))),
+          selectedDate: _detailedViewDate,
+          onPreviousDay: _goToPreviousDetailDay,
+          onNextDay: _goToNextDetailDay,
+          isViewingToday: isToday,
+          sessionsForDate: sessionsForDate,
+          todayTotalMinutes: todayTotal,
+          yesterdayTotalMinutes: yesterdayTotal,
+          weeklyAvgMinutesPerDay: weeklyAvg,
+          strongestSubject: strongest,
+          weakestSubject: weakest,
+        );
+      },
+    );
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] 평가분석 탭 - 자녀가 선택되어 있으면 Firestore의
+  // examRecords/sessionHistory를 기반으로, 없으면 기존처럼 로컬 데이터를 사용합니다.
+  Widget _buildEvaluationAnalysisTabContent() {
+    if (_selectedChildCode == null) {
+      return ParentEvaluationAnalysisWidget(
+        childName: _realChildName,
+        selectedEvaluationType: _selectedEvaluationType,
+        selectedBigUnits: _selectedBigUnits,
+        selectedMidUnits: _selectedMidUnits,
+        selectedYear: _selectedYear,
+        selectedMonth: _selectedMonth,
+        selectedWeek: _selectedWeek,
+        timeTabController: _timeTabController,
+        mirroredExamRecords: _examRecords,
+        parentMasterTimeData: _subjectAggregates,
+        premiumCardBg: premiumCardBg,
+        brandGolden: brandGolden,
+        luxuryDarkBg: luxuryDarkBg,
+        buildCustomSectionTitle: _buildCustomSectionTitle,
+        onEvaluationTypeChanged: (type) => setState(() => _selectedEvaluationType = type),
+        onBigUnitChanged: _toggleBigUnit,
+        onMidUnitChanged: _toggleMidUnit,
+        onYearChanged: (year) => setState(() => _selectedYear = year),
+        onMonthChanged: (month) => setState(() => _selectedMonth = month),
+        onWeekChanged: (week) => setState(() => _selectedWeek = week),
+        onShowDetailAnalysisReport: () async {
+          if (_examRecords.isEmpty) {
+            _showReportPopup(context, _t(kDiagReportTitleMap), _t(kNoExamDataMap));
+            return;
+          }
+          final lastExam = _examRecords.last;
+          final String content = await DiagnosisService.getAnalysis(
+            personKey: 'student_$_realChildName',
+            type: lastExam.type,
+            subject: lastExam.subject,
+            score: lastExam.score,
+          );
+          if (!mounted) return;
+          _showReportPopup(context, _t(kDiagReportTitleMap), content);
+        },
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(_selectedChildCode!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !(snapshot.data?.exists ?? false)) {
+          return const Center(child: CircularProgressIndicator(color: brandGolden));
+        }
+        final Map<String, dynamic> data = snapshot.data!.data() ?? {};
+        final String childName = (data['studentName'] as String?)?.trim().isNotEmpty == true
+            ? (data['studentName'] as String)
+            : '학습자';
+        final List<ParentSessionRecord> allSessions = _parseSessionHistory(data);
+        final List<ParentExamRecord> examRecords = _parseExamRecords(data);
+        final List<Map<String, dynamic>> subjectAggregates = _computeSubjectAggregatesFrom(allSessions);
+
+        return ParentEvaluationAnalysisWidget(
+          childName: childName,
+          selectedEvaluationType: _selectedEvaluationType,
+          selectedBigUnits: _selectedBigUnits,
+          selectedMidUnits: _selectedMidUnits,
+          selectedYear: _selectedYear,
+          selectedMonth: _selectedMonth,
+          selectedWeek: _selectedWeek,
+          timeTabController: _timeTabController,
+          mirroredExamRecords: examRecords,
+          parentMasterTimeData: subjectAggregates,
+          premiumCardBg: premiumCardBg,
+          brandGolden: brandGolden,
+          luxuryDarkBg: luxuryDarkBg,
+          buildCustomSectionTitle: _buildCustomSectionTitle,
+          onEvaluationTypeChanged: (type) => setState(() => _selectedEvaluationType = type),
+          onBigUnitChanged: _toggleBigUnit,
+          onMidUnitChanged: _toggleMidUnit,
+          onYearChanged: (year) => setState(() => _selectedYear = year),
+          onMonthChanged: (month) => setState(() => _selectedMonth = month),
+          onWeekChanged: (week) => setState(() => _selectedWeek = week),
+          onShowDetailAnalysisReport: () async {
+            if (examRecords.isEmpty) {
+              _showReportPopup(context, _t(kDiagReportTitleMap), _t(kNoExamDataMap));
+              return;
+            }
+            final lastExam = examRecords.last;
+            final String content = await DiagnosisService.getAnalysis(
+              personKey: 'student_$childName',
+              type: lastExam.type,
+              subject: lastExam.subject,
+              score: lastExam.score,
+            );
+            if (!mounted) return;
+            _showReportPopup(context, _t(kDiagReportTitleMap), content);
+          },
+        );
+      },
+    );
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] 성적관리 탭 - 자녀가 선택되어 있으면 Firestore의
+  // gradeRecords/gradeConfigs/examRecords를 기반으로, 없으면 기존처럼 로컬 데이터를 사용합니다.
+  Widget _buildGradeManagementTabContent() {
+    if (_selectedChildCode == null) {
+      return ParentGradeManagementWidget(
+        childName: _realChildName,
+        premiumCardBg: premiumCardBg,
+        brandGolden: brandGolden,
+        luxuryDarkBg: luxuryDarkBg,
+        buildCustomSectionTitle: _buildCustomSectionTitle,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(_selectedChildCode!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !(snapshot.data?.exists ?? false)) {
+          return const Center(child: CircularProgressIndicator(color: brandGolden));
+        }
+        final Map<String, dynamic> data = snapshot.data!.data() ?? {};
+        final String childName = (data['studentName'] as String?)?.trim().isNotEmpty == true
+            ? (data['studentName'] as String)
+            : '학습자';
+
+        final List<dynamic> rawRecords = (data['gradeRecords'] as List<dynamic>?) ?? [];
+        final List<GradeRecord> records = [];
+        for (final e in rawRecords) {
+          try {
+            records.add(GradeRecord.fromJson(Map<String, dynamic>.from(e as Map)));
+          } catch (_) {}
+        }
+
+        final List<dynamic> rawConfigs = (data['gradeConfigs'] as List<dynamic>?) ?? [];
+        final List<SubjectConfig> configs = [];
+        for (final e in rawConfigs) {
+          try {
+            configs.add(SubjectConfig.fromJson(Map<String, dynamic>.from(e as Map)));
+          } catch (_) {}
+        }
+
+        // 🆕 [연동] readAchievementAverageScore()와 동일한 방식(score 필드 평균)으로
+        // Firestore의 examRecords 배열에서 계산 - 로컬 전용 함수를 대체하는 순수 계산 버전
+        final List<dynamic> rawExamRecords = (data['examRecords'] as List<dynamic>?) ?? [];
+        final List<double> scores = [];
+        for (final e in rawExamRecords) {
+          try {
+            final map = Map<String, dynamic>.from(e as Map);
+            final double? s = (map['score'] as num?)?.toDouble();
+            if (s != null) scores.add(s);
+          } catch (_) {}
+        }
+        final double? achievementAvg = scores.isEmpty ? null : scores.reduce((a, b) => a + b) / scores.length;
+
+        return ParentGradeManagementWidget(
+          childName: childName,
+          premiumCardBg: premiumCardBg,
+          brandGolden: brandGolden,
+          luxuryDarkBg: luxuryDarkBg,
+          buildCustomSectionTitle: _buildCustomSectionTitle,
+          overrideRecords: records,
+          overrideConfigs: configs,
+          overrideAchievementAverage: achievementAvg,
+        );
+      },
+    );
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] 실시간현황 탭 - 자녀가 선택되어 있으면 해당 자녀의
+  // Firestore 문서(links/{code})를 실시간 구독해서 이름/최근세션/별을 보여주고,
+  // 연결된 자녀가 없으면(기존 단일기기 사용자) 원래대로 이 기기의 로컬 데이터를 보여줍니다.
+  Widget _buildLiveStatusTabContent() {
+    if (_selectedChildCode == null) {
+      return ParentLiveStatusWidget(
+        childName: _realChildName,
+        lastSessionSubject: _todaySessions.isNotEmpty ? _todaySessions.last.subject : null,
+        lastSessionDurationMinutes: _todaySessions.isNotEmpty ? _todaySessions.last.durationMinutes : 0,
+        totalCollectedStars: _totalCollectedStars,
+        isMonitoringActive: _isMonitoringActive,
+        monitoringCountdown: _monitoringCountdown,
+        premiumCardBg: premiumCardBg,
+        brandGolden: brandGolden,
+        luxuryDarkBg: luxuryDarkBg,
+        lastSentTimeText: _lastSentTimeText,
+        buildCustomSectionTitle: _buildCustomSectionTitle,
+        onSendEmojiMessage: _handleSendEmojiMessage,
+        onSendCustomMessage: _handleSendCustomMessage,
+        onStartMonitoring: _handleStartMonitoring,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(_selectedChildCode!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !(snapshot.data?.exists ?? false)) {
+          return const Center(child: CircularProgressIndicator(color: brandGolden));
+        }
+        final Map<String, dynamic> data = snapshot.data!.data() ?? {};
+        final String childName = (data['studentName'] as String?)?.trim().isNotEmpty == true
+            ? (data['studentName'] as String)
+            : '학습자';
+        final int totalStars = (data['todayStars'] as num?)?.toInt() ?? 0;
+        final List<dynamic> sessionHistory = (data['sessionHistory'] as List<dynamic>?) ?? [];
+
+        String? lastSubject;
+        int lastDurationMinutes = 0;
+        if (sessionHistory.isNotEmpty) {
+          try {
+            final Map<String, dynamic> last = Map<String, dynamic>.from(sessionHistory.last as Map);
+            lastSubject = last['subject'] as String?;
+            final int durationSeconds = (last['durationSeconds'] as num?)?.toInt() ?? 0;
+            lastDurationMinutes = (durationSeconds / 60).round();
+          } catch (_) {
+            // 손상된 마지막 기록 1건은 건너뜀 - 화면은 "학습 기록 없음" 상태로 정상 표시됨
+          }
+        }
+
+        return ParentLiveStatusWidget(
+          childName: childName,
+          lastSessionSubject: lastSubject,
+          lastSessionDurationMinutes: lastDurationMinutes,
+          totalCollectedStars: totalStars,
+          isMonitoringActive: _isMonitoringActive,
+          monitoringCountdown: _monitoringCountdown,
+          premiumCardBg: premiumCardBg,
+          brandGolden: brandGolden,
+          luxuryDarkBg: luxuryDarkBg,
+          lastSentTimeText: _lastSentTimeText,
+          buildCustomSectionTitle: _buildCustomSectionTitle,
+          onSendEmojiMessage: _handleSendEmojiMessage,
+          onSendCustomMessage: _handleSendCustomMessage,
+          onStartMonitoring: _handleStartMonitoring,
+        );
+      },
+    );
+  }
+
+  // 🆕 [정리] 기존에 IndexedStack 안에 인라인으로 있던 콜백들을 재사용 가능하도록 메서드로 분리
+  // (로컬 모드/Firestore 모드 양쪽에서 동일한 콜백을 그대로 씁니다 - 동작 변경 없음)
+  void _handleSendEmojiMessage(String emoji, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: premiumCardBg,
+        content: Text(
+          "${_t(kEmojiSentMap)}\n($message)",
+          style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  void _handleSendCustomMessage(String customText) {
+    final now = DateTime.now();
+    final hourText = now.hour < 10 ? '0${now.hour}' : '${now.hour}';
+    final minText = now.minute < 10 ? '0${now.minute}' : '${now.minute}';
+
+    setState(() {
+      _lastSentTimeText = "$hourText:$minText";
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF040B19),
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+          side: BorderSide(color: brandGolden, width: 1),
+        ),
+        duration: const Duration(seconds: 4),
+        content: Text(
+          "${_t(kForceInterventionMap)}\n${_t(kMessageContentLabelMap)}: \"$customText\"",
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+        ),
+      ),
+    );
+  }
+
+  void _handleStartMonitoring() {
+    setState(() {
+      _isMonitoringActive = true;
+      _monitoringCountdown = 60;
+    });
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || !_isMonitoringActive) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_monitoringCountdown > 1) {
+          _monitoringCountdown--;
+        } else {
+          _isMonitoringActive = false;
+          timer.cancel();
+          _showMonitorTimeoutSnackbar();
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
     _timeTabController.dispose();
@@ -699,166 +1225,19 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             child: IndexedStack(
               index: _currentIndex,
               children: [
-                ParentLiveStatusWidget(
-                  childName: _realChildName,
-                  lastSessionSubject: _todaySessions.isNotEmpty ? _todaySessions.last.subject : null,
-                  lastSessionDurationMinutes: _todaySessions.isNotEmpty ? _todaySessions.last.durationMinutes : 0,
-                  totalCollectedStars: _totalCollectedStars,
-                  isMonitoringActive: _isMonitoringActive,
-                  monitoringCountdown: _monitoringCountdown,
-                  premiumCardBg: premiumCardBg,
-                  brandGolden: brandGolden,
-                  luxuryDarkBg: luxuryDarkBg,
-                  lastSentTimeText: _lastSentTimeText,
-                  buildCustomSectionTitle: _buildCustomSectionTitle,
-                  onSendEmojiMessage: (emoji, message) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: premiumCardBg,
-                        content: Text(
-                          "${_t(kEmojiSentMap)}\n($message)",
-                          style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    );
-                  },
-                  onSendCustomMessage: (customText) {
-                    final now = DateTime.now();
-                    final hourText = now.hour < 10 ? '0${now.hour}' : '${now.hour}';
-                    final minText = now.minute < 10 ? '0${now.minute}' : '${now.minute}';
+                // 🆕 [자녀 선택 UI + Firestore 연동] 자녀가 선택되어 있으면 해당 자녀의 Firestore
+                // 데이터를, 없으면(단일기기 사용자) 기존처럼 로컬 데이터를 보여줌
+                _buildLiveStatusTabContent(),
 
-                    setState(() {
-                      _lastSentTimeText = "$hourText:$minText";
-                    });
+                // 🆕 [자녀 선택 UI + Firestore 연동] 상세보기/평가분석 탭 - 자녀가 선택되어 있으면
+                // 해당 자녀의 Firestore 데이터를, 없으면(단일기기 사용자) 기존처럼 로컬 데이터를 보여줌
+                _buildDetailedAnalysisTabContent(),
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: const Color(0xFF040B19),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                          side: BorderSide(color: brandGolden, width: 1),
-                        ),
-                        duration: const Duration(seconds: 4),
-                        content: Text(
-                          "${_t(kForceInterventionMap)}\n${_t(kMessageContentLabelMap)}: \"$customText\"",
-                          style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ),
-                    );
-                  },
-                  onStartMonitoring: () {
-                    setState(() {
-                      _isMonitoringActive = true;
-                      _monitoringCountdown = 60;
-                    });
-                    Timer.periodic(const Duration(seconds: 1), (timer) {
-                      if (!mounted || !_isMonitoringActive) {
-                        timer.cancel();
-                        return;
-                      }
-                      setState(() {
-                        if (_monitoringCountdown > 1) {
-                          _monitoringCountdown--;
-                        } else {
-                          _isMonitoringActive = false;
-                          timer.cancel();
-                          _showMonitorTimeoutSnackbar();
-                        }
-                      });
-                    });
-                  },
-                ),
+                _buildEvaluationAnalysisTabContent(),
 
-                ParentDetailedAnalysisWidget(
-                  childName: _realChildName,
-                  premiumCardBg: premiumCardBg,
-                  brandGolden: brandGolden,
-                  luxuryDarkBg: luxuryDarkBg,
-                  buildCustomSectionTitle: _buildCustomSectionTitle,
-                  onShowReportPopup: () async {
-                    final String content = await _buildSummaryReportText();
-                    if (!mounted) return;
-                    _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
-                  },
-                  onShowDetailedAnalysisPopup: () => _showReportPopup(context, _t(kTodayDetailReportTitleMap), _buildDetailedAnalysisText()),
-                  // 🆕 [지난 일자 조회] 좌우 화살표로 하루씩 이동하며 조회
-                  selectedDate: _detailedViewDate,
-                  onPreviousDay: _goToPreviousDetailDay,
-                  onNextDay: _goToNextDetailDay,
-                  isViewingToday: _isViewingToday,
-                  sessionsForDate: _sessionsForDetailedDate,
-                  todayTotalMinutes: _detailedDayTotalMinutes,
-                  yesterdayTotalMinutes: _detailedDayBeforeMinutes,
-                  weeklyAvgMinutesPerDay: _detailedWeeklyAvgMinutes,
-                  strongestSubject: _strongestSubject,
-                  weakestSubject: _weakestSubject,
-                ),
-
-                ParentEvaluationAnalysisWidget(
-                  childName: _realChildName,
-                  selectedEvaluationType: _selectedEvaluationType,
-                  selectedBigUnits: _selectedBigUnits,
-                  selectedMidUnits: _selectedMidUnits,
-                  selectedYear: _selectedYear,
-                  selectedMonth: _selectedMonth,
-                  selectedWeek: _selectedWeek,
-                  timeTabController: _timeTabController,
-                  mirroredExamRecords: _examRecords,
-                  parentMasterTimeData: _subjectAggregates,
-                  premiumCardBg: premiumCardBg,
-                  brandGolden: brandGolden,
-                  luxuryDarkBg: luxuryDarkBg,
-                  buildCustomSectionTitle: _buildCustomSectionTitle,
-                  onEvaluationTypeChanged: (type) => setState(() => _selectedEvaluationType = type),
-                  // 🆕 [다중선택] 탭한 값을 토글(이미 선택돼 있으면 해제, 아니면 추가) - 최소 1개는 항상 유지
-                  onBigUnitChanged: (unit) => setState(() {
-                    if (_selectedBigUnits.contains(unit)) {
-                      if (_selectedBigUnits.length > 1) _selectedBigUnits.remove(unit);
-                    } else {
-                      _selectedBigUnits.add(unit);
-                    }
-                  }),
-                  onMidUnitChanged: (unit) => setState(() {
-                    if (_selectedMidUnits.contains(unit)) {
-                      if (_selectedMidUnits.length > 1) _selectedMidUnits.remove(unit);
-                    } else {
-                      _selectedMidUnits.add(unit);
-                    }
-                  }),
-                  onYearChanged: (year) => setState(() => _selectedYear = year),
-                  onMonthChanged: (month) => setState(() => _selectedMonth = month),
-                  onWeekChanged: (week) => setState(() => _selectedWeek = week),
-                  onShowDetailAnalysisReport: () async {
-                    // 🆕 [요청] 300자 이상 상세 진단 + 같은 사람에게 3개월 내 재사용 금지 + 생성된 문구는
-                    // 반드시 저장 후 유사한 사람(같은 점수 구간)에게 재사용. DiagnosisService가 전담 관리.
-                    if (_examRecords.isEmpty) {
-                      _showReportPopup(
-                        context,
-                        _t(kDiagReportTitleMap),
-                        _t(kNoExamDataMap),
-                      );
-                      return;
-                    }
-                    final lastExam = _examRecords.last;
-                    final String content = await DiagnosisService.getAnalysis(
-                      personKey: 'student_$_realChildName',
-                      type: lastExam.type,
-                      subject: lastExam.subject,
-                      score: lastExam.score,
-                    );
-                    if (!mounted) return;
-                    _showReportPopup(context, _t(kDiagReportTitleMap), content);
-                  },
-                ),
-
-                // 🆕 [성적 관리] 4번째 탭 - 조회 전용 (Plan A: 같은 기기 SharedPreferences 직접 조회)
-                ParentGradeManagementWidget(
-                  childName: _realChildName,
-                  premiumCardBg: premiumCardBg,
-                  brandGolden: brandGolden,
-                  luxuryDarkBg: luxuryDarkBg,
-                  buildCustomSectionTitle: _buildCustomSectionTitle,
-                ),
+                // 🆕 [성적 관리] 4번째 탭 - 자녀가 선택되어 있으면 Firestore 데이터를,
+                // 없으면(단일기기 사용자) 기존처럼 로컬 데이터를 보여줌
+                _buildGradeManagementTabContent(),
               ],
             ),
           ),

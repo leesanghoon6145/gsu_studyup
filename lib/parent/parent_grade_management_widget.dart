@@ -16,6 +16,9 @@ import '../global_lang.dart';
 ///   기본모드(KO/EN 선택)는 한글+영문 동시 표시, 10개국어(JA/ZH/FR/DE/RU/AR/HI/VI/ES/TH)
 ///   선택 시 해당 언어만 단독 표시. 실제 데이터 저장 키(과목명·시험종류 등 한글 원문)는
 ///   절대 바꾸지 않고, 화면에 보여줄 때만 번역 사전을 거쳐 표시합니다.
+/// - 🆕 [자녀 선택 UI + Firestore 연동 2026-09-04] overrideRecords/overrideConfigs가
+///   주어지면(다른 기기의 자녀를 선택한 경우) 그 데이터를 그대로 사용하고, 주어지지 않으면
+///   (기존 단일기기 사용자) 원래처럼 ParentDataService로 이 기기의 로컬 데이터를 읽습니다.
 /// ============================================================================
 
 // ---------------------------------------------------------------------------
@@ -73,6 +76,13 @@ class ParentGradeManagementWidget extends StatefulWidget {
   final Color luxuryDarkBg;
   final Widget Function(String engTitle, String korTitle, {required double fontSize}) buildCustomSectionTitle;
 
+  // 🆕 [자녀 선택 UI + Firestore 연동] 다른 기기의 자녀를 선택한 경우, 대시보드가
+  // Firestore에서 읽어온 데이터를 여기로 넘겨줍니다. null이면(연결된 자녀가 없는
+  // 기존 단일기기 사용자) 원래처럼 이 기기의 로컬 데이터(ParentDataService)를 읽습니다.
+  final List<GradeRecord>? overrideRecords;
+  final List<SubjectConfig>? overrideConfigs;
+  final double? overrideAchievementAverage;
+
   const ParentGradeManagementWidget({
     Key? key,
     required this.childName,
@@ -80,6 +90,9 @@ class ParentGradeManagementWidget extends StatefulWidget {
     required this.brandGolden,
     required this.luxuryDarkBg,
     required this.buildCustomSectionTitle,
+    this.overrideRecords,
+    this.overrideConfigs,
+    this.overrideAchievementAverage,
   }) : super(key: key);
 
   @override
@@ -103,6 +116,19 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
   void initState() {
     super.initState();
     _loadRecords();
+  }
+
+  // 🆕 [자녀 선택 UI + Firestore 연동] 부모가 다른 자녀로 전환하면(overrideRecords가
+  // 다른 데이터로 바뀌면) 화면을 그 자녀 데이터로 다시 불러옵니다.
+  @override
+  void didUpdateWidget(covariant ParentGradeManagementWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final bool usingOverride = widget.overrideRecords != null;
+    final bool childChanged = widget.childName != oldWidget.childName;
+    if (usingOverride && (childChanged || !identical(widget.overrideRecords, oldWidget.overrideRecords))) {
+      _introShown = false; // 자녀가 바뀌면 안내 팝업도 다시 보여줄 수 있게 초기화
+      _loadRecords();
+    }
   }
 
   void _showIntroPopupOnce() {
@@ -145,8 +171,17 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
   }
 
   Future<void> _loadRecords() async {
-    final all = await ParentDataService.loadGradeManagementRecords();
-    final configs = await ParentDataService.loadGradeSubjectConfigs();
+    // 🆕 [자녀 선택 UI + Firestore 연동] override 데이터가 있으면(다른 기기의 자녀 선택 중)
+    // 그것을 그대로 쓰고, 없으면 기존처럼 이 기기의 로컬 데이터를 읽습니다.
+    final List<GradeRecord> all;
+    final List<SubjectConfig> configs;
+    if (widget.overrideRecords != null) {
+      all = widget.overrideRecords!;
+      configs = widget.overrideConfigs ?? [];
+    } else {
+      all = await ParentDataService.loadGradeManagementRecords();
+      configs = await ParentDataService.loadGradeSubjectConfigs();
+    }
     if (!mounted) return;
 
     // 🆕 가장 최근에 입력된 기록의 학교구분/학년/학기를 초기 선택값으로 자동 설정
@@ -188,8 +223,12 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
       return;
     }
     setState(() { _isSummaryLoading = true; _notEnoughSubjects = false; });
+    // 🆕 [자녀 선택 UI + Firestore 연동] override 모드면 대시보드가 Firestore examRecords로
+    // 계산해서 넘겨준 값을 그대로 쓰고, 아니면 기존처럼 이 기기의 로컬 값을 읽습니다.
+    final double? achievementAvg = widget.overrideRecords != null
+        ? widget.overrideAchievementAverage
+        : await GradeManagementService.readAchievementAverageScore();
     // 🆕 [요청] 학생 화면과 동일한 personKey 규칙을 사용해 "동일한 문구"가 그대로 조회됩니다.
-    final double? achievementAvg = await GradeManagementService.readAchievementAverageScore();
     final String personKey = 'student_${widget.childName}_$_schoolLevel$_grade$_semester';
     final GradeSummaryResult result = await GradeDiagnosisService.getOverallSummary(
       personKey: personKey, combinedAverage: avg, achievementAverage: achievementAvg,

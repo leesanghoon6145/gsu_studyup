@@ -21,16 +21,23 @@ class DkeUserProfile {
   // 로컬 캐시 키 (오프라인 등 즉시 응답이 필요할 때 마지막으로 불러온 값을 잠깐 보여주는 용도)
   static const String _kCachedUserTypeKey = 'dke_user_type_cache';
   static const String _kCachedNameKey = 'dke_user_real_name_cache';
+  // 🆕 [요청 2026-09-04] 학교/학년 캐시 키 추가 (성취도 화면 "OO학교 O학년 이름" 표시용)
+  static const String _kCachedSchoolKey = 'dke_user_school_cache';
+  static const String _kCachedGradeKey = 'dke_user_grade_cache';
 
   // ===========================================================================
   // 1) 가입 완료 시점에 실제 입력한 이름/유형/연동 정보를 저장.
   //    🆕 이제 "이 계정(uid)"에 정확히 묶어서 Firestore에 저장합니다.
+  //    🆕 [요청 2026-09-04] school/grade 파라미터 추가 (학생 가입 시 signup_screen.dart의
+  //    _schoolController/_gradeController 입력값을 그대로 저장). 학부모/일반 가입은 null로 옴.
   // ===========================================================================
   static Future<void> saveProfileOnSignup({
     required String realName,
     required String userType, // '학생' / '학부모' / '일반'
     String? childEmail,
     String? parentEmail,
+    String? school, // 🆕 [요청 2026-09-04]
+    String? grade, // 🆕 [요청 2026-09-04]
   }) async {
     final String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return; // 계정 생성이 안 된 상태면 저장할 곳이 없음
@@ -41,6 +48,8 @@ class DkeUserProfile {
         'userType': userType,
         if (childEmail != null && childEmail.isNotEmpty) 'childEmail': childEmail,
         if (parentEmail != null && parentEmail.isNotEmpty) 'parentEmail': parentEmail,
+        if (school != null && school.isNotEmpty) 'school': school, // 🆕
+        if (grade != null && grade.isNotEmpty) 'grade': grade, // 🆕
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -48,6 +57,8 @@ class DkeUserProfile {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kCachedUserTypeKey, userType);
       await prefs.setString(_kCachedNameKey, realName);
+      if (school != null && school.isNotEmpty) await prefs.setString(_kCachedSchoolKey, school); // 🆕
+      if (grade != null && grade.isNotEmpty) await prefs.setString(_kCachedGradeKey, grade); // 🆕
     } catch (e) {
       // 저장 실패해도 앱 흐름을 막지 않음
     }
@@ -68,6 +79,37 @@ class DkeUserProfile {
       // 오프라인 등으로 실패하면 마지막 캐시라도 보여줌
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString(_kCachedNameKey);
+    }
+  }
+
+  // 🆕 [요청 2026-09-04] 학교명 조회 — member_achievement_screen.dart의
+  // "GKE 고등학교 2학년" 고정 문구를 실제 값으로 교체하기 위해 신규 추가.
+  static Future<String?> getSchoolName() async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    try {
+      final doc = await _db.collection(_collection).doc(uid).get();
+      final String? school = doc.data()?['school'] as String?;
+      if (school != null && school.isNotEmpty) return school;
+      return null;
+    } catch (e) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_kCachedSchoolKey);
+    }
+  }
+
+  // 🆕 [요청 2026-09-04] 학년 조회 — 위와 동일한 목적.
+  static Future<String?> getGrade() async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    try {
+      final doc = await _db.collection(_collection).doc(uid).get();
+      final String? grade = doc.data()?['grade'] as String?;
+      if (grade != null && grade.isNotEmpty) return grade;
+      return null;
+    } catch (e) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_kCachedGradeKey);
     }
   }
 
@@ -103,6 +145,31 @@ class DkeUserProfile {
       return doc.data()?['parentEmail'] as String?;
     } catch (e) {
       return null;
+    }
+  }
+
+  // 🆕 [요청 2026-09-04] 마이페이지에서 학교/학년을 나중에 입력·수정할 수 있도록 신규 추가.
+  // 가입 시점(saveProfileOnSignup)이 아니라도, 기존 가입자가 마이페이지에서 언제든
+  // 학교/학년을 채우거나 고칠 수 있게 하는 용도. 이름/유형 등 다른 필드는 건드리지 않고
+  // school/grade 두 필드만 병합(merge) 저장함.
+  static Future<void> updateSchoolGrade({
+    required String school,
+    required String grade,
+  }) async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await _db.collection(_collection).doc(uid).set({
+        'school': school,
+        'grade': grade,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kCachedSchoolKey, school);
+      await prefs.setString(_kCachedGradeKey, grade);
+    } catch (e) {
+      // 저장 실패해도 앱 흐름을 막지 않음
     }
   }
 }

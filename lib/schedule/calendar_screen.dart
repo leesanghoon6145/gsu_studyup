@@ -9,6 +9,10 @@
 // 🆕 [수정 UX] 일정 목록의 개별 연필/휴지통 아이콘을 없애고, 3선(파랑/노랑/흰색)
 // 연필 모양 아이콘 하나로 통합 — 누르면 수정 팝업이 열리고, 그 팝업 맨 아래에
 // 삭제/취소/저장 3개 버튼을 작게 한 줄로 배치함.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 운동 기록이 있는 날짜에 캘린더 셀
+// 아이콘 표시 + 선택한 날짜 목록에 운동 기록 미리보기 타일 추가. 약속(Appointment)
+// 연동과 동일한 패턴(날짜 집합 + 읽기전용 미리보기 타일 + 탭하면 원본 화면 이동).
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -18,6 +22,9 @@ import 'bilingual_text.dart';
 import 'holiday_data.dart'; // 🆕 [국경일 표시] 대한민국 공휴일 데이터
 import 'appointment_data_service.dart'; // 🆕 [약속 연동] 캘린더에도 약속을 시각적으로 표시
 import 'appointment_screen.dart'; // 🆕 [약속 연동] 약속 미리보기 탭하면 이동
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
+import 'today_exercise_screen.dart'; // 🆕 [운동 연동] 미리보기 탭하면 기록 화면으로 이동
 
 // 🆕 카테고리 프리셋 정의 (색상 + 영/한 라벨)
 class ScheduleCategory {
@@ -61,8 +68,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Map<String, Set<String>> _categoriesByDate = {};
   Set<String> _datesWithAppointments = {}; // 🆕 [약속 연동]
+  Set<String> _datesWithExercise = {}; // 🆕 [운동 연동]
+  Map<String, ExerciseType> _exerciseTypesById = {}; // 🆕 [운동 연동] 아이콘/이름 조회용
   List<ScheduleItem> _selectedDateItems = [];
   List<AppointmentItem> _selectedDateAppointments = []; // 🆕 [약속 연동]
+  List<ExerciseRecord> _selectedDateExercises = []; // 🆕 [운동 연동]
   bool _isLoading = true;
 
   @override
@@ -86,6 +96,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final allAppointments = await AppointmentDataService.loadAll();
     final Set<String> apptDates = allAppointments.map((a) => a.date).toSet();
 
+    // 🆕 [운동 연동] 운동 기록이 있는 날짜 집합 + 종목 정보(아이콘/이름 조회용) 로드
+    final allExerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
+    final typesById = {for (final t in allExerciseTypes) t.id: t};
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final Set<String> exerciseDates = allExerciseRecords.map((r) => _dateKey(r.date)).toSet();
+    final selectedExercises =
+    allExerciseRecords.where((r) => _dateKey(r.date) == _dateKey(_selectedDate)).toList();
+
     final items = await ScheduleDataService.loadForDate(_dateKey(_selectedDate));
     final selectedAppointments = allAppointments.where((a) => a.date == _dateKey(_selectedDate)).toList();
 
@@ -93,8 +111,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
     setState(() {
       _categoriesByDate = catMap;
       _datesWithAppointments = apptDates;
+      _datesWithExercise = exerciseDates; // 🆕 [운동 연동]
+      _exerciseTypesById = typesById; // 🆕 [운동 연동]
       _selectedDateItems = items;
       _selectedDateAppointments = selectedAppointments;
+      _selectedDateExercises = selectedExercises; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -104,10 +125,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final items = await ScheduleDataService.loadForDate(_dateKey(date));
     final allAppointments = await AppointmentDataService.loadAll();
     final selectedAppointments = allAppointments.where((a) => a.date == _dateKey(date)).toList();
+    // 🆕 [운동 연동] 탭한 날짜의 운동 기록도 함께 조회
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final selectedExercises = allExerciseRecords.where((r) => _dateKey(r.date) == _dateKey(date)).toList();
     if (!mounted) return;
     setState(() {
       _selectedDateItems = items;
       _selectedDateAppointments = selectedAppointments; // 🆕 [약속 연동]
+      _selectedDateExercises = selectedExercises; // 🆕 [운동 연동]
     });
   }
 
@@ -517,6 +542,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       final bool hasAppointment = _datesWithAppointments.contains(key); // 🆕 [약속 연동]
+      final bool hasExercise = _datesWithExercise.contains(key); // 🆕 [운동 연동]
 
       dayCells.add(
         GestureDetector(
@@ -546,6 +572,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Padding(
                         padding: const EdgeInsets.only(left: 1, top: 1),
                         child: Icon(Icons.watch_later_rounded, size: 8, color: isSelected ? _pageBg : Colors.white70),
+                      ),
+                    // 🆕 [운동 연동] 운동 기록이 있는 날짜에도 작은 아이콘 표시 (약속 아이콘 바로 옆)
+                    if (hasExercise)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 1, top: 1),
+                        child: Icon(Icons.fitness_center_rounded, size: 8, color: isSelected ? _pageBg : _brandGolden),
                       ),
                   ],
                 ),
@@ -627,12 +659,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           ],
           const SizedBox(height: 12),
-          // 🆕 [시간순 통합 표시] 일정(ScheduleItem)과 약속(AppointmentItem)을 하나로 합쳐서
-          // 시간순으로 정렬해 보여줍니다. 이전에는 일정만 보이고 약속은 아예 안 보였습니다.
+          // 🆕 [시간순 통합 표시] 일정(ScheduleItem)/약속(AppointmentItem)/운동(ExerciseRecord)을
+          // 하나로 합쳐서 시간순으로 정렬해 보여줍니다.
           Builder(builder: (context) {
             final List<_CalendarDayEntry> combined = [
               ..._selectedDateItems.map((s) => _CalendarDayEntry.schedule(s)),
               ..._selectedDateAppointments.map((a) => _CalendarDayEntry.appointment(a)),
+              ..._selectedDateExercises.map((e) => _CalendarDayEntry.exercise(e)), // 🆕 [운동 연동]
             ];
             final now = DateTime.now();
             final String todayKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -666,7 +699,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
             return Column(
               children: combined.map((entry) {
                 if (entry.schedule != null) return _buildScheduleTile(entry.schedule!);
-                return _buildAppointmentPreviewTile(entry.appointment!);
+                if (entry.appointment != null) return _buildAppointmentPreviewTile(entry.appointment!);
+                return _buildExercisePreviewTile(entry.exercise!); // 🆕 [운동 연동]
               }).toList(),
             );
           }),
@@ -705,6 +739,51 @@ class _CalendarScreenState extends State<CalendarScreen> {
             BiInline(
               en: 'Appt', ko: '약속', color: Colors.white38, fontSize: 10,
               translations: const {'JA': '約束', 'ZH': '约会', 'FR': 'RDV', 'DE': 'Termin', 'RU': 'Встреча', 'AR': 'موعد', 'HI': 'नियुक्ति', 'VI': 'Hẹn', 'ES': 'Cita', 'TH': 'นัด'},
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🆕 [운동 미리보기 타일] 캘린더에서는 운동 기록을 읽기 전용 요약(종목/시간)으로
+  // 보여주고, 탭하면 그 기록의 상세 입력화면(TodayExerciseScreen)으로 이동해서
+  // 그 자리에서 수정할 수 있게 합니다.
+  Widget _buildExercisePreviewTile(ExerciseRecord record) {
+    final type = _exerciseTypesById[record.exerciseTypeId];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _pageBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _brandGolden.withOpacity(0.25)),
+      ),
+      child: InkWell(
+        onTap: type == null
+            ? null
+            : () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TodayExerciseScreen(exerciseType: type, existingRecord: record),
+            ),
+          );
+          await _loadCalendarData();
+        },
+        child: Row(
+          children: [
+            Text(type?.icon ?? '💪', style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${type?.name ?? '운동'} · ${record.durationMin}분',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+            BiInline(
+              en: 'Exercise', ko: '운동', color: _brandGolden, fontSize: 10,
+              translations: const {'JA': '運動', 'ZH': '运动', 'FR': 'Exercice', 'DE': 'Sport', 'RU': 'Упражнение', 'AR': 'تمرين', 'HI': 'व्यायाम', 'VI': 'Tập thể dục', 'ES': 'Ejercicio', 'TH': 'ออกกำลังกาย'},
             ),
           ],
         ),
@@ -764,13 +843,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-// 🆕 [시간순 통합 표시] 캘린더 하루 목록에서 일정/약속을 하나로 합쳐 시간순 정렬하기 위한 헬퍼
+// 🆕 [시간순 통합 표시] 캘린더 하루 목록에서 일정/약속/운동을 하나로 합쳐 시간순 정렬하기 위한 헬퍼
 class _CalendarDayEntry {
   final ScheduleItem? schedule;
   final AppointmentItem? appointment;
+  final ExerciseRecord? exercise; // 🆕 [운동 연동]
 
-  _CalendarDayEntry.schedule(this.schedule) : appointment = null;
-  _CalendarDayEntry.appointment(this.appointment) : schedule = null;
+  _CalendarDayEntry.schedule(this.schedule) : appointment = null, exercise = null;
+  _CalendarDayEntry.appointment(this.appointment) : schedule = null, exercise = null;
+  _CalendarDayEntry.exercise(this.exercise) : schedule = null, appointment = null; // 🆕 [운동 연동]
 
-  String get time => schedule?.time ?? appointment?.time ?? '';
+  String get time {
+    if (schedule != null) return schedule!.time;
+    if (appointment != null) return appointment!.time;
+    if (exercise?.startTime != null) {
+      final t = exercise!.startTime!;
+      return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    }
+    return '';
+  }
 }

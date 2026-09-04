@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 실제로 연결
+import '../services/user_profile_service.dart'; // 🆕 [요청 2026-09-04] 학교/학년 불러오기·저장용
 
 class MyPageScreen extends StatefulWidget {
   final bool isVipMember;
@@ -47,6 +48,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Target',
       'savePersonalInfo': 'Save Personal Info',
       'savedPersonalInfo': 'Personal info has been saved.',
+      'schoolGrade': 'School / Grade',
+      'schoolHint': 'Enter your school name',
+      'gradeHint': 'e.g., Grade 2',
+      'saveSchoolGrade': 'Save School / Grade',
+      'savedSchoolGrade': 'School / grade have been saved.',
     },
     {
       'code': 'KO',
@@ -73,6 +79,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': '목표',
       'savePersonalInfo': '개인정보 저장',
       'savedPersonalInfo': '개인정보가 저장되었습니다.',
+      'schoolGrade': '학교 / 학년',
+      'schoolHint': '학교명을 입력하세요',
+      'gradeHint': '예: 2학년',
+      'saveSchoolGrade': '학교/학년 저장',
+      'savedSchoolGrade': '학교/학년 정보가 저장되었습니다.',
     },
     {
       'code': 'JA',
@@ -99,6 +110,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': '目標',
       'savePersonalInfo': '個人情報を保存',
       'savedPersonalInfo': '個人情報が保存されました。',
+      'schoolGrade': '学校 / 学年',
+      'schoolHint': '学校名を入力してください',
+      'gradeHint': '例：2年生',
+      'saveSchoolGrade': '学校/学年を保存',
+      'savedSchoolGrade': '学校/学年情報が保存されました。',
     },
     {
       'code': 'ZH',
@@ -125,6 +141,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': '目标',
       'savePersonalInfo': '保存个人信息',
       'savedPersonalInfo': '个人信息已保存。',
+      'schoolGrade': '学校 / 年级',
+      'schoolHint': '请输入学校名称',
+      'gradeHint': '例如：二年级',
+      'saveSchoolGrade': '保存学校/年级',
+      'savedSchoolGrade': '学校/年级信息已保存。',
     },
     {
       'code': 'FR',
@@ -151,6 +172,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Cible',
       'savePersonalInfo': 'Enregistrer les infos',
       'savedPersonalInfo': 'Les informations personnelles ont été enregistrées.',
+      'schoolGrade': 'École / Niveau',
+      'schoolHint': "Entrez le nom de l'école",
+      'gradeHint': 'ex : 2e année',
+      'saveSchoolGrade': "Enregistrer l'école/niveau",
+      'savedSchoolGrade': "L'école/le niveau ont été enregistrés.",
     },
     {
       'code': 'DE',
@@ -177,6 +203,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Ziel',
       'savePersonalInfo': 'Persönliche Daten speichern',
       'savedPersonalInfo': 'Persönliche Daten wurden gespeichert.',
+      'schoolGrade': 'Schule / Klasse',
+      'schoolHint': 'Schulname eingeben',
+      'gradeHint': 'z. B. 2. Klasse',
+      'saveSchoolGrade': 'Schule/Klasse speichern',
+      'savedSchoolGrade': 'Schule/Klasse wurden gespeichert.',
     },
     {
       'code': 'RU',
@@ -203,6 +234,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Цель',
       'savePersonalInfo': 'Сохранить личные данные',
       'savedPersonalInfo': 'Личные данные сохранены.',
+      'schoolGrade': 'Школа / Класс',
+      'schoolHint': 'Введите название школы',
+      'gradeHint': 'напр., 2 класс',
+      'saveSchoolGrade': 'Сохранить школу/класс',
+      'savedSchoolGrade': 'Школа/класс сохранены.',
     },
     {
       'code': 'AR',
@@ -229,6 +265,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'الهدف',
       'savePersonalInfo': 'حفظ البيانات الشخصية',
       'savedPersonalInfo': 'تم حفظ البيانات الشخصية.',
+      'schoolGrade': 'المدرسة / الصف',
+      'schoolHint': 'أدخل اسم المدرسة',
+      'gradeHint': 'مثال: الصف الثاني',
+      'saveSchoolGrade': 'حفظ المدرسة/الصف',
+      'savedSchoolGrade': 'تم حفظ المدرسة/الصف.',
     },
     {
       'code': 'HI',
@@ -255,6 +296,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'लक्ष्य',
       'savePersonalInfo': 'व्यक्तिगत जानकारी सहेजें',
       'savedPersonalInfo': 'व्यक्तिगत जानकारी सहेज ली गई है।',
+      'schoolGrade': 'स्कूल / कक्षा',
+      'schoolHint': 'स्कूल का नाम दर्ज करें',
+      'gradeHint': 'उदा., कक्षा 2',
+      'saveSchoolGrade': 'स्कूल/कक्षा सहेजें',
+      'savedSchoolGrade': 'स्कूल/कक्षा जानकारी सहेज ली गई है।',
     },
     {
       'code': 'VI',
@@ -281,6 +327,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Mục tiêu',
       'savePersonalInfo': 'Lưu thông tin cá nhân',
       'savedPersonalInfo': 'Đã lưu thông tin cá nhân.',
+      'schoolGrade': 'Trường / Lớp',
+      'schoolHint': 'Nhập tên trường',
+      'gradeHint': 'VD: Lớp 2',
+      'saveSchoolGrade': 'Lưu trường/lớp',
+      'savedSchoolGrade': 'Đã lưu thông tin trường/lớp.',
     },
     // 🆕 [신규 추가] 스페인어
     {
@@ -308,6 +359,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'Objetivo',
       'savePersonalInfo': 'Guardar información personal',
       'savedPersonalInfo': 'La información personal se ha guardado.',
+      'schoolGrade': 'Escuela / Grado',
+      'schoolHint': 'Ingresa el nombre de la escuela',
+      'gradeHint': 'ej. 2º grado',
+      'saveSchoolGrade': 'Guardar escuela/grado',
+      'savedSchoolGrade': 'Se ha guardado la escuela/grado.',
     },
     // 🆕 [신규 추가] 태국어
     {
@@ -335,6 +391,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'targetWord': 'เป้าหมาย',
       'savePersonalInfo': 'บันทึกข้อมูลส่วนตัว',
       'savedPersonalInfo': 'บันทึกข้อมูลส่วนตัวแล้ว',
+      'schoolGrade': 'โรงเรียน / ชั้นปี',
+      'schoolHint': 'กรอกชื่อโรงเรียน',
+      'gradeHint': 'เช่น ชั้นปีที่ 2',
+      'saveSchoolGrade': 'บันทึกโรงเรียน/ชั้นปี',
+      'savedSchoolGrade': 'บันทึกข้อมูลโรงเรียน/ชั้นปีแล้ว',
     },
   ];
 
@@ -348,6 +409,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
   final TextEditingController _uniController = TextEditingController();
   final TextEditingController _emailController = TextEditingController(text: 'studyup@dke.com');
   final TextEditingController _passwordController = TextEditingController();
+  // 🆕 [요청 2026-09-04] 학교/학년 수정용 컨트롤러 - 기존 가입자도 여기서 나중에 입력·수정 가능.
+  final TextEditingController _schoolController = TextEditingController();
+  final TextEditingController _gradeController = TextEditingController();
 
   Map<String, String> get _lang => _languages[_currentLangIndex];
   bool get _isRtl => _lang['code'] == 'AR';
@@ -357,6 +421,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
     super.initState();
     _isVip = widget.isVipMember;
     _loadSavedSettings();
+    _loadSchoolGrade(); // 🆕 [요청 2026-09-04] 저장된 학교/학년 불러오기
   }
 
   // 🕒 기기 저장소에서 영구 가입된 VIP 상태와 목표 데이터를 실시간 로드 및 복원
@@ -379,6 +444,59 @@ class _MyPageScreenState extends State<MyPageScreen> {
       _currentLangIndex = langIdx;
       _isVip = savedVipStatus;
     });
+  }
+
+  // 🆕 [요청 2026-09-04] 저장된 학교/학년을 불러와서 입력창에 미리 채워둠.
+  // 기존 가입자(가입 당시 학교/학년을 입력하지 않았던 경우)는 빈 칸으로 시작해서
+  // 여기서 처음 입력할 수 있고, 이미 값이 있으면 수정할 수 있음.
+  Future<void> _loadSchoolGrade() async {
+    try {
+      final String? school = await DkeUserProfile.getSchoolName();
+      final String? grade = await DkeUserProfile.getGrade();
+      if (!mounted) return;
+      setState(() {
+        _schoolController.text = school ?? '';
+        _gradeController.text = grade ?? '';
+      });
+    } catch (e) {
+      debugPrint('[MyPageScreen] 학교/학년 불러오기 실패: $e');
+    }
+  }
+
+  // 🆕 [요청 2026-09-04] 학교/학년 저장 버튼 처리.
+  // user_profile_service.dart의 updateSchoolGrade()를 호출해서 Firestore(계정별 문서)에 반영.
+  // 저장되면 member_achievement_screen.dart의 "학교 학년 이름" 표시도 다음 로드부터 실제 값으로 나타남.
+  Future<void> _saveSchoolGrade() async {
+    try {
+      final String school = _schoolController.text.trim();
+      final String grade = _gradeController.text.trim();
+      if (school.isEmpty || grade.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_lang['schoolHint'] ?? '학교명과 학년을 모두 입력해주세요.')),
+        );
+        return;
+      }
+
+      await DkeUserProfile.updateSchoolGrade(school: school, grade: grade);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_lang['savedSchoolGrade'] ?? '학교/학년 정보가 저장되었습니다.'),
+          backgroundColor: _containerBg,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[MyPageScreen] 학교/학년 저장 실패: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('학교/학년 저장에 실패했습니다. 다시 시도해 주세요.\n($e)'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   // 💾 [설정 저장] 버튼을 누를 때 대학 이름, 언어, 가입 승인 상태를 동시에 기기에 영구 고정
@@ -542,6 +660,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
     _uniController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _schoolController.dispose(); // 🆕
+    _gradeController.dispose(); // 🆕
     super.dispose();
   }
 
@@ -645,6 +765,62 @@ class _MyPageScreenState extends State<MyPageScreen> {
                         onPressed: _savePersonalInfo,
                         child: Text(
                           _lang['savePersonalInfo'] ?? '개인정보 저장',
+                          style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // 🆕 [요청 2026-09-04] 학교/학년 수정 섹션 신규 추가.
+              // 가입 당시 입력하지 않았거나(학부모/일반 계정에서 학생으로 전환 등) 수정이 필요한 경우
+              // 여기서 언제든 채우거나 고칠 수 있음. 성취도 화면의 "학교 학년 이름" 표시와 직결됨.
+              _buildSectionTitle('SCHOOL / GRADE (${_lang['schoolGrade'] ?? '학교 / 학년'})'),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _containerBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _brandGolden.withOpacity(0.4), width: 1),
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _schoolController,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: _underlineDecoration(
+                        labelText: _lang['schoolGrade'] ?? '학교',
+                        hintText: _lang['schoolHint'] ?? '학교명을 입력하세요',
+                        icon: Icons.school_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _gradeController,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: _underlineDecoration(
+                        labelText: _lang['gradeHint'] ?? '학년',
+                        hintText: _lang['gradeHint'] ?? '예: 2학년',
+                        icon: Icons.grade_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: _brandGolden, width: 1.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          backgroundColor: _brandGolden.withOpacity(0.05),
+                        ),
+                        onPressed: _saveSchoolGrade,
+                        child: Text(
+                          _lang['saveSchoolGrade'] ?? '학교/학년 저장',
                           style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),

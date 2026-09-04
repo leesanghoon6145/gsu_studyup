@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart'; // 🆕 [한국어 달력 등 시스템 위젯 현지화]
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [부모-자녀 응원 시스템] 로그인 상태 변화 감지용
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [부모-자녀 응원 시스템] DocumentSnapshot 타입 참조용
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'dart:async';
 import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
 import 'parent/parent_main_dashboard_screen.dart'; // 🆕 [유형별 라우팅] 학부모 화면
@@ -12,6 +15,7 @@ import 'package:gsu_studyup/global_lang.dart';
 import 'services/timer2_services.dart';
 import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
 import 'services/user_profile_service.dart'; // 🆕 [유형별 라우팅] 가입 시 저장한 회원 유형 조회
+import 'services/family_link_service.dart'; // 🆕 [부모-자녀 응원 시스템] 이모지/응원문구 실시간 수신
 import 'timer/timer_screen.dart';
 
 void main() async {
@@ -50,7 +54,210 @@ void main() async {
     };
   }
 
+  // 🆕 [부모-자녀 응원 시스템 2026-09-04] 앱의 핵심 취지 - 학생이 어떤 화면에 있든
+  // (과목 설정 중이든, 홈 화면이든, 플래너를 보든) 부모가 보낸 이모지/응원문구가
+  // 최우선으로 나타나야 하므로, 개별 화면이 아니라 앱 전체 최상단에서 감시를 시작합니다.
+  // 답장 기능은 의도적으로 넣지 않습니다(학습 방해 요소를 없애기 위함).
+  if (!kIsWeb) {
+    ParentEncouragementManager.start();
+  }
+
   runApp(const GsuStudyUpApp());
+}
+
+// ============================================================================
+// 🆕 [부모-자녀 응원 시스템 2026-09-04] 앱 전체 최상단에서 딱 한 번만 동작하는
+// 전역 관리자. 개별 화면(timer_screen.dart 등)에는 이 로직을 절대 중복으로 넣지
+// 않습니다 - 화면이 여러 개 동시에 감시하면 팝업이 중복으로 뜨는 문제가 생깁니다.
+//
+// [동작 원리]
+// - Firebase Auth의 로그인 상태 변화를 감지해서, 로그인될 때마다(=학생이 로그인한
+//   기기라면) 그 계정의 연결 코드 문서(links/{code})를 실시간 구독합니다.
+// - pendingEmoji/pendingMessage 필드가 채워지면, Timer2Service.navigatorKey를 통해
+//   "현재 어떤 화면이 떠 있든" 그 위에 오버레이(이모지)/다이얼로그(응원문구)를 띄웁니다.
+//   navigatorKey는 main.dart의 MaterialApp에 이미 연결되어 있어서, 특정 화면의
+//   BuildContext 없이도 전역에서 화면 위에 뭔가를 띄울 수 있게 해줍니다.
+// - 로그아웃하면 구독을 정리하고, 다시 로그인하면 새 계정 기준으로 다시 시작합니다.
+// ============================================================================
+class ParentEncouragementManager {
+  ParentEncouragementManager._();
+
+  static StreamSubscription<User?>? _authSub;
+  static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _linkSub;
+  static OverlayEntry? _emojiOverlayEntry;
+  static bool _isEmojiShowing = false;
+  static bool _isMessageShowing = false;
+
+  static void start() {
+    _authSub?.cancel();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      _linkSub?.cancel();
+      _linkSub = null;
+      _removeEmojiOverlay();
+      _isMessageShowing = false;
+
+      if (user == null) return; // 로그아웃 상태면 감시할 대상 없음
+      _subscribeToMyLinkDoc();
+    });
+  }
+
+  static Future<void> _subscribeToMyLinkDoc() async {
+    final String? code = await FamilyLinkService.getMyLinkCode();
+    if (code == null) return; // 아직 부모와 연결 안 된 계정(학생이 아니거나 미연결)이면 조용히 넘어감
+
+    _linkSub = FamilyLinkService.watch(code).listen((snapshot) {
+      if (!snapshot.exists) return;
+      final Map<String, dynamic>? data = snapshot.data();
+      if (data == null) return;
+
+      final Map<String, dynamic>? emojiData = data['pendingEmoji'] != null
+          ? Map<String, dynamic>.from(data['pendingEmoji'] as Map)
+          : null;
+      if (emojiData != null && !_isEmojiShowing) {
+        _showEmojiOverlay(emojiData);
+      }
+
+      final Map<String, dynamic>? messageData = data['pendingMessage'] != null
+          ? Map<String, dynamic>.from(data['pendingMessage'] as Map)
+          : null;
+      if (messageData != null && !_isMessageShowing) {
+        _showEncouragementDialog(messageData['text'] as String? ?? '');
+      }
+    });
+  }
+
+  // 🆕 [부모-자녀 응원 시스템] 이모지 - 현재 화면이 무엇이든 그 위에 떠 있는 카드로 표시.
+  // "확인"을 누르기 전까지 화면 전환을 해도 계속 남아있습니다(Overlay는 Navigator 스택
+  // 전체 위에 그려지므로 라우트가 바뀌어도 사라지지 않음).
+  static void _showEmojiOverlay(Map<String, dynamic> emojiData) {
+    final OverlayState? overlay = Timer2Service.navigatorKey.currentState?.overlay;
+    if (overlay == null) return;
+
+    _isEmojiShowing = true;
+    const Color brandGolden = Color(0xFFE5C158);
+    final String emoji = emojiData['emoji'] as String? ?? '💛';
+    final String message = emojiData['message'] as String? ?? '';
+
+    _emojiOverlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 20,
+        right: 20,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: brandGolden.withOpacity(0.6), width: 1.3),
+              boxShadow: [
+                BoxShadow(color: brandGolden.withOpacity(0.25), blurRadius: 22, spreadRadius: 1),
+                const BoxShadow(color: Colors.black, blurRadius: 16, offset: Offset(0, 6)),
+              ],
+            ),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 34)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, height: 1.3),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _acknowledgeEmoji,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(color: brandGolden, borderRadius: BorderRadius.circular(10)),
+                    child: Text('확인', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_emojiOverlayEntry!);
+  }
+
+  static Future<void> _acknowledgeEmoji() async {
+    _removeEmojiOverlay();
+    await FamilyLinkService.clearPendingEmoji();
+  }
+
+  static void _removeEmojiOverlay() {
+    _emojiOverlayEntry?.remove();
+    _emojiOverlayEntry = null;
+    _isEmojiShowing = false;
+  }
+
+  // 🆕 [부모-자녀 응원 시스템] 응원 문구 - navigatorKey의 context로 다이얼로그를 띄우면,
+  // 현재 화면이 어디든 그 위에 모달로 나타납니다. 답장 입력창은 넣지 않습니다.
+  static Future<void> _showEncouragementDialog(String message) async {
+    if (message.trim().isEmpty) return;
+    final BuildContext? context = Timer2Service.navigatorKey.currentState?.overlay?.context;
+    if (context == null) return;
+
+    _isMessageShowing = true;
+    const Color brandGolden = Color(0xFFE5C158);
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 30),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+            border: Border.all(color: brandGolden.withOpacity(0.6), width: 1.3),
+            boxShadow: [
+              BoxShadow(color: brandGolden.withOpacity(0.2), blurRadius: 30, spreadRadius: 1),
+              const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(26, 30, 26, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.favorite_rounded, color: brandGolden, size: 32),
+              const SizedBox(height: 14),
+              Text('부모님의 응원', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 14),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: brandGolden,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text('힘낼게요!', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 14)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    _isMessageShowing = false;
+    await FamilyLinkService.clearPendingMessage();
+  }
 }
 
 class GsuStudyUpApp extends StatelessWidget {

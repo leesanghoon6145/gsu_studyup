@@ -185,6 +185,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     'nextLevelRoad': {'KO': '학습레벨로드', 'EN': 'Next Level Road', 'JA': '次のレベルへの道', 'ZH': '下一等级之路', 'FR': 'Vers le niveau suivant', 'DE': 'Weg zum nächsten Level', 'RU': 'Путь к следующему уровню', 'AR': 'الطريق إلى المستوى التالي', 'HI': 'अगले स्तर की राह', 'VI': 'Lộ trình cấp độ tiếp theo', 'ES': 'Camino al siguiente nivel', 'TH': 'เส้นทางสู่เลเวลถัดไป'},
     'todaySessionsTitle': {'KO': '오늘 학습한 과목', 'EN': "Today's Study Sessions", 'JA': '本日の学習科目', 'ZH': '今日学习科目', 'FR': "Sessions d'étude du jour", 'DE': 'Heutige Lernsitzungen', 'RU': 'Сегодняшние занятия', 'AR': 'جلسات الدراسة اليوم', 'HI': 'आज के अध्ययन सत्र', 'VI': 'Buổi học hôm nay', 'ES': 'Sesiones de estudio de hoy', 'TH': 'วิชาที่เรียนวันนี้'},
     'noSessionsToday': {'KO': '오늘 진행한 학습 세션이 아직 없습니다.', 'EN': 'No study sessions recorded today yet.', 'JA': '本日の学習セッションはまだありません。', 'ZH': '今天还没有学习记录。', 'FR': "Aucune session d'étude aujourd'hui pour l'instant.", 'DE': 'Heute wurden noch keine Lernsitzungen aufgezeichnet.', 'RU': 'Сегодня пока нет записанных занятий.', 'AR': 'لا توجد جلسات دراسة مسجلة اليوم بعد.', 'HI': 'आज तक कोई अध्ययन सत्र दर्ज नहीं हुआ।', 'VI': 'Hôm nay chưa có buổi học nào được ghi lại.', 'ES': 'Aún no se han registrado sesiones de estudio hoy.', 'TH': 'วันนี้ยังไม่มีการบันทึกการเรียน'},
+    // 🆕 [요청 2026-09-04] 날짜별 조회(좌우 화살표)에서 "오늘"이 아닌 과거 날짜를 볼 때 쓰는 일반화된 문구.
+    'noSessionsOnDate': {'KO': '해당 날짜에 진행한 학습 세션이 없습니다.', 'EN': 'No study sessions recorded on this date.', 'JA': 'この日の学習セッションはありません。', 'ZH': '该日期没有学习记录。', 'FR': "Aucune session d'étude enregistrée à cette date.", 'DE': 'An diesem Tag wurden keine Lernsitzungen aufgezeichnet.', 'RU': 'В этот день нет записанных занятий.', 'AR': 'لا توجد جلسات دراسة مسجلة في هذا التاريخ.', 'HI': 'इस तिथि पर कोई अध्ययन सत्र दर्ज नहीं है।', 'VI': 'Không có buổi học nào được ghi lại vào ngày này.', 'ES': 'No se registraron sesiones de estudio en esta fecha.', 'TH': 'ไม่มีการบันทึกการเรียนในวันนี้'},
+    // 🆕 [요청 2026-09-04] "오늘"이 아닌 날짜의 카드 제목에 쓰이는 일반 명칭 ("MM/DD 학습한 과목" 형태로 조합)
+    'sessionsGenericTitle': {'KO': '학습한 과목', 'EN': 'Study Sessions', 'JA': '学習科目', 'ZH': '学习科目', 'FR': "Sessions d'étude", 'DE': 'Lernsitzungen', 'RU': 'Занятия', 'AR': 'جلسات الدراسة', 'HI': 'अध्ययन सत्र', 'VI': 'Buổi học', 'ES': 'Sesiones de estudio', 'TH': 'วิชาที่เรียน'},
     'sessionOrdinal': {'KO': '교시', 'EN': 'Session', 'JA': '時限目', 'ZH': '节', 'FR': 'Séance', 'DE': 'Einheit', 'RU': 'Занятие', 'AR': 'حصة', 'HI': 'सत्र', 'VI': 'Tiết', 'ES': 'Sesión', 'TH': 'คาบ'},
     'minutesUnitSuffix': {'KO': '분', 'EN': 'min', 'JA': '分', 'ZH': '分钟', 'FR': 'min', 'DE': 'Min', 'RU': 'мин', 'AR': 'دقيقة', 'HI': 'मिनट', 'VI': 'phút', 'ES': 'min', 'TH': 'นาที'},
     'starsCount': {'KO': '23,487 개', 'EN': '23,487 Stars', 'JA': '23,487個', 'ZH': '23,487颗', 'FR': '23 487 étoiles', 'DE': '23.487 Sterne', 'RU': '23 487 звёзд', 'AR': '23,487 نجمة', 'HI': '23,487 स्टार्स', 'VI': '23.487 sao', 'ES': '23.487 estrellas', 'TH': '23,487 ดาว'},
@@ -393,6 +397,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   // 🆕 [데이터 연결] "일일 전체 학습시간" 가로스크롤 그래프용 - 기록 있는 날짜만, 최대 15일치
   List<Map<String, dynamic>> _dailyTotalHistory = [];
   final ScrollController _dailyTotalScrollController = ScrollController();
+  // 🆕 [요청 2026-09-04] 주평가 "월 선택" 가로 스크롤을 현재 월 위치로 자동 이동시키기 위한 컨트롤러.
+  final ScrollController _monthScrollController = ScrollController();
+  bool _monthRowAutoScrolled = false; // 한 번만 자동 스크롤하고, 이후 사용자가 직접 스크롤한 위치는 존중함
 
   // 🆕 [데이터 연결] "어제 대비 오늘" / "목표 달성도" 계산용 실제 오늘·어제 학습분(모든 과목 합산)
   int _todayTotalStudyMinutes = 0;
@@ -513,6 +520,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   String? _realTargetUniversity;
   // 🆕 [데이터 연결] 마이페이지에서 실제로 저장한 목표 대학을 그대로 반영 (기존엔 '서울대학교' 고정값이었음)
   String? _realUserName;
+  // 🆕 [요청 2026-09-04] 회원가입 시 입력한 실제 학교명/학년. "GKE 고등학교 2학년" 고정 문구 대체용.
+  String? _realSchoolName;
+  String? _realGrade;
 
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _unitController = TextEditingController();
@@ -564,6 +574,26 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     _loadRealSubjectStudyData(); // 🆕 [데이터 연결] 가상 8과목 그래프 대신 실제 학습기록을 집계해서 불러옴
     _loadDailyTotalHistory(); // 🆕 [데이터 연결] 일일 전체 학습시간(가로스크롤) 그래프용 데이터 로드
     _loadRealUserName(); // 🆕 [데이터 연결 2026-07-29] 실제 가입자 이름 불러옴
+    _loadRealSchoolGrade(); // 🆕 [요청 2026-09-04] 실제 학교명/학년 불러옴
+    _loadSessionsForDate(_selectedSessionDate); // 🆕 [요청 2026-09-04] 선택 날짜(기본값 오늘) 학습 세션 불러옴
+    // 🆕 [요청 2026-09-04] 첫 프레임이 렌더링된 직후, "주평가" 월 선택 가로 스크롤을 현재 월 위치로 이동.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollMonthRowToCurrent());
+  }
+
+  // 🆕 [요청 2026-09-04] "월 선택" 가로 스크롤 목록이 항상 1월부터 시작해서 현재 월이
+  // 화면 밖에 있던 문제 수정. 첫 렌더링 직후 한 번만, 현재 월 칩이 보이는 위치로 스크롤을 이동시킴.
+  // 이후 사용자가 직접 스크롤한 위치는 다시 덮어쓰지 않음(_monthRowAutoScrolled 플래그로 1회만 실행).
+  void _scrollMonthRowToCurrent() {
+    if (_monthRowAutoScrolled) return;
+    if (!_monthScrollController.hasClients) return;
+    final int currentMonthIndex = DateTime.now().month - 1; // 0-based
+    const double itemExtent = 58.0; // "N월" 칩 1개의 대략적인 폭(패딩+글자+여백 포함 추정치)
+    double target = (currentMonthIndex * itemExtent) - itemExtent; // 현재 월 바로 앞칸부터 보이도록 약간의 여유
+    if (target < 0) target = 0;
+    final double maxScroll = _monthScrollController.position.maxScrollExtent;
+    if (target > maxScroll) target = maxScroll;
+    _monthScrollController.jumpTo(target);
+    _monthRowAutoScrolled = true;
   }
 
   // 🆕 [데이터 연결-버그 수정] 레벨/별 실제 연동
@@ -595,6 +625,38 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     } catch (e) {
       debugPrint("[MemberAchievement] 가입자 이름 불러오기 실패: $e");
     }
+  }
+
+  // 🆕 [요청 2026-09-04] 실제 학교명/학년 불러오기.
+  // 기존엔 "GKE 고등학교 2학년"이 화면에 고정 문자열로 박혀있었음.
+  // 이제 signup_screen.dart 가입 완료 시점에 학생이 입력한 학교/학년(user_profile_service.dart에 저장됨)을
+  // 불러와서 표시. 값이 없는 회원(가입 당시 미입력, 또는 학부모/일반 계정)은 기존 고정 문구를 그대로 표시.
+  Future<void> _loadRealSchoolGrade() async {
+    try {
+      final String? school = await DkeUserProfile.getSchoolName();
+      final String? grade = await DkeUserProfile.getGrade();
+      if (!mounted) return;
+      setState(() {
+        _realSchoolName = school;
+        _realGrade = grade;
+      });
+    } catch (e) {
+      debugPrint("[MemberAchievement] 학교/학년 불러오기 실패: $e");
+    }
+  }
+
+  // 🆕 [요청 2026-09-04] 학교/학년/이름을 조합한 실제 표시 문자열.
+  // 회원가입 때 학교와 학년을 모두 입력한 학생이면 "OO고등학교 2학년 홍길동"처럼
+  // 실제 값으로 조합해서 보여주고, 하나라도 비어있으면(가입 당시 미입력, 학부모/일반 계정 등)
+  // 기존 고정 문구("GKE 고등학교 2학년" + 이름)로 안전하게 대체합니다.
+  String get _schoolGradeNameDisplay {
+    final String name = _realUserName ?? (DkeLang.current == 'KO' ? "학습자" : "Learner");
+    if ((_realSchoolName ?? '').isNotEmpty && (_realGrade ?? '').isNotEmpty) {
+      return "$_realSchoolName $_realGrade $name";
+    }
+    return DkeLang.current == 'KO'
+        ? '${_t("highSchoolGrade2")} $name'
+        : "${_t('highSchoolGrade2')}, $name";
   }
 
   // ============================================================================
@@ -824,6 +886,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     _unitController.dispose();
     _scoreController.dispose();
     _dailyTotalScrollController.dispose(); // 🆕 [데이터 연결] 신규 스크롤 컨트롤러 해제
+    _monthScrollController.dispose(); // 🆕 [요청 2026-09-04] 월 선택 스크롤 컨트롤러 해제
     super.dispose();
   }
 
@@ -1370,9 +1433,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 child: Column(
                   children: [
                     Text(
-                      DkeLang.current == 'KO'
-                          ? '${_t("highSchoolGrade2")} ${_realUserName ?? "학습자"}'
-                          : "${_t('highSchoolGrade2')}, ${_realUserName ?? "Learner"}",
+                      _schoolGradeNameDisplay, // 🆕 [요청 2026-09-04] 실제 "학교 학년 이름"으로 표시
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.fade,
                       softWrap: false,
@@ -1840,7 +1901,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     _buildSubScrollRow(years, _inputYear, (v) => setState(() => _inputYear = v!)),
                     const SizedBox(height: 8),
                     _buildSubFilterLabel(_t('monthSelect')),
-                    _buildSubScrollRow(months, _inputMonth, (v) => setState(() => _inputMonth = v!)),
+                    _buildSubScrollRow(months, _inputMonth, (v) => setState(() => _inputMonth = v!), controller: _monthScrollController),
                     const SizedBox(height: 8),
                     _buildSubFilterLabel(_t('weekSelect')),
                     _buildSubScrollRow(weeks, _inputWeek, (v) => setState(() => _inputWeek = v!)),
@@ -2104,8 +2165,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     return nums.map((n) => "$unitWord $n").join(", ");
   }
 
-  Widget _buildSubScrollRow(List<String> items, String selectedValue, ValueChanged<String?> onSelected) {
+  // 🆕 [요청 2026-09-04] 월 선택 등 가로 스크롤 목록에 controller를 선택적으로 지정할 수 있게 변경.
+  // (현재 월로 자동 스크롤하는 기능을 위해 필요 - controller가 없으면 기존과 동일하게 동작)
+  Widget _buildSubScrollRow(List<String> items, String selectedValue, ValueChanged<String?> onSelected, {ScrollController? controller}) {
     return SingleChildScrollView(
+      controller: controller,
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       child: Row(
@@ -2384,18 +2448,52 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   static const double _kChartTopPad = 25.0;
   static const double _kChartBottomPad = 44.0;
 
-  // 🆕 [⑤번] 오늘 학습한 과목 목록 (timer_screen.dart가 저장한 dke_history_* 기록 중 오늘 것만 필터링)
-  List<Map<String, dynamic>> _todaySessions = [];
+  // 🆕 [요청 2026-09-04] "오늘 학습한 과목" 카드가 날짜별로 조회 가능하도록 확장.
+  // 기본값은 오늘이며, 좌우 화살표로 전날/전전날 등을 조회할 수 있음(미래 날짜는 이동 불가).
+  DateTime _selectedSessionDate = DateTime.now();
+  List<Map<String, dynamic>> _selectedDaySessions = [];
 
-  // 🆕 [⑤번] 오늘 진행한 학습 세션을 시간순으로 불러오는 함수.
-  // dke_history_{과목명} 키를 전부 훑어서 오늘 날짜에 해당하는 기록만 추출합니다.
-  Future<void> _loadTodaySessions() async {
+  bool get _isSelectedDateToday {
+    final DateTime today = DateTime.now();
+    return _selectedSessionDate.year == today.year &&
+        _selectedSessionDate.month == today.month &&
+        _selectedSessionDate.day == today.day;
+  }
+
+  // 🆕 [요청 2026-09-04] 오늘 날짜보다 이후로는 이동할 수 없도록 다음(▶) 버튼 비활성화 여부 판단.
+  bool get _isNextDayDisabled => _isSelectedDateToday;
+
+  String get _sessionCardTitle {
+    if (_isSelectedDateToday) return _t('todaySessionsTitle');
+    return DkeLang.current == 'KO'
+        ? "${_selectedSessionDate.month}월 ${_selectedSessionDate.day}일 ${_t('sessionsGenericTitle')}"
+        : "${_selectedSessionDate.month}/${_selectedSessionDate.day} ${_t('sessionsGenericTitle')}";
+  }
+
+  String get _sessionEmptyMessage => _isSelectedDateToday ? _t('noSessionsToday') : _t('noSessionsOnDate');
+
+  void _goToPreviousSessionDay() {
+    final DateTime newDate = _selectedSessionDate.subtract(const Duration(days: 1));
+    setState(() => _selectedSessionDate = newDate);
+    _loadSessionsForDate(newDate);
+  }
+
+  void _goToNextSessionDay() {
+    if (_isNextDayDisabled) return; // 오늘이 이미 선택되어 있으면 미래로는 이동 불가
+    final DateTime newDate = _selectedSessionDate.add(const Duration(days: 1));
+    setState(() => _selectedSessionDate = newDate);
+    _loadSessionsForDate(newDate);
+  }
+
+  // 🆕 [요청 2026-09-04] 선택된 날짜의 학습 세션을 시간순으로 불러오는 함수.
+  // dke_history_{과목명} 키를 전부 훑어서 해당 날짜 하루치(00:00~다음날 00:00 직전)만 추출합니다.
+  Future<void> _loadSessionsForDate(DateTime date) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final Set<String> allKeys = prefs.getKeys();
       final Iterable<String> historyKeys = allKeys.where((k) => k.startsWith('dke_history_'));
-      final DateTime now = DateTime.now();
-      final DateTime todayStart = DateTime(now.year, now.month, now.day);
+      final DateTime dayStart = DateTime(date.year, date.month, date.day);
+      final DateTime dayEnd = dayStart.add(const Duration(days: 1));
 
       final List<Map<String, dynamic>> sessions = [];
 
@@ -2406,8 +2504,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         for (final raw in entries) {
           try {
             final Map<String, dynamic> item = jsonDecode(raw);
-            final DateTime ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal() ?? now;
-            if (ts.isBefore(todayStart)) continue;
+            final DateTime ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+            if (ts.isBefore(dayStart) || !ts.isBefore(dayEnd)) continue;
             final int durationSeconds = (item['durationSeconds'] as num?)?.toInt() ?? 0;
             final int minutes = (durationSeconds / 60).round();
             sessions.add({
@@ -2425,14 +2523,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
       if (!mounted) return;
       setState(() {
-        _todaySessions = sessions;
+        _selectedDaySessions = sessions;
       });
     } catch (e) {
-      debugPrint("[MemberAchievement] 오늘 학습 세션 불러오기 실패: $e");
+      debugPrint("[MemberAchievement] 학습 세션 불러오기 실패: $e");
     }
   }
 
-  // 🆕 [⑤번] "오늘 학습한 과목" 카드 위젯. 오늘 진행한 세션이 없으면 안내 문구, 있으면 교시별 목록을 보여줍니다.
+  // 🆕 [요청 2026-09-04] "오늘 학습한 과목" 카드 위젯 - 좌우 화살표로 날짜 이동 가능.
+  // 세션이 없으면 안내 문구, 있으면 교시별 목록을 보여줍니다.
   Widget _buildTodaySessionsCard() {
     return Container(
       width: double.infinity,
@@ -2446,18 +2545,38 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _t('todaySessionsTitle'),
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            maxLines: 1,
-            style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: _goToPreviousSessionDay,
+                child: const Icon(Icons.arrow_left_rounded, color: _ThemeColors.brandGolden, size: 26),
+              ),
+              Expanded(
+                child: Text(
+                  _sessionCardTitle,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  maxLines: 1,
+                  style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+              GestureDetector(
+                onTap: _isNextDayDisabled ? null : _goToNextSessionDay,
+                child: Icon(
+                  Icons.arrow_right_rounded,
+                  color: _isNextDayDisabled ? Colors.white12 : _ThemeColors.brandGolden,
+                  size: 26,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
-          if (_todaySessions.isEmpty)
-            Text(_t('noSessionsToday'), style: const TextStyle(color: Colors.white38, fontSize: 12))
+          if (_selectedDaySessions.isEmpty)
+            Text(_sessionEmptyMessage, style: const TextStyle(color: Colors.white38, fontSize: 12))
           else
-            ..._todaySessions.asMap().entries.map((entry) {
+            ..._selectedDaySessions.asMap().entries.map((entry) {
               final int idx = entry.key;
               final Map<String, dynamic> s = entry.value;
               return Padding(
@@ -2487,19 +2606,20 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     );
   }
 
-  // 🆕 [⑤⑦번] "종합 리포트" 버튼용 실시간 콘텐츠 생성 함수.
-  // 기존의 "이규현" 가짜 고정 텍스트(summaryReportBody)를 대체하며, 오늘 실제 학습 세션과
+  // 🆕 [요청 2026-09-04] "종합 리포트" 버튼용 실시간 콘텐츠 생성 함수.
+  // 기존의 "이규현" 가짜 고정 텍스트(summaryReportBody)를 대체하며, "오늘 학습한 과목" 카드와
+  // 동일하게 선택된 날짜(_selectedSessionDate, 좌우 화살표로 이동 가능)의 실제 학습 세션과
   // 실제 목표 달성도를 반영한 진단 피드백을 실시간으로 구성합니다.
   Future<String> _buildTotalReportContent() async {
-    if (_todaySessions.isEmpty) {
-      return _t('noSessionsToday');
+    if (_selectedDaySessions.isEmpty) {
+      return _sessionEmptyMessage;
     }
 
     final buffer = StringBuffer();
     buffer.write(DkeLang.current == 'KO' ? '[종합 리포트]\n\n' : '[Total Report]\n\n');
 
-    for (int i = 0; i < _todaySessions.length; i++) {
-      final s = _todaySessions[i];
+    for (int i = 0; i < _selectedDaySessions.length; i++) {
+      final s = _selectedDaySessions[i];
       final DateTime ts = s["timestamp"] as DateTime;
       final String timeStr = "${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}";
       buffer.write(DkeLang.current == 'KO'
@@ -2508,7 +2628,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       buffer.write("• ${_subjectName(s["subject"] as String)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n");
     }
 
-    final String topSubject = _todaySessions.first["subject"] as String;
+    final String topSubject = _selectedDaySessions.first["subject"] as String;
     final String diagnosis = await _generateOrReuseDiagnosis(
       type: "일일종합",
       score: _realGoalAttainmentPercent.toDouble(),
@@ -2521,16 +2641,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     return buffer.toString();
   }
 
-  // 🆕 [⑤⑦번] "상세분석기록" 버튼용 실시간 콘텐츠 생성 함수.
-  // 기존의 "이규현" 가짜 고정 텍스트(detailedReportBody)를 대체하며, 오늘 실제 학습시간과
+  // 🆕 [요청 2026-09-04] "상세분석기록" 버튼용 실시간 콘텐츠 생성 함수.
+  // 기존의 "이규현" 가짜 고정 텍스트(detailedReportBody)를 대체하며, 선택된 날짜의 실제 학습시간과
   // 가장 많이 학습한 과목을 반영한 상세 진단을 실시간으로 구성합니다.
   Future<String> _buildDetailedReportContent() async {
-    if (_todaySessions.isEmpty) {
-      return _t('noSessionsToday');
+    if (_selectedDaySessions.isEmpty) {
+      return _sessionEmptyMessage;
     }
 
-    final int totalTodayMin = _todaySessions.fold<int>(0, (sum, s) => sum + (s["minutes"] as int));
-    final String topSubject = _todaySessions.first["subject"] as String;
+    final int totalTodayMin = _selectedDaySessions.fold<int>(0, (sum, s) => sum + (s["minutes"] as int));
+    final String topSubject = _selectedDaySessions.first["subject"] as String;
 
     final buffer = StringBuffer();
     buffer.write(DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n');

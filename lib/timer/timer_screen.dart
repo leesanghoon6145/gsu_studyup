@@ -2029,22 +2029,16 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Row(children: [Expanded(child: Text("🔊 ${widget.selectedSubject}", style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))]),
                           const SizedBox(height: 4),
-                          // 🆕 [실시간 별 표시 2026-09-02] 아이콘 없이 순수 텍스트로만 표시.
-                          // 세션 중 실시간으로 쌓이는 별 개수(_starsEarnedThisSession)를 그대로 보여줌.
-                          // DkeStars에는 이미 실시간으로 저장되고 있으므로 여기서는 화면 표시만 추가함
-                          // (저장 로직 변경 없음).
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              _isForeign
-                                  ? '${_koOnly(_dlg['liveStars']!)}: $_starsEarnedThisSession'
-                                  : '${_koOnly(_dlg['liveStars']!)} $_starsEarnedThisSession${_koOnly(_dlg['starsCountUnit']!)}',
-                              style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
+                          // 🆕 [요청 2026-09-04] 기존엔 "실시간 별 ??개"를 별도 줄로 보여주었으나,
+                          // 요청에 따라 그 줄을 삭제하고 "실시간 집중 모드" 문구 뒤에
+                          // ", 별 ??개" 형태로 합쳐서 한 줄에 표시하도록 변경함.
                           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text(_koOnly(_dlg['realtimeFocusMode']!), style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text(
+                              _isForeign
+                                  ? '${_koOnly(_dlg['realtimeFocusMode']!)}, ${_koOnly(_dlg['liveStars']!)} $_starsEarnedThisSession'
+                                  : '${_koOnly(_dlg['realtimeFocusMode']!)}, ${_koOnly(_dlg['liveStars']!)} $_starsEarnedThisSession${_koOnly(_dlg['starsCountUnit']!)}',
+                              style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
                             Text('${_koOnly(_dlg['targetTimeLabel']!)}: ${widget.selectedDurationMinutes}$_minuteUnit', textAlign: TextAlign.end, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
                           ]),
                           const SizedBox(height: 10),

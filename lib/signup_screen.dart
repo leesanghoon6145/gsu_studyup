@@ -731,6 +731,11 @@ class _SignupScreenState extends State<SignupScreen> {
                       password: _passwordController.text, // 🆕 [실제 계정 생성용]
                       childEmail: (!isStudent && !isGeneral) ? _childEmailController.text.trim() : null,
                       parentEmail: null, // 🆕 [보호자 인증 재설계] 이메일 대신 연결 코드 방식으로 대체되어 더 이상 수집하지 않음
+                      // 🆕 [요청 2026-09-04] 학생 가입일 때만 학교/학년 값을 함께 전달.
+                      // (member_achievement_screen.dart의 "GKE 고등학교 2학년" 고정 문구를
+                      // 실제 "학교 학년 이름"으로 표시하기 위해 필요)
+                      school: (isStudent && !isGeneral) ? _schoolController.text.trim() : null,
+                      grade: (isStudent && !isGeneral) ? _gradeController.text.trim() : null,
                     ),
                   ),
                 );
@@ -861,6 +866,8 @@ class TermsAgreementScreen extends StatefulWidget {
   final String password; // 🆕 [실제 계정 생성용]
   final String? childEmail;
   final String? parentEmail;
+  final String? school; // 🆕 [요청 2026-09-04] 학생 가입 시 학교명
+  final String? grade; // 🆕 [요청 2026-09-04] 학생 가입 시 학년
 
   const TermsAgreementScreen({
     super.key,
@@ -870,6 +877,8 @@ class TermsAgreementScreen extends StatefulWidget {
     required this.password,
     this.childEmail,
     this.parentEmail,
+    this.school, // 🆕
+    this.grade, // 🆕
   });
 
   @override
@@ -1002,11 +1011,14 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
 
                 // 🆕 [실사용 전환 2026-07-29] 가상 데이터 아님 - 실제 입력한 이름/유형/연동 정보를
                 // user_profile_service.dart 창구를 통해 저장. 이후 성취도 화면 등에서 실제 이름 표시됨.
+                // 🆕 [요청 2026-09-04] school/grade도 함께 전달해서 저장.
                 await DkeUserProfile.saveProfileOnSignup(
                   realName: widget.realName,
                   userType: widget.userType,
                   childEmail: widget.childEmail,
                   parentEmail: widget.parentEmail,
+                  school: widget.school, // 🆕
+                  grade: widget.grade, // 🆕
                 );
 
                 if (!mounted) return;

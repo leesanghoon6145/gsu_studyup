@@ -10,6 +10,9 @@
 //   - 팝업 맨 아래 삭제/취소/저장 한 줄 배치
 //   - 캘린더와 같은 ScheduleDataService를 쓰므로, 캘린더에서 오늘 추가한
 //     일정이 여기 그대로 보이고, 여기서 수정하면 캘린더에도 반영됩니다.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 오늘 운동 기록이 있으면 목록에
+// 함께 노출하고, 탭하면 해당 기록의 상세화면(TodayExerciseScreen)으로 이동.
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -17,6 +20,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'schedule_data_service.dart';
 import 'calendar_screen.dart' show kScheduleCategories, categoryColorOf;
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
+import 'exercise_theme.dart'; // 🆕 [운동 연동] 골드 아이콘 매핑 재사용
+import 'today_exercise_screen.dart'; // 🆕 [운동 연동] 탭하면 기록화면으로 이동
 
 class TodayScheduleScreen extends StatefulWidget {
   const TodayScheduleScreen({super.key});
@@ -31,6 +38,8 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
   static const Color _containerBg = Color(0xFF0D1527);
 
   List<ScheduleItem> _todayItems = [];
+  List<ExerciseRecord> _todayExercises = []; // 🆕 [운동 연동]
+  Map<String, ExerciseType> _exerciseTypesById = {}; // 🆕 [운동 연동]
   bool _isLoading = true;
 
   String get _todayKey {
@@ -47,15 +56,29 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
   Future<void> _loadTodaySchedule() async {
     setState(() => _isLoading = true);
     final items = await ScheduleDataService.loadForDate(_todayKey);
+
+    // 🆕 [운동 연동] 오늘 날짜의 운동 기록 + 종목(아이콘/이름 조회용) 로드
+    final types = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
+    final typesById = {for (final t in types) t.id: t};
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final now = DateTime.now();
+    final todayExercises = allExerciseRecords.where((r) {
+      return r.date.year == now.year && r.date.month == now.month && r.date.day == now.day;
+    }).toList();
+
     if (!mounted) return;
     setState(() {
       _todayItems = items;
+      _todayExercises = todayExercises; // 🆕 [운동 연동]
+      _exerciseTypesById = typesById; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
 
-  int get _completedCount => _todayItems.where((e) => e.isCompleted).length;
-  double get _completionRate => _todayItems.isEmpty ? 0 : _completedCount / _todayItems.length;
+  // 🆕 [운동 연동] 완료율 계산에 운동 기록도 포함시킨다 (운동 기록은 항상 "완료된" 항목으로 취급).
+  int get _completedCount => _todayItems.where((e) => e.isCompleted).length + _todayExercises.length;
+  int get _totalCount => _todayItems.length + _todayExercises.length;
+  double get _completionRate => _totalCount == 0 ? 0 : _completedCount / _totalCount;
 
   Future<void> _toggleComplete(ScheduleItem item) async {
     item.isCompleted = !item.isCompleted;
@@ -201,6 +224,17 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
     );
   }
 
+  // 🆕 [운동 연동] 운동 기록 탭 시 해당 기록의 상세화면으로 이동, 돌아오면 새로고침.
+  Future<void> _onExerciseTapped(ExerciseRecord record) async {
+    final type = _exerciseTypesById[record.exerciseTypeId];
+    if (type == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: type, existingRecord: record)),
+    );
+    await _loadTodaySchedule();
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -232,7 +266,7 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
             const SizedBox(height: 12),
             _buildProgressCard(),
             const SizedBox(height: 20),
-            if (_todayItems.isEmpty)
+            if (_todayItems.isEmpty && _todayExercises.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Center(
@@ -253,8 +287,11 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
                   ),
                 ),
               )
-            else
+            else ...[
               ..._todayItems.map((item) => _buildScheduleTile(item)),
+              // 🆕 [운동 연동] 일정 목록 아래에 오늘의 운동 기록도 이어서 표시
+              ..._todayExercises.map((record) => _buildExerciseTile(record)),
+            ],
           ],
         ),
       ),
@@ -267,7 +304,7 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
   }
 
   Widget _buildProgressCard() {
-    final int total = _todayItems.length;
+    final int total = _totalCount; // 🆕 [운동 연동] 일정+운동 합산
     final int done = _completedCount;
     final int percent = (total == 0) ? 0 : (_completionRate * 100).round();
 
@@ -336,6 +373,42 @@ class _TodayScheduleScreenState extends State<TodayScheduleScreen> {
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
         ],
+      ),
+    );
+  }
+
+  // 🆕 [운동 연동] 오늘의 운동 기록 타일. 일정 타일과 같은 톤(골드 테두리 컨테이너)이지만
+  // 완료 토글 대신 항상 체크 표시(이미 기록된 완료 활동)이고, 탭하면 상세 기록화면으로 이동.
+  Widget _buildExerciseTile(ExerciseRecord record) {
+    final type = _exerciseTypesById[record.exerciseTypeId];
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _onExerciseTapped(record),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: _brandGolden.withOpacity(0.35))),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: _brandGolden, size: 24),
+            const SizedBox(width: 10),
+            Icon(ExerciseTheme.iconForType(record.exerciseTypeId), color: _brandGolden, size: 18),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(6)),
+              child: Text('${record.durationMin}min', style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                type?.name ?? '운동',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+              ),
+            ),
+            BiInline(en: 'Exercise', ko: '운동', color: Colors.white38, fontSize: 10),
+          ],
+        ),
       ),
     );
   }
