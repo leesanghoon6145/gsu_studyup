@@ -34,8 +34,8 @@ class ExerciseTheme {
       color: containerBg,
       borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: brandGolden.withOpacity(highlighted ? 0.7 : 0.45),
-        width: highlighted ? 1.6 : 1,
+        color: brandGolden.withOpacity(highlighted ? 0.85 : 0.45),
+        width: highlighted ? 2.0 : 1,
       ),
       boxShadow: [
         BoxShadow(
@@ -172,13 +172,15 @@ class ExerciseTheme {
     List<Widget>? actions,
     Widget? leading,
     Map<String, String>? translations,
+    double enSize = 18,
+    double koSize = 13,
   }) {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
       leading: leading,
-      title: BiTitle(en: en, ko: ko, enSize: 18, koSize: 13, translations: translations),
+      title: BiTitle(en: en, ko: ko, enSize: enSize, koSize: koSize, translations: translations),
       actions: actions,
     );
   }

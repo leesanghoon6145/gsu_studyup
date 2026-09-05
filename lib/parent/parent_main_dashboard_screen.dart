@@ -1073,7 +1073,12 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
 
   // 🆕 [정리] 기존에 IndexedStack 안에 인라인으로 있던 콜백들을 재사용 가능하도록 메서드로 분리
   // (로컬 모드/Firestore 모드 양쪽에서 동일한 콜백을 그대로 씁니다 - 동작 변경 없음)
+  // 🆕 [부모-자녀 응원 시스템 2026-09-04] 실제로 학생 기기에 도달하도록, 선택된 자녀의
+  // Firestore 문서에 이모지를 전송합니다. 부모 화면의 스낵바는 "전송 확인" 용도로 유지합니다.
   void _handleSendEmojiMessage(String emoji, String message) {
+    if (_selectedChildCode != null) {
+      FamilyLinkService.pushEmojiToChild(_selectedChildCode!, emoji: emoji, message: message);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: premiumCardBg,
@@ -1085,6 +1090,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     );
   }
 
+  // 🆕 [부모-자녀 응원 시스템 2026-09-04] 실제로 학생 기기에 도달하도록, 선택된 자녀의
+  // Firestore 문서에 응원 문구를 전송합니다 (학생 화면에 팝업으로 표시, 답장 없음).
   void _handleSendCustomMessage(String customText) {
     final now = DateTime.now();
     final hourText = now.hour < 10 ? '0${now.hour}' : '${now.hour}';
@@ -1093,6 +1100,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
     setState(() {
       _lastSentTimeText = "$hourText:$minText";
     });
+
+    if (_selectedChildCode != null) {
+      FamilyLinkService.pushEncouragementToChild(_selectedChildCode!, message: customText);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

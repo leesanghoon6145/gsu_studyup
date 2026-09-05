@@ -3,12 +3,18 @@
 // 올해의 목표 달성률, 총 일정 완료 수, 가장 생산적인 달, 가장 활동적인
 // 요일, 올해 달성한 목표 개수를 보여줍니다. 실제 쌓인 데이터만으로
 // 정직하게 계산합니다 (데이터 없으면 "데이터 없음").
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 올해 운동 요약(세션/시간/평균
+// RPE + 종목별 랭킹) 카드를 추가.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'report_data_service.dart';
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
+import 'exercise_theme.dart' show ExerciseTheme; // 🆕 [운동 연동]
 
 class YearlyReportScreen extends StatefulWidget {
   const YearlyReportScreen({super.key});
@@ -27,6 +33,8 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
   String? _mostActiveWeekday;
   int _achievedGoalCount = 0;
   int _completedProjectCount = 0; // 🆕 [프로젝트 연동]
+  List<ExerciseRecord> _exercises = []; // 🆕 [운동 연동]
+  Map<String, ExerciseType> _exerciseTypesById = {}; // 🆕 [운동 연동]
   late DateTime _yearStart;
   late DateTime _yearEnd;
   bool _isLoading = true;
@@ -40,6 +48,13 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
     _load();
   }
 
+  bool _inRange(DateTime d) {
+    final day = DateTime(d.year, d.month, d.day);
+    final start = DateTime(_yearStart.year, _yearStart.month, _yearStart.day);
+    final end = DateTime(_yearEnd.year, _yearEnd.month, _yearEnd.day);
+    return !day.isBefore(start) && !day.isAfter(end);
+  }
+
   Future<void> _load() async {
     setState(() => _isLoading = true);
     final summary = await ReportDataService.summarize(_yearStart, _yearEnd);
@@ -48,6 +63,12 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
     final projectCount = await ReportDataService.countProjectsCompletedInRange(_yearStart, _yearEnd);
     final achievedCount = await ReportDataService.countAchievementsInRange(_yearStart, _yearEnd);
 
+    // 🆕 [운동 연동] 올해 운동 기록 + 종목(아이콘/이름 조회용) 로드
+    final exerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
+    final typesById = {for (final t in exerciseTypes) t.id: t};
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final yearExercises = allExerciseRecords.where((r) => _inRange(r.date)).toList();
+
     if (!mounted) return;
     setState(() {
       _summary = summary;
@@ -55,12 +76,16 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
       _mostActiveWeekday = weekday;
       _achievedGoalCount = achievedCount;
       _completedProjectCount = projectCount;
+      _exercises = yearExercises; // 🆕 [운동 연동]
+      _exerciseTypesById = typesById; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool hasReportableData = (_summary != null && _summary!.hasData) || _exercises.isNotEmpty; // 🆕 [운동 연동]
+
     return Scaffold(
       backgroundColor: _pageBg,
       appBar: AppBar(
@@ -75,7 +100,7 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
-          : (_summary == null || !_summary!.hasData)
+          : !hasReportableData
           ? Center(
         child: BiInline(
           en: 'No records for this year yet.', ko: '올해 등록된 기록이 없습니다.', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
@@ -87,13 +112,21 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
         children: [
           Text('${_yearStart.year}', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _buildCompletionCard(),
-          const SizedBox(height: 16),
+          if (_summary != null && _summary!.hasData) ...[
+            _buildCompletionCard(),
+            const SizedBox(height: 16),
+          ],
+          if (_exercises.isNotEmpty) ...[
+            _buildExerciseSummaryCard(), // 🆕 [운동 연동]
+            const SizedBox(height: 16),
+          ],
           _buildGoalAchievedCard(),
           const SizedBox(height: 16),
           _buildProjectCompletedCard(),
-          const SizedBox(height: 16),
-          _buildInsightCard(),
+          if (_summary != null && _summary!.hasData) ...[
+            const SizedBox(height: 16),
+            _buildInsightCard(),
+          ],
         ],
       ),
     );
@@ -124,6 +157,76 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // 🆕 [운동 연동] 올해 운동 요약 카드 - 세션/시간/평균RPE + 종목별 랭킹
+  Widget _buildExerciseSummaryCard() {
+    final totalMinutes = _exercises.fold<int>(0, (sum, r) => sum + r.durationMin);
+    final rpeValues = _exercises.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
+    final avgRpe = rpeValues.isEmpty ? null : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+    final Map<String, int> countByType = {};
+    for (final r in _exercises) {
+      countByType[r.exerciseTypeId] = (countByType[r.exerciseTypeId] ?? 0) + 1;
+    }
+    final ranked = countByType.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BiInline(
+                  en: 'Exercise This Year', ko: '올해 운동', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                  translations: const {'JA': '今年の運動', 'ZH': '今年运动', 'FR': "Exercice cette année", 'DE': 'Training dieses Jahr', 'RU': 'Тренировки в этом году', 'AR': 'تمرين هذا العام', 'HI': 'इस वर्ष व्यायाम', 'VI': 'Tập luyện năm nay', 'ES': 'Ejercicio este año', 'TH': 'ออกกำลังกายปีนี้'},
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _exerciseStat('SESSIONS', '세션', '${_exercises.length}')),
+              Expanded(child: _exerciseStat('MINUTES', '시간(분)', '$totalMinutes')),
+              Expanded(child: _exerciseStat('AVG RPE', '평균 강도', avgRpe == null ? '-' : avgRpe.toStringAsFixed(1))),
+            ],
+          ),
+          if (ranked.isNotEmpty) ...[
+            const Divider(color: Colors.white12, height: 24),
+            ...ranked.take(5).map((e) {
+              final type = _exerciseTypesById[e.key];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(ExerciseTheme.iconForType(e.key), color: _brandGolden, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(type?.name ?? e.key, style: const TextStyle(color: Colors.white, fontSize: 13))),
+                    Text('${e.value}회', style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _exerciseStat(String en, String ko, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(color: _brandGolden, fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        BiInline(en: en, ko: ko, color: Colors.white54, fontSize: 10),
+      ],
     );
   }
 

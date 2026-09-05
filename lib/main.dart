@@ -11,6 +11,7 @@ import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
 import 'parent/parent_main_dashboard_screen.dart'; // 🆕 [유형별 라우팅] 학부모 화면
 import 'schedule/general_planner_home_screen.dart'; // 🆕 [유형별 라우팅] 일반 사용자 화면
+import 'schedule/notification_service.dart'; // 🆕 [2026-09-05 추가] 알람 끄기 전체화면 팝업(RingingAlarmStopBanner)을 앱 최상단에 붙이기 위함
 import 'package:gsu_studyup/global_lang.dart';
 import 'services/timer2_services.dart';
 import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
@@ -284,6 +285,19 @@ class GsuStudyUpApp extends StatelessWidget {
         brightness: Brightness.dark,
         primaryColor: const Color(0xFFFDE047), // 황금색 포인트
       ),
+      // ✅ [2026-09-05 추가] 알람이 울리면 "지금 어떤 화면에 있든" 그 위에 전체화면
+      // 끄기 팝업이 뜨도록, RingingAlarmStopBanner를 앱의 모든 라우트 위에 항상
+      // 겹쳐서 그림. ParentEncouragementManager(위 오버레이 방식)와 동일한 목적으로,
+      // "특정 화면 안에 넣는 대신 앱 최상단 한 곳에서만 관리"하는 원칙을 그대로 따름.
+      // 로그인 화면/일반 플래너/타이머 등 어떤 화면이 떠 있어도 동일하게 작동함.
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            if (!kIsWeb) const RingingAlarmStopBanner(),
+          ],
+        );
+      },
       // 처음 시작 화면을 EntranceScreen으로 설정
       home: const EntranceScreen(),
     );

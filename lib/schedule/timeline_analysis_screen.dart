@@ -4,12 +4,16 @@
 // 데이터가 없으면 가짜 숫자로 채우지 않고 "아직 분석할 데이터가 없다"는
 // 안내만 보여줍니다 (ai_consulting_room_screen.dart에서 발견됐던 문제를
 // 반복하지 않기 위한 원칙 적용).
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 전체 기간 누적 운동 요약(세션/
+// 시간/평균 RPE) 카드를 추가.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'timeline_data_service.dart';
 import 'bilingual_text.dart'; // 🆕 [42건 정리] 이 화면만 병기 공용위젯이 빠져있었음
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
 
 class TimelineAnalysisScreen extends StatefulWidget {
   const TimelineAnalysisScreen({super.key});
@@ -25,6 +29,9 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
 
   List<TimelineBlock> _allBlocks = [];
   List<TimelineBlock> _completedBlocks = [];
+  int _totalExerciseSessions = 0; // 🆕 [운동 연동]
+  int _totalExerciseMinutes = 0; // 🆕 [운동 연동]
+  double? _avgExerciseRpe; // 🆕 [운동 연동]
   bool _isLoading = true;
 
   @override
@@ -36,10 +43,20 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
   Future<void> _loadData() async {
     final all = await TimelineDataService.loadAllBlocks();
     final completed = all.where((b) => b.status == 'completed').toList();
+
+    // 🆕 [운동 연동] 전체 기간 누적 운동 기록
+    final allExercises = await ExerciseDataService.instance.getAllRecords();
+    final exerciseMinutes = allExercises.fold<int>(0, (sum, r) => sum + r.durationMin);
+    final rpeValues = allExercises.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
+    final avgRpe = rpeValues.isEmpty ? null : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+
     if (!mounted) return;
     setState(() {
       _allBlocks = all;
       _completedBlocks = completed;
+      _totalExerciseSessions = allExercises.length; // 🆕 [운동 연동]
+      _totalExerciseMinutes = exerciseMinutes; // 🆕 [운동 연동]
+      _avgExerciseRpe = avgRpe; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -70,6 +87,9 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🆕 [운동 연동] 완료된 타임라인이 없어도 운동 기록이 있으면 빈 화면 대신 분석을 보여준다.
+    final bool hasAnyData = _completedBlocks.isNotEmpty || _totalExerciseSessions > 0;
+
     return Scaffold(
       backgroundColor: _pageBg,
       appBar: AppBar(
@@ -90,7 +110,7 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
-          : _completedBlocks.isEmpty
+          : !hasAnyData
           ? Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -118,11 +138,15 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildOverallCard(),
-          const SizedBox(height: 16),
-          _buildCategoryCard(),
-          const SizedBox(height: 16),
-          _buildDiffCard(),
+          if (_completedBlocks.isNotEmpty) ...[
+            _buildOverallCard(),
+            const SizedBox(height: 16),
+            _buildCategoryCard(),
+            const SizedBox(height: 16),
+            _buildDiffCard(),
+            const SizedBox(height: 16),
+          ],
+          if (_totalExerciseSessions > 0) _buildExerciseCard(), // 🆕 [운동 연동]
         ],
       ),
     );
@@ -160,6 +184,50 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // 🆕 [운동 연동] 전체 기간 누적 운동 요약 - 세션/시간/평균 RPE
+  Widget _buildExerciseCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BiInline(
+                  en: 'Exercise (All Time)', ko: '운동 (전체 기간)', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                  translations: const {'JA': '運動（全期間）', 'ZH': '运动（全部时间）', 'FR': "Exercice (toute période)", 'DE': 'Training (gesamter Zeitraum)', 'RU': 'Тренировки (за всё время)', 'AR': 'التمرين (كل الفترات)', 'HI': 'व्यायाम (संपूर्ण अवधि)', 'VI': 'Tập luyện (toàn bộ)', 'ES': 'Ejercicio (todo el período)', 'TH': 'ออกกำลังกาย (ทั้งหมด)'},
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _exerciseStat('SESSIONS', '세션', '$_totalExerciseSessions')),
+              Expanded(child: _exerciseStat('MINUTES', '시간(분)', '$_totalExerciseMinutes')),
+              Expanded(child: _exerciseStat('AVG RPE', '평균 강도', _avgExerciseRpe == null ? '-' : _avgExerciseRpe!.toStringAsFixed(1))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _exerciseStat(String en, String ko, String value) {
+    return Column(
+      children: [
+        Text(value, style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        BiInline(en: en, ko: ko, color: Colors.white54, fontSize: 10),
+      ],
     );
   }
 

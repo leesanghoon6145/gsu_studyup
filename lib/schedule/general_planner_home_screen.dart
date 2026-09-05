@@ -48,6 +48,7 @@ import 'monthly_report_screen.dart';
 import 'yearly_report_screen.dart';
 import 'statistics_screen.dart';
 import 'exercise_type_screen.dart'; // 🆕 [2026-09-04 추가] 운동 종목 리스트 화면
+import 'exercise_analysis_screen.dart'; // 🆕 [2026-09-05 추가] 운동 분석 화면 (홈에서 바로 진입)
 
 class GeneralPlannerHomeScreen extends StatefulWidget {
   const GeneralPlannerHomeScreen({super.key});
@@ -117,6 +118,9 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
               _MenuEntry('🔔', 'REMINDER', '알림', () => _navigate(context, const ReminderScreen())),
               _MenuEntry('🏃', 'EXERCISE', '운동', () => _navigate(context, const ExerciseTypeScreen())), // 🆕 [2026-09-04 추가]
               _MenuEntry('📈', 'SCHEDULE ANALYSIS', '일정 분석', () => _navigate(context, const ScheduleAnalysisScreen())),
+              // 🆕 [2026-09-05 이동] 홈 상단 큰 배너였던 것을 "일정분석" 옆 빈 칸으로 이동.
+              // 7개(홀수)였던 그리드가 8개(짝수)로 채워져서 빈 공간 없이 딱 맞음.
+              _MenuEntry('📊', 'EXERCISE ANALYSIS', '운동 분석', () => _navigate(context, const ExerciseAnalysisScreen())),
             ]),
             const SizedBox(height: 30),
 
@@ -177,6 +181,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     'PROJECT': {'JA': 'プロジェクト', 'ZH': '项目', 'FR': 'Projet', 'DE': 'Projekt', 'RU': 'Проект', 'AR': 'مشروع', 'HI': 'परियोजना', 'VI': 'Dự án', 'ES': 'Proyecto', 'TH': 'โครงการ'},
     'REMINDER': {'JA': 'リマインダー', 'ZH': '提醒', 'FR': 'Rappel', 'DE': 'Erinnerung', 'RU': 'Напоминание', 'AR': 'تذكير', 'HI': 'रिमाइंडर', 'VI': 'Nhắc nhở', 'ES': 'Recordatorio', 'TH': 'การแจ้งเตือน'},
     'EXERCISE': {'JA': '運動', 'ZH': '运动', 'FR': 'Exercice', 'DE': 'Sport', 'RU': 'Упражнение', 'AR': 'تمرين', 'HI': 'व्यायाम', 'VI': 'Tập thể dục', 'ES': 'Ejercicio', 'TH': 'ออกกำลังกาย'}, // 🆕 [2026-09-04 추가]
+    'EXERCISE ANALYSIS': {'JA': '運動分析', 'ZH': '运动分析', 'FR': 'Analyse des exercices', 'DE': 'Sportanalyse', 'RU': 'Анализ упражнений', 'AR': 'تحليل التمارين', 'HI': 'व्यायाम विश्लेषण', 'VI': 'Phân tích tập luyện', 'ES': 'Análisis de ejercicio', 'TH': 'วิเคราะห์การออกกำลังกาย'}, // 🆕 [2026-09-05 추가]
     'SCHEDULE ANALYSIS': {'JA': 'スケジュール分析', 'ZH': '日程分析', 'FR': 'Analyse du planning', 'DE': 'Zeitplananalyse', 'RU': 'Анализ расписания', 'AR': 'تحليل الجدول', 'HI': 'शेड्यूल विश्लेषण', 'VI': 'Phân tích lịch trình', 'ES': 'Análisis de horario', 'TH': 'วิเคราะห์ตารางเวลา'},
     // 타임라인 5개
     "TODAY'S TIMELINE": {'JA': '今日のタイムライン', 'ZH': '今日时间线', 'FR': "Chronologie du jour", 'DE': 'Heutige Zeitleiste', 'RU': 'Хронология на сегодня', 'AR': 'الجدول الزمني لليوم', 'HI': 'आज की समयरेखा', 'VI': 'Dòng thời gian hôm nay', 'ES': 'Cronología de hoy', 'TH': 'ไทม์ไลน์วันนี้'},

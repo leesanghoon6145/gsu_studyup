@@ -172,4 +172,23 @@ class DkeUserProfile {
       // 저장 실패해도 앱 흐름을 막지 않음
     }
   }
+
+  // 🆕 [요청 2026-09-05] 이름이 "학습자"로만 나타나는 계정을 위해, 마이페이지에서 이름을
+  // 직접 입력·수정할 수 있도록 신규 추가. (가입 시점에 realName 저장이 누락됐거나
+  // 오래된 계정이라 비어있는 경우를 직접 채울 수 있게 함)
+  static Future<void> updateRealName({required String realName}) async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await _db.collection(_collection).doc(uid).set({
+        'realName': realName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kCachedNameKey, realName);
+    } catch (e) {
+      // 저장 실패해도 앱 흐름을 막지 않음
+    }
+  }
 }

@@ -442,7 +442,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           children: [
             Icon(ExerciseTheme.iconForType(type.id), color: ExerciseTheme.brandGolden, size: 20),
             const SizedBox(width: 8),
-            BiTitle(en: enName, ko: type.name, enSize: 16, koSize: 13),
+            BiTitle(en: enName, ko: type.name, enSize: 17, koSize: 17),
           ],
         ),
         actions: [

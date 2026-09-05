@@ -80,6 +80,8 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
       appBar: ExerciseTheme.biAppBar(
         en: 'EXERCISE',
         ko: '운동',
+        enSize: 17,
+        koSize: 17,
         translations: const {
           'JA': '運動', 'ZH': '运动', 'FR': 'Exercice', 'DE': 'Sport', 'RU': 'Упражнение',
           'AR': 'تمرين', 'HI': 'व्यायाम', 'VI': 'Tập thể dục', 'ES': 'Ejercicio', 'TH': 'ออกกำลังกาย',
@@ -107,7 +109,7 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
           crossAxisCount: 2,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 1.05,
+          childAspectRatio: 1.5,
         ),
         itemCount: _types.length,
         itemBuilder: (context, index) => _buildTypeCard(_types[index]),
@@ -122,7 +124,7 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
       borderRadius: BorderRadius.circular(16),
       onTap: () => _onTypeTapped(type),
       child: Container(
-        decoration: ExerciseTheme.luxeCardDecoration(),
+        decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,17 +154,26 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
               ],
             ),
             const Spacer(),
-            // 🆕 [영문+한글 병기] 다른 화면 메뉴 버튼과 동일한 두 줄 표기
+            // 🆕 [배치 변경] 영문명(왼쪽)+한글명(오른쪽, 수정 아이콘 바로 아래)을 한 줄에 배치.
+            // 한글명은 15px 골드색으로 축소해서 세로 공간을 줄여 오버플로우를 해소함.
             appLanguage.isDefault
-                ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+                ? Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(enName, style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
-                Text(type.name, style: ExerciseTheme.titleStyle(size: 15)),
+                Text(
+                  type.name,
+                  style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
               ],
             )
-                : Text(type.name, style: ExerciseTheme.titleStyle(size: 15)),
+                : Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                type.name,
+                style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
             const SizedBox(height: 4),
             BiInline(
               en: '${type.fields.length} fields',

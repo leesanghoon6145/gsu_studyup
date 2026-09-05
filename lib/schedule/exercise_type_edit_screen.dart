@@ -232,6 +232,8 @@ class _ExerciseTypeEditScreenState extends State<ExerciseTypeEditScreen> {
       appBar: ExerciseTheme.biAppBar(
         en: _isEditMode ? 'EDIT EXERCISE' : 'ADD EXERCISE',
         ko: _isEditMode ? '종목 수정' : '종목 추가',
+        enSize: 17,
+        koSize: 17,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

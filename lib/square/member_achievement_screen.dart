@@ -189,6 +189,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     'noSessionsOnDate': {'KO': '해당 날짜에 진행한 학습 세션이 없습니다.', 'EN': 'No study sessions recorded on this date.', 'JA': 'この日の学習セッションはありません。', 'ZH': '该日期没有学习记录。', 'FR': "Aucune session d'étude enregistrée à cette date.", 'DE': 'An diesem Tag wurden keine Lernsitzungen aufgezeichnet.', 'RU': 'В этот день нет записанных занятий.', 'AR': 'لا توجد جلسات دراسة مسجلة في هذا التاريخ.', 'HI': 'इस तिथि पर कोई अध्ययन सत्र दर्ज नहीं है।', 'VI': 'Không có buổi học nào được ghi lại vào ngày này.', 'ES': 'No se registraron sesiones de estudio en esta fecha.', 'TH': 'ไม่มีการบันทึกการเรียนในวันนี้'},
     // 🆕 [요청 2026-09-04] "오늘"이 아닌 날짜의 카드 제목에 쓰이는 일반 명칭 ("MM/DD 학습한 과목" 형태로 조합)
     'sessionsGenericTitle': {'KO': '학습한 과목', 'EN': 'Study Sessions', 'JA': '学習科目', 'ZH': '学习科目', 'FR': "Sessions d'étude", 'DE': 'Lernsitzungen', 'RU': 'Занятия', 'AR': 'جلسات الدراسة', 'HI': 'अध्ययन सत्र', 'VI': 'Buổi học', 'ES': 'Sesiones de estudio', 'TH': 'วิชาที่เรียน'},
+    // 🆕 [위험한 오류 수정 2026-09-05] 세션 목록/리포트에서 강의/평가를 명확히 구분 표시하기 위한 라벨.
+    'lectureLabel': {'KO': '강의', 'EN': 'Lecture', 'JA': '講義', 'ZH': '讲课', 'FR': 'Cours', 'DE': 'Vorlesung', 'RU': 'Лекция', 'AR': 'محاضرة', 'HI': 'व्याख्यान', 'VI': 'Bài giảng', 'ES': 'Clase', 'TH': 'บรรยาย'},
+    'evaluationLabel': {'KO': '평가', 'EN': 'Evaluation', 'JA': '評価', 'ZH': '评估', 'FR': 'Évaluation', 'DE': 'Bewertung', 'RU': 'Оценка', 'AR': 'تقييم', 'HI': 'मूल्यांकन', 'VI': 'Đánh giá', 'ES': 'Evaluación', 'TH': 'ประเมิน'},
     'sessionOrdinal': {'KO': '교시', 'EN': 'Session', 'JA': '時限目', 'ZH': '节', 'FR': 'Séance', 'DE': 'Einheit', 'RU': 'Занятие', 'AR': 'حصة', 'HI': 'सत्र', 'VI': 'Tiết', 'ES': 'Sesión', 'TH': 'คาบ'},
     'minutesUnitSuffix': {'KO': '분', 'EN': 'min', 'JA': '分', 'ZH': '分钟', 'FR': 'min', 'DE': 'Min', 'RU': 'мин', 'AR': 'دقيقة', 'HI': 'मिनट', 'VI': 'phút', 'ES': 'min', 'TH': 'นาที'},
     'starsCount': {'KO': '23,487 개', 'EN': '23,487 Stars', 'JA': '23,487個', 'ZH': '23,487颗', 'FR': '23 487 étoiles', 'DE': '23.487 Sterne', 'RU': '23 487 звёзд', 'AR': '23,487 نجمة', 'HI': '23,487 स्टार्स', 'VI': '23.487 sao', 'ES': '23.487 estrellas', 'TH': '23,487 ดาว'},
@@ -848,9 +851,69 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     'TH': ' [คำแนะนำเพิ่มเติมอย่างละเอียด] เพื่อก้าวข้ามจุดวิกฤตที่จำเป็นสำหรับการก้าวกระโดดของผลสัมฤทธิ์ครั้งต่อไป ห้ามยอมประนีประนอมหรือเผลอเลินเล่อเด็ดขาด จงเชื่อมั่นในศักยภาพของตนเองและรักษาวินัยการตรวจสอบนี้ไว้อย่างเคร่งครัด!',
   };
 
+  // 🆕 [위험한 오류 수정 2026-09-05] "일일종합"/"일일상세"(오늘 학습 요약) 전용 문구 뱅크.
+  // 기존 버그: 개념강의만 듣고 시험을 전혀 안 본 날에도 위의 _diagOpenings/_diagClosings(전부
+  // "이번 평가에서 OO점..." 같은 시험 점수 전제 문구)이 그대로 사용되어, 강의만 들었는데
+  // 마치 시험을 본 것처럼 엉뚱하고 위험한 진단문이 나오는 문제가 있었음.
+  // 수정 내용: 오늘 요약은 "시험 점수"가 아니라 "목표 달성률"을 기준으로, 학습 습관/집중도에
+  // 대한 문구만 사용하도록 완전히 별도의 뱅크로 분리함.
+  static const Map<String, Map<String, List<String>>> _dailyDiagOpenings = {
+    'good': {
+      'KO': ['오늘 목표 달성률이 90%를 넘어선 것은 계획한 학습량을 흔들림 없이 소화해냈다는 뜻이며, 스스로 세운 기준을 지켜내는 자기주도 학습 습관이 확실히 자리잡고 있음을 보여주는 매우 고무적인 결과입니다. '],
+      'EN': ["Reaching over 90% of today's study goal shows the plan was carried through without wavering, and that a genuinely self-directed study habit is taking firm hold. "],
+    },
+    'mid': {
+      'KO': ['오늘 목표 달성률이 80%대에 도달한 것은 안정적인 학습 리듬을 갖추고 있다는 신호이며, 조금만 더 집중 시간을 늘리면 곧바로 최상위권 달성률에 닿을 수 있는 위치에 있습니다. '],
+      'EN': ["Landing in the 80% range for today's goal signals a stable study rhythm, and just a bit more focused time could carry you to the very top. "],
+    },
+    'seventy': {
+      'KO': ['오늘 목표 달성률이 70%대인 것은 학습을 시작은 했으나 계획한 만큼 끝까지 밀도 있게 이어가지 못했음을 나타냅니다. 다만 이 구간은 조금만 습관을 다듬으면 가장 크게 달성률이 뛰어오를 수 있는 구간이기도 합니다. '],
+      'EN': ["A 70%-range goal attainment today means the session started but wasn't carried through with full intensity. This range, though, is exactly where a small habit tweak can produce the biggest jump. "],
+    },
+    'sixty': {
+      'KO': ['오늘 목표 달성률이 60%대에 머문 것은 학습 계획과 실제 실행 사이에 다소 큰 간극이 있었음을 의미합니다. 이 자체를 자책하기보다는, 무엇이 학습 흐름을 방해했는지 되짚어보는 계기로 삼는 것이 더 중요합니다. '],
+      'EN': ['Staying in the 60% range points to a real gap between the plan and what actually got done today. Rather than being hard on yourself, use this as a chance to notice what interrupted the flow. '],
+    },
+    'low': {
+      'KO': ['오늘 목표 달성률이 60% 미만으로 나타난 것은 학습 루틴 자체를 처음부터 재정비할 필요가 있다는 신호입니다. 이런 날일수록 스스로를 다그치기보다는, 실현 가능한 아주 작은 목표부터 다시 세우는 것이 현실적인 해법입니다. '],
+      'EN': ['Falling below 60% today is a sign the whole study routine may need a reset from the ground up. On days like this, setting a much smaller, genuinely achievable goal is the more realistic move than pushing harder. '],
+    },
+  };
+
+  static const Map<String, Map<String, List<String>>> _dailyDiagClosings = {
+    'good': {
+      'KO': ['다만 이 페이스에 안주하지 말고, 내일도 오늘과 같은 밀도로 학습을 이어가려는 의식적인 노력이 필요합니다. 개념강의든 평가든 꾸준히 기록을 남기는 습관 자체가 장기적인 성장의 가장 확실한 토대가 되므로, 지금의 리듬을 그대로 유지해 나가시길 바랍니다.'],
+      'EN': ["Don't get too comfortable with this pace, though — keep making a conscious effort to hit the same density tomorrow. Whether it's a concept lecture or an evaluation, the habit of logging every session is the surest foundation for long-term growth, so keep this rhythm going."],
+    },
+    'mid': {
+      'KO': ['남은 격차를 메우기 위해서는 학습 시작 시점의 집중 진입 속도를 조금 더 끌어올리는 것이 효과적입니다. 개념강의를 들었다면 핵심 내용을 스스로 요약해보고, 평가를 치렀다면 오답을 반드시 복기하는 습관을 더하면 다음 세션에서 100%에 근접한 결과를 기대할 수 있습니다.'],
+      'EN': ['To close the remaining gap, try speeding up how quickly you settle into focus at the start of a session. Summarize the key points after a lecture, and review mistakes carefully after an evaluation — that combination should push the next session close to 100%.'],
+    },
+    'seventy': {
+      'KO': ['학습 중간에 집중력이 흐트러지는 지점이 어디인지 스스로 점검해보고, 오늘처럼 개념강의나 평가를 기록으로 남기는 습관을 하루도 빠짐없이 이어가는 것이 중요합니다. 작은 꾸준함이 쌓이면 다음 세션부터는 달성률이 눈에 띄게 개선될 것입니다.'],
+      'EN': ['Take a moment to notice where concentration tends to slip mid-session, and keep logging every lecture or evaluation without skipping a day. Small consistency compounds quickly, and the next few sessions should show a noticeable improvement.'],
+    },
+    'sixty': {
+      'KO': ['목표 시간을 다소 낮춰서라도 매일 빠짐없이 기록을 남기는 것이, 무리한 목표를 세우고 중도에 포기하는 것보다 훨씬 효과적입니다. 개념강의를 들었다면 짧게라도 배운 내용을 적어보고, 평가를 봤다면 반드시 오답 원인을 확인하는 루틴부터 다시 세워보시기 바랍니다.'],
+      'EN': ['Logging something every single day, even with a lower target, beats setting an ambitious goal and giving up halfway. Jot down a few lines after a lecture, and make sure to review the cause of any mistakes after an evaluation — rebuilding that basic routine comes first.'],
+    },
+    'low': {
+      'KO': ['완벽한 하루를 만들려 하기보다, 하루 10분이라도 개념강의를 듣거나 짧은 평가를 기록하는 최소한의 습관부터 되찾는 것이 우선입니다. 작은 성공 경험이 쌓이면 학습 밀도는 자연스럽게 다시 올라가므로, 지금은 포기하지 않고 이어가는 것 자체에 의미를 두시길 바랍니다.'],
+      'EN': ["Rather than aiming for a perfect day, the priority is recovering the minimum habit — even ten minutes of a concept lecture or logging a short evaluation. Small wins rebuild momentum naturally, so what matters right now is simply not giving up."],
+    },
+  };
+
+  static const Map<String, String> _dailyDiagAdditionalGuidance = {
+    'KO': ' [참고] 이 요약은 오늘 하루의 학습 세션(강의/평가) 기록을 바탕으로 자동 생성된 것이며, 특정 시험 점수와는 무관합니다. 꾸준한 기록이 쌓일수록 분석의 정확도가 높아집니다.',
+    'EN': " [Note] This summary is generated from today's logged study sessions (lectures/evaluations) and is not tied to any specific exam score. The more consistently you log sessions, the more accurate this analysis becomes.",
+  };
+
   String _buildRuleBasedDiagnosisText({required String type, required double score, required String subject}) {
     final random = math.Random();
     final String lang = DkeLang.current;
+    // 🆕 [위험한 오류 수정 2026-09-05] "일일종합"/"일일상세"는 시험 점수 전제 문구가 아니라
+    // 목표 달성률 기반의 학습 습관 문구를 사용해야 함 (강의만 들은 날 오작동 방지)
+    final bool isDailySummary = type == '일일종합' || type == '일일상세';
 
     String tier;
     if (score >= 90) {
@@ -865,13 +928,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       tier = 'low';
     }
 
-    final List<String> openings = _diagOpenings[tier]![lang] ?? _diagOpenings[tier]!['EN']!;
-    final List<String> closings = _diagClosings[tier]![lang] ?? _diagClosings[tier]!['EN']!;
+    final Map<String, Map<String, List<String>>> openingsBank = isDailySummary ? _dailyDiagOpenings : _diagOpenings;
+    final Map<String, Map<String, List<String>>> closingsBank = isDailySummary ? _dailyDiagClosings : _diagClosings;
+    final Map<String, String> guidanceBank = isDailySummary ? _dailyDiagAdditionalGuidance : _diagAdditionalGuidance;
+
+    final List<String> openings = openingsBank[tier]![lang] ?? openingsBank[tier]!['EN']!;
+    final List<String> closings = closingsBank[tier]![lang] ?? closingsBank[tier]!['EN']!;
 
     String diagnosisText = openings[random.nextInt(openings.length)] + closings[random.nextInt(closings.length)];
 
     if (diagnosisText.length < 350) {
-      diagnosisText += _diagAdditionalGuidance[lang] ?? _diagAdditionalGuidance['EN']!;
+      diagnosisText += guidanceBank[lang] ?? guidanceBank['EN']!;
     }
     return diagnosisText;
   }
@@ -2472,6 +2539,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   String get _sessionEmptyMessage => _isSelectedDateToday ? _t('noSessionsToday') : _t('noSessionsOnDate');
 
+  // 🆕 [위험한 오류 수정 2026-09-05] 세션 하나가 "강의"인지 "평가"인지, 평가라면 점수까지
+  // 한눈에 보이도록 표시하는 라벨. 개념강의를 들었을 때 시험을 본 것처럼 보이는 혼동을 방지함.
+  String _sessionTypeLabel(Map<String, dynamic> s) {
+    final String? recordType = s['recordType'] as String?;
+    final num? score = s['score'] as num?;
+    if (recordType == '평가') {
+      return score != null ? "[${_t('evaluationLabel')} $score${_t('scoreLabel')}]" : "[${_t('evaluationLabel')}]";
+    } else if (recordType == '강의') {
+      return "[${_t('lectureLabel')}]";
+    }
+    return '';
+  }
+
   void _goToPreviousSessionDay() {
     final DateTime newDate = _selectedSessionDate.subtract(const Duration(days: 1));
     setState(() => _selectedSessionDate = newDate);
@@ -2508,10 +2588,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             if (ts.isBefore(dayStart) || !ts.isBefore(dayEnd)) continue;
             final int durationSeconds = (item['durationSeconds'] as num?)?.toInt() ?? 0;
             final int minutes = (durationSeconds / 60).round();
+            // 🆕 [위험한 오류 수정 2026-09-05] 강의(개념강의/단원정리)인지 평가인지 구분해서 표시하기 위해
+            // timer_screen.dart가 저장한 recordType/lectureSubType/score 필드도 함께 읽어옴.
             sessions.add({
               "subject": subjectName,
               "minutes": minutes,
               "timestamp": ts,
+              "recordType": item['recordType'] as String?, // '강의' 또는 '평가'
+              "lectureSubType": item['lectureSubType'] as String?, // '개념강의' / '단원정리 및 문제해설'
+              "score": item['score'], // 평가일 때만 int, 강의면 null
             });
           } catch (_) {
             // 손상된 기록 하나는 건너뛰고 나머지는 계속 집계
@@ -2586,7 +2671,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   children: [
                     Flexible(
                       child: Text(
-                        "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)}",
+                        "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
                         overflow: TextOverflow.fade,
                         softWrap: false,
                         maxLines: 1,
@@ -2625,7 +2710,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       buffer.write(DkeLang.current == 'KO'
           ? "${i + 1}${_t('sessionOrdinal')}\n"
           : "${_t('sessionOrdinal')} ${i + 1}\n");
-      buffer.write("• ${_subjectName(s["subject"] as String)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n");
+      buffer.write("• ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n");
     }
 
     final String topSubject = _selectedDaySessions.first["subject"] as String;

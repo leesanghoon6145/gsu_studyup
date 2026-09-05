@@ -4,11 +4,21 @@
 // 전체 타임라인을 조회/수정/삭제하거나 새 항목을 추가할 수 있습니다.
 // 🆕 [고급 팝업] 진한 골드 테두리+글로우, 가로 3선(빨/노/파) 연필 아이콘,
 // 하단 삭제/취소/저장 한 줄 배치를 실행기록 화면과 동일하게 적용.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동.
+// - 날짜 목록: 타임라인 기록이 없어도 운동 기록만 있는 날짜도 함께 표시
+// - 날짜 상세화면: 그 날의 운동 기록을 읽기 전용 카드로 보여주고, 탭하면
+//   TodayExerciseScreen으로 이동해 수정 가능 (TimelineBlock 데이터 구조는
+//   건드리지 않는 순수 정보 병합 - 다른 화면들과 동일한 원칙).
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'timeline_data_service.dart';
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
+import 'exercise_theme.dart' show ExerciseTheme; // 🆕 [운동 연동] 종목 아이콘 매핑 재사용
+import 'today_exercise_screen.dart'; // 🆕 [운동 연동] 탭하면 기록 화면으로 이동
 
 class TimelineHistoryScreen extends StatefulWidget {
   const TimelineHistoryScreen({super.key});
@@ -23,7 +33,10 @@ class _TimelineHistoryScreenState extends State<TimelineHistoryScreen> {
   static const Color _containerBg = Color(0xFF0D1527);
 
   List<String> _dates = [];
+  Set<String> _datesWithExerciseOnly = {}; // 🆕 [운동 연동] 타임라인 없이 운동만 있는 날짜 표시용
   bool _isLoading = true;
+
+  String _exerciseDateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   void initState() {
@@ -33,10 +46,21 @@ class _TimelineHistoryScreenState extends State<TimelineHistoryScreen> {
 
   Future<void> _loadDates() async {
     setState(() => _isLoading = true);
-    final dates = await TimelineDataService.loadDatesWithTimeline();
+    final timelineDates = await TimelineDataService.loadDatesWithTimeline();
+
+    // 🆕 [운동 연동] 운동 기록만 있고 타임라인 기록은 없는 날짜도 목록에 포함
+    final allExercises = await ExerciseDataService.instance.getAllRecords();
+    final exerciseDates = allExercises.map((r) => _exerciseDateKey(r.date)).toSet();
+    final timelineDateSet = timelineDates.toSet();
+    final exerciseOnlyDates = exerciseDates.difference(timelineDateSet);
+
+    final merged = {...timelineDateSet, ...exerciseOnlyDates}.toList();
+    merged.sort((a, b) => b.compareTo(a)); // 최신 날짜 먼저
+
     if (!mounted) return;
     setState(() {
-      _dates = dates;
+      _dates = merged;
+      _datesWithExerciseOnly = exerciseOnlyDates; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -73,6 +97,7 @@ class _TimelineHistoryScreenState extends State<TimelineHistoryScreen> {
   }
 
   Widget _buildDateTile(String dateKey) {
+    final bool exerciseOnly = _datesWithExerciseOnly.contains(dateKey); // 🆕 [운동 연동]
     return InkWell(
       onTap: () async {
         await Navigator.push(context, MaterialPageRoute(builder: (_) => _DateTimelineDetailScreen(dateKey: dateKey)));
@@ -88,6 +113,11 @@ class _TimelineHistoryScreenState extends State<TimelineHistoryScreen> {
             const Icon(Icons.calendar_today, color: _brandGolden, size: 18),
             const SizedBox(width: 12),
             Expanded(child: Text(dateKey, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
+            // 🆕 [운동 연동] 타임라인 없이 운동만 있는 날짜는 작은 아령 아이콘으로 구분
+            if (exerciseOnly) ...[
+              const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 15),
+              const SizedBox(width: 8),
+            ],
             const Icon(Icons.chevron_right, color: Colors.white38),
           ],
         ),
@@ -111,7 +141,11 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
   static const Color _containerBg = Color(0xFF0D1527);
 
   List<TimelineBlock> _blocks = [];
+  List<ExerciseRecord> _exercises = []; // 🆕 [운동 연동]
+  Map<String, ExerciseType> _exerciseTypesById = {}; // 🆕 [운동 연동]
   bool _isLoading = true;
+
+  String _exerciseDateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   void initState() {
@@ -122,9 +156,18 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     final blocks = await TimelineDataService.loadForDate(widget.dateKey);
+
+    // 🆕 [운동 연동] 이 날짜의 운동 기록 + 종목(아이콘/이름 조회용) 로드
+    final types = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
+    final typesById = {for (final t in types) t.id: t};
+    final allExercises = await ExerciseDataService.instance.getAllRecords();
+    final dateExercises = allExercises.where((r) => _exerciseDateKey(r.date) == widget.dateKey).toList();
+
     if (!mounted) return;
     setState(() {
       _blocks = blocks;
+      _exercises = dateExercises; // 🆕 [운동 연동]
+      _exerciseTypesById = typesById; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -262,6 +305,17 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
     );
   }
 
+  // 🆕 [운동 연동] 운동 기록 탭 시 해당 기록의 상세화면으로 이동, 돌아오면 새로고침.
+  Future<void> _onExerciseTapped(ExerciseRecord record) async {
+    final type = _exerciseTypesById[record.exerciseTypeId];
+    if (type == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: type, existingRecord: record)),
+    );
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final int completed = _blocks.where((b) => b.status == 'completed').length;
@@ -296,7 +350,7 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
             },
           ),
           const SizedBox(height: 12),
-          if (_blocks.isEmpty)
+          if (_blocks.isEmpty && _exercises.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 30),
               child: Center(
@@ -338,6 +392,32 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
                 ],
               ),
             )),
+          // 🆕 [운동 연동] 이 날짜의 운동 기록을 읽기 전용 카드로 표시, 탭하면 수정화면 이동
+          if (_exercises.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ..._exercises.map((r) {
+              final type = _exerciseTypesById[r.exerciseTypeId];
+              return InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => _onExerciseTapped(r),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+                  child: Row(
+                    children: [
+                      Icon(ExerciseTheme.iconForType(r.exerciseTypeId), color: _brandGolden, size: 18),
+                      const SizedBox(width: 10),
+                      Text('${r.durationMin}min', style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(type?.name ?? '운동', style: const TextStyle(color: Colors.white))),
+                      BiInline(en: 'Exercise', ko: '운동', color: Colors.white38, fontSize: 10),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
         ],
       ),
       floatingActionButton: FloatingActionButton(

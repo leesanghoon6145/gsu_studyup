@@ -3,12 +3,16 @@
 // "성취 완료" 처리된 목표들의 기록을 모아 보여줍니다. GoalDataService에
 // 저장된 AchievementRecord만 표시하며, 실제로 달성한 것이 없으면 빈 상태
 // 안내만 보여줍니다 (가짜 트로피 없음).
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 목표 성취 기록과는 별개로, 누적
+// 운동 세션 수를 보여주는 정보성 카드를 상단에 추가.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
 
 class AchievementScreen extends StatefulWidget {
   const AchievementScreen({super.key});
@@ -46,6 +50,7 @@ class _AchievementScreenState extends State<AchievementScreen> {
   };
 
   List<AchievementRecord> _achievements = [];
+  int _totalExerciseSessions = 0; // 🆕 [운동 연동]
   bool _isLoading = true;
 
   @override
@@ -57,15 +62,19 @@ class _AchievementScreenState extends State<AchievementScreen> {
   Future<void> _loadAchievements() async {
     setState(() => _isLoading = true);
     final list = await GoalDataService.loadAchievements();
+    final allExercises = await ExerciseDataService.instance.getAllRecords(); // 🆕 [운동 연동]
     if (!mounted) return;
     setState(() {
       _achievements = list;
+      _totalExerciseSessions = allExercises.length; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool hasAnything = _achievements.isNotEmpty || _totalExerciseSessions > 0; // 🆕 [운동 연동]
+
     return Scaffold(
       backgroundColor: _pageBg,
       appBar: AppBar(
@@ -83,7 +92,7 @@ class _AchievementScreenState extends State<AchievementScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
-          : _achievements.isEmpty
+          : !hasAnything
           ? Center(
         child: BiInline(
           en: 'No achievements yet.\nToggle "Achieved" in a goal to record one.',
@@ -128,6 +137,27 @@ class _AchievementScreenState extends State<AchievementScreen> {
               ],
             ),
           ),
+          if (_totalExerciseSessions > 0) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+              child: Row(
+                children: [
+                  const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: BiInline(
+                      en: 'Total Exercise Sessions', ko: '누적 운동 세션', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 14,
+                      translations: const {'JA': '累計運動セッション', 'ZH': '累计运动次数', 'FR': "Total des séances d'exercice", 'DE': 'Gesamte Trainingseinheiten', 'RU': 'Всего тренировок', 'AR': 'إجمالي جلسات التمرين', 'HI': 'कुल व्यायाम सत्र', 'VI': 'Tổng buổi tập', 'ES': 'Total de sesiones de ejercicio', 'TH': 'เซสชันออกกำลังกายทั้งหมด'},
+                    ),
+                  ),
+                  Text('$_totalExerciseSessions', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 22, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ],
           ..._achievements.map((a) => _buildAchievementTile(a)),
         ],
       ),

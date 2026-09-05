@@ -12,6 +12,12 @@
 //
 // 인생 목표(life)만 예외적으로 특정 날짜 범위가 없으므로, 기존처럼
 // TodoItem을 연결해서 할 일 체크 기반으로 진행률을 계산합니다.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 목표 연동. exerciseTargetSessions가
+// null이 아니면 "이 기간 동안 N회 운동"을 뜻하는 목표로 취급되고,
+// period_goal_screen.dart에서 캘린더/타임라인 완료율 대신 실제
+// ExerciseRecord 개수를 기준으로 진행률을 계산한다. 기존 데이터와의
+// 하위호환을 위해 기본값은 null(=운동 목표 아님)이라 기존 목표는 영향 없음.
 // ============================================================================
 
 import 'dart:convert';
@@ -26,6 +32,7 @@ class GoalItem {
   final String periodEnd; // 'yyyy-MM-dd', life 타입은 빈 문자열
   bool isAchieved;
   final String createdAt;
+  final int? exerciseTargetSessions; // 🆕 [운동 목표] null=일반 목표, 숫자면 "이 기간 동안 N회 운동" 목표
 
   GoalItem({
     required this.id,
@@ -36,6 +43,7 @@ class GoalItem {
     this.periodEnd = '',
     this.isAchieved = false,
     required this.createdAt,
+    this.exerciseTargetSessions, // 🆕 [운동 목표]
   });
 
   Map<String, dynamic> toJson() => {
@@ -47,6 +55,7 @@ class GoalItem {
     'periodEnd': periodEnd,
     'isAchieved': isAchieved,
     'createdAt': createdAt,
+    'exerciseTargetSessions': exerciseTargetSessions, // 🆕 [운동 목표]
   };
 
   factory GoalItem.fromJson(Map<String, dynamic> json) => GoalItem(
@@ -58,6 +67,7 @@ class GoalItem {
     periodEnd: json['periodEnd'] as String? ?? '',
     isAchieved: json['isAchieved'] as bool? ?? false,
     createdAt: json['createdAt'] as String? ?? '',
+    exerciseTargetSessions: json['exerciseTargetSessions'] as int?, // 🆕 [운동 목표] 기존 데이터엔 키가 없으므로 자동으로 null
   );
 }
 

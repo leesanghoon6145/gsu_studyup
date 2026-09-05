@@ -35,6 +35,19 @@
 // inexactAllowWhileIdle로 변경. (즉시 알림은 정상 작동하는데 예약만
 // 실패하는 것으로 확인되어, 이 기기(삼성 One UI)에서 exact 계열 정확한
 // 알람 등록 자체가 원인일 가능성을 테스트하기 위함)
+//
+// ✅ [2026-09-05 추가 - 알람 끄기 UX 전면 개선] 기존엔 알람을 끄려면
+// (1) 알림창의 액션 버튼을 누르거나 (2) 앱 안의 인라인 배너를 직접 찾아서
+// 눌러야 했습니다. 둘 다 "화면이 꺼져있거나/잠겨있거나/다른 화면에 있을 때"
+// 찾기 어렵다는 문제가 있었습니다. 이번 수정:
+// 1) fireLoopingAlarm()의 알림에 fullScreenIntent:true + category:alarm을
+//    추가해서, 화면이 꺼져있거나 잠겨있을 때 시스템이 강제로 화면을 깨우고
+//    앱을 최상단에 띄우도록 함 (AndroidManifest.xml의 USE_FULL_SCREEN_INTENT
+//    권한 + MainActivity의 showWhenLocked/turnScreenOn 속성과 함께 작동).
+// 2) RingingAlarmStopBanner를 "찾아서 눌러야 하는 인라인 배너"에서 "알람이
+//    울리기 시작하면 그 즉시 전체화면 팝업이 자동으로 뜨는" 방식으로 전면
+//    교체. 이 위젯이 마운트되어 있는 한, 앱의 어느 화면을 보고 있든 그 위로
+//    전체화면 팝업이 덮어씌워짐 (rootNavigator 사용).
 // ============================================================================
 
 import 'dart:async'; // 🆕 [2026-08-16 추가] 반복 알람 안전장치(자동 정지) 타이머용
@@ -260,6 +273,15 @@ class NotificationService {
   // ⚠️ [사전 조건] assets/sounds/soft_alarm.mp3 파일이 있어야 하고,
   // pubspec.yaml의 flutter > assets 목록에 assets/sounds/ 가 포함되어
   // 있어야 합니다(이미 포함되어 있음, 백색소음 재생에 쓰던 것과 동일 목록).
+  //
+  // ✅ [2026-09-05 추가] fullScreenIntent:true + category:alarm 적용.
+  // AndroidManifest.xml의 USE_FULL_SCREEN_INTENT 권한, MainActivity의
+  // showWhenLocked/turnScreenOn 속성과 함께 작동해서, 화면이 꺼져있거나
+  // 잠겨있을 때도 시스템이 강제로 화면을 깨우고 앱을 최상단에 띄웁니다.
+  // 화면이 켜져있고 잠금 해제된 상태에서 다른 앱을 쓰고 있을 때는 OS 정책상
+  // 강제로 화면을 뺏지는 않고 높은 우선순위 알림(헤드업)으로 표시되는 게
+  // 일반적인 동작입니다 - 이 경우엔 앱을 열면 RingingAlarmStopBanner가
+  // 즉시 전체화면 팝업으로 뜹니다.
   static Future<void> fireLoopingAlarm({
     required String title,
     required String body,
@@ -285,6 +307,9 @@ class NotificationService {
           enableVibration: true,
           ongoing: true, // 🆕 스와이프로 안 지워짐 (직접 꺼야 함)
           autoCancel: false,
+          fullScreenIntent: true, // 🆕 [2026-09-05 추가] 화면 꺼짐/잠금 상태에서도 최상단에 강제 표시
+          category: AndroidNotificationCategory.alarm, // 🆕 [2026-09-05 추가] "알람" 성격임을 시스템에 명시 (방해금지 모드 우회에도 도움)
+          visibility: NotificationVisibility.public, // 🆕 [2026-09-05 추가] 잠금화면에서도 내용이 가려지지 않고 그대로 보이도록 함
           actions: const [
             AndroidNotificationAction('stop_alarm', '알람 끄기', cancelNotification: true),
           ],
@@ -377,13 +402,26 @@ class NotificationService {
 // ============================================================================
 
 // ============================================================================
-// 🆕 [2026-08-16 추가] RingingAlarmStopBanner
-// 안드로이드 알림창의 "알람 끄기" 액션 버튼이 일부 삼성 기기에서 알림 자체가
-// 사라지면서 같이 없어지는 문제가 확인되어, 알림창에 의존하지 않는 확실한
-// "끄기" 수단으로 앱 화면 안에 직접 만든 버튼입니다. 1초마다 "지금 알람이
-// 울리고 있는지" 확인해서, 울리고 있을 때만 크고 빨간 버튼으로 나타납니다.
-// 이 버튼은 그냥 평범한 앱 안의 버튼이라 기기/제조사와 무관하게 항상
-// 확실하게 작동합니다.
+// 🆕 [2026-08-16 추가, 2026-09-05 전면 개편] RingingAlarmStopBanner
+//
+// [기존 방식의 문제] 안드로이드 알림창의 "알람 끄기" 액션 버튼이 일부 삼성
+// 기기에서 알림 자체가 사라지면서 같이 없어지는 문제가 있었고, 그 대안으로
+// 만들었던 인라인 배너도 "그 화면을 찾아가서 봐야만" 보이는 방식이라 여전히
+// 끄기 어렵다는 피드백을 받았습니다.
+//
+// [2026-09-05 개편] 이 위젯이 화면 트리 어딘가에 마운트되어 있기만 하면:
+// 1초마다 알람이 울리는지 확인하다가, 울리기 "시작하는 순간" 그 즉시
+// rootNavigator 위에 전체화면 팝업(barrierDismissible:false, 뒤로가기로도
+// 안 닫힘)을 자동으로 띄웁니다. 사용자가 지금 어떤 화면을 보고 있었든
+// 상관없이 그 위로 전체화면이 덮이고, 큰 버튼 한 번으로 즉시 끌 수
+// 있습니다(예전의 2단계 확인 팝업 제거 - 전체화면 자체가 이미 "의도적으로
+// 확인하는 상태"이므로 이중 확인이 불필요한 마찰이라고 판단).
+//
+// ⚠️ [적용 범위 안내] 이 위젯은 마운트된 화면 트리 아래에서 열리는 모든
+// 라우트 위에 뜹니다. 앱의 정말 모든 상태(로그인 화면 포함)에서 확실하게
+// 뜨게 하려면, main.dart의 MaterialApp builder에 최상위로 한 번만
+// 넣어두는 것을 권장합니다 (예: `builder: (context, child) => Stack(
+// children: [child!, const RingingAlarmStopBanner()])`).
 // ============================================================================
 class RingingAlarmStopBanner extends StatefulWidget {
   const RingingAlarmStopBanner({super.key});
@@ -394,12 +432,14 @@ class RingingAlarmStopBanner extends StatefulWidget {
 
 class _RingingAlarmStopBannerState extends State<RingingAlarmStopBanner> {
   bool _ringing = false;
+  bool _dialogShowing = false; // 🆕 [2026-09-05 추가] 팝업 중복 호출 방지
   Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _check();
+    // 🆕 [2026-09-05 변경] 1초마다 확인해서 울리기 시작하면 즉시 전체화면 팝업을 띄움
     _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) => _check());
   }
 
@@ -411,101 +451,126 @@ class _RingingAlarmStopBannerState extends State<RingingAlarmStopBanner> {
 
   Future<void> _check() async {
     final bool ringing = await NotificationService.isAlarmRinging();
-    if (mounted && ringing != _ringing) {
-      setState(() => _ringing = ringing);
+    if (!mounted) return;
+    if (ringing == _ringing) return;
+
+    setState(() => _ringing = ringing);
+
+    if (ringing && !_dialogShowing) {
+      _showFullScreenAlarmDialog(); // 🆕 [2026-09-05 추가] 울리기 시작하면 자동으로 전체화면 팝업
+    } else if (!ringing && _dialogShowing) {
+      // 🆕 [2026-09-05 추가] 안전정지 타이머 등 다른 경로로 알람이 이미 꺼졌다면
+      // 열려있는 팝업도 자동으로 닫아줌 (사용자가 끄지 않았는데도 계속 떠있는 것 방지)
+      _dismissDialogIfShowing();
     }
   }
 
-  // ✅ [2026-08-16 추가] 버튼을 누르면 바로 꺼지지 않고, "정말 끄시겠습니까?"
-  // 확인 팝업이 먼저 뜨고, 거기서 다시 한번 확인해야 최종적으로 꺼집니다.
-  // 잠결에 무심코 눌러서 알람이 꺼지는 것을 방지하기 위함입니다.
-  Future<void> _confirmAndStop(BuildContext context) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false, // 바깥을 눌러도 안 닫힘 (반드시 아래 버튼 중 하나를 눌러야 함)
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
-            border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.5), width: 1.2),
-            boxShadow: [
-              BoxShadow(color: const Color(0xFFDC2626).withOpacity(0.18), blurRadius: 30, spreadRadius: 1),
-              const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.notifications_active_rounded, color: Color(0xFFDC2626), size: 30),
-              const SizedBox(height: 12),
-              const Text(
-                '정말 알람을 끄시겠습니까?',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '알람을 끄면 소리가 즉시 멈춥니다.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12.5, height: 1.4),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('취소', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('알람 끄기', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (confirmed == true) {
-      await NotificationService.stopAlarmSound();
+  void _dismissDialogIfShowing() {
+    if (!mounted) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
     }
+  }
+
+  // 🆕 [2026-09-05 추가] 알람이 울리기 시작하면 자동으로 뜨는 전체화면 팝업.
+  // rootNavigator를 써서, 지금 어떤 화면(다이얼로그/탭/중첩 라우트) 위에
+  // 있었든 상관없이 앱의 최상단에 뜨도록 함.
+  Future<void> _showFullScreenAlarmDialog() async {
+    _dialogShowing = true;
+    await showGeneralDialog(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false, // 바깥을 눌러도 안 닫힘
+      barrierColor: Colors.black.withOpacity(0.92),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return PopScope(
+          canPop: false, // 🆕 뒤로가기 버튼으로도 안 닫힘 (반드시 끄기 버튼을 눌러야 함)
+          child: _FullScreenAlarmStopView(
+            onStop: () async {
+              await NotificationService.stopAlarmSound();
+              if (Navigator.of(dialogContext, rootNavigator: true).canPop()) {
+                Navigator.of(dialogContext, rootNavigator: true).pop();
+              }
+            },
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+    );
+    _dialogShowing = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_ringing) return const SizedBox.shrink();
+    // 🆕 [2026-09-05 변경] 이 위젯 자체는 화면에 아무것도 그리지 않음 - 실제
+    // 표시는 위 _showFullScreenAlarmDialog()가 담당. 감시 전용 위젯.
+    return const SizedBox.shrink();
+  }
+}
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () => _confirmAndStop(context),
-        icon: const Icon(Icons.notifications_off_rounded, size: 22),
-        label: const Text(
-          '지금 울리는 알람 끄기 (Stop Ringing Alarm)',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          textAlign: TextAlign.center,
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFDC2626),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 6,
+// 🆕 [2026-09-05 신규] 전체화면 알람 끄기 화면. 큰 아이콘 + 문구 + 아주 큰
+// 빨간 버튼 하나로 구성해서, 한 번의 탭으로 확실하게 끌 수 있게 함.
+class _FullScreenAlarmStopView extends StatelessWidget {
+  final Future<void> Function() onStop;
+  const _FullScreenAlarmStopView({required this.onStop});
+
+  static const Color _pageBg = Color(0xFF030712);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _pageBg,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Spacer(),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.85, end: 1.0),
+                duration: const Duration(milliseconds: 700),
+                curve: Curves.easeInOut,
+                builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                child: const Icon(Icons.alarm_rounded, color: Color(0xFFDC2626), size: 96),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                '알람이 울리고 있습니다',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '아래 버튼을 눌러 알람을 끄세요.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: onStop,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 22),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 8,
+                  ),
+                  child: const Text(
+                    '알람 끄기',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );

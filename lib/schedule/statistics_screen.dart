@@ -3,6 +3,9 @@
 // 전체 기간 누적 분류별 시간 비중, 올해 1~12월 완료율 막대그래프, 그리고
 // 지금까지 총 달성한 목표 개수를 보여줍니다. 기록이 없는 달은 회색
 // "No Data" 막대로 구분해서 표시하고, 가짜 값을 만들지 않습니다.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 전체 기간 누적 운동 요약(세션/
+// 시간/평균 RPE) 카드를 추가.
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -11,6 +14,7 @@ import 'report_data_service.dart';
 import 'goal_data_service.dart'; // 🆕 [목표 연동] 총 달성 목표 개수 표시용
 import 'project_data_service.dart'; // 🆕 [프로젝트 연동] 총 완료 프로젝트 개수 표시용
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -37,6 +41,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Map<int, int> _monthlyRates = {};
   int _totalAchievements = 0; // 🆕 [목표 연동]
   int _totalCompletedProjects = 0; // 🆕 [프로젝트 연동]
+  int _totalExerciseSessions = 0; // 🆕 [운동 연동]
+  int _totalExerciseMinutes = 0; // 🆕 [운동 연동]
+  double? _avgExerciseRpe; // 🆕 [운동 연동]
   bool _isLoading = true;
 
   @override
@@ -54,12 +61,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final allProjects = await ProjectDataService.loadAll(); // 🆕 [프로젝트 연동]
     final completedProjects = allProjects.where((p) => p.status == '완료').length;
 
+    // 🆕 [운동 연동] 전체 기간 누적 운동 기록
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final exerciseMinutes = allExerciseRecords.fold<int>(0, (sum, r) => sum + r.durationMin);
+    final rpeValues = allExerciseRecords.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
+    final avgRpe = rpeValues.isEmpty ? null : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+
     if (!mounted) return;
     setState(() {
       _allTimeSummary = summary;
       _monthlyRates = monthly;
       _totalAchievements = achievements.length;
       _totalCompletedProjects = completedProjects;
+      _totalExerciseSessions = allExerciseRecords.length; // 🆕 [운동 연동]
+      _totalExerciseMinutes = exerciseMinutes; // 🆕 [운동 연동]
+      _avgExerciseRpe = avgRpe; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -87,6 +103,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           const SizedBox(height: 16),
           _buildProjectCard(), // 🆕 [프로젝트 연동]
           const SizedBox(height: 16),
+          if (_totalExerciseSessions > 0) ...[
+            _buildExerciseCard(), // 🆕 [운동 연동]
+            const SizedBox(height: 16),
+          ],
           _buildCategoryBreakdownCard(),
           const SizedBox(height: 16),
           _buildMonthlyBarChartCard(),
@@ -136,6 +156,50 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           Text('$_totalCompletedProjects', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
       ),
+    );
+  }
+
+  // 🆕 [운동 연동] 전체 기간 누적 운동 요약 - 세션/시간/평균 RPE
+  Widget _buildExerciseCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: BiInline(
+                  en: 'Total Exercise (All Time)', ko: '누적 운동 (전체 기간)', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                  translations: const {'JA': '累計運動（全期間）', 'ZH': '累计运动（全部时间）', 'FR': "Exercice total (toute période)", 'DE': 'Gesamttraining (gesamter Zeitraum)', 'RU': 'Всего тренировок (за всё время)', 'AR': 'إجمالي التمرين (كل الفترات)', 'HI': 'कुल व्यायाम (संपूर्ण अवधि)', 'VI': 'Tổng tập luyện (toàn bộ)', 'ES': 'Ejercicio total (todo el período)', 'TH': 'ออกกำลังกายทั้งหมด (ทั้งหมด)'},
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: _exerciseStat('SESSIONS', '세션', '$_totalExerciseSessions')),
+              Expanded(child: _exerciseStat('MINUTES', '시간(분)', '$_totalExerciseMinutes')),
+              Expanded(child: _exerciseStat('AVG RPE', '평균 강도', _avgExerciseRpe == null ? '-' : _avgExerciseRpe!.toStringAsFixed(1))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _exerciseStat(String en, String ko, String value) {
+    return Column(
+      children: [
+        Text(value, style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        BiInline(en: en, ko: ko, color: Colors.white54, fontSize: 10),
+      ],
     );
   }
 

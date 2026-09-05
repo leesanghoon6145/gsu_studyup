@@ -412,6 +412,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
   // 🆕 [요청 2026-09-04] 학교/학년 수정용 컨트롤러 - 기존 가입자도 여기서 나중에 입력·수정 가능.
   final TextEditingController _schoolController = TextEditingController();
   final TextEditingController _gradeController = TextEditingController();
+  // 🆕 [요청 2026-09-05] 이름이 "학습자" 고정 표시로 나오는 계정(가입 시 저장 누락 등)을 위해
+  // 이름도 여기서 직접 입력·수정할 수 있게 추가.
+  final TextEditingController _nameController = TextEditingController();
 
   Map<String, String> get _lang => _languages[_currentLangIndex];
   bool get _isRtl => _lang['code'] == 'AR';
@@ -449,50 +452,57 @@ class _MyPageScreenState extends State<MyPageScreen> {
   // 🆕 [요청 2026-09-04] 저장된 학교/학년을 불러와서 입력창에 미리 채워둠.
   // 기존 가입자(가입 당시 학교/학년을 입력하지 않았던 경우)는 빈 칸으로 시작해서
   // 여기서 처음 입력할 수 있고, 이미 값이 있으면 수정할 수 있음.
+  // 🆕 [요청 2026-09-05] 이름도 함께 불러와서 채워둠 (이름이 비어있는 계정을 여기서 채울 수 있게).
   Future<void> _loadSchoolGrade() async {
     try {
       final String? school = await DkeUserProfile.getSchoolName();
       final String? grade = await DkeUserProfile.getGrade();
+      final String? realName = await DkeUserProfile.getRealName();
       if (!mounted) return;
       setState(() {
         _schoolController.text = school ?? '';
         _gradeController.text = grade ?? '';
+        _nameController.text = realName ?? '';
       });
     } catch (e) {
-      debugPrint('[MyPageScreen] 학교/학년 불러오기 실패: $e');
+      debugPrint('[MyPageScreen] 학교/학년/이름 불러오기 실패: $e');
     }
   }
 
-  // 🆕 [요청 2026-09-04] 학교/학년 저장 버튼 처리.
-  // user_profile_service.dart의 updateSchoolGrade()를 호출해서 Firestore(계정별 문서)에 반영.
-  // 저장되면 member_achievement_screen.dart의 "학교 학년 이름" 표시도 다음 로드부터 실제 값으로 나타남.
+  // 🆕 [요청 2026-09-04] 학교/학년(+이름) 저장 버튼 처리.
+  // user_profile_service.dart의 updateSchoolGrade()/updateRealName()을 호출해서
+  // Firestore(계정별 문서)에 반영. 저장되면 member_achievement_screen.dart의
+  // "학교 학년 이름" 표시도 다음 로드부터 실제 값으로 나타남.
+  // 🆕 [요청 2026-09-05] 이름 필드도 함께 저장하도록 확장 (비어있으면 이름은 건드리지 않음).
   Future<void> _saveSchoolGrade() async {
     try {
       final String school = _schoolController.text.trim();
       final String grade = _gradeController.text.trim();
-      if (school.isEmpty || grade.isEmpty) {
+      final String name = _nameController.text.trim();
+      if (school.isEmpty || grade.isEmpty || name.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_lang['schoolHint'] ?? '학교명과 학년을 모두 입력해주세요.')),
+          SnackBar(content: Text(_lang['schoolHint'] ?? '이름, 학교명, 학년을 모두 입력해주세요.')),
         );
         return;
       }
 
       await DkeUserProfile.updateSchoolGrade(school: school, grade: grade);
+      await DkeUserProfile.updateRealName(realName: name); // 🆕
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_lang['savedSchoolGrade'] ?? '학교/학년 정보가 저장되었습니다.'),
+          content: Text(_lang['savedSchoolGrade'] ?? '이름/학교/학년 정보가 저장되었습니다.'),
           backgroundColor: _containerBg,
         ),
       );
     } catch (e) {
-      debugPrint('[MyPageScreen] 학교/학년 저장 실패: $e');
+      debugPrint('[MyPageScreen] 학교/학년/이름 저장 실패: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('학교/학년 저장에 실패했습니다. 다시 시도해 주세요.\n($e)'),
+          content: Text('저장에 실패했습니다. 다시 시도해 주세요.\n($e)'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -662,6 +672,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
     _passwordController.dispose();
     _schoolController.dispose(); // 🆕
     _gradeController.dispose(); // 🆕
+    _nameController.dispose(); // 🆕 [요청 2026-09-05]
     super.dispose();
   }
 
@@ -777,7 +788,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
               // 🆕 [요청 2026-09-04] 학교/학년 수정 섹션 신규 추가.
               // 가입 당시 입력하지 않았거나(학부모/일반 계정에서 학생으로 전환 등) 수정이 필요한 경우
               // 여기서 언제든 채우거나 고칠 수 있음. 성취도 화면의 "학교 학년 이름" 표시와 직결됨.
-              _buildSectionTitle('SCHOOL / GRADE (${_lang['schoolGrade'] ?? '학교 / 학년'})'),
+              _buildSectionTitle(DkeLang.current == 'KO' ? '이름 / 학교 / 학년' : 'Name / School / Grade'),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -789,6 +800,17 @@ class _MyPageScreenState extends State<MyPageScreen> {
                 ),
                 child: Column(
                   children: [
+                    // 🆕 [요청 2026-09-05] 이름이 "학습자"로 고정 표시되는 문제 해결용 - 이름 직접 입력/수정.
+                    TextField(
+                      controller: _nameController,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: _underlineDecoration(
+                        labelText: DkeLang.current == 'KO' ? '이름' : 'Full Name',
+                        hintText: DkeLang.current == 'KO' ? '실명을 입력하세요' : 'Enter your name',
+                        icon: Icons.badge_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: _schoolController,
                       style: const TextStyle(color: Colors.white, fontSize: 15),

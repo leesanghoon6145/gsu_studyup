@@ -33,9 +33,10 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
   static const Color _pageBg = Color(0xFF030712);
   static const Color _containerBg = Color(0xFF0D1527);
 
-  // 🆕 [운동 연동] 도넛차트용 골드/실버/브론즈 3색 팔레트 - 앱의 골드 톤과 어울리는 "메달" 색상
-  static const Color _silverTone = Color(0xFFC7CDD6);
-  static const Color _bronzeTone = Color(0xFFCD7F32);
+  // 🆕 [색상 지정] 일정=파랑 / 약속=빨강 / 운동=초록
+  static const Color _scheduleColor = Color(0xFF3B82F6);
+  static const Color _appointmentColor = Color(0xFFEF4444);
+  static const Color _exerciseColor = Color(0xFF22C55E);
 
   List<ScheduleItem> _all = [];
   List<AppointmentItem> _allAppointments = []; // 🆕 [약속 연동]
@@ -236,21 +237,21 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
                         if (scheduleCount > 0)
                           PieChartSectionData(
                             value: scheduleCount.toDouble(),
-                            color: _brandGolden,
+                            color: _scheduleColor,
                             title: '',
                             radius: 26,
                           ),
                         if (appointmentCount > 0)
                           PieChartSectionData(
                             value: appointmentCount.toDouble(),
-                            color: _silverTone,
+                            color: _appointmentColor,
                             title: '',
                             radius: 26,
                           ),
                         if (exerciseCount > 0)
                           PieChartSectionData(
                             value: exerciseCount.toDouble(),
-                            color: _bronzeTone,
+                            color: _exerciseColor,
                             title: '',
                             radius: 26,
                           ),
@@ -263,11 +264,11 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildDonutLegendRow(_brandGolden, 'Schedule', '일정', scheduleCount, total),
+                      _buildDonutLegendRow(_scheduleColor, 'Schedule', '일정', scheduleCount, total),
                       const SizedBox(height: 10),
-                      _buildDonutLegendRow(_silverTone, 'Appointment', '약속', appointmentCount, total),
+                      _buildDonutLegendRow(_appointmentColor, 'Appointment', '약속', appointmentCount, total),
                       const SizedBox(height: 10),
-                      _buildDonutLegendRow(_bronzeTone, 'Exercise', '운동', exerciseCount, total),
+                      _buildDonutLegendRow(_exerciseColor, 'Exercise', '운동', exerciseCount, total),
                     ],
                   ),
                 ),
@@ -291,16 +292,33 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
   }
 
   // 🆕 [운동 연동] 요일별 전체 활동량(일정+약속+운동 합산) 막대그래프.
+  // ✅ [2026-09-05 개편] 참고 이미지와 동일한 스타일로 재구성:
+  // - 요일마다 고정 무지개색(월=빨강~일=보라)
+  // - Y축: "0h •" 형태로 시간 단위 + 구분점 표시
+  // - X축: 요일명을 그 요일 색으로 표시
+  // - 막대 위에 값(건수) 라벨 표시
+  static const List<Color> _rainbowWeekColors = [
+    Color(0xFFEF4444), // 월 - 빨강
+    Color(0xFFF97316), // 화 - 주황
+    Color(0xFFFACC15), // 수 - 노랑
+    Color(0xFF22C55E), // 목 - 초록
+    Color(0xFF3B82F6), // 금 - 파랑
+    Color(0xFF4338CA), // 토 - 남색
+    Color(0xFF8B5CF6), // 일 - 보라
+  ];
+
   Widget _buildWeekdayBarChartCard() {
     final counts = _weekdayCounts;
     const weekdayLabels = ['월', '화', '수', '목', '금', '토', '일'];
     final values = List.generate(7, (i) => (counts[i + 1] ?? 0).toDouble());
-    final double maxVal = values.isEmpty ? 5 : (values.reduce((a, b) => a > b ? a : b) * 1.25).clamp(3, 100000);
+    final double rawMax = values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b);
+    final double maxVal = (rawMax <= 0 ? 5.0 : rawMax * 1.35).clamp(3.0, 100000.0);
+    final double interval = (maxVal / 4).clamp(1.0, 100000.0);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.3))),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.8), width: 1.6)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -308,29 +326,68 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
             en: 'Activity by Weekday', ko: '요일별 활동량', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
             translations: const {'JA': '曜日別アクティビティ', 'ZH': '按星期活动量', 'FR': 'Activité par jour', 'DE': 'Aktivität nach Wochentag', 'RU': 'Активность по дням недели', 'AR': 'النشاط حسب اليوم', 'HI': 'सप्ताह के दिन अनुसार गतिविधि', 'VI': 'Hoạt động theo ngày trong tuần', 'ES': 'Actividad por día', 'TH': 'กิจกรรมตามวัน'},
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 150,
+            height: 200,
             child: counts.isEmpty
                 ? Center(child: BiInline(en: 'No data', ko: '데이터 없음', color: Colors.white38, fontSize: 12))
                 : BarChart(
               BarChartData(
-                maxY: maxVal.toDouble(),
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
+                maxY: maxVal,
+                minY: 0,
+                alignment: BarChartAlignment.spaceAround,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: interval,
+                  getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.08), strokeWidth: 1),
+                ),
+                // 🆕 [참고이미지처럼 왼쪽/아래만 축선으로 표시]
+                borderData: FlBorderData(
+                  show: true,
+                  border: Border(
+                    left: BorderSide(color: _brandGolden.withOpacity(0.5), width: 1.4),
+                    bottom: BorderSide(color: _brandGolden.withOpacity(0.5), width: 1.4),
+                    top: BorderSide.none,
+                    right: BorderSide.none,
+                  ),
+                ),
                 titlesData: FlTitlesData(
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  // 🆕 [Y축: 건수 + 구분점] 참고 이미지의 "3h•" 처럼 값 옆에 점을 붙여 표시
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      interval: interval,
+                      getTitlesWidget: (value, meta) {
+                        if (value < 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(
+                            '${value.toInt()} •',
+                            style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+                            textAlign: TextAlign.right,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // 🆕 [X축: 요일명을 그 요일 색으로 표시]
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 28,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
                         if (idx < 0 || idx >= weekdayLabels.length) return const SizedBox.shrink();
                         return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(weekdayLabels[idx], style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            weekdayLabels[idx],
+                            style: TextStyle(color: _rainbowWeekColors[idx], fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
                         );
                       },
                     ),
@@ -342,18 +399,33 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
                     barRods: [
                       BarChartRodData(
                         toY: values[i],
-                        color: _brandGolden,
+                        color: _rainbowWeekColors[i], // 🆕 요일 고정 무지개색
                         width: 20,
                         borderRadius: BorderRadius.circular(4),
+                        // 🆕 [막대 위에 값 표시] 참고 이미지의 "0.6h" 처럼 막대 위에 건수 라벨
                         backDrawRodData: BackgroundBarChartRodData(
                           show: true,
-                          toY: maxVal.toDouble(),
+                          toY: maxVal,
                           color: Colors.white.withOpacity(0.04),
                         ),
                       ),
                     ],
+                    showingTooltipIndicators: values[i] > 0 ? [0] : [],
                   );
                 }),
+                barTouchData: BarTouchData(
+                  enabled: false,
+                  touchTooltipData: BarTouchTooltipData(
+                    tooltipPadding: EdgeInsets.zero,
+                    tooltipMargin: 4,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      return BarTooltipItem(
+                        '${rod.toY.toInt()}',
+                        TextStyle(color: _rainbowWeekColors[groupIndex], fontSize: 11),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),

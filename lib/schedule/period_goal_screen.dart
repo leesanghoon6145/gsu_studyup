@@ -10,6 +10,11 @@
 // 자동 계산됩니다 (ReportDataService.summarize 재사용 - 리포트 화면과
 // 완전히 같은 계산 로직/같은 데이터). "달성함" 스위치는 여전히 수동으로
 // 켜고 끌 수 있습니다.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 목표 연동. 목표 추가 시 "운동 목표로
+// 만들기"를 켜면 캘린더/타임라인 완료율 대신 실제 ExerciseRecord 개수를
+// 목표 세션 수와 비교해서 진행률을 계산한다 (예: "이번 주 3회 운동" ->
+// 이번 주 실제 운동 기록이 3건이면 100%).
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -17,6 +22,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'goal_data_service.dart';
 import 'report_data_service.dart';
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 목표]
 
 class PeriodGoalScreen extends StatefulWidget {
   final String goalType; // 'yearly' | 'monthly' | 'weekly' | 'today'
@@ -36,6 +42,8 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
 
   List<GoalItem> _goals = [];
   Map<String, ReportSummary> _summaryCache = {};
+  Map<String, int> _exerciseSessionCountCache = {}; // 🆕 [운동 목표] 목표별 실제 운동 세션 수
+
   bool _isLoading = true;
 
   @override
@@ -44,19 +52,37 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
     _loadGoals();
   }
 
+  // 🆕 [운동 목표] 주어진 기간 안의 실제 운동 기록 개수를 센다.
+  Future<int> _countExerciseSessions(DateTime start, DateTime end) async {
+    final all = await ExerciseDataService.instance.getAllRecords();
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day);
+    return all.where((r) {
+      final day = DateTime(r.date.year, r.date.month, r.date.day);
+      return !day.isBefore(s) && !day.isAfter(e);
+    }).length;
+  }
+
   Future<void> _loadGoals() async {
     setState(() => _isLoading = true);
     final goals = await GoalDataService.loadGoalsByType(widget.goalType);
     final Map<String, ReportSummary> summaryMap = {};
+    final Map<String, int> exerciseCountMap = {}; // 🆕 [운동 목표]
     for (final g in goals) {
       final start = DateTime.tryParse(g.periodStart) ?? DateTime.now();
       final end = DateTime.tryParse(g.periodEnd) ?? DateTime.now();
-      summaryMap[g.id] = await ReportDataService.summarize(start, end);
+      if (g.exerciseTargetSessions != null) {
+        // 🆕 [운동 목표] 완료율 대신 실제 운동 세션 수를 센다.
+        exerciseCountMap[g.id] = await _countExerciseSessions(start, end);
+      } else {
+        summaryMap[g.id] = await ReportDataService.summarize(start, end);
+      }
     }
     if (!mounted) return;
     setState(() {
       _goals = goals;
       _summaryCache = summaryMap;
+      _exerciseSessionCountCache = exerciseCountMap; // 🆕 [운동 목표]
       _isLoading = false;
     });
   }
@@ -103,6 +129,10 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
     final categoryController = TextEditingController(text: existing?.category ?? '');
     bool isAchieved = existing?.isAchieved ?? false;
     int periodOffset = 0; // 🆕 [기간 선택] 0=지금, +1=다음 기간, -1=이전 기간 ...
+
+    // 🆕 [운동 목표] 이 목표를 "운동 목표"로 만들지 여부 + 목표 세션 수
+    bool isExerciseGoal = existing?.exerciseTargetSessions != null;
+    final exerciseTargetController = TextEditingController(text: (existing?.exerciseTargetSessions ?? 3).toString());
 
     final (currentStart, currentEnd) = _currentPeriodRange();
     final String editPeriodLabel = isEdit ? _periodLabel(DateTime.tryParse(existing!.periodStart) ?? currentStart, DateTime.tryParse(existing.periodEnd) ?? currentEnd) : '';
@@ -183,6 +213,58 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // 🆕 [운동 목표] 이 목표를 운동 세션 수 기준으로 만들지 선택하는 토글.
+                    // 켜면 아래 완료율 대신 실제 ExerciseRecord 개수로 진행률을 계산한다.
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 16),
+                                  const SizedBox(width: 8),
+                                  BiInline(
+                                    en: 'Exercise Goal', ko: '운동 목표로 만들기', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5,
+                                    translations: const {'JA': '運動目標にする', 'ZH': '设为运动目标', 'FR': "Objectif d'exercice", 'DE': 'Als Trainingsziel festlegen', 'RU': 'Сделать целью по тренировкам', 'AR': 'اجعله هدف تمرين', 'HI': 'व्यायाम लक्ष्य बनाएं', 'VI': 'Đặt làm mục tiêu tập luyện', 'ES': 'Convertir en objetivo de ejercicio', 'TH': 'ตั้งเป็นเป้าหมายออกกำลังกาย'},
+                                  ),
+                                ],
+                              ),
+                              Switch(value: isExerciseGoal, activeColor: _brandGolden, onChanged: (v) => setDialogState(() => isExerciseGoal = v)),
+                            ],
+                          ),
+                          if (isExerciseGoal) ...[
+                            const Divider(color: Colors.white12, height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: BiInline(
+                                    en: 'Target sessions for this period', ko: '이 기간 목표 운동 횟수', color: Colors.white54, fontSize: 11.5,
+                                    translations: const {'JA': 'この期間の目標運動回数', 'ZH': '本期间目标运动次数', 'FR': "Séances cibles pour cette période", 'DE': 'Zielanzahl für diesen Zeitraum', 'RU': 'Целевое число тренировок за период', 'AR': 'عدد الجلسات المستهدفة لهذه الفترة', 'HI': 'इस अवधि के लिए लक्ष्य सत्र', 'VI': 'Số buổi mục tiêu cho giai đoạn này', 'ES': 'Sesiones objetivo para este período', 'TH': 'จำนวนครั้งเป้าหมายสำหรับช่วงนี้'},
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 64,
+                                  child: TextField(
+                                    controller: exerciseTargetController,
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+                                    decoration: const InputDecoration(border: InputBorder.none, isDense: true),
+                                  ),
+                                ),
+                                BiInline(en: 'times', ko: '회', color: Colors.white54, fontSize: 11.5),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
@@ -224,6 +306,9 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
     }
 
     if (action == 'save' && titleController.text.trim().isNotEmpty) {
+      // 🆕 [운동 목표] 토글이 켜져 있으면 목표 세션 수를 정수로 파싱 (최소 1)
+      final int? exerciseTarget = isExerciseGoal ? (int.tryParse(exerciseTargetController.text.trim()) ?? 1).clamp(1, 9999).toInt() : null;
+
       if (isEdit) {
         final wasAchieved = existing!.isAchieved;
         final updated = GoalItem(
@@ -235,6 +320,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
           periodEnd: existing.periodEnd,
           isAchieved: isAchieved,
           createdAt: existing.createdAt,
+          exerciseTargetSessions: exerciseTarget, // 🆕 [운동 목표]
         );
         if (isAchieved && !wasAchieved) {
           await GoalDataService.markGoalAchieved(updated);
@@ -253,6 +339,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
           periodEnd: dateStr(end),
           isAchieved: isAchieved,
           createdAt: DateTime.now().toIso8601String(),
+          exerciseTargetSessions: exerciseTarget, // 🆕 [운동 목표]
         );
         await GoalDataService.addGoal(newGoal);
         if (isAchieved) await GoalDataService.markGoalAchieved(newGoal);
@@ -338,12 +425,18 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
   }
 
   Widget _buildGoalCard(GoalItem goal) {
-    final summary = _summaryCache[goal.id];
-    final double progress = summary?.completionRate ?? 0.0;
-    final int percent = summary?.completionPercent ?? 0;
     final start = DateTime.tryParse(goal.periodStart);
     final end = DateTime.tryParse(goal.periodEnd);
     final String periodLabel = (start != null && end != null) ? _periodLabel(start, end) : '';
+
+    // 🆕 [운동 목표] 운동 목표면 완료율(summary) 대신 세션 수 기준으로 진행률 계산
+    final bool isExerciseGoal = goal.exerciseTargetSessions != null;
+    final ReportSummary? summary = isExerciseGoal ? null : _summaryCache[goal.id];
+    final int exerciseCount = _exerciseSessionCountCache[goal.id] ?? 0;
+    final double progress = isExerciseGoal
+        ? (goal.exerciseTargetSessions! == 0 ? 0.0 : (exerciseCount / goal.exerciseTargetSessions!).clamp(0.0, 1.0))
+        : (summary?.completionRate ?? 0.0);
+    final int percent = isExerciseGoal ? (progress * 100).round() : (summary?.completionPercent ?? 0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -355,6 +448,8 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
           Row(
             children: [
               if (goal.isAchieved) const Padding(padding: EdgeInsets.only(right: 6), child: Icon(Icons.emoji_events, color: _brandGolden, size: 18)),
+              // 🆕 [운동 목표] 운동 목표 카드에는 아령 아이콘을 앞에 표시해서 구분
+              if (isExerciseGoal) const Padding(padding: EdgeInsets.only(right: 6), child: Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 18)),
               Expanded(
                 child: Text(goal.title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, decoration: goal.isAchieved ? TextDecoration.lineThrough : null)),
               ),
@@ -392,12 +487,37 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                   'ES': '$percent% Completado', 'TH': '$percent% เสร็จสิ้น',
                 },
               ),
-              if (summary != null)
+              // 🆕 [운동 목표] "3/5회" 형태로 표시, 일반 목표는 기존처럼 completedCount/totalCount
+              if (isExerciseGoal)
+                Text('$exerciseCount / ${goal.exerciseTargetSessions}회', style: const TextStyle(color: Colors.white38, fontSize: 11))
+              else if (summary != null)
                 Text('${summary.completedCount} / ${summary.totalCount}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
             ],
           ),
-          // 🆕 [연동 안내] 데이터가 캘린더/타임라인에서 자동으로 온다는 것을 알려주는 작은 힌트
-          if (summary != null && !summary.hasData)
+          // 🆕 [연동 안내] 데이터가 캘린더/타임라인(또는 운동 기록)에서 자동으로 온다는 것을 알려주는 작은 힌트
+          if (isExerciseGoal && exerciseCount == 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: BiInline(
+                en: 'No exercise records for this period yet.',
+                ko: '이 기간에 운동 기록이 아직 없습니다.',
+                color: Colors.white24,
+                fontSize: 10.5,
+                translations: const {
+                  'JA': 'この期間の運動記録がまだありません。',
+                  'ZH': '此期间暂无运动记录。',
+                  'FR': "Aucun enregistrement d'exercice pour cette période pour l'instant.",
+                  'DE': 'Noch keine Trainingsdaten für diesen Zeitraum.',
+                  'RU': 'Пока нет записей о тренировках за этот период.',
+                  'AR': 'لا توجد سجلات تمرين لهذه الفترة بعد.',
+                  'HI': 'इस अवधि के लिए अभी तक कोई व्यायाम रिकॉर्ड नहीं है।',
+                  'VI': 'Chưa có dữ liệu tập luyện cho giai đoạn này.',
+                  'ES': 'Aún no hay registros de ejercicio para este período.',
+                  'TH': 'ยังไม่มีบันทึกการออกกำลังกายสำหรับช่วงเวลานี้',
+                },
+              ),
+            )
+          else if (!isExerciseGoal && summary != null && !summary.hasData)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: BiInline(

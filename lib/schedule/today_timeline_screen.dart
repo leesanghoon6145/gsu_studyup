@@ -12,6 +12,10 @@
 // 표시됩니다 - 기능(수정/삭제/시작)은 동일하게 전부 됩니다, 보여지는 것만 다름.
 // [기본 틀 재설정] 앱바의 격자 아이콘을 누르면 언제든 05:00~24:00 기본 틀로
 // 다시 초기화할 수 있습니다 (이미 항목이 있으면 확인 팝업이 먼저 뜸).
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 오늘 운동 기록이 있으면 상단
+// "현재 시간" 카드 아래에 읽기 전용 요약 카드를 추가로 보여줌 (TimelineBlock
+// 데이터 구조는 건드리지 않는 순수 정보성 카드).
 // ============================================================================
 
 import 'dart:async';
@@ -21,6 +25,8 @@ import 'timeline_data_service.dart';
 import 'routine_screen.dart';
 import 'bilingual_text.dart';
 import 'completion_survey_data.dart'; // 🆕 [AI 분석용 데이터 수집] 완료 설문 질문지
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
 
 class TodayTimelineScreen extends StatefulWidget {
   const TodayTimelineScreen({super.key});
@@ -35,6 +41,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
   static const Color _containerBg = Color(0xFF0D1527);
 
   List<TimelineBlock> _blocks = [];
+  List<ExerciseRecord> _todayExercises = []; // 🆕 [운동 연동]
   bool _isLoading = true;
 
   String get _todayKey {
@@ -96,9 +103,17 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
     }
   }
 
+  // 🆕 [운동 연동] 오늘의 운동 기록 조회 (TimelineBlock과는 별개 데이터 소스)
+  Future<List<ExerciseRecord>> _loadTodayExerciseRecords() async {
+    final all = await ExerciseDataService.instance.getAllRecords();
+    final now = DateTime.now();
+    return all.where((r) => r.date.year == now.year && r.date.month == now.month && r.date.day == now.day).toList();
+  }
+
   Future<void> _loadTimeline() async {
     setState(() => _isLoading = true);
     final blocks = await TimelineDataService.loadForDate(_todayKey);
+    final todayExercises = await _loadTodayExerciseRecords(); // 🆕 [운동 연동]
 
     // 🆕 [요청 반영] 오늘 항목이 하나도 없으면, 무조건 새 기본틀(자유시간)로
     // 초기화하는 대신 - 먼저 "어제" 시간표가 있는지 확인해서 그대로 이어받음.
@@ -130,6 +145,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
         if (!mounted) return;
         setState(() {
           _blocks = carried;
+          _todayExercises = todayExercises; // 🆕 [운동 연동]
           _isLoading = false;
         });
         return;
@@ -142,6 +158,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
       if (!mounted) return;
       setState(() {
         _blocks = refilled;
+        _todayExercises = todayExercises; // 🆕 [운동 연동]
         _isLoading = false;
       });
       if (mounted) {
@@ -154,6 +171,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
     if (!mounted) return;
     setState(() {
       _blocks = blocks;
+      _todayExercises = todayExercises; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
@@ -1013,6 +1031,10 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             _buildCurrentTimeCard(), // 🆕 [현재 시간 표시 복구] 항상 고정으로 보이는 현재 시각 카드
+            if (_todayExercises.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildExerciseSummaryCard(), // 🆕 [운동 연동]
+            ],
             const SizedBox(height: 12),
             _buildProgressCard(completed, total, rate),
             const SizedBox(height: 16),
@@ -1052,6 +1074,33 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
           ),
           const Spacer(),
           Text(nowText, style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 24, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [운동 연동] 오늘의 운동 요약 카드 (읽기 전용, TimelineBlock 구조 변경 없음)
+  Widget _buildExerciseSummaryCard() {
+    final totalMinutes = _todayExercises.fold<int>(0, (sum, r) => sum + r.durationMin);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _containerBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _brandGolden.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: BiInline(
+              en: "Today's Exercise", ko: '오늘의 운동', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12,
+              translations: const {'JA': '今日の運動', 'ZH': '今日运动', 'FR': "Exercice du jour", 'DE': 'Heutiges Training', 'RU': 'Тренировка сегодня', 'AR': 'تمرين اليوم', 'HI': 'आज का व्यायाम', 'VI': 'Tập luyện hôm nay', 'ES': 'Ejercicio de hoy', 'TH': 'ออกกำลังกายวันนี้'},
+            ),
+          ),
+          Text('${_todayExercises.length}회 · $totalMinutes분', style: GoogleFonts.rajdhani(color: _brandGolden, fontSize: 18, fontWeight: FontWeight.bold)),
         ],
       ),
     );

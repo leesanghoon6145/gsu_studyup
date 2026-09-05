@@ -3,12 +3,18 @@
 // 이번 달의 완료율, 루틴 성공률, 분류별 시간 사용, 이번 달 달성한 목표
 // 개수를 보여줍니다. 데이터가 없는 항목(예: 루틴을 아직 안 쓴 경우)은
 // 가짜 %가 아니라 "데이터 없음"으로 구분해서 표시합니다.
+//
+// ✅ [2026-09-04 추가] 운동(EXERCISE) 연동. 이번 달 운동 요약(세션/시간/평균
+// RPE + 종목별 랭킹) 카드를 추가.
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'report_data_service.dart';
 import 'bilingual_text.dart';
+import 'exercise_data_service.dart'; // 🆕 [운동 연동]
+import 'exercise_models.dart'; // 🆕 [운동 연동]
+import 'exercise_theme.dart' show ExerciseTheme; // 🆕 [운동 연동]
 
 class MonthlyReportScreen extends StatefulWidget {
   const MonthlyReportScreen({super.key});
@@ -26,6 +32,8 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
   int? _routineSuccessRate;
   int _achievedGoalCount = 0;
   int _completedProjectCount = 0; // 🆕 [프로젝트 연동]
+  List<ExerciseRecord> _exercises = []; // 🆕 [운동 연동]
+  Map<String, ExerciseType> _exerciseTypesById = {}; // 🆕 [운동 연동]
   late DateTime _monthStart;
   late DateTime _monthEnd;
   bool _isLoading = true;
@@ -39,6 +47,13 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
     _load();
   }
 
+  bool _inRange(DateTime d) {
+    final day = DateTime(d.year, d.month, d.day);
+    final start = DateTime(_monthStart.year, _monthStart.month, _monthStart.day);
+    final end = DateTime(_monthEnd.year, _monthEnd.month, _monthEnd.day);
+    return !day.isBefore(start) && !day.isAfter(end);
+  }
+
   Future<void> _load() async {
     setState(() => _isLoading = true);
     final summary = await ReportDataService.summarize(_monthStart, _monthEnd);
@@ -46,18 +61,28 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
     final projectCount = await ReportDataService.countProjectsCompletedInRange(_monthStart, _monthEnd);
     final achievedCount = await ReportDataService.countAchievementsInRange(_monthStart, _monthEnd);
 
+    // 🆕 [운동 연동] 이번 달 운동 기록 + 종목(아이콘/이름 조회용) 로드
+    final exerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
+    final typesById = {for (final t in exerciseTypes) t.id: t};
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final monthExercises = allExerciseRecords.where((r) => _inRange(r.date)).toList();
+
     if (!mounted) return;
     setState(() {
       _summary = summary;
       _routineSuccessRate = routineRate;
       _achievedGoalCount = achievedCount;
       _completedProjectCount = projectCount;
+      _exercises = monthExercises; // 🆕 [운동 연동]
+      _exerciseTypesById = typesById; // 🆕 [운동 연동]
       _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool hasReportableData = (_summary != null && _summary!.hasData) || _exercises.isNotEmpty; // 🆕 [운동 연동]
+
     return Scaffold(
       backgroundColor: _pageBg,
       appBar: AppBar(
@@ -72,7 +97,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: _brandGolden))
-          : (_summary == null || !_summary!.hasData)
+          : !hasReportableData
           ? Center(
         child: BiInline(
           en: 'No records for this month yet.', ko: '이번 달 등록된 기록이 없습니다.', color: Colors.white38, fontSize: 14, textAlign: TextAlign.center,
@@ -84,15 +109,23 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
         children: [
           Text('${_monthStart.year}.${_monthStart.month.toString().padLeft(2, '0')}', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _buildCompletionCard(),
-          const SizedBox(height: 16),
+          if (_summary != null && _summary!.hasData) ...[
+            _buildCompletionCard(),
+            const SizedBox(height: 16),
+          ],
+          if (_exercises.isNotEmpty) ...[
+            _buildExerciseSummaryCard(), // 🆕 [운동 연동]
+            const SizedBox(height: 16),
+          ],
           _buildGoalAchievedCard(),
           const SizedBox(height: 16),
           _buildProjectCompletedCard(),
           const SizedBox(height: 16),
           _buildRoutineCard(),
-          const SizedBox(height: 16),
-          _buildCategoryCard(),
+          if (_summary != null && _summary!.hasData) ...[
+            const SizedBox(height: 16),
+            _buildCategoryCard(),
+          ],
         ],
       ),
     );
@@ -123,6 +156,76 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // 🆕 [운동 연동] 이번 달 운동 요약 카드 - 세션/시간/평균RPE + 종목별 랭킹
+  Widget _buildExerciseSummaryCard() {
+    final totalMinutes = _exercises.fold<int>(0, (sum, r) => sum + r.durationMin);
+    final rpeValues = _exercises.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
+    final avgRpe = rpeValues.isEmpty ? null : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+    final Map<String, int> countByType = {};
+    for (final r in _exercises) {
+      countByType[r.exerciseTypeId] = (countByType[r.exerciseTypeId] ?? 0) + 1;
+    }
+    final ranked = countByType.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BiInline(
+                  en: 'Exercise This Month', ko: '이번 달 운동', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                  translations: const {'JA': '今月の運動', 'ZH': '本月运动', 'FR': "Exercice ce mois-ci", 'DE': 'Training diesen Monat', 'RU': 'Тренировки в этом месяце', 'AR': 'تمرين هذا الشهر', 'HI': 'इस महीने व्यायाम', 'VI': 'Tập luyện tháng này', 'ES': 'Ejercicio este mes', 'TH': 'ออกกำลังกายเดือนนี้'},
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _exerciseStat('SESSIONS', '세션', '${_exercises.length}')),
+              Expanded(child: _exerciseStat('MINUTES', '시간(분)', '$totalMinutes')),
+              Expanded(child: _exerciseStat('AVG RPE', '평균 강도', avgRpe == null ? '-' : avgRpe.toStringAsFixed(1))),
+            ],
+          ),
+          if (ranked.isNotEmpty) ...[
+            const Divider(color: Colors.white12, height: 24),
+            ...ranked.take(5).map((e) {
+              final type = _exerciseTypesById[e.key];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(ExerciseTheme.iconForType(e.key), color: _brandGolden, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(type?.name ?? e.key, style: const TextStyle(color: Colors.white, fontSize: 13))),
+                    Text('${e.value}회', style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _exerciseStat(String en, String ko, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(color: _brandGolden, fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        BiInline(en: en, ko: ko, color: Colors.white54, fontSize: 10),
+      ],
     );
   }
 
