@@ -11,6 +11,8 @@ import '../services/parent_data_service.dart';
 import '../services/diagnosis_service.dart'; // 🆕 [요청] 300자 이상 AI 진단문 + 재사용 규칙 서비스
 import '../services/family_link_service.dart'; // 🆕 [자녀 추가] 가족 연결 코드 서비스
 import '../services/grade_management_service.dart'; // 🆕 [성적 관리] GradeRecord/SubjectConfig 타입 참조용
+import '../services/auth_service.dart'; // 🆕 [로그아웃 기능] 실제 로그인/로그아웃 처리
+import '../main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 import '../global_lang.dart';
 
 // ---------------------------------------------------------------------------
@@ -338,12 +340,12 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
   Widget _buildLinkedChildrenBar() {
     if (_loadingLinkedChildren) {
       return const SizedBox(
-        height: 78,
+        height: 92,
         child: Center(child: CircularProgressIndicator(color: brandGolden, strokeWidth: 2)),
       );
     }
     return SizedBox(
-      height: 78,
+      height: 92,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -368,52 +370,150 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           final totalStars = data?['totalStars'];
           final level = data?['level'];
           final String? studentName = data?['studentName'] as String?;
-          return Container(
-            width: 130,
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: isSelected ? brandGolden.withValues(alpha: 0.15) : premiumCardBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: brandGolden.withValues(alpha: isSelected ? 1.0 : 0.4), width: isSelected ? 1.6 : 1.0),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  studentName != null && studentName.isNotEmpty ? studentName : '코드 $code',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.notoSansKr(color: isSelected ? brandGolden : Colors.white38, fontSize: isSelected ? 11 : 9, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 130,
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? brandGolden.withValues(alpha: 0.15) : premiumCardBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: brandGolden.withValues(alpha: isSelected ? 1.0 : 0.4), width: isSelected ? 1.6 : 1.0),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  totalStars != null ? '⭐ $totalStars개' : '데이터 없음',
-                  style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      studentName != null && studentName.isNotEmpty ? studentName : '코드 $code',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.notoSansKr(color: isSelected ? brandGolden : Colors.white38, fontSize: isSelected ? 11 : 9, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      totalStars != null ? '⭐ $totalStars개' : '데이터 없음',
+                      style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    if (level != null)
+                      Text('레벨 $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
+                  ],
                 ),
-                if (level != null)
-                  Text('레벨 $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
-              ],
-            ),
+              ),
+              // 🆕 [요청] 정식 부모 화면에는 자녀 연결 해제 버튼이 없었음 - 오른쪽 위에
+              // 작은 X 아이콘으로 추가. 실수로 지우는 걸 막기 위해 확인 팝업을 거침.
+              Positioned(
+                top: -6,
+                right: 2,
+                child: GestureDetector(
+                  onTap: () => _confirmRemoveChild(code, studentName),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(color: Color(0xFF030712), shape: BoxShape.circle),
+                    child: const Icon(Icons.close_rounded, color: Colors.white54, size: 14),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
+  // 🆕 [요청] 자녀 연결 해제 확인 팝업. 실수로 지우는 걸 막기 위해 반드시 한 번 더 확인.
+  // 🆕 [요청 2026-09-08] 로그아웃 확인 팝업 - 실수로 눌러서 바로 로그아웃되지 않도록 확인 절차 추가
+  Future<void> _confirmLogout() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: premiumCardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('로그아웃', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+        content: Text(
+          '로그아웃 하시겠습니까?',
+          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: brandGolden),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('로그아웃', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await AuthService.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const EntranceScreen()),
+          (route) => false,
+    );
+  }
+
+  Future<void> _confirmRemoveChild(String code, String? studentName) async {
+    final String displayName = (studentName != null && studentName.isNotEmpty) ? studentName : '코드 $code';
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: premiumCardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('자녀 연결 해제', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+        content: Text(
+          '$displayName 자녀와의 연결을 해제하시겠습니까?\n연결을 해제하면 이 목록에서 사라지고, 다시 보려면 자녀 코드를 재입력해야 합니다.',
+          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('연결 해제', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await FamilyLinkService.removeLinkedCode(code);
+    if (!mounted) return;
+    setState(() {
+      _linkedChildCodes.remove(code);
+      // 지금 지운 자녀가 선택되어 있었다면, 선택을 풀거나 남은 자녀 중 하나로 자동 전환
+      if (_selectedChildCode == code) {
+        _selectedChildCode = _linkedChildCodes.isNotEmpty ? _linkedChildCodes.first : null;
+      }
+    });
+  }
+
   Widget _buildAddChildChip() {
     return GestureDetector(
       onTap: _showAddChildDialog,
       child: Container(
-        width: 90,
+        width: 130, // 🆕 [요청 2026-09-08] 자녀 칩(130)과 폭을 통일 - 예전엔 90이라 줄이 안 맞았음
         margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), // 🆕 자녀 칩과 동일한 패딩
         decoration: BoxDecoration(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: brandGolden.withValues(alpha: 0.6), style: BorderStyle.solid),
+          borderRadius: BorderRadius.circular(12), // 🆕 자녀 칩과 동일한 모서리 둥글기
+          border: Border.all(color: brandGolden.withValues(alpha: 0.6), width: 1.0),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.add_circle_outline, color: brandGolden, size: 22),
@@ -1036,6 +1136,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             ? (data['studentName'] as String)
             : '학습자';
         final int totalStars = (data['todayStars'] as num?)?.toInt() ?? 0;
+        // 🆕 [버그 수정 2026-09-06] "오늘의 별" 대신 전체 누적 별 개수 - 장학금 위젯이
+        // 이 값으로 계산해야 상단 자녀 칩(⭐)의 숫자와 항상 일치합니다.
+        final int allTimeStars = (data['totalStars'] as num?)?.toInt() ?? 0;
         final List<dynamic> sessionHistory = (data['sessionHistory'] as List<dynamic>?) ?? [];
 
         String? lastSubject;
@@ -1056,6 +1159,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           lastSessionSubject: lastSubject,
           lastSessionDurationMinutes: lastDurationMinutes,
           totalCollectedStars: totalStars,
+          allTimeTotalStars: allTimeStars,
           isMonitoringActive: _isMonitoringActive,
           monitoringCountdown: _monitoringCountdown,
           premiumCardBg: premiumCardBg,
@@ -1193,6 +1297,33 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+            // 🆕 [요청 2026-09-08] 부모 화면에 로그아웃 버튼이 전혀 없던 문제 - 왼쪽 위에 추가
+            Positioned(
+              top: 0,
+              left: 0,
+              child: GestureDetector(
+                onTap: _confirmLogout,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.logout_rounded, color: brandGolden, size: 13),
+                      const SizedBox(width: 4),
+                      Text(
+                        '로그아웃/Log out',
+                        style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

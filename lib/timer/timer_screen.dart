@@ -1180,6 +1180,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
       list.add(newRecord);
       await prefs.setString('gke_exam_records', jsonEncode(list));
+      await FamilyLinkService.pushExamRecord(newRecord); // 🆕 [버그 수정] 학부모 화면 동기화 누락분 추가
     }
 
     // 다음 표시할 항목의 key로 정확히 스크롤 이동. 고정 offset을 쓰지 않으므로

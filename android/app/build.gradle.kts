@@ -32,7 +32,7 @@ android {
 
     defaultConfig {
         applicationId = "com.kery.gsu_studyup"
-        minSdk = flutter.minSdkVersion
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

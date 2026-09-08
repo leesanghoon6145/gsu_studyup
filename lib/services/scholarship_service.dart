@@ -176,6 +176,41 @@ class ScholarshipService {
     return levelUps * 1000;
   }
 
+  // 🆕 [버그 수정 2026-09-06] 부모 화면에서 Firestore로 연결된 "다른 기기의 자녀"를 볼 때 쓰는
+  // 계산 함수. 위의 calculate()는 항상 "이 기기(부모 폰)에 로컬로 저장된 별 데이터"만 읽기
+  // 때문에, 화면 상단(Firestore 기반)과 장학금 섹션(로컬 기기 기반)이 서로 다른 자녀의
+  // 데이터를 보여주는 문제가 있었습니다. 이 함수는 Firestore에서 이미 받아온 별 개수를
+  // 그대로 사용해서 계산하며, 로컬 기기 데이터는 전혀 읽지 않습니다.
+  //
+  // ⚠️ [알려진 제한] 출석/연속출석/레벨업 보너스는 "날짜별 별 개수" 기록이 있어야 계산 가능한데,
+  // 지금은 Firestore에 전체 누적 별 개수만 올라가 있어서 이 보너스들은 0으로 처리됩니다.
+  // (별 환산액 자체는 정확합니다 - 자녀 화면과 항상 일치합니다.)
+  static ScholarshipResult calculateFromStars({
+    required ScholarshipType type,
+    required int totalStars,
+  }) {
+    final int starToMoney = totalStars * _wonPerStar;
+    const int attendanceBonus = 0; // 알려진 제한: 날짜별 데이터 필요
+    const int streakBonus = 0; // 알려진 제한: 날짜별 데이터 필요
+    const int levelUpBonus = 0; // 알려진 제한: 날짜별 데이터 필요
+
+    final int rawTotal = starToMoney + attendanceBonus + streakBonus + levelUpBonus;
+    final int cap = type.monthlyCap;
+    final int finalTotal = rawTotal > cap ? cap : rawTotal;
+    final int cappedAway = rawTotal > cap ? (rawTotal - cap) : 0;
+
+    return ScholarshipResult(
+      type: type,
+      starToMoney: starToMoney,
+      attendanceBonus: attendanceBonus,
+      streakBonus: streakBonus,
+      levelUpBonus: levelUpBonus,
+      rawTotal: rawTotal,
+      finalTotal: finalTotal,
+      cappedAway: cappedAway,
+    );
+  }
+
   // 🆕 메인 계산 함수 - 지정된 유형으로 "이번 달" 장학금을 계산합니다.
   static Future<ScholarshipResult> calculate(ScholarshipType type) async {
     final prefs = await SharedPreferences.getInstance();

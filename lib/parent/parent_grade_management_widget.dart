@@ -118,16 +118,22 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
     _loadRecords();
   }
 
-  // 🆕 [자녀 선택 UI + Firestore 연동] 부모가 다른 자녀로 전환하면(overrideRecords가
-  // 다른 데이터로 바뀌면) 화면을 그 자녀 데이터로 다시 불러옵니다.
+  // 🆕 [자녀 선택 UI + Firestore 연동] 부모가 다른 자녀로 전환하면 화면을 그 자녀 데이터로
+  // 다시 불러옵니다. 데이터 새로고침(그래프/표 갱신)은 Firestore 갱신마다 계속 수행하되,
+  // 🆕 [버그 수정] 안내 팝업 재노출 여부는 "자녀가 실제로 바뀌었을 때"만 판단합니다.
+  // 예전엔 overrideRecords 리스트 자체를 비교했는데, Firestore 스냅샷이 올 때마다 매번
+  // 새로운 리스트 객체가 만들어지기 때문에 내용이 같아도 항상 "다르다"고 오판되어,
+  // 성적관리 탭에 진입할 때마다(심지어 다른 필드만 바뀌어도) 팝업이 계속 다시 떴습니다.
   @override
   void didUpdateWidget(covariant ParentGradeManagementWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     final bool usingOverride = widget.overrideRecords != null;
-    final bool childChanged = widget.childName != oldWidget.childName;
-    if (usingOverride && (childChanged || !identical(widget.overrideRecords, oldWidget.overrideRecords))) {
-      _introShown = false; // 자녀가 바뀌면 안내 팝업도 다시 보여줄 수 있게 초기화
-      _loadRecords();
+    if (usingOverride) {
+      final bool childChanged = widget.childName != oldWidget.childName;
+      if (childChanged) {
+        _introShown = false; // 자녀가 "진짜로" 바뀌었을 때만 안내 팝업을 다시 허용
+      }
+      _loadRecords(); // 그래프/표 데이터는 Firestore 갱신마다 계속 최신화
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async'; // 🆕 [복구 조치] unawaited() 사용
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'family_link_service.dart'; // 🆕 [학부모 가시성 확보 2026-09-04] 성적 데이터를 Firestore에도 함께 올리기 위함
@@ -266,7 +267,11 @@ class GradeManagementService {
   // ------------------------------------------------------------------------
   static Future<void> _syncToFirestore() async {
     try {
-      final records = await loadAll();
+      // 🆕 [치명적 버그 수정 2026-09-06] 여기서 공개 함수 loadAll()을 호출하면
+      // loadAll() 내부의 unawaited(_syncToFirestore())가 다시 이 함수를 호출해서
+      // 서로를 끝없이 호출하는 무한 루프가 발생했습니다 (앱이 먹통되는 원인이었습니다).
+      // 이제 동기화를 다시 트리거하지 않는 내부 전용 읽기 함수(_loadAllRaw)만 사용합니다.
+      final records = await _loadAllRaw();
       final configs = await loadAllConfigs();
       await FamilyLinkService.pushGradeManagementSnapshot(
         records: records.map((r) => r.toJson()).toList(),
@@ -297,7 +302,6 @@ class GradeManagementService {
       return [];
     }
   }
-
   static Future<void> _saveAllConfigs(List<SubjectConfig> configs) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kConfigsKey, jsonEncode(configs.map((c) => c.toJson()).toList()));
@@ -336,7 +340,7 @@ class GradeManagementService {
   static Future<void> _recalculateRecordsForSubject({
     required String schoolLevel, required int grade, required int semester, required String subject, required SubjectConfig config,
   }) async {
-    final all = await loadAll();
+    final all = await _loadAllRaw();
     bool changed = false;
     for (int i = 0; i < all.length; i++) {
       final r = all[i];
@@ -357,7 +361,9 @@ class GradeManagementService {
   // ------------------------------------------------------------------------
   // 성적 기록
   // ------------------------------------------------------------------------
-  static Future<List<GradeRecord>> loadAll() async {
+  // 🆕 [치명적 버그 수정] 실제 읽기 로직은 여기(_loadAllRaw)에만 있고, 동기화를
+  // 트리거하지 않습니다. _syncToFirestore()는 반드시 이 함수만 호출해야 합니다.
+  static Future<List<GradeRecord>> _loadAllRaw() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? raw = prefs.getString(_kRecordsKey);
@@ -373,6 +379,14 @@ class GradeManagementService {
     } catch (e) {
       return [];
     }
+  }
+
+  static Future<List<GradeRecord>> loadAll() async {
+    final List<GradeRecord> result = await _loadAllRaw();
+    // 🆕 [복구 조치 2026-09-05] 화면을 불러올 때마다 자동으로 Firestore와 동기화합니다.
+    // (동기화 자체는 _loadAllRaw만 사용하므로 여기서 다시 loadAll()이 불릴 일은 없습니다.)
+    unawaited(_syncToFirestore());
+    return result;
   }
 
   static Future<void> _saveAll(List<GradeRecord> records) async {
@@ -396,7 +410,7 @@ class GradeManagementService {
     final String? grd = computeGrade(schoolLevel: schoolLevel, average: avg, personalRank: personalRank, totalStudents: config?.totalStudents);
     final DateTime now = DateTime.now();
 
-    final all = await loadAll();
+    final all = await _loadAllRaw();
     GradeRecord result;
     if (existingId != null) {
       final idx = all.indexWhere((r) => r.id == existingId);
@@ -431,7 +445,7 @@ class GradeManagementService {
   }
 
   static Future<void> deleteRecord(String id) async {
-    final all = await loadAll();
+    final all = await _loadAllRaw();
     all.removeWhere((r) => r.id == id);
     await _saveAll(all);
     await _syncToFirestore(); // 🆕 [학부모 가시성 확보]
@@ -559,7 +573,7 @@ class GradeManagementService {
   }) async {
     if (oldName == newName || newName.trim().isEmpty) return;
 
-    final allRecords = await loadAll();
+    final allRecords = await _loadAllRaw();
     for (int i = 0; i < allRecords.length; i++) {
       final r = allRecords[i];
       if (r.schoolLevel == schoolLevel && r.grade == grade && r.semester == semester && r.subject == oldName) {

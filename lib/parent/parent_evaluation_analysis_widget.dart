@@ -234,9 +234,9 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (selectedEvaluationType == "주평가") ...[
-                  Text(t(kWeeklyPastFilterMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(bi(kWeeklyPastFilterMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  Text(t(kYearSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                  Text(bi(kYearSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -251,7 +251,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(t(kMonthSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                  Text(bi(kMonthSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
                   DropdownButton<String>(
                     dropdownColor: premiumCardBg,
@@ -264,7 +264,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                     onChanged: (val) => onMonthChanged(val!),
                   ),
                   const SizedBox(height: 8),
-                  Text(t(kWeekSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                  Text(bi(kWeekSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -281,7 +281,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                 ] else ...[
                   // 🆕 [다중선택] 대단원/중단원 모두 selectedBigUnits.contains(v) / selectedMidUnits.contains(v)로
                   // 비교하도록 변경 - 탭할 때마다 onBigUnitChanged/onMidUnitChanged가 토글(선택↔해제)합니다.
-                  Text(t(kBigUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                  Text(bi(kBigUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -293,7 +293,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(t(kMidUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                  Text(bi(kMidUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -306,7 +306,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                   ),
                 ],
                 const Divider(color: Colors.white10, height: 16),
-                Text(t(kGraphTargetInfraMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 11)),
+                Text(bi(kGraphTargetInfraMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 11)),
               ],
             ),
           ),
@@ -356,7 +356,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                 // Expanded + 2줄 허용으로 감싸고, 화살표 아이콘은 고정 폭 유지
                 Expanded(
                   child: Text(
-                    t(kTodayAnalysisReportBtnMap),
+                    bi(kTodayAnalysisReportBtnMap),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
@@ -388,16 +388,40 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
     }
 
     if (rawRecords.isEmpty) {
+      // 🆕 [버그 원인 안내 2026-09-06] 선택된 연/월/주차와 실제로 기록된 연/월/주차가
+      // 달라서 "기록 없음"으로 보이는 경우가 많습니다(주평가는 정확히 일치해야만 표시됨).
+      // 자동으로 값을 바꾸는 대신, 실제 기록이 있는 시점을 안내해서 부모가 직접 선택하게 합니다.
+      String? actualDataHint;
+      if (type == "주평가") {
+        final List<dynamic> allOfType = mirroredExamRecords.where((rec) => rec.type == type).toList();
+        if (allOfType.isNotEmpty) {
+          final Set<String> units = allOfType.map((rec) => rec.unit.toString()).toSet();
+          actualDataHint = units.join(' / ');
+        }
+      }
       return Container(
         height: 140,
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(color: premiumCardBg, borderRadius: BorderRadius.circular(12)),
         alignment: Alignment.center,
-        child: Text(
-          noEvalRecordsText(type),
-          textAlign: TextAlign.center,
-          style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12, height: 1.5),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              noEvalRecordsText(type),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12, height: 1.5),
+            ),
+            if (actualDataHint != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '실제 기록이 있는 시점: $actualDataHint\n(위에서 그 연도/월/주차를 선택해보세요)',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(color: brandGolden.withValues(alpha: 0.8), fontSize: 11, height: 1.5, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ],
         ),
       );
     }
@@ -563,7 +587,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
         width: double.infinity,
         alignment: Alignment.center,
         decoration: BoxDecoration(color: premiumCardBg, borderRadius: BorderRadius.circular(12)),
-        child: Text(t(kNoTimeDataMap), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12)),
+        child: Text(bi(kNoTimeDataMap), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12)),
       );
     }
 
@@ -630,7 +654,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                 children: [
                   Container(width: 10, height: 10, color: Colors.grey),
                   const SizedBox(width: 4),
-                  Text(t(kSelfSubjectAvgMap), style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 10)),
+                  Text(bi(kSelfSubjectAvgMap), style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 10)),
                 ],
               ),
               const SizedBox(height: 6),

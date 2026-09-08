@@ -7,6 +7,8 @@ import '../global_lang.dart'; // 👑 글로벌 사전 연결
 import '../services/user_profile_service.dart'; // 🆕 [실사용 전환] 실제 가입자 이름 조회용
 import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [반복 방지] 사람 구분(uid)용
 import '../star_economy.dart'; // 🆕 [버그 수정] DkeStars 클래스 사용을 위한 import 누락 수정 (Undefined name 'DkeStars' 에러의 원인)
+import 'dart:async';
+import '../services/family_link_service.dart';
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -678,13 +680,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           try {
             loaded.add(_ExamRecord.fromJson(Map<String, dynamic>.from(e as Map)));
           } catch (itemError) {
-            // 개별 레코드 하나가 손상되어 있어도 나머지 레코드는 정상적으로 계속 불러옵니다.
             debugPrint("[MemberAchievement] 손상된 성적 기록 1건 건너뜀: $itemError");
           }
         }
       }
 
       if (!mounted) return;
+
+      // 🆕 [버그 수정 2026-09-08] 조회 필터가 항상 고정 기본값(2학년/1학기)이라, 다른
+      // 학년으로 저장한 기록은 안 보이는 것처럼 느껴지던 문제 - 가장 최근 기록 기준으로
+      // 필터를 자동으로 맞춰줍니다.
+      if (loaded.isNotEmpty) {
+        final _ExamRecord latest = loaded.last;
+        _filterGrade = latest.grade;
+        _filterSemester = latest.semester;
+        _inputGrade = latest.grade;
+        _inputSemester = latest.semester;
+        if (latest.type == "중간고사" || latest.type == "기말고사") {
+          _inputSemesterGroup = latest.semester == 1 ? "1학기" : "2학기";
+        }
+        _selectedExamType = latest.type;
+        _filterExamType = latest.type;
+      }
+
       setState(() {
         _allRecords = loaded;
         _lastSavedRecordForDisplay = loaded.isNotEmpty ? loaded.last : null;
@@ -1295,6 +1313,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                   _scoreController.clear();
                                 });
                                 await _persistExamRecords(); // 🆕 [데이터 연결] 새로 입력한 성적 기록을 즉시 영구 저장
+                                await FamilyLinkService.pushExamRecord(newRecord.toJson());
 
                                 Navigator.pop(ctx);
                                 FocusScope.of(context).unfocus();
@@ -2594,9 +2613,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               "subject": subjectName,
               "minutes": minutes,
               "timestamp": ts,
-              "recordType": item['recordType'] as String?, // '강의' 또는 '평가'
-              "lectureSubType": item['lectureSubType'] as String?, // '개념강의' / '단원정리 및 문제해설'
-              "score": item['score'], // 평가일 때만 int, 강의면 null
+              "recordType": item['recordType'] as String?,
+              "lectureSubType": item['lectureSubType'] as String?,
+              "score": item['score'],
+              // 🆕 [요청 2026-09-07] 상세분석기록에서 쓸 세부 항목 추가
+              "details": item['details'] as String?,
+              "understanding": item['understanding'],
+              "difficulty": item['difficulty'] as String?,
+              "concentration": item['concentration'] as String?,
+              "condition": item['condition'] as String?,
+              "incorrectNote": item['incorrectNote'] as String?,
             });
           } catch (_) {
             // 손상된 기록 하나는 건너뛰고 나머지는 계속 집계
@@ -2739,6 +2765,32 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
     final buffer = StringBuffer();
     buffer.write(DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n');
+
+    // 🆕 [요청 2026-09-07] 교시별 상세 기록(내용/이해도/난이도/집중도/컨디션/오답정리)을
+    // 전부 나열 - "상세"라는 이름에 맞게 종합 리포트보다 훨씬 구체적인 정보를 제공합니다.
+    for (int i = 0; i < _selectedDaySessions.length; i++) {
+      final s = _selectedDaySessions[i];
+      final String recType = (s["recordType"] as String?) ?? '';
+      buffer.write("${i + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}\n");
+      final String? details = s["details"] as String?;
+      if (details != null && details.isNotEmpty) {
+        buffer.write("  상세내용: $details\n");
+      }
+      if (recType == '평가') {
+        final understanding = s["understanding"];
+        final difficulty = s["difficulty"] as String?;
+        final concentration = s["concentration"] as String?;
+        final condition = s["condition"] as String?;
+        final incorrectNote = s["incorrectNote"] as String?;
+        if (understanding != null) buffer.write("  이해도: $understanding%\n");
+        if (difficulty != null && difficulty.isNotEmpty) buffer.write("  난이도: $difficulty\n");
+        if (concentration != null && concentration.isNotEmpty) buffer.write("  집중도: $concentration\n");
+        if (condition != null && condition.isNotEmpty) buffer.write("  학습컨디션: $condition\n");
+        if (incorrectNote != null && incorrectNote.isNotEmpty) buffer.write("  오답정리: $incorrectNote\n");
+      }
+      buffer.write("\n");
+    }
+
     buffer.write("• ${_t('studyTime')}: $totalTodayMin${_t('minutesUnitSuffix')}\n");
     buffer.write("• ${_t('mostStudiedSubject').replaceAll('\n', '')}: ${_subjectName(topSubject)}\n\n");
 

@@ -14,14 +14,56 @@ String _bi(Map<String, String> map) {
   return "${map['KO']}/${map['EN']}";
 }
 
-String lastSessionText(String childName, String subject) {
+// 🆕 [요청 2026-09-08] "한글/English" 한 줄 대신, 한글 한 줄 + 영문 한 줄로 나눠서 보여주는
+// 위젯 버전. 기본모드(KO/EN)에서 문구가 길 때 한 줄에 욱여넣지 않고 읽기 편하게 함.
+Widget _biTwoLineWidget(Map<String, String> map, {required TextStyle koStyle, required TextStyle enStyle}) {
+  if (DkeLang.isForeignSelected) {
+    return Text(_t(map), style: koStyle);
+  }
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(map['KO'] ?? '', style: koStyle),
+      Text(map['EN'] ?? '', style: enStyle),
+    ],
+  );
+}
+
+// 🆕 [요청] "OO님의 가장 최근 학습: 과목" 한 줄 형식 대신, 아래 3줄 형식으로 변경:
+// 1줄: "OO님 가장최근 학습 상태"  2줄: "학습과목명칭: 과목"  3줄: "최근 세션 집중학습 : N분"
+String recentStatusTitle(String childName) {
   final Map<String, String> map = {
-    'KO': '$childName님의 가장 최근 학습: "$subject"', 'EN': "$childName's most recent study: \"$subject\"",
-    'JA': '$childName様の直近の学習：「$subject」', 'ZH': '$childName最近的学习："$subject"',
-    'FR': "Étude la plus récente de $childName : « $subject »", 'DE': 'Letzte Lernaktivität von $childName: „$subject"',
-    'RU': 'Последнее занятие $childName: «$subject»', 'AR': 'أحدث دراسة لـ $childName: "$subject"',
-    'HI': '$childName की हाल की पढ़ाई: "$subject"', 'VI': 'Buổi học gần nhất của $childName: "$subject"',
-    'ES': 'Estudio más reciente de $childName: "$subject"', 'TH': 'การเรียนล่าสุดของ $childName: "$subject"',
+    'KO': '$childName님 가장최근 학습 상태', 'EN': "$childName's Most Recent Study Status",
+    'JA': '$childName様の直近の学習状況', 'ZH': '$childName最近的学习状态',
+    'FR': "État d'étude le plus récent de $childName", 'DE': 'Neuester Lernstatus von $childName',
+    'RU': 'Последний статус обучения $childName', 'AR': 'أحدث حالة دراسية لـ $childName',
+    'HI': '$childName की हाल की अध्ययन स्थिति', 'VI': 'Trạng thái học gần nhất của $childName',
+    'ES': 'Estado de estudio más reciente de $childName', 'TH': 'สถานะการเรียนล่าสุดของ $childName',
+  };
+  return _t(map);
+}
+
+String subjectNameLine(String subject) {
+  final Map<String, String> map = {
+    'KO': '학습과목명칭: $subject 과목', 'EN': 'Subject: $subject',
+    'JA': '学習科目名称：$subject科目', 'ZH': '学习科目名称：$subject科目',
+    'FR': 'Matière étudiée : $subject', 'DE': 'Lernfach: $subject',
+    'RU': 'Предмет: $subject', 'AR': 'اسم مادة الدراسة: $subject',
+    'HI': 'अध्ययन विषय का नाम: $subject', 'VI': 'Tên môn học: $subject',
+    'ES': 'Nombre de la asignatura: $subject', 'TH': 'ชื่อวิชาที่เรียน: $subject',
+  };
+  return _t(map);
+}
+
+String recentFocusLine(int minutes) {
+  final Map<String, String> map = {
+    'KO': '최근 세션 집중학습 : $minutes분', 'EN': 'Recent session focused study: $minutes min',
+    'JA': '直近セッション集中学習：$minutes分', 'ZH': '最近会话专注学习：$minutes分钟',
+    'FR': "Étude concentrée de la dernière session : $minutes min", 'DE': 'Fokussiertes Lernen der letzten Sitzung: $minutes Min.',
+    'RU': 'Сосредоточенное обучение за последнее занятие: $minutes мин', 'AR': 'الدراسة المركزة للجلسة الأخيرة: $minutes دقيقة',
+    'HI': 'हाल के सत्र का केंद्रित अध्ययन: $minutes मिनट', 'VI': 'Học tập trung phiên gần nhất: $minutes phút',
+    'ES': 'Estudio concentrado de la sesión reciente: $minutes min', 'TH': 'การเรียนแบบตั้งใจเซสชันล่าสุด: $minutes นาที',
   };
   return _t(map);
 }
@@ -132,6 +174,10 @@ class ParentLiveStatusWidget extends StatefulWidget {
   final String? lastSessionSubject;
   final int lastSessionDurationMinutes;
   final int totalCollectedStars;
+  // 🆕 [버그 수정 2026-09-06] 자녀 선택(Firestore 연동) 시, 그 자녀의 실제 전체 누적 별
+  // 개수를 장학금 위젯에도 함께 전달하기 위한 필드. null이면(연결된 자녀 없음) 장학금
+  // 위젯이 원래처럼 이 기기의 로컬 데이터를 사용합니다.
+  final int? allTimeTotalStars;
   final bool isMonitoringActive;
   final int monitoringCountdown;
   final Color premiumCardBg;
@@ -149,6 +195,7 @@ class ParentLiveStatusWidget extends StatefulWidget {
     required this.lastSessionSubject,
     required this.lastSessionDurationMinutes,
     required this.totalCollectedStars,
+    this.allTimeTotalStars,
     required this.isMonitoringActive,
     required this.monitoringCountdown,
     required this.premiumCardBg,
@@ -189,29 +236,33 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               border: Border.all(color: widget.brandGolden.withValues(alpha: 0.3), width: 1.2),
             ),
             child: Column(
-              children: [
+              children: widget.lastSessionSubject != null
+                  ? [
+                // 🆕 [요청] 3줄 형식: 1) OO님 가장최근 학습 상태  2) 학습과목명칭: 과목  3) 최근 세션 집중학습 : N분
                 Text(
-                  widget.lastSessionSubject != null
-                      ? lastSessionText(widget.childName, widget.lastSessionSubject!)
-                      : noSessionYetText(widget.childName),
+                  recentStatusTitle(widget.childName),
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white,
-                    fontSize: 14.0,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subjectNameLine(widget.lastSessionSubject!),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13.0, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 4),
-                if (widget.lastSessionSubject != null)
-                  Text(
-                    focusDurationText(widget.lastSessionDurationMinutes),
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansKr(
-                      color: widget.brandGolden,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                Text(
+                  recentFocusLine(widget.lastSessionDurationMinutes),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 14.5, fontWeight: FontWeight.bold),
+                ),
+              ]
+                  : [
+                Text(
+                  noSessionYetText(widget.childName),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.w500),
+                ),
               ],
             ),
           ),
@@ -228,7 +279,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _t(kEncourageMsgSectionMap),
+                  _bi(kEncourageMsgSectionMap),
                   style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
@@ -257,9 +308,10 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _t(kQuickPhrasesHintMap),
-                  style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11),
+                _biTwoLineWidget(
+                  kQuickPhrasesHintMap,
+                  koStyle: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                  enStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
@@ -303,7 +355,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                     );
                   },
                   decoration: InputDecoration(
-                    hintText: _t(kMessageHintMap),
+                    hintText: _bi(kMessageHintMap),
                     hintStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12),
                     filled: true,
                     fillColor: Colors.black45,
@@ -323,16 +375,24 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      widget.lastSentTimeText.isNotEmpty
-                          ? lastSentText(widget.lastSentTimeText)
-                          : _t(kWaitingMap),
-                      style: GoogleFonts.notoSansKr(color: widget.brandGolden.withValues(alpha: 0.7), fontSize: 11, fontWeight: FontWeight.w500),
+                    // 🆕 [오버플로우 수정 2026-09-06] 한글+영문 병기로 문구가 길어져서
+                    // 버튼과 함께 배치했을 때 화면 폭을 넘던 문제 - Expanded로 감싸고
+                    // 1줄로 말줄임 처리해서 버튼 자리를 항상 확보합니다.
+                    Expanded(
+                      child: Text(
+                        widget.lastSentTimeText.isNotEmpty
+                            ? lastSentText(widget.lastSentTimeText)
+                            : _bi(kWaitingMap),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.notoSansKr(color: widget.brandGolden.withValues(alpha: 0.7), fontSize: 11, fontWeight: FontWeight.w500),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.brandGolden,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () {
@@ -343,8 +403,10 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                       },
                       icon: const Icon(Icons.send_rounded, color: Colors.black, size: 14),
                       label: Text(
-                        _t(kSendBtnMap),
-                        style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
+                        _bi(kSendBtnMap),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11),
                       ),
                     ),
                   ],
@@ -361,6 +423,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
             premiumCardBg: widget.premiumCardBg,
             brandGolden: widget.brandGolden,
             luxuryDarkBg: widget.luxuryDarkBg,
+            overrideTotalStars: widget.allTimeTotalStars,
           ),
           const SizedBox(height: 10),
         ],

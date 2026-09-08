@@ -10,28 +10,36 @@ import '../global_lang.dart';
 String _t(Map<String, String> map) =>
     map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '';
 
+// 🆕 [요청] 한글+영문 병기 - 기본모드(KO/EN 미선택)는 "한글/English" 동시 표시,
+// 10개국어 선택 시엔 해당 언어만 단독 표시 (다른 부모 화면 파일들과 동일한 관례)
+String _bi(Map<String, String> map) {
+  if (DkeLang.isForeignSelected) return _t(map);
+  return "${map['KO']}/${map['EN']}";
+}
+
+// 🆕 [요청] 유형 명칭 변경: 기본형→성장형 / 동기부여형→도전형 / 챔피언형→성취형
 const Map<String, Map<String, String>> kScholarshipTypeNameMap = {
   'basic': {
-    'KO': '기본형', 'EN': 'Basic', 'JA': '基本型', 'ZH': '基础型', 'FR': 'Basique',
-    'DE': 'Basis', 'RU': 'Базовый', 'AR': 'أساسي', 'HI': 'बेसिक', 'VI': 'Cơ bản',
-    'ES': 'Básico', 'TH': 'พื้นฐาน',
+    'KO': '성장형', 'EN': 'Growth', 'JA': '成長型', 'ZH': '成长型', 'FR': 'Croissance',
+    'DE': 'Wachstum', 'RU': 'Рост', 'AR': 'نمو', 'HI': 'विकास', 'VI': 'Tăng trưởng',
+    'ES': 'Crecimiento', 'TH': 'การเติบโต',
   },
   'motivation': {
-    'KO': '동기부여형', 'EN': 'Motivation', 'JA': '動機付け型', 'ZH': '激励型', 'FR': 'Motivation',
-    'DE': 'Motivation', 'RU': 'Мотивационный', 'AR': 'تحفيزي', 'HI': 'प्रेरणा', 'VI': 'Động lực',
-    'ES': 'Motivación', 'TH': 'สร้างแรงจูงใจ',
+    'KO': '도전형', 'EN': 'Challenge', 'JA': 'チャレンジ型', 'ZH': '挑战型', 'FR': 'Défi',
+    'DE': 'Herausforderung', 'RU': 'Вызов', 'AR': 'تحدي', 'HI': 'चुनौती', 'VI': 'Thử thách',
+    'ES': 'Desafío', 'TH': 'ความท้าทาย',
   },
   'champion': {
-    'KO': '챔피언형', 'EN': 'Champion', 'JA': 'チャンピオン型', 'ZH': '冠军型', 'FR': 'Champion',
-    'DE': 'Champion', 'RU': 'Чемпион', 'AR': 'بطل', 'HI': 'चैंपियन', 'VI': 'Nhà vô địch',
-    'ES': 'Campeón', 'TH': 'แชมป์',
+    'KO': '성취형', 'EN': 'Achievement', 'JA': '達成型', 'ZH': '成就型', 'FR': 'Accomplissement',
+    'DE': 'Erfolg', 'RU': 'Достижение', 'AR': 'إنجاز', 'HI': 'उपलब्धि', 'VI': 'Thành tựu',
+    'ES': 'Logro', 'TH': 'ความสำเร็จ',
   },
 };
 
 String scholarshipTypeName(ScholarshipType type) {
   final map = kScholarshipTypeNameMap[type.name];
   if (map == null) return type.name;
-  return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? type.name;
+  return _bi(map);
 }
 
 String scholarshipTitle(ScholarshipType type) {
@@ -91,51 +99,19 @@ const Map<String, String> kCapNoteMap = {
 };
 
 const Map<String, String> kPhilosophyPopupTitleMap = {
-  'KO': '왜 "장학금"일까요?',
-  'EN': 'Why call it a "Scholarship"?',
-  'JA': 'なぜ「奨学金」なのでしょうか？',
-  'ZH': '为什么叫"奖学金"？',
-  'FR': 'Pourquoi une « bourse » ?',
-  'DE': 'Warum ein „Stipendium"?',
-  'RU': 'Почему это «стипендия»?',
-  'AR': 'لماذا "منحة دراسية"؟',
-  'HI': '"छात्रवृत्ति" ही क्यों?',
-  'VI': 'Tại sao gọi là "học bổng"?',
-  'ES': '¿Por qué llamarlo "beca"?',
-  'TH': 'ทำไมถึงเรียกว่า "ทุนการศึกษา"?',
+  'KO': '자녀 학습 장학금 안내',
+  'EN': "Notice: Your Child's Study Scholarship",
 };
 
 const Map<String, String> kPhilosophyPopupBodyMap = {
   'KO':
-  '자녀에게 매달 정해진 용돈을 그냥 건네는 대신,\n스스로 계획하고 몰입한 시간을 별로 쌓아 올리고\n그 별이 눈에 보이는 보상으로 돌아오게 해보세요.\n\n노력한 만큼 정직하게 돌아오는 이 경험이,\n아이의 마음속에 "나는 해낼 수 있다"는 확신을 심어줍니다.\n\n이 장학금은 단순한 용돈이 아니라,\n자녀의 하루하루 노력에 보내는 부모님의 가장 따뜻한 응원입니다.',
+  '매일 한 걸음씩 꾸준히 공부하며 모은 별은\n단순한 숫자가 아니라 자녀의 노력과 성취를 기록한 소중한 결과입니다.\n\nGKE StudyUp에서는 학생이 스스로 세운 목표를 실천하고\n꾸준히 학습한 만큼 별을 모아 장학금으로 환산할 수 있습니다.\n\n그리고 이 장학금은\n부모님께서 자녀의 노력에 대한 따뜻한 격려와 응원의 마음을 직접 전해주는 것을 권장합니다.\n\n"공부해라"라는 말보다\n"네가 노력한 만큼 정말 잘했다."라는 한마디가\n아이에게는 더 큰 힘이 될 수 있습니다.\n\n오늘도 열심히 노력한 자녀에게\n부모님의 작은 응원을 선물해 주세요. 💛\n\n※ 장학금 지급 여부와 금액은 가정의 상황에 맞게 부모님께서 자율적으로 결정하실 수 있습니다.',
   'EN':
-  "Instead of simply handing over a fixed monthly allowance, let your child's own focus and effort build up into stars — stars that return as a visible reward.\n\nThis honest exchange between effort and reward plants a lasting belief in your child: \"I can do this.\"\n\nThis scholarship isn't just pocket money. It's the warmest way to say — I see how hard you're trying, and I'm proud of you.",
-  'JA':
-  '毎月決まったお小遣いをそのまま渡す代わりに、お子様が自ら計画し没頭した時間を星として積み上げ、その星が目に見える報酬として返ってくるようにしてみましょう。\n\n努力した分だけ正直に返ってくるこの経験が、「自分はやればできる」という確信を子どもの心に育てます。\n\nこの奨学金は単なるお小遣いではなく、お子様の日々の努力に贈る親御様の最も温かい応援です。',
-  'ZH':
-  '与其每月固定给孩子零花钱，不如让孩子自己规划、专注学习的时间累积成星星，再让这些星星变成看得见的奖励回到孩子手中。\n\n这种"付出多少、收获多少"的诚实体验，会在孩子心中种下"我能做到"的信念。\n\n这份奖学金不只是零花钱，而是父母对孩子每一天努力所给予的、最温暖的鼓励。',
-  'FR':
-  "Plutôt que de simplement verser une allocation mensuelle fixe, laissez le temps que votre enfant consacre lui-même à sa concentration et à ses efforts se transformer en étoiles — des étoiles qui reviennent sous forme de récompense visible.\n\nCet échange honnête entre l'effort et la récompense ancre en lui une conviction durable : « J'en suis capable ».\n\nCette bourse n'est pas un simple argent de poche. C'est la façon la plus chaleureuse de lui dire : je vois combien tu travailles dur, et je suis fier(ère) de toi.",
-  'DE':
-  'Anstatt einfach ein festes monatliches Taschengeld zu geben, lassen Sie die Zeit, die Ihr Kind selbst plant und sich konzentriert widmet, zu Sternen heranwachsen – Sternen, die als sichtbare Belohnung zurückkehren.\n\nDiese ehrliche Verbindung zwischen Anstrengung und Belohnung pflanzt in Ihrem Kind die dauerhafte Überzeugung: „Ich kann das schaffen."\n\nDieses Stipendium ist kein einfaches Taschengeld. Es ist die herzlichste Art zu sagen: Ich sehe, wie sehr du dich bemühst, und ich bin stolz auf dich.',
-  'RU':
-  'Вместо того чтобы просто выдавать фиксированные карманные деньги каждый месяц, позвольте времени, которое ребёнок сам планирует и посвящает учёбе, превращаться в звёзды — звёзды, которые возвращаются в виде видимой награды.\n\nЭтот честный обмен между усилием и наградой закладывает в ребёнке стойкую убеждённость: «Я справлюсь».\n\nЭта стипендия — не просто карманные деньги. Это самый тёплый способ сказать: я вижу, как ты стараешься, и горжусь тобой.',
-  'AR':
-  'بدلاً من مجرد إعطاء مصروف شهري ثابت، دع الوقت الذي يخطط له طفلك بنفسه وينغمس فيه يتحول إلى نجوم — نجوم تعود كمكافأة ملموسة.\n\nهذه المبادلة الصادقة بين الجهد والمكافأة تزرع في قلب طفلك قناعة راسخة: "أستطيع فعل ذلك".\n\nهذه المنحة ليست مجرد مصروف جيب، بل أدفأ طريقة تقول بها لطفلك: أرى مدى اجتهادك، وأنا فخور بك.',
-  'HI':
-  'हर महीने एक तय जेबखर्च सीधे देने के बजाय, अपने बच्चे के अपने प्रयास और एकाग्रता से बिताए समय को सितारों में बदलने दें — सितारे जो एक स्पष्ट पुरस्कार के रूप में वापस आते हैं।\n\nप्रयास और पुरस्कार के बीच का यह ईमानदार आदान-प्रदान बच्चे के मन में एक स्थायी विश्वास जगाता है: "मैं यह कर सकता/सकती हूं।"\n\nयह छात्रवृत्ति केवल जेबखर्च नहीं है। यह आपके बच्चे के रोज़ के प्रयास के लिए माता-पिता की सबसे गर्मजोशी भरी सराहना है।',
-  'VI':
-  'Thay vì chỉ đưa một khoản tiền tiêu vặt cố định hàng tháng, hãy để thời gian con tự lên kế hoạch và chuyên tâm học tập tích lũy thành những ngôi sao — những ngôi sao trở lại dưới dạng phần thưởng hữu hình.\n\nSự trao đổi trung thực giữa nỗ lực và phần thưởng này gieo vào lòng con niềm tin bền vững: "Con có thể làm được."\n\nHọc bổng này không chỉ là tiền tiêu vặt. Đó là cách ấm áp nhất để nói với con rằng: bố mẹ thấy con đã cố gắng thế nào, và bố mẹ tự hào về con.',
-  'ES':
-  'En lugar de simplemente entregar una mesada mensual fija, deje que el tiempo que su hijo/a planifica y dedica por sí mismo se convierta en estrellas, estrellas que regresan como una recompensa visible.\n\nEste intercambio honesto entre esfuerzo y recompensa siembra en el niño una convicción duradera: "puedo lograrlo".\n\nEsta beca no es solo dinero de bolsillo. Es la forma más cálida de decirle: veo lo mucho que te esfuerzas, y estoy orgulloso/a de ti.',
-  'TH':
-  'แทนที่จะให้ค่าขนมคงที่ทุกเดือนเฉยๆ ลองปล่อยให้เวลาที่ลูกวางแผนและตั้งใจเรียนด้วยตัวเองสะสมกลายเป็นดวงดาว แล้วดาวเหล่านั้นก็กลับมาเป็นรางวัลที่จับต้องได้\n\nประสบการณ์ที่ซื่อสัตย์ระหว่างความพยายามกับผลตอบแทนนี้ จะปลูกฝังความเชื่อมั่นในใจลูกว่า "ฉันทำได้"\n\nทุนนี้ไม่ใช่แค่ค่าขนม แต่เป็นวิธีที่อบอุ่นที่สุดที่พ่อแม่จะบอกลูกว่า พ่อแม่เห็นความพยายามของลูก และภูมิใจในตัวลูกมาก',
+  "The stars your child collects by studying steadily, one step at a time, aren't just numbers — they're a precious record of your child's effort and achievement.\n\nOn GKE StudyUp, students can turn the stars they earn from working toward their own goals into a scholarship.\n\nAnd we encourage parents to use this scholarship as a way to directly express warm encouragement and support for your child's effort.\n\nMore than saying \"go study,\"\na single \"I'm proud of how hard you worked\" can mean so much more to your child.\n\nGive your child, who worked hard again today,\na small gift of your encouragement. 💛\n\n※ Whether to give the scholarship and how much is entirely up to each family to decide as fits their situation.",
 };
 
 const Map<String, String> kCloseBtnMap = {
-  'KO': '확인', 'EN': 'Got it', 'JA': '了解', 'ZH': '知道了', 'FR': 'Compris',
-  'DE': 'Verstanden', 'RU': 'Понятно', 'AR': 'حسناً', 'HI': 'समझ गया', 'VI': 'Đã hiểu',
-  'ES': 'Entendido', 'TH': 'เข้าใจแล้ว',
+  'KO': '부모님께 안내하기', 'EN': 'Guide for Parents',
 };
 
 // 천 단위 콤마 + 통화 표기 (한국어는 "원", 그 외 언어는 "₩" 접두)
@@ -150,16 +126,40 @@ String wonText(int amount) {
   return '₩$num';
 }
 
+// 🆕 [요청] "🌟 자녀의 학습 별 2,480개" 형식의 헤더 줄 (한글+영문 병기)
+String studyStarsLine(int count) {
+  final String formatted = _formatNumber(count);
+  if (DkeLang.isForeignSelected) {
+    return "🌟 Child's Study Stars: $formatted";
+  }
+  return "🌟 자녀의 학습 별 $formatted개 / Child's Study Stars: $formatted";
+}
+
+// 🆕 [요청] "장학금 환산액 ○○○원 (자동 환산됨)" 형식 (한글+영문 병기)
+String scholarshipAmountLine(int amount) {
+  final String money = wonText(amount);
+  if (DkeLang.isForeignSelected) {
+    return 'Scholarship value: $money (auto-calculated)';
+  }
+  return '장학금 환산액 $money (자동 환산됨) / Scholarship value: $money (auto-calculated)';
+}
+
 class ParentScholarshipWidget extends StatefulWidget {
   final Color premiumCardBg;
   final Color brandGolden;
   final Color luxuryDarkBg;
+
+  // 🆕 [버그 수정 2026-09-06] 자녀를 선택한 상태(Firestore 연동)일 때, 부모 대시보드가
+  // 그 자녀의 실제 누적 별 개수를 여기로 넘겨줍니다. null이면(연결된 자녀 없음 - 기존
+  // 단일기기 사용자) 원래처럼 이 기기의 로컬 별 데이터를 사용합니다.
+  final int? overrideTotalStars;
 
   const ParentScholarshipWidget({
     Key? key,
     required this.premiumCardBg,
     required this.brandGolden,
     required this.luxuryDarkBg,
+    this.overrideTotalStars,
   }) : super(key: key);
 
   @override
@@ -171,6 +171,7 @@ class _ParentScholarshipWidgetState extends State<ParentScholarshipWidget> {
   ScholarshipResult? _result;
   bool _loading = true;
   bool _expanded = false;
+  bool _introShown = false; // 🆕 [반복 방지] 이 화면에 처음 들어왔을 때 딱 한 번만 안내 팝업 자동 표시
 
   @override
   void initState() {
@@ -178,29 +179,61 @@ class _ParentScholarshipWidgetState extends State<ParentScholarshipWidget> {
     _load();
   }
 
+  // 🆕 [버그 수정 2026-09-06] 부모가 다른 자녀로 전환하면(overrideTotalStars 값이 바뀌면)
+  // 그 자녀의 별 개수 기준으로 다시 계산합니다.
+  @override
+  void didUpdateWidget(covariant ParentScholarshipWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.overrideTotalStars != null && widget.overrideTotalStars != oldWidget.overrideTotalStars) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     final ScholarshipType type = await ScholarshipService.getSelectedType();
-    final ScholarshipResult result = await ScholarshipService.calculate(type);
+    // 🆕 [버그 수정 2026-09-06] 자녀가 선택되어 있으면(overrideTotalStars != null) 그 자녀의
+    // 실제 Firestore 별 개수로 계산하고, 없으면 기존처럼 이 기기의 로컬 데이터를 사용합니다.
+    final ScholarshipResult result = widget.overrideTotalStars != null
+        ? ScholarshipService.calculateFromStars(type: type, totalStars: widget.overrideTotalStars!)
+        : await ScholarshipService.calculate(type);
     if (!mounted) return;
     setState(() {
       _selectedType = type;
       _result = result;
       _loading = false;
+    });
+    // 🆕 [요청 변경] 화면 진입 시가 아니라, "오늘의 별 수집 현황" 3개 유형 중
+    // 하나를 처음 탭했을 때 딱 한 번만 안내 팝업이 뜨도록 변경 (_onTypeChanged에서 트리거)
+  }
+
+  // 🆕 [반복 방지] _introShown 플래그로 세션당 한 번만 자동 표시. 이후엔 ⓘ 아이콘으로
+  // 언제든 다시 볼 수 있음(수동 트리거는 그대로 유지).
+  void _showIntroPopupOnce() {
+    if (_introShown || !mounted) return;
+    _introShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showPhilosophyPopup();
     });
   }
 
+  // 🆕 [요청] 유형 3개(성장형/도전형/성취형) 중 하나를 탭하면, 처음 한 번만 안내 팝업을
+  // 보여줍니다. 🆕 [화면 튐 수정] 예전엔 전환 중 _loading=true로 전체를 로딩 스피너로
+  // 바꿔서, 카드 높이가 갑자기 줄었다가 늘어나며 상위 스크롤이 튀는 것처럼 보였습니다.
+  // 이제 계산이 끝날 때까지 기존 카드 내용을 그대로 유지한 채 결과만 갱신합니다.
   Future<void> _onTypeChanged(ScholarshipType type) async {
     if (type == _selectedType) return;
+    _showIntroPopupOnce(); // 처음 탭했을 때만 실제로 뜸 (플래그로 이후엔 무시됨)
     setState(() {
-      _loading = true;
-      _selectedType = type;
+      _selectedType = type; // 카드 레이아웃은 그대로 유지, 유형명만 먼저 바뀜
     });
     await ScholarshipService.setSelectedType(type);
-    final ScholarshipResult result = await ScholarshipService.calculate(type);
+    final ScholarshipResult result = widget.overrideTotalStars != null
+        ? ScholarshipService.calculateFromStars(type: type, totalStars: widget.overrideTotalStars!)
+        : await ScholarshipService.calculate(type);
     if (!mounted) return;
     setState(() {
       _result = result;
-      _loading = false;
     });
   }
 
@@ -209,67 +242,83 @@ class _ParentScholarshipWidgetState extends State<ParentScholarshipWidget> {
       context: context,
       builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [const Color(0xFF0D1527), widget.luxuryDarkBg],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+        child: ConstrainedBox(
+          // 🆕 [오버플로우 수정] 문구가 길어져도 화면 높이를 넘지 않도록 최대 높이를 제한하고,
+          // 그 안에서 내용만 스크롤되게 합니다. 버튼은 항상 하단에 고정됩니다.
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(dialogContext).size.height * 0.82),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [const Color(0xFF0D1527), widget.luxuryDarkBg],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: widget.brandGolden.withValues(alpha: 0.55), width: 1.3),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.brandGolden.withValues(alpha: 0.18),
+                  blurRadius: 26,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: widget.brandGolden.withValues(alpha: 0.55), width: 1.3),
-            boxShadow: [
-              BoxShadow(
-                color: widget.brandGolden.withValues(alpha: 0.18),
-                blurRadius: 26,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(Icons.auto_awesome_rounded, color: widget.brandGolden, size: 30),
-              const SizedBox(height: 14),
-              Text(
-                _t(kPhilosophyPopupTitleMap),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(
-                  color: widget.brandGolden,
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(width: 36, height: 1.2, color: widget.brandGolden.withValues(alpha: 0.4)),
-              const SizedBox(height: 16),
-              Text(
-                _t(kPhilosophyPopupBodyMap),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13.2, height: 1.75),
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.brandGolden,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 0,
-                  ),
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: Text(
-                    _t(kCloseBtnMap),
-                    style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(Icons.auto_awesome_rounded, color: widget.brandGolden, size: 30),
+                        const SizedBox(height: 14),
+                        Text(
+                          _bi(kPhilosophyPopupTitleMap),
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSansKr(
+                            color: widget.brandGolden,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(width: 36, height: 1.2, color: widget.brandGolden.withValues(alpha: 0.4)),
+                        const SizedBox(height: 16),
+                        Text(
+                          _t(kPhilosophyPopupBodyMap),
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13.2, height: 1.75),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.brandGolden,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: Text(
+                      _bi(kCloseBtnMap),
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -361,7 +410,7 @@ class _ParentScholarshipWidgetState extends State<ParentScholarshipWidget> {
                           children: [
                             Expanded(
                               child: Text(
-                                scholarshipTitle(_selectedType),
+                                studyStarsLine(result.starToMoney ~/ 3),
                                 style: GoogleFonts.notoSansKr(
                                   color: Colors.white70,
                                   fontSize: 12,
@@ -383,13 +432,23 @@ class _ParentScholarshipWidgetState extends State<ParentScholarshipWidget> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 6),
                         Text(
-                          wonText(result.finalTotal),
-                          style: GoogleFonts.rajdhani(
+                          scholarshipTypeName(_selectedType),
+                          style: GoogleFonts.notoSansKr(
                             color: widget.brandGolden,
-                            fontSize: 24,
+                            fontSize: 16,
                             fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          scholarshipAmountLine(result.finalTotal),
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
                           ),
                         ),
                       ],

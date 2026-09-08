@@ -53,6 +53,7 @@ class _FamilyLinkTestScreenState extends State<FamilyLinkTestScreen> {
                     : _StudentSide(
                   code: _studentCode,
                   onCodeGenerated: (c) => setState(() => _studentCode = c),
+                  onCodeCleared: () => setState(() => _studentCode = null),
                 ),
               ),
             ],
@@ -69,7 +70,8 @@ class _FamilyLinkTestScreenState extends State<FamilyLinkTestScreen> {
 class _StudentSide extends StatefulWidget {
   final String? code;
   final ValueChanged<String> onCodeGenerated;
-  const _StudentSide({required this.code, required this.onCodeGenerated});
+  final VoidCallback onCodeCleared;
+  const _StudentSide({required this.code, required this.onCodeGenerated, required this.onCodeCleared});
 
   @override
   State<_StudentSide> createState() => _StudentSideState();
@@ -83,6 +85,23 @@ class _StudentSideState extends State<_StudentSide> {
     final code = await FamilyLinkService.generateLinkCode();
     widget.onCodeGenerated(code);
     setState(() => _loading = false);
+  }
+
+  // 🆕 [디버깅/복구용 2026-09-05] "코드를 만들었던 계정"과 "실제로 공부한 계정"이 서로
+  // 달라서 서버가 쓰기를 거부하는 상황을 의심될 때 쓰는 버튼. 기기에 저장된 예전 코드를
+  // 완전히 지우고, 지금 로그인된 계정 기준으로 새 코드를 발급합니다.
+  Future<void> _resetAndRegenerate() async {
+    setState(() => _loading = true);
+    await FamilyLinkService.clearMyLinkCode();
+    widget.onCodeCleared();
+    final code = await FamilyLinkService.generateLinkCode();
+    widget.onCodeGenerated(code);
+    setState(() => _loading = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('코드를 초기화하고 새로 발급했습니다. 부모님 화면에서 이 새 코드로 다시 연결해주세요.')),
+      );
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -104,7 +123,7 @@ class _StudentSideState extends State<_StudentSide> {
     final newTotal = await DkeStars.addStars(50, subject: '수학');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('별 50개 적립! (전체 누적: $newTotal개) → 부모 화면 자동 반영')),
+        SnackBar(content: Text('별 50개 적립! (전체 누적: $newTotal개) → 부모 화면 자동 반영 시도됨 (실제 반영은 부모 화면에서 직접 확인 필요)')),
       );
     }
   }
@@ -148,6 +167,23 @@ class _StudentSideState extends State<_StudentSide> {
               onPressed: _addRealStars,
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158)),
               child: const Text('⭐ 별 50개 실제 적립 (진짜 데이터 테스트)'),
+            ),
+            const SizedBox(height: 24),
+            const Divider(color: Colors.white24),
+            const SizedBox(height: 8),
+            const Text(
+              '데이터가 부모 화면에 안 뜨면, 코드를 만들었던 계정과\n지금 로그인된 계정이 다를 수 있습니다.\n아래 버튼으로 초기화 후 재발급하세요.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _loading ? null : _resetAndRegenerate,
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.redAccent)),
+              child: Text(
+                _loading ? '초기화 중...' : '🔄 코드 초기화 후 재발급',
+                style: const TextStyle(color: Colors.redAccent),
+              ),
             ),
           ],
         ],
@@ -196,13 +232,29 @@ class _ParentSideState extends State<_ParentSide> {
       setState(() => _errorText = '최대 ${FamilyLinkService.maxChildren}명까지만 연결할 수 있습니다');
       return;
     }
-    final ok = await FamilyLinkService.connectWithCode(code);
-    if (ok) {
+    // 🆕 [디버깅] 실패 사유를 구분해서 보여줌 (없는 코드/정원초과/로그인안됨/기타 오류)
+    final ConnectResult result = await FamilyLinkService.connectWithCodeResult(code);
+    if (result == ConnectResult.success) {
       _controller.clear();
       setState(() => _errorText = null);
       await _loadLinkedCodes();
     } else {
-      setState(() => _errorText = '존재하지 않는 코드입니다');
+      setState(() => _errorText = _describeConnectError(result));
+    }
+  }
+
+  String _describeConnectError(ConnectResult result) {
+    switch (result) {
+      case ConnectResult.codeNotFound:
+        return '존재하지 않는 코드입니다';
+      case ConnectResult.capacityFull:
+        return '이미 정원(3명)이 가득 찬 코드입니다';
+      case ConnectResult.notLoggedIn:
+        return '로그인이 필요합니다 (부모 계정으로 로그인해주세요)';
+      case ConnectResult.unknownError:
+        return '연결 중 오류가 발생했습니다 (네트워크 또는 권한 문제)';
+      case ConnectResult.success:
+        return '';
     }
   }
 
@@ -280,6 +332,7 @@ class _ChildCard extends StatelessWidget {
         final totalStars = data?['totalStars'];
         final todayStars = data?['todayStars'];
         final level = data?['level'];
+        final ownerUid = data?['ownerUid'];
         return Card(
           color: const Color(0xFF0D1527),
           margin: const EdgeInsets.only(bottom: 12),
@@ -292,6 +345,10 @@ class _ChildCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('코드: $code', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      // 🆕 [디버깅] ownerUid를 화면에 직접 노출 - 지금 학습 기록을 쌓고 있는
+                      // 계정의 uid와 이 값을 비교하면 계정 불일치 여부를 바로 확인할 수 있음
+                      Text('ownerUid: ${ownerUid ?? "(비어있음 - 문제 가능성)"}',
+                          style: TextStyle(color: ownerUid == null ? Colors.redAccent : Colors.white24, fontSize: 10)),
                       const SizedBox(height: 6),
                       if (totalStars != null) ...[
                         Text('⭐ 전체 누적: $totalStars개',

@@ -12,6 +12,7 @@ import 'exercise_models.dart';
 import 'exercise_data_service.dart';
 import 'exercise_calculations.dart';
 import 'exercise_theme.dart';
+import 'exercise_step_service.dart'; // 🆕 [만보기 연동 1단계+매일 자동기록] StepTrackingSession, DailyStepWatcherService
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -48,11 +49,32 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   final Map<String, int> _counterValues = {};
   final List<_SetRow> _setRows = [];
 
+  // 🆕 [만보기 연동 1단계] 걸음수 자동 측정 상태
+  StepTrackingSession? _stepSession;
+  bool _isStepTracking = false;
+  bool _stepUnavailable = false;
+  int _autoSteps = 0;
+  DateTime? _stepTrackingStartTime;
+
+  // 🆕 [매일 자동기록] "매일 자동 기록" 토글의 현재 상태 (SharedPreferences에서 로드)
+  bool _dailyAutoEnabled = false;
+
   bool get _isEditMode => widget.existingRecord != null;
+
+  // 🆕 [만보기 연동 1단계] 이 종목이 '걸음수(steps)' 필드를 갖고 있을 때만
+  // 자동 측정 카드를 보여준다 (걷기 외에 나중에 다른 종목이 steps 필드를
+  // 추가해도 자동으로 지원됨 - 종목 id를 하드코딩하지 않음).
+  bool get _hasStepsField => widget.exerciseType.fields.any((f) => f.key == 'steps');
 
   @override
   void initState() {
     super.initState();
+    if (_hasStepsField) {
+      _loadDailyAutoState(); // 🆕 [매일 자동기록] 토글 초기 상태 불러오기
+      ExerciseStepService.loadPreferredSource().then((_) {
+        if (mounted) setState(() {}); // 🆕 [2단계] 폰/워치 선택 상태를 화면에 반영
+      });
+    }
     for (final field in widget.exerciseType.fields) {
       if (field.isCalculated) continue;
       switch (field.type) {
@@ -95,6 +117,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   @override
   void dispose() {
+    _stepSession?.dispose(); // 🆕 [만보기 연동 1단계] 측정 중이었다면 스트림 구독 해제
     _durationController.dispose();
     _avgHrController.dispose();
     _maxHrController.dispose();
@@ -143,6 +166,93 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       ),
     );
     if (picked != null) setState(() => _date = picked);
+  }
+
+  // ---------------------------------------------------------------------
+  // 🆕 [매일 자동기록] 자정 기준 매일 자동 걸음수 기록 토글
+  // ---------------------------------------------------------------------
+
+  Future<void> _loadDailyAutoState() async {
+    final enabled = await DailyStepWatcherService.instance.isEnabled();
+    if (mounted) setState(() => _dailyAutoEnabled = enabled);
+  }
+
+  // 🆕 [2단계] 측정 소스를 폰 센서 ↔ 워치(Health Connect/HealthKit)로 전환.
+  // 측정 중이었다면 먼저 멈추고, 새 소스로 다시 시작해야 하므로 진행 중인
+  // 세션은 초기화됨(사용자에게 안내).
+  Future<void> _switchStepSource(StepSourceType type) async {
+    if (ExerciseStepService.activeSourceType == type) return;
+    if (_isStepTracking) {
+      _stepSession?.stop();
+      setState(() {
+        _isStepTracking = false;
+        _autoSteps = 0;
+      });
+    }
+    await ExerciseStepService.setPreferredSource(type);
+    setState(() => _stepUnavailable = false);
+    if (mounted) {
+      ExerciseTheme.showLuxeSnackBar(
+        context,
+        type == StepSourceType.watch ? '워치(Health Connect/HealthKit) 측정으로 전환했습니다.' : '폰 센서 측정으로 전환했습니다.',
+      );
+    }
+  }
+
+  Future<void> _toggleDailyAuto(bool value) async {
+    await DailyStepWatcherService.instance.setEnabled(value);
+    setState(() => _dailyAutoEnabled = value);
+    if (mounted) {
+      ExerciseTheme.showLuxeSnackBar(
+        context,
+        value ? '매일 자동 기록을 켰습니다. 자정마다 자동으로 다음날로 넘어갑니다.' : '매일 자동 기록을 껐습니다.',
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 🆕 [만보기 연동 1단계] 걸음수 자동 측정 시작/종료
+  // ---------------------------------------------------------------------
+
+  Future<void> _toggleStepTracking() async {
+    if (_isStepTracking) {
+      // 측정 종료 -> 걸음수/거리/시간을 관련 필드에 자동으로 채워 넣음
+      _stepSession?.stop();
+      final int finalSteps = _autoSteps;
+      setState(() => _isStepTracking = false);
+
+      _textControllers['steps']?.text = finalSteps.toString();
+      if (_textControllers.containsKey('distanceKm')) {
+        _textControllers['distanceKm']!.text = ExerciseStepService.stepsToKm(finalSteps).toStringAsFixed(2);
+      }
+      if (_stepTrackingStartTime != null) {
+        final int elapsedMin = DateTime.now().difference(_stepTrackingStartTime!).inMinutes;
+        if (elapsedMin > 0) _durationController.text = elapsedMin.toString();
+      }
+      if (mounted) ExerciseTheme.showLuxeSnackBar(context, '$finalSteps보 측정 완료 - 걸음수/거리에 자동 반영했습니다.');
+      return;
+    }
+
+    // 측정 시작
+    _stepSession = StepTrackingSession(
+      onUpdate: (steps) {
+        if (mounted) setState(() => _autoSteps = steps);
+      },
+      onError: (e) {
+        if (mounted) setState(() => _stepUnavailable = true);
+      },
+    );
+    final bool started = await _stepSession!.start();
+    if (!started) {
+      setState(() => _stepUnavailable = true);
+      if (mounted) ExerciseTheme.showLuxeSnackBar(context, '이 기기에서는 걸음수 측정을 사용할 수 없습니다. 직접 입력해 주세요.');
+      return;
+    }
+    _stepTrackingStartTime = DateTime.now();
+    setState(() {
+      _isStepTracking = true;
+      _autoSteps = 0;
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -290,6 +400,144 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         }
         break;
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // 🆕 [만보기 연동 1단계] 걸음수 자동 측정 카드
+  // ---------------------------------------------------------------------
+
+  // 🆕 [2단계] 폰/워치 선택 칩 하나
+  Widget _buildSourceChip(String label, StepSourceType type) {
+    final bool isSelected = ExerciseStepService.activeSourceType == type;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _switchStepSource(type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? ExerciseTheme.brandGolden.withOpacity(0.18) : ExerciseTheme.pageBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? ExerciseTheme.brandGolden : Colors.white12, width: isSelected ? 1.3 : 1),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? ExerciseTheme.brandGolden : Colors.white54,
+            fontSize: 12.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAutoStepTrackingCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.directions_walk_rounded, color: ExerciseTheme.brandGolden, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AUTO STEP TRACKING', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10.5)),
+                    Text(
+                      ExerciseStepService.activeSourceType == StepSourceType.watch ? '자동 걸음수 측정 (워치)' : '자동 걸음수 측정 (폰 센서)',
+                      style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // 🆕 [2단계] 측정 소스 선택: 폰 센서 ↔ 워치(Health Connect/HealthKit)
+          Row(
+            children: [
+              Expanded(child: _buildSourceChip('📱 폰', StepSourceType.phone)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildSourceChip('⌚ 워치', StepSourceType.watch)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_stepUnavailable)
+            Text(
+              '이 기기에서는 걸음수 센서를 사용할 수 없습니다. 아래 항목에 직접 입력해 주세요.',
+              style: ExerciseTheme.bodyStyle(size: 11.5, color: Colors.white38),
+            )
+          else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isStepTracking
+                      ? '측정 중... $_autoSteps 보'
+                      : (_autoSteps > 0 ? '측정 완료: $_autoSteps 보' : '아직 측정 전'),
+                  style: TextStyle(
+                    color: _isStepTracking ? ExerciseTheme.brandGolden : Colors.white70,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _toggleStepTracking,
+                  icon: Icon(_isStepTracking ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
+                  label: Text(_isStepTracking ? '측정 종료' : '측정 시작'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isStepTracking ? ExerciseTheme.dangerRed : ExerciseTheme.brandGolden,
+                    foregroundColor: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
+                  ),
+                ),
+              ],
+            ),
+            if (_isStepTracking) ...[
+              const SizedBox(height: 8),
+              Text(
+                '폰을 주머니나 손에 들고 걸으면 자동으로 걸음수가 올라갑니다.',
+                style: ExerciseTheme.bodyStyle(size: 11, color: Colors.white38),
+              ),
+            ],
+            // 🆕 [매일 자동기록] 위 "측정 시작/종료"와는 별개로, 켜두면 자정마다
+            // 자동으로 다음날로 넘어가면서 매일 걸음수가 계속 기록됨.
+            const Divider(color: Colors.white12, height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('DAILY AUTO RECORD', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10)),
+                      Text('매일 자동 기록 (자정 기준)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _dailyAutoEnabled,
+                  activeColor: ExerciseTheme.brandGolden,
+                  onChanged: _toggleDailyAuto,
+                ),
+              ],
+            ),
+            if (_dailyAutoEnabled)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '자정이 지나면 어제 걸음수가 자동 확정 저장되고, 오늘 걸음수가 새로 시작됩니다. 언제든 이 화면에서 직접 수정할 수 있습니다.',
+                  style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -588,6 +836,12 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             fontSize: 15,
           ),
           const SizedBox(height: 12),
+
+          // 🆕 [만보기 연동 1단계] '걸음수' 필드가 있는 종목에서만 자동측정 카드 노출
+          if (_hasStepsField) ...[
+            _buildAutoStepTrackingCard(),
+            const SizedBox(height: 12),
+          ],
 
           ...type.fields.map(_buildField),
 

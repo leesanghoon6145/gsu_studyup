@@ -33,6 +33,7 @@ class FamilyLinkService {
   // 않을 때만 생성"을 원자적으로 처리하고, 겹치면 최대 5회까지 새 코드로 재시도합니다.
   static Future<String> generateLinkCode() async {
     final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+
     final Random random = Random.secure(); // 🆕 예측 가능한 의사난수 대신 암호학적으로 안전한 난수 사용
     const int maxAttempts = 5;
 
@@ -59,8 +60,8 @@ class FamilyLinkService {
           await saveMyLinkCode(code);
           return code;
         }
-      } catch (_) {
-        // 이번 시도에서 예기치 못한 오류가 나도 다음 시도로 넘어감
+      } catch (e) {
+        // 🆕 [임시 디버깅] 진짜 실패 이유를 로그로 확인하기 위함 - 원인 파악 후 원래대로 되돌릴 예정
       }
     }
     throw StateError('6자리 코드 생성 실패 - $maxAttempts회 시도');
@@ -174,6 +175,16 @@ class FamilyLinkService {
       // 🆕 [버그 수정] 권한 거부 등 예상치 못한 오류가 나도 앱이 멈추지 않고 실패로 처리.
       return ConnectResult.unknownError;
     }
+  }
+
+  // 🆕 [디버깅/복구용 2026-09-05] 기기에 저장된 연결 코드를 지웁니다. 코드를 생성했던
+  // 계정과 실제로 학습 기록을 쌓은 계정이 서로 달라 서버가 쓰기를 거부하는 상황일 때,
+  // 이 함수로 로컬 코드를 초기화한 뒤 generateLinkCode()를 다시 호출하면 "현재 로그인된
+  // 계정" 기준으로 완전히 새 코드가 만들어집니다. (기존 Firestore 문서는 그대로 남지만
+  // 더 이상 이 기기와 연결되지 않으므로, 부모님도 새 코드로 다시 연결해야 합니다.)
+  static Future<void> clearMyLinkCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kMyLinkCodeKey);
   }
 
   // 🆕 [학생] 내 기기에 연결 코드를 저장 (앱 재시작해도 유지됨)

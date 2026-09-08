@@ -7,11 +7,11 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [부모-자녀 �
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [버그 수정] 로그인 기억하기 저장용
 import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
 import 'parent/parent_main_dashboard_screen.dart'; // 🆕 [유형별 라우팅] 학부모 화면
 import 'schedule/general_planner_home_screen.dart'; // 🆕 [유형별 라우팅] 일반 사용자 화면
-import 'schedule/notification_service.dart'; // 🆕 [2026-09-05 추가] 알람 끄기 전체화면 팝업(RingingAlarmStopBanner)을 앱 최상단에 붙이기 위함
 import 'package:gsu_studyup/global_lang.dart';
 import 'services/timer2_services.dart';
 import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
@@ -175,7 +175,7 @@ class ParentEncouragementManager {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     decoration: BoxDecoration(color: brandGolden, borderRadius: BorderRadius.circular(10)),
-                    child: Text('확인', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: Text('확인 / OK', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
               ],
@@ -230,7 +230,7 @@ class ParentEncouragementManager {
             children: [
               Icon(Icons.favorite_rounded, color: brandGolden, size: 32),
               const SizedBox(height: 14),
-              Text('부모님의 응원', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+              Text('부모님의 응원 / Encouragement from Parents', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 14),
               Text(
                 message,
@@ -247,7 +247,7 @@ class ParentEncouragementManager {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text('힘낼게요!', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 14)),
+                  child: Text('힘낼게요! / I\'ll do my best!', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
               ),
             ],
@@ -285,19 +285,6 @@ class GsuStudyUpApp extends StatelessWidget {
         brightness: Brightness.dark,
         primaryColor: const Color(0xFFFDE047), // 황금색 포인트
       ),
-      // ✅ [2026-09-05 추가] 알람이 울리면 "지금 어떤 화면에 있든" 그 위에 전체화면
-      // 끄기 팝업이 뜨도록, RingingAlarmStopBanner를 앱의 모든 라우트 위에 항상
-      // 겹쳐서 그림. ParentEncouragementManager(위 오버레이 방식)와 동일한 목적으로,
-      // "특정 화면 안에 넣는 대신 앱 최상단 한 곳에서만 관리"하는 원칙을 그대로 따름.
-      // 로그인 화면/일반 플래너/타이머 등 어떤 화면이 떠 있어도 동일하게 작동함.
-      builder: (context, child) {
-        return Stack(
-          children: [
-            if (child != null) child,
-            if (!kIsWeb) const RingingAlarmStopBanner(),
-          ],
-        );
-      },
       // 처음 시작 화면을 EntranceScreen으로 설정
       home: const EntranceScreen(),
     );
@@ -552,10 +539,39 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   // 🗺️ [선배님 지시: 로그인 전용 계정 기억하기 단일 상태 레버 변수 안착]
   bool _isRememberMeChecked = false;
 
+  // 🆕 [버그 수정 2026-09-08] "이메일/패스워드 기억하기" 저장용 로컬 키.
+  // 예전엔 체크박스가 화면에서 토글만 될 뿐, 저장/불러오기 로직이 전혀 없어서
+  // 실제로는 아무 기능도 하지 않고 있었습니다.
+  static const String _kRememberedEmailKey = 'remembered_login_email';
+  static const String _kRememberedPasswordKey = 'remembered_login_password';
+  static const String _kRememberMeFlagKey = 'remembered_login_flag';
+
   // 🆕 [실제 로그인 연결] 이메일/비밀번호 입력값을 실제로 붙잡아두는 컨트롤러
   final TextEditingController _loginEmailController = TextEditingController();
   final TextEditingController _loginPasswordController = TextEditingController();
   bool _isLoggingIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedCredentials(); // 🆕 [버그 수정] 화면 진입 시 저장된 이메일/비밀번호 자동 채움
+  }
+
+  // 🆕 [버그 수정 2026-09-08] 이전에 "기억하기"를 체크하고 로그인했었다면, 저장된
+  // 이메일/비밀번호를 자동으로 입력창에 채우고 체크박스도 켜둡니다.
+  Future<void> _loadRememberedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool remembered = prefs.getBool(_kRememberMeFlagKey) ?? false;
+    if (!remembered) return;
+    final String? savedEmail = prefs.getString(_kRememberedEmailKey);
+    final String? savedPassword = prefs.getString(_kRememberedPasswordKey);
+    if (!mounted) return;
+    setState(() {
+      _isRememberMeChecked = true;
+      if (savedEmail != null) _loginEmailController.text = savedEmail;
+      if (savedPassword != null) _loginPasswordController.text = savedPassword;
+    });
+  }
 
   // 🆕 [실제 로그인 연결] 이메일/비밀번호를 Firebase Authentication으로 실제 검증
   Future<void> _handleSignIn(BuildContext context) async {
@@ -572,6 +588,9 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
     try {
       await AuthService.signIn(email: email, password: password);
       if (!mounted) return;
+      // 🆕 [버그 수정 2026-09-08] 로그인 성공 시점에 "기억하기" 체크 여부에 따라
+      // 저장하거나(체크됨) 지웁니다(체크 해제됨). 로그인 실패 시에는 저장하지 않습니다.
+      await _saveOrClearRememberedCredentials(email, password);
 
       // 🆕 [이메일 인증 필수화] 인증 안 된 계정은 여기서 막고, 대시보드로 못 들어가게 함
       final bool verified = await AuthService.isEmailVerified();
@@ -603,6 +622,13 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
         );
       } else {
         // 기본값(학생 또는 유형 정보 없음)은 기존과 동일하게 학생용 대시보드로
+        // 🆕 [요청] 부모 화면에 "학습자"로만 뜨던 문제 - 첫 학습기록 저장을 기다리지 않고
+        // 로그인하는 즉시 실명을 Firestore에 동기화해서, 부모가 자녀를 연결한 직후부터
+        // 바로 실제 이름이 보이도록 합니다.
+        final String? realName = await DkeUserProfile.getRealName();
+        if (realName != null && realName.isNotEmpty) {
+          unawaited(FamilyLinkService.pushStudentName(realName));
+        }
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -620,6 +646,21 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoggingIn = false);
+    }
+  }
+
+  // 🆕 [버그 수정 2026-09-08] "기억하기" 체크 여부에 따라 이메일/비밀번호를 저장하거나 지웁니다.
+  // 로그인이 실제로 성공했을 때만 호출되므로, 잘못된 계정 정보가 저장될 일은 없습니다.
+  Future<void> _saveOrClearRememberedCredentials(String email, String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_isRememberMeChecked) {
+      await prefs.setBool(_kRememberMeFlagKey, true);
+      await prefs.setString(_kRememberedEmailKey, email);
+      await prefs.setString(_kRememberedPasswordKey, password);
+    } else {
+      await prefs.setBool(_kRememberMeFlagKey, false);
+      await prefs.remove(_kRememberedEmailKey);
+      await prefs.remove(_kRememberedPasswordKey);
     }
   }
 

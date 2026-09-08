@@ -26,6 +26,7 @@ import 'appointment_screen.dart';
 import 'project_screen.dart';
 import 'reminder_screen.dart';
 import 'reminder_watcher_service.dart'; // 🆕 [2026-08-16 추가] 홈 화면에서부터 알람 감시자를 시작하기 위함
+import 'exercise_step_service.dart'; // 🆕 [2026-09-05 추가] 매일 자동 걸음수 감시자를 홈 화면에서부터 재개하기 위함
 import 'schedule_analysis_screen.dart';
 import 'today_schedule_screen.dart';
 import 'today_timeline_screen.dart';
@@ -76,6 +77,9 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     // ✅ [2026-08-16 추가] 알람 감시자를 홈 화면 진입 시점부터 시작. 리마인더나
     // 약속 화면에 안 들어가도 "매일"/"매주" 알람이 계속 감시되도록 하기 위함.
     ReminderWatcherService.instance.start();
+    // ✅ [2026-09-05 추가] 이전에 "매일 자동 기록"을 켜둔 적이 있으면, 사용자가
+    // [운동 > 걷기] 화면에 안 들어가도 홈 화면 진입 시점부터 자동으로 재개됨.
+    DailyStepWatcherService.instance.resumeIfEnabled();
   }
 
   @override
