@@ -83,6 +83,11 @@ class ParentGradeManagementWidget extends StatefulWidget {
   final List<SubjectConfig>? overrideConfigs;
   final double? overrideAchievementAverage;
 
+  // 🆕 [버그 수정 2026-09-09] 안내 팝업이 "성적 관리" 탭을 실제로 클릭했을 때만 뜨도록
+  // 하기 위한 플래그. IndexedStack 구조상 4개 탭 위젯이 전부 미리 만들어지기 때문에,
+  // 이 값 없이는 위젯이 생성되는 순간(=다른 탭에서도) 팝업이 떠버리는 문제가 있었습니다.
+  final bool isActiveTab;
+
   const ParentGradeManagementWidget({
     Key? key,
     required this.childName,
@@ -93,6 +98,7 @@ class ParentGradeManagementWidget extends StatefulWidget {
     this.overrideRecords,
     this.overrideConfigs,
     this.overrideAchievementAverage,
+    this.isActiveTab = false,
   }) : super(key: key);
 
   @override
@@ -134,6 +140,11 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
         _introShown = false; // 자녀가 "진짜로" 바뀌었을 때만 안내 팝업을 다시 허용
       }
       _loadRecords(); // 그래프/표 데이터는 Firestore 갱신마다 계속 최신화
+    }
+    // 🆕 [버그 수정 2026-09-09] 다른 탭에 있다가 "성적 관리" 탭으로 실제로 전환된 순간에만
+    // 팝업을 띄웁니다. isActiveTab이 false→true로 바뀌는 시점이 곧 "탭을 클릭한 순간"입니다.
+    if (widget.isActiveTab && !oldWidget.isActiveTab) {
+      _showIntroPopupOnce();
     }
   }
 
@@ -203,7 +214,11 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
       _allConfigs = configs;
       _isLoading = false;
     });
-    _showIntroPopupOnce();
+    // 🆕 [버그 수정 2026-09-09] 데이터 로딩은 다른 탭에 있어도(IndexedStack 특성상) 계속
+    // 일어나므로, 팝업은 반드시 "지금 이 탭이 실제로 보이고 있을 때"만 띄웁니다.
+    if (widget.isActiveTab) {
+      _showIntroPopupOnce();
+    }
     _loadSummary();
   }
 
@@ -263,6 +278,21 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
     return _filtered
         .where((r) => r.subject == subject && r.examType == examType)
         .fold<GradeRecord?>(null, (prev, r) => (prev == null || r.updatedAt.isAfter(prev.updatedAt)) ? r : prev);
+  }
+
+  // 🆕 [요청 2026-09-09] 성적표 헤더(중간고사/기말고사/모의고사)를 한글 위, 영문 아래
+  // 2줄로 일관되게 표시. 10개국어 선택 시엔 해당 언어로 번역된 문구만 단독 표시.
+  Widget _buildExamHeaderCell(String koWord, String enWord) {
+    if (DkeLang.isForeignSelected) {
+      return Text(examTypeLabel(koWord), textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold));
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(koWord, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(enWord, style: GoogleFonts.notoSerif(color: Colors.white38, fontSize: 9.5, fontStyle: FontStyle.italic)),
+      ],
+    );
   }
 
   Widget _buildSelectorChip(String label, bool isSelected, VoidCallback onTap) {
@@ -509,12 +539,41 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(t(kTitleEngMap), style: GoogleFonts.notoSerif(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.0)),
-          const SizedBox(height: 2),
-          Text("${widget.childName} ${bi(kScreenSubtitleMap)}", style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontWeight: FontWeight.bold, fontSize: 20)),
-          const SizedBox(height: 4),
-          Text(biLong(kScreenDescMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12)),
-          const SizedBox(height: 18),
+          // 🆕 [요청 2026-09-09] 헤더를 고급스러운 그라디언트 박스로 재설계.
+          // 부제목도 "이상훈 성적 관리 조회"와 "Grade Report Viewer"를 한 줄에 슬래시로
+          // 붙이던 걸 각각 별도 줄로 분리했습니다.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [widget.premiumCardBg, widget.luxuryDarkBg],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: widget.brandGolden, width: 1.6),
+              boxShadow: [
+                BoxShadow(color: widget.brandGolden.withOpacity(0.18), blurRadius: 20, spreadRadius: 1),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t(kTitleEngMap), style: GoogleFonts.notoSerif(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+                const SizedBox(height: 4),
+                if (DkeLang.isForeignSelected)
+                  Text("${widget.childName} ${t(kScreenSubtitleMap)}", style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontWeight: FontWeight.bold, fontSize: 20))
+                else ...[
+                  Text("${widget.childName} ${kScreenSubtitleMap['KO']}", style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontWeight: FontWeight.bold, fontSize: 20)),
+                  Text(kScreenSubtitleMap['EN']!, style: GoogleFonts.notoSerif(color: widget.brandGolden.withOpacity(0.75), fontWeight: FontWeight.w600, fontSize: 13, fontStyle: FontStyle.italic)),
+                ],
+                const SizedBox(height: 6),
+                Text(biLong(kScreenDescMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, height: 1.4)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28), // 🆕 단락 간 여유 공간 확대 (기존 18)
 
           if (_allRecords.isEmpty)
             Container(
@@ -588,9 +647,9 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
                     Row(
                       children: [
                         Expanded(flex: 2, child: Text(t(kSubjectHeaderMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold))),
-                        Expanded(flex: 3, child: Center(child: Text(examTypeLabel("중간고사"), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)))),
-                        Expanded(flex: 3, child: Center(child: Text(examTypeLabel("기말고사"), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)))),
-                        Expanded(flex: 3, child: Center(child: Text(examTypeLabel("모의고사"), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)))),
+                        Expanded(flex: 3, child: Center(child: _buildExamHeaderCell("중간고사", "Midterm"))),
+                        Expanded(flex: 3, child: Center(child: _buildExamHeaderCell("기말고사", "Final"))),
+                        Expanded(flex: 3, child: Center(child: _buildExamHeaderCell("모의고사", "Mock Exam"))),
                       ],
                     ),
                     const Divider(color: Colors.white10, height: 20),
@@ -618,12 +677,12 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
                   ],
                 ),
               ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32), // 🆕 단락 간 여유 공간 확대
 
             Text(t(kChartSectionTitleMap), style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 10),
             _buildExamTypeChart(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32), // 🆕 단락 간 여유 공간 확대
 
             Text(t(kSummaryTitleMap), style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 10),

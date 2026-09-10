@@ -284,12 +284,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           builder: (context, setDialogState) => AlertDialog(
             backgroundColor: premiumCardBg,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Text('자녀 추가', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+            title: Text('자녀 추가/Add Child', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('자녀에게 받은 6자리 연결 코드를 입력하세요',
-                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
+                Text('자녀에게 받은 6자리 연결 코드를 입력하세요\nEnter the 6-digit code from your child',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.4)),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _addChildCodeController,
@@ -309,14 +310,14 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('취소', style: TextStyle(color: Colors.white54)),
+                child: const Text('취소/Cancel', style: TextStyle(color: Colors.white54)),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: brandGolden),
                 onPressed: () async {
                   final code = _addChildCodeController.text.trim();
                   if (code.length != 6) {
-                    setDialogState(() => errorText = '6자리 숫자를 입력하세요');
+                    setDialogState(() => errorText = '6자리 숫자를 입력하세요 / Enter 6 digits');
                     return;
                   }
                   final bool ok = await FamilyLinkService.connectWithCode(code);
@@ -324,10 +325,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                     if (context.mounted) Navigator.pop(dialogContext);
                     await _loadLinkedChildren();
                   } else {
-                    setDialogState(() => errorText = '존재하지 않는 코드이거나 이미 5명이 연결되었습니다');
+                    setDialogState(() => errorText = '존재하지 않는 코드이거나 이미 5명이 연결되었습니다 / Invalid code or already full');
                   }
                 },
-                child: const Text('연결하기', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+                child: const Text('연결하기/Connect', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -399,7 +400,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
                       style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     if (level != null)
-                      Text('레벨 $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
+                      Text('레벨/Lv. $level', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10)),
                   ],
                 ),
               ),
@@ -426,26 +427,137 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
 
   // 🆕 [요청] 자녀 연결 해제 확인 팝업. 실수로 지우는 걸 막기 위해 반드시 한 번 더 확인.
   // 🆕 [요청 2026-09-08] 로그아웃 확인 팝업 - 실수로 눌러서 바로 로그아웃되지 않도록 확인 절차 추가
+  // 🆕 [요청 2026-09-09] 12개 언어 이름을 화면에 짧게 보여주기 위한 표시용 이름표.
+  // (실제 저장/적용은 DkeLang.setLanguage()가 그대로 처리 - 학생 마이페이지와 완전히 동일한 방식)
+  static const Map<String, String> _langDisplayNames = {
+    'KO': '한국어', 'EN': 'English', 'JA': '日本語', 'ZH': '中文', 'FR': 'Français',
+    'DE': 'Deutsch', 'RU': 'Русский', 'AR': 'العربية', 'HI': 'हिन्दी', 'VI': 'Tiếng Việt',
+    'ES': 'Español', 'TH': 'ไทย',
+  };
+  String _languageDisplayName(String code) => _langDisplayNames[code] ?? code;
+
+  // 🆕 [요청 2026-09-09] 각 언어 옆에 표시할 국기 이모지
+  static const Map<String, String> _langFlags = {
+    'KO': '🇰🇷', 'EN': '🇺🇸', 'JA': '🇯🇵', 'ZH': '🇨🇳', 'FR': '🇫🇷',
+    'DE': '🇩🇪', 'RU': '🇷🇺', 'AR': '🇸🇦', 'HI': '🇮🇳', 'VI': '🇻🇳',
+    'ES': '🇪🇸', 'TH': '🇹🇭',
+  };
+
+  // 🆕 [요청 2026-09-09] 부모가 직접 언어를 고르는 팝업 - 고급스러운 디자인으로 재설계.
+  // 진한 황금 테두리 + 그라디언트 배경, 국기 아이콘, 선택 시 줄 전체가 황금색으로 채워짐.
+  Future<void> _showLanguagePicker() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 520),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+            border: Border.all(color: brandGolden, width: 2.0), // 🆕 진한 황금 테두리
+            boxShadow: [
+              BoxShadow(color: brandGolden.withValues(alpha: 0.25), blurRadius: 26, spreadRadius: 1),
+              const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 26, 24, 16),
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    children: [
+                      TextSpan(text: '언어 선택 ', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 20)),
+                      TextSpan(text: '/ Language', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 20)),
+                    ],
+                  ),
+                ),
+              ),
+              Divider(color: brandGolden.withValues(alpha: 0.25), height: 1, thickness: 1, indent: 20, endIndent: 20),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(14),
+                  itemCount: DkeLang.supportedLanguages.length,
+                  itemBuilder: (ctx, idx) {
+                    final String code = DkeLang.supportedLanguages[idx];
+                    final bool isSelected = DkeLang.current == code;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () async {
+                            await DkeLang.setLanguage(code);
+                            if (!mounted) return;
+                            Navigator.pop(dialogContext);
+                            setState(() {}); // 화면 전체를 새 언어로 다시 그림
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              // 🆕 [요청] 선택 시 줄 전체가 황금색으로 채워지도록
+                              color: isSelected ? brandGolden : Colors.white.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: isSelected ? brandGolden : Colors.white12, width: 1.2),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(_langFlags[code] ?? '🏳️', style: const TextStyle(fontSize: 20)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _languageDisplayName(code),
+                                    style: GoogleFonts.notoSansKr(
+                                      color: isSelected ? const Color(0xFF030712) : Colors.white,
+                                      fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                if (isSelected) const Icon(Icons.check_circle_rounded, color: Color(0xFF030712), size: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmLogout() async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: premiumCardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('로그아웃', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+        title: Text('로그아웃/Log out', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
         content: Text(
-          '로그아웃 하시겠습니까?',
-          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13),
+          '로그아웃 하시겠습니까?\nAre you sure you want to log out?',
+          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('취소', style: TextStyle(color: Colors.white54)),
+            child: const Text('취소/Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: brandGolden),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('로그아웃', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+            child: const Text('로그아웃/Log out', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -468,20 +580,20 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       builder: (dialogContext) => AlertDialog(
         backgroundColor: premiumCardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('자녀 연결 해제', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+        title: Text('자녀 연결 해제/Disconnect Child', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
         content: Text(
-          '$displayName 자녀와의 연결을 해제하시겠습니까?\n연결을 해제하면 이 목록에서 사라지고, 다시 보려면 자녀 코드를 재입력해야 합니다.',
-          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.5),
+          '$displayName 자녀와의 연결을 해제하시겠습니까?\n연결을 해제하면 이 목록에서 사라지고, 다시 보려면 자녀 코드를 재입력해야 합니다.\n\nDisconnect from $displayName? They will be removed from this list until you re-enter their code.',
+          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('취소', style: TextStyle(color: Colors.white54)),
+            child: const Text('취소/Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('연결 해제', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('연결 해제/Disconnect', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -519,6 +631,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
             const Icon(Icons.add_circle_outline, color: brandGolden, size: 22),
             const SizedBox(height: 4),
             Text('자녀 추가', style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold)),
+            Text('Add Child', style: GoogleFonts.notoSansKr(color: brandGolden.withValues(alpha: 0.7), fontSize: 9)),
           ],
         ),
       ),
@@ -1045,6 +1158,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
         brandGolden: brandGolden,
         luxuryDarkBg: luxuryDarkBg,
         buildCustomSectionTitle: _buildCustomSectionTitle,
+        isActiveTab: _currentIndex == 3,
       );
     }
 
@@ -1097,6 +1211,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
           overrideRecords: records,
           overrideConfigs: configs,
           overrideAchievementAverage: achievementAvg,
+          isActiveTab: _currentIndex == 3,
         );
       },
     );
@@ -1362,6 +1477,36 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen> w
       body: Column(
         children: [
           _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 상단에 항상 표시되는 연결된 자녀 명단 + 추가 버튼
+          // 🆕 [요청 2026-09-09] 언어 선택 버튼을 앱바에서 이 위치(자녀 코드 목록 바로 아래,
+          // 콘텐츠 시작 전 오른쪽)로 이동
+          Padding(
+            padding: const EdgeInsets.only(right: 16, top: 4, bottom: 2),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: _showLanguagePicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.language_rounded, color: brandGolden, size: 13),
+                      const SizedBox(width: 4),
+                      Text(
+                        _languageDisplayName(DkeLang.current),
+                        style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           const Divider(color: Colors.white10, height: 1),
           Expanded(
             child: IndexedStack(

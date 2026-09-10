@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:convert'; // 🆕 [7일 보관함] jsonEncode/jsonDecode용
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [본인 데이터만 접근] 소유자 확인용
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +26,15 @@ class FamilyLinkService {
   static const String _collection = 'links';
   static const String _kMyLinkCodeKey = 'family_link_code'; // 내 기기에 저장해둘 연결 코드
 
+  // 🆕 [버그 수정 2026-09-09] 예전엔 이 키가 계정 구분 없이 기기 하나에 딱 하나만 있어서,
+  // 같은 폰에서 학생↔부모 계정을 바꿔 로그인하면 이전 계정이 남긴 코드를 새 계정이
+  // 그대로 이어받는 심각한 문제가 있었습니다(부모가 보낸 응원을 부모 자신이 받는 등).
+  // 지금 로그인된 uid를 키에 포함시켜서, 계정마다 완전히 독립적으로 저장/조회되게 합니다.
+  static String _scopedKey(String base) {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null ? base : '${base}_$uid';
+  }
+
   // [학생] 6자리 코드를 새로 만들어서 Firestore에 등록하고, 내 기기에도 저장(자동 동기화용)
   //
   // 🆕 [버그 수정] 예전에는 존재 여부 확인 없이 바로 .set()을 호출해서, 90만 개뿐인 6자리
@@ -33,7 +43,6 @@ class FamilyLinkService {
   // 않을 때만 생성"을 원자적으로 처리하고, 겹치면 최대 5회까지 새 코드로 재시도합니다.
   static Future<String> generateLinkCode() async {
     final String? myUid = FirebaseAuth.instance.currentUser?.uid;
-
     final Random random = Random.secure(); // 🆕 예측 가능한 의사난수 대신 암호학적으로 안전한 난수 사용
     const int maxAttempts = 5;
 
@@ -58,10 +67,21 @@ class FamilyLinkService {
 
         if (created) {
           await saveMyLinkCode(code);
+          // 🆕 [버그 수정 2026-09-09] 이 기기의 로컬 저장(SharedPreferences)이 지워지면
+          // (예: 앱 데이터 삭제, 재설치) 서버엔 코드가 멀쩡히 있어도 앱이 "연결된 적 없음"으로
+          // 착각하는 문제가 있었습니다. uid → 코드 매핑을 서버에도 별도로 남겨서, 로컬 캐시가
+          // 사라져도 getMyLinkCode()가 이걸로 되찾아올 수 있게 합니다.
+          if (myUid != null) {
+            try {
+              await _db.collection('userLinkCodes').doc(myUid).set({'code': code});
+            } catch (e) {
+              debugPrint('[FamilyLinkService] userLinkCodes 매핑 저장 실패(무시하고 진행): $e');
+            }
+          }
           return code;
         }
-      } catch (e) {
-        // 🆕 [임시 디버깅] 진짜 실패 이유를 로그로 확인하기 위함 - 원인 파악 후 원래대로 되돌릴 예정
+      } catch (_) {
+        // 이번 시도에서 예기치 못한 오류가 나도 다음 시도로 넘어감
       }
     }
     throw StateError('6자리 코드 생성 실패 - $maxAttempts회 시도');
@@ -73,17 +93,18 @@ class FamilyLinkService {
 
   static Future<List<String>> getLinkedCodes() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_kMyLinkedCodesKey) ?? [];
+    return prefs.getStringList(_scopedKey(_kMyLinkedCodesKey)) ?? [];
   }
 
   // 부모 쪽에서 자녀 코드를 목록에 추가. 이미 5명이면 false 반환(추가 실패)
   static Future<bool> addLinkedCode(String code) async {
     final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_kMyLinkedCodesKey) ?? [];
+    final String key = _scopedKey(_kMyLinkedCodesKey);
+    final list = prefs.getStringList(key) ?? [];
     if (list.contains(code)) return true; // 이미 등록된 코드면 그냥 성공 처리
     if (list.length >= maxChildren) return false; // 5명 초과
     list.add(code);
-    await prefs.setStringList(_kMyLinkedCodesKey, list);
+    await prefs.setStringList(key, list);
     return true;
   }
 
@@ -92,9 +113,10 @@ class FamilyLinkService {
   // 이제 로컬 목록 제거와 함께 서버 parentUids에서도 반드시 내 uid를 제거합니다.
   static Future<void> removeLinkedCode(String code) async {
     final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_kMyLinkedCodesKey) ?? [];
+    final String key = _scopedKey(_kMyLinkedCodesKey);
+    final list = prefs.getStringList(key) ?? [];
     list.remove(code);
-    await prefs.setStringList(_kMyLinkedCodesKey, list);
+    await prefs.setStringList(key, list);
 
     final String? myUid = FirebaseAuth.instance.currentUser?.uid;
     if (myUid == null) return; // 로그인 정보가 없으면 서버 반영은 건너뜀 (로컬 해제는 이미 완료)
@@ -184,19 +206,39 @@ class FamilyLinkService {
   // 더 이상 이 기기와 연결되지 않으므로, 부모님도 새 코드로 다시 연결해야 합니다.)
   static Future<void> clearMyLinkCode() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kMyLinkCodeKey);
+    await prefs.remove(_scopedKey(_kMyLinkCodeKey));
   }
 
   // 🆕 [학생] 내 기기에 연결 코드를 저장 (앱 재시작해도 유지됨)
   static Future<void> saveMyLinkCode(String code) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kMyLinkCodeKey, code);
+    await prefs.setString(_scopedKey(_kMyLinkCodeKey), code);
   }
 
   // 🆕 [학생] 저장된 내 연결 코드 조회 (없으면 null — 아직 연결 안 한 상태)
+  // 🆕 [버그 수정 2026-09-09] 로컬 캐시가 비어있으면(앱 데이터 삭제 등으로 사라진 경우),
+  // 서버의 userLinkCodes/{uid} 매핑에서 되찾아와서 로컬에 다시 저장해둡니다.
+  // 이렇게 하면 "서버엔 연결이 있는데 앱만 모르는" 상태를 자동으로 복구합니다.
   static Future<String?> getMyLinkCode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kMyLinkCodeKey);
+    final String? localCode = prefs.getString(_scopedKey(_kMyLinkCodeKey));
+    if (localCode != null && localCode.isNotEmpty) return localCode;
+
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return null;
+
+    try {
+      final doc = await _db.collection('userLinkCodes').doc(myUid).get();
+      final String? recoveredCode = doc.exists ? (doc.data()?['code'] as String?) : null;
+      if (recoveredCode != null && recoveredCode.isNotEmpty) {
+        await saveMyLinkCode(recoveredCode); // 다음부턴 다시 로컬에서 바로 찾도록 캐시 복원
+        debugPrint('[디버깅] getMyLinkCode: 로컬 캐시 없어서 서버에서 복구함 - $recoveredCode');
+        return recoveredCode;
+      }
+    } catch (e) {
+      debugPrint('[FamilyLinkService] getMyLinkCode 서버 조회 실패: $e');
+    }
+    return null;
   }
 
   // 🆕 [동기화 주기 설정] 3분에 한 번만 서버로 전송 (서버 부담 최소화, 회원 늘어나면 재조정 예정)
@@ -373,6 +415,92 @@ class FamilyLinkService {
   }
 
   // [학생] 이모지를 "확인"한 뒤 Firestore에서 지움 (내 코드 문서에서만 지우므로 owner 규칙으로 허용됨)
+  // ============================================================================
+  // 🆕 [요청 2026-09-09] 이모지/응원문자 7일 보관함. 받을 때마다 이 기기(계정별로 구분)에
+  // 이력을 남기고, 조회할 때마다 7일 지난 것은 자동으로 정리합니다. 서버가 아니라 이
+  // 기기에만 저장되므로 별도 Firestore 비용이 들지 않습니다.
+  // ============================================================================
+  static const String _kHistoryKey = 'family_encouragement_history';
+  static const int _historyRetentionDays = 7;
+
+  // [학생] 이모지/응원문자를 받을 때마다 호출 - 보관함에 추가하고 7일 지난 기록은 정리
+  static Future<void> saveEncouragementToHistory({
+    required String type, // 'emoji' 또는 'message'
+    String? emoji,
+    required String text,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String key = _scopedKey(_kHistoryKey);
+      final List<String> raw = prefs.getStringList(key) ?? [];
+
+      final List<Map<String, dynamic>> entries = raw
+          .map((s) {
+        try {
+          return Map<String, dynamic>.from(jsonDecode(s) as Map);
+        } catch (_) {
+          return null;
+        }
+      })
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+      entries.add({
+        'type': type,
+        'emoji': emoji,
+        'text': text,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      final DateTime cutoff = DateTime.now().subtract(const Duration(days: _historyRetentionDays));
+      final List<Map<String, dynamic>> kept = entries.where((e) {
+        final DateTime? ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
+        return ts != null && ts.isAfter(cutoff);
+      }).toList();
+
+      await prefs.setStringList(key, kept.map((e) => jsonEncode(e)).toList());
+    } catch (e) {
+      debugPrint('[FamilyLinkService] saveEncouragementToHistory 실패: $e');
+    }
+  }
+
+  // [학생] 보관함 조회 - 최신순으로 정렬해서 반환. 조회 시점에도 7일 지난 것은 함께 정리.
+  static Future<List<Map<String, dynamic>>> getEncouragementHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String key = _scopedKey(_kHistoryKey);
+      final List<String> raw = prefs.getStringList(key) ?? [];
+
+      final List<Map<String, dynamic>> entries = raw
+          .map((s) {
+        try {
+          return Map<String, dynamic>.from(jsonDecode(s) as Map);
+        } catch (_) {
+          return null;
+        }
+      })
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+      final DateTime cutoff = DateTime.now().subtract(const Duration(days: _historyRetentionDays));
+      final List<Map<String, dynamic>> kept = entries.where((e) {
+        final DateTime? ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
+        return ts != null && ts.isAfter(cutoff);
+      }).toList();
+
+      if (kept.length != entries.length) {
+        // 정리된 결과를 그대로 저장해서, 다음부턴 지운 걸 다시 안 읽음
+        await prefs.setStringList(key, kept.map((e) => jsonEncode(e)).toList());
+      }
+
+      kept.sort((a, b) => (b['timestamp'] as String).compareTo(a['timestamp'] as String));
+      return kept;
+    } catch (e) {
+      debugPrint('[FamilyLinkService] getEncouragementHistory 실패: $e');
+      return [];
+    }
+  }
+
   static Future<void> clearPendingEmoji() async {
     final code = await getMyLinkCode();
     if (code == null) return;

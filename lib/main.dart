@@ -104,9 +104,11 @@ class ParentEncouragementManager {
 
   static Future<void> _subscribeToMyLinkDoc() async {
     final String? code = await FamilyLinkService.getMyLinkCode();
+    debugPrint('[디버깅] ParentEncouragementManager: 구독 시작 - 내 코드: $code'); // 🆕 [임시 디버깅]
     if (code == null) return; // 아직 부모와 연결 안 된 계정(학생이 아니거나 미연결)이면 조용히 넘어감
 
     _linkSub = FamilyLinkService.watch(code).listen((snapshot) {
+      debugPrint('[디버깅] ParentEncouragementManager: 스냅샷 수신 - exists: ${snapshot.exists}'); // 🆕 [임시 디버깅]
       if (!snapshot.exists) return;
       final Map<String, dynamic>? data = snapshot.data();
       if (data == null) return;
@@ -115,24 +117,53 @@ class ParentEncouragementManager {
           ? Map<String, dynamic>.from(data['pendingEmoji'] as Map)
           : null;
       if (emojiData != null && !_isEmojiShowing) {
+        debugPrint('[디버깅] ParentEncouragementManager: 이모지 발견! 표시 시도'); // 🆕 [임시 디버깅]
         _showEmojiOverlay(emojiData);
+        // 🆕 [요청 2026-09-09] 받을 때마다 7일 보관함에도 함께 기록
+        FamilyLinkService.saveEncouragementToHistory(
+          type: 'emoji',
+          emoji: emojiData['emoji'] as String?,
+          text: emojiData['message'] as String? ?? '',
+        );
       }
 
       final Map<String, dynamic>? messageData = data['pendingMessage'] != null
           ? Map<String, dynamic>.from(data['pendingMessage'] as Map)
           : null;
       if (messageData != null && !_isMessageShowing) {
+        debugPrint('[디버깅] ParentEncouragementManager: 응원문자 발견! 표시 시도'); // 🆕 [임시 디버깅]
         _showEncouragementDialog(messageData['text'] as String? ?? '');
+        // 🆕 [요청 2026-09-09] 받을 때마다 7일 보관함에도 함께 기록
+        FamilyLinkService.saveEncouragementToHistory(
+          type: 'message',
+          text: messageData['text'] as String? ?? '',
+        );
       }
+    }, onError: (Object error) {
+      // 🆕 [버그 수정 2026-09-08] 예전엔 에러 처리가 전혀 없어서, 구독 자체가 실패해도
+      // (예: 권한 문제) 화면에도 콘솔에도 아무것도 안 뜨고 완전히 조용히 죽어있었습니다.
+      debugPrint('[디버깅] ParentEncouragementManager: 구독 실패! 원인: $error');
     });
   }
 
   // 🆕 [부모-자녀 응원 시스템] 이모지 - 현재 화면이 무엇이든 그 위에 떠 있는 카드로 표시.
   // "확인"을 누르기 전까지 화면 전환을 해도 계속 남아있습니다(Overlay는 Navigator 스택
   // 전체 위에 그려지므로 라우트가 바뀌어도 사라지지 않음).
-  static void _showEmojiOverlay(Map<String, dynamic> emojiData) {
+  //
+  // 🆕 [버그 수정 2026-09-09] 로그인 직후처럼 화면이 아직 완전히 전환되기 전에 이 함수가
+  // 불리면 overlay가 잠깐 null이라 조용히 포기하고, 그 뒤로는 재시도가 없어서 이모지가
+  // 영원히 안 뜨는 문제가 있었습니다. 이제 null이면 0.3초 후 자동으로 다시 시도합니다
+  // (최대 10번, 총 3초까지 - 그래도 안 되면 다음 스냅샷을 기다림).
+  static void _showEmojiOverlay(Map<String, dynamic> emojiData, {int retryCount = 0}) {
     final OverlayState? overlay = Timer2Service.navigatorKey.currentState?.overlay;
-    if (overlay == null) return;
+    if (overlay == null) {
+      if (retryCount < 10) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _showEmojiOverlay(emojiData, retryCount: retryCount + 1);
+        });
+      }
+      return;
+    }
 
     _isEmojiShowing = true;
     const Color brandGolden = Color(0xFFE5C158);
@@ -198,56 +229,172 @@ class ParentEncouragementManager {
     _isEmojiShowing = false;
   }
 
-  // 🆕 [부모-자녀 응원 시스템] 응원 문구 - navigatorKey의 context로 다이얼로그를 띄우면,
-  // 현재 화면이 어디든 그 위에 모달로 나타납니다. 답장 입력창은 넣지 않습니다.
-  static Future<void> _showEncouragementDialog(String message) async {
+  // 🆕 [부모-자녀 응원 시스템] 응원 문구 - 이모지와 동일하게 Overlay 방식으로 표시합니다.
+  // 🆕 [버그 수정 2026-09-09] 예전엔 showDialog(모달 팝업)를 썼는데, 이 방식은 Navigator의
+  // 라우트 스택에 얹히기 때문에 팝업이 떠 있는 상태에서 다른 화면으로 이동(다른 메뉴를 탭)하면
+  // 팝업이 그 화면 뒤로 밀려나거나 사라지는 문제가 있었습니다. 이모지 카드처럼 Overlay로
+  // 바꾸면 Navigator 스택과 무관하게 항상 맨 위에 남아있어서, 확인을 누르기 전까지는
+  // 어떤 화면으로 이동해도 계속 따라다닙니다.
+  static OverlayEntry? _messageOverlayEntry;
+  static String _pendingMessageText = '';
+
+  static Future<void> _showEncouragementDialog(String message, {int retryCount = 0}) async {
     if (message.trim().isEmpty) return;
-    final BuildContext? context = Timer2Service.navigatorKey.currentState?.overlay?.context;
-    if (context == null) return;
+    final OverlayState? overlay = Timer2Service.navigatorKey.currentState?.overlay;
+    if (overlay == null) {
+      if (retryCount < 10) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _showEncouragementDialog(message, retryCount: retryCount + 1);
+        });
+      }
+      return;
+    }
+    if (_isMessageShowing) return; // 이미 떠 있으면 중복 표시 방지
 
     _isMessageShowing = true;
+    _pendingMessageText = message;
     const Color brandGolden = Color(0xFFE5C158);
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 30),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
-            border: Border.all(color: brandGolden.withOpacity(0.6), width: 1.3),
-            boxShadow: [
-              BoxShadow(color: brandGolden.withOpacity(0.2), blurRadius: 30, spreadRadius: 1),
-              const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
-            ],
+    _messageOverlayEntry = OverlayEntry(
+      builder: (overlayContext) => Positioned.fill(
+        child: Material(
+          color: Colors.black.withOpacity(0.55), // 모달처럼 뒤를 어둡게 가림
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 30),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+                border: Border.all(color: brandGolden.withOpacity(0.6), width: 1.3),
+                boxShadow: [
+                  BoxShadow(color: brandGolden.withOpacity(0.2), blurRadius: 30, spreadRadius: 1),
+                  const BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 8)),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(26, 30, 26, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.favorite_rounded, color: brandGolden, size: 32),
+                  const SizedBox(height: 14),
+                  Text('부모님의 응원 / Encouragement from Parents', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 14),
+                  Text(
+                    _pendingMessageText,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: brandGolden,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: _acknowledgeMessage,
+                      child: Text('힘낼게요! / I\'ll do my best!', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // 🆕 [요청 2026-09-09] 지난 7일간 받은 이모지/응원문자를 모아볼 수 있는 버튼
+                  TextButton(
+                    onPressed: () => _showEncouragementHistoryDialog(overlayContext),
+                    child: Text('지난 응원 보기 / View Past Messages', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
           ),
-          padding: const EdgeInsets.fromLTRB(26, 30, 26, 22),
+        ),
+      ),
+    );
+    overlay.insert(_messageOverlayEntry!);
+  }
+
+  static Future<void> _acknowledgeMessage() async {
+    _removeMessageOverlay();
+    await FamilyLinkService.clearPendingMessage();
+  }
+
+  static void _removeMessageOverlay() {
+    _messageOverlayEntry?.remove();
+    _messageOverlayEntry = null;
+    _isMessageShowing = false;
+  }
+
+  // 🆕 [요청 2026-09-09] 지난 7일간 받은 이모지/응원문자 목록을 보여주는 다이얼로그.
+  // FamilyLinkService.getEncouragementHistory()가 이미 7일 지난 것은 자동으로 정리해줌.
+  static Future<void> _showEncouragementHistoryDialog(BuildContext parentDialogContext) async {
+    const Color brandGolden = Color(0xFFE5C158);
+    final List<Map<String, dynamic>> history = await FamilyLinkService.getEncouragementHistory();
+    if (!parentDialogContext.mounted) return;
+
+    showDialog(
+      context: parentDialogContext,
+      builder: (historyContext) => Dialog(
+        backgroundColor: const Color(0xFF0D1527),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: brandGolden.withOpacity(0.4))),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.favorite_rounded, color: brandGolden, size: 32),
+              Text('지난 7일간의 응원 / Past 7 Days', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
               const SizedBox(height: 14),
-              Text('부모님의 응원 / Encouragement from Parents', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
+              if (history.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Text('아직 받은 응원이 없습니다.\nNo messages yet.', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12)),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 340),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: history.map((entry) {
+                        final String type = entry['type'] as String? ?? 'message';
+                        final String? emoji = entry['emoji'] as String?;
+                        final String text = entry['text'] as String? ?? '';
+                        final DateTime? ts = DateTime.tryParse(entry['timestamp'] as String? ?? '');
+                        final String dateLabel = ts != null
+                            ? "${ts.month}/${ts.day} ${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}"
+                            : '';
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (type == 'emoji' && emoji != null) ...[
+                                Text(emoji, style: const TextStyle(fontSize: 20)),
+                                const SizedBox(width: 8),
+                              ],
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(text, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, height: 1.4)),
+                                    const SizedBox(height: 4),
+                                    Text(dateLabel, style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 14),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: brandGolden,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text('힘낼게요! / I\'ll do my best!', style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 13)),
+                child: TextButton(
+                  onPressed: () => Navigator.of(historyContext).pop(),
+                  child: Text('닫기 / Close', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
               ),
             ],
@@ -255,9 +402,6 @@ class ParentEncouragementManager {
         ),
       ),
     );
-
-    _isMessageShowing = false;
-    await FamilyLinkService.clearPendingMessage();
   }
 }
 

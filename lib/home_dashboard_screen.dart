@@ -15,6 +15,8 @@ import 'package:gsu_studyup/square/academic_timeline/academic_timeline_screen.da
 import 'planner/widgets/study_timelines.dart'; // 🆕 [D-day 팝업 연동] 시험 D-day 응원/실전팁 팝업 데이터 참조
 import 'package:gsu_studyup/square/my_growth_path_screen.dart'; // 나의 성장로 화면 연동 (메뉴에서는 제외, 파일은 보존)
 import 'package:gsu_studyup/square/grade_management_screen.dart'; // 🆕 [성적 관리] 신규 화면 연동
+import 'services/auth_service.dart'; // 🆕 [로그아웃 기능]
+import 'main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -666,6 +668,41 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     );
   }
 
+  // 🆕 [요청 2026-09-08] 학생 화면에 로그아웃 버튼이 없어서 뒤로가기(<)로만 빠져나오던 문제 -
+  // 부모 화면과 동일한 방식으로 왼쪽 위에 로그아웃 버튼 추가.
+  Future<void> _confirmLogout() async {
+    const Color brandGolden = Color(0xFFE5C158);
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF0D1527),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('로그아웃', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold)),
+        content: Text('로그아웃 하시겠습니까?', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: brandGolden),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('로그아웃', style: TextStyle(color: Color(0xFF030712), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await AuthService.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const EntranceScreen()),
+          (route) => false,
+    );
+  }
+
   void _showAddSubjectDialog() {
     final TextEditingController subjectController = TextEditingController();
 
@@ -747,6 +784,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
         elevation: 0,
         toolbarHeight: 110,
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.logout_rounded, color: brandGolden, size: 20),
+          tooltip: '로그아웃/Log out',
+          onPressed: () => _confirmLogout(),
+        ),
         title: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

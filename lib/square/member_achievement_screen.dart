@@ -1044,6 +1044,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   }
 
   // 🆕 [선배님 지시 완료]: 당근과 채찍 + 전문적 주석 해설 알고리즘이 내장된 150자 이상 분석 팝업 개설
+  // 🆕 [선배님 지시 완료]: 당근과 채찍 + 전문적 주석 해설 알고리즘이 내장된 150자 이상 분석 팝업 개설
   Future<void> _showDetailAnalysisPopup(String type) async {
     final filtered = _getFilteredRecords(type);
     String diagnosisText = "";
@@ -1062,6 +1063,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
     _showReportPopup(context, _t('diagReportTitle'), diagnosisText);
   }
+
+  // 🆕 [요청 2026-09-09] 중간고사/기말고사/모의고사 선택 시 - 학교 발표 성적과 헷갈리지 않도록 안내
+  void _showExamRecordGuidancePopup() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _ThemeColors.premiumCardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: _ThemeColors.brandGolden.withOpacity(0.4))),
+        title: Text('성적 기록 안내', style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+        content: Text(
+          '여기 성적 기록은 학교시험 전·후 간단하게 예상하여 기록하는 곳이며, 학교 발표 성적은 "성적 관리"에 가서 기록해 주세요.',
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('확인', style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   void _showFeedbackRegistrationDialog({
     required String type,
@@ -1927,12 +1951,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     padding: const EdgeInsets.only(right: 6.0),
                     child: InkWell(
                       onTap: () {
+                        final bool wasSelected = isSelected;
                         setState(() {
                           _selectedExamType = isSelected ? null : type;
                           if (_selectedExamType != null) {
                             _filterExamType = _selectedExamType!;
                           }
                         });
+                        if (!wasSelected && (type == "중간고사" || type == "기말고사" || type == "모의고사")) {
+                          _showExamRecordGuidancePopup();
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -2693,17 +2721,21 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Flexible(
-                      child: Text(
-                        "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
-                        overflow: TextOverflow.fade,
-                        softWrap: false,
-                        maxLines: 1,
-                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Text(
+                          "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
+                          maxLines: 1,
+                          softWrap: false,
+                          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 10),
                     Text(
                       "${s["minutes"]}${_t('minutesUnitSuffix')}",
                       style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold),
@@ -3135,7 +3167,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                               child: Column(
                                                 mainAxisAlignment: MainAxisAlignment.end,
                                                 children: [
-                                                  Text("${(data["averageScore"] * 100).toInt()}%", style: const TextStyle(color: Colors.white54, fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                                  Text("${((data["averageScore"] as double) * (currentMins * 0.8)).round()}m", style: const TextStyle(color: Colors.white54, fontSize: 8.5, fontWeight: FontWeight.bold)),
                                                   Container(
                                                     height: drawAvgHeight, width: 16,
                                                     decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
@@ -3148,7 +3180,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                               child: Column(
                                                 mainAxisAlignment: MainAxisAlignment.end,
                                                 children: [
-                                                  Text("${(data["score"] * 100).toInt()}%", style: TextStyle(color: pCol, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                                  Text("${currentMins.round()}m", style: TextStyle(color: pCol, fontSize: 9.5, fontWeight: FontWeight.bold)),
                                                   Container(
                                                     height: drawScoreHeight, width: 16,
                                                     decoration: BoxDecoration(color: pCol, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
