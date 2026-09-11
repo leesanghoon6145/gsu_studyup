@@ -13,6 +13,8 @@ import 'exercise_data_service.dart';
 import 'exercise_type_edit_screen.dart';
 import 'today_exercise_screen.dart';
 import 'exercise_analysis_screen.dart';
+import 'exercise_personal_info_screen.dart'; // 🆕 [개인정보 - 칼로리 계산용]
+import 'exercise_consent_service.dart'; // 🆕 [건강정보 수집 동의]
 import 'exercise_theme.dart';
 
 class ExerciseTypeScreen extends StatefulWidget {
@@ -30,7 +32,27 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    _checkConsentThenReload(); // 🆕 [건강정보 수집 동의] 최초 진입 시 동의부터 확인
+  }
+
+  // 🆕 [건강정보 수집 동의] 이미 동의했으면 바로 진행, 아직이면 동의 화면을
+  // 먼저 보여주고, 동의 안 하면 이 화면(운동 섹션)에서 바로 나가게 함.
+  Future<void> _checkConsentThenReload() async {
+    final bool consented = await ExerciseConsentService.hasConsented();
+    if (!consented) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final bool agreed = await ExerciseConsentService.showConsentDialog(context);
+        if (!mounted) return;
+        if (!agreed) {
+          Navigator.of(context).pop(); // 동의 안 하면 운동 섹션 진입 취소
+          return;
+        }
+        _reload();
+      });
+    } else {
+      _reload();
+    }
   }
 
   Future<void> _reload() async {
@@ -91,6 +113,12 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
             icon: const Icon(Icons.insights_rounded, color: ExerciseTheme.brandGolden),
             tooltip: 'Analysis',
             onPressed: _onAnalysisPressed,
+          ),
+          // 🆕 [개인정보 - 칼로리 계산용] 몸무게 입력 화면 진입 버튼
+          IconButton(
+            icon: const Icon(Icons.person_outline_rounded, color: ExerciseTheme.brandGolden),
+            tooltip: 'Personal Info',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExercisePersonalInfoScreen())),
           ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline_rounded, color: ExerciseTheme.brandGolden),

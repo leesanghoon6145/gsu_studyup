@@ -416,12 +416,13 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
                 barTouchData: BarTouchData(
                   enabled: false,
                   touchTooltipData: BarTouchTooltipData(
+                    tooltipBgColor: Colors.transparent,
                     tooltipPadding: EdgeInsets.zero,
                     tooltipMargin: 4,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       return BarTooltipItem(
                         '${rod.toY.toInt()}',
-                        TextStyle(color: _rainbowWeekColors[groupIndex], fontSize: 11),
+                        TextStyle(color: _rainbowWeekColors[groupIndex], fontSize: 11, fontWeight: FontWeight.bold),
                       );
                     },
                   ),

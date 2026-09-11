@@ -6,13 +6,16 @@
 // - 저장 시 exercise_calculations.dart의 공식으로 계산필드(isCalculated)를 채워
 //   ExerciseRecord를 완성한 뒤 exercise_data_service.dart에 저장한다.
 
+import 'dart:async'; // 🆕 [화면 실시간 표시] StreamSubscription 사용
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart'; // 🆕 [일별 걸음수 그래프]
 import 'package:google_fonts/google_fonts.dart';
 import 'exercise_models.dart';
 import 'exercise_data_service.dart';
 import 'exercise_calculations.dart';
 import 'exercise_theme.dart';
 import 'exercise_step_service.dart'; // 🆕 [만보기 연동 1단계+매일 자동기록] StepTrackingSession, DailyStepWatcherService
+import 'exercise_profile_service.dart'; // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 반영
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -37,6 +40,18 @@ class _SetRow {
 class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   final _service = ExerciseDataService.instance;
 
+  // 🆕 [일별 걸음수 그래프] 요일별 고정 무지개색 (월=빨강 ~ 일=보라).
+  // DateTime.weekday: 1=월 ... 7=일 이므로 인덱스는 weekday-1
+  static const List<Color> _rainbowWeekColors = [
+    Color(0xFFEF4444), // 월 - 빨강
+    Color(0xFFF97316), // 화 - 주황
+    Color(0xFFFACC15), // 수 - 노랑
+    Color(0xFF22C55E), // 목 - 초록
+    Color(0xFF3B82F6), // 금 - 파랑
+    Color(0xFF4338CA), // 토 - 남색
+    Color(0xFF8B5CF6), // 일 - 보라
+  ];
+
   DateTime _date = DateTime.now();
   final _durationController = TextEditingController(text: '30');
   int _rpe = 5;
@@ -59,6 +74,23 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 🆕 [매일 자동기록] "매일 자동 기록" 토글의 현재 상태 (SharedPreferences에서 로드)
   bool _dailyAutoEnabled = false;
 
+  // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게. 화면 열 때 한 번 불러와서
+  // 계속 재사용(칼로리 계산 콜백들이 동기 함수라 그때그때 비동기 조회를 못 함).
+  double _bodyWeightKg = ExerciseProfileService.defaultWeightKg;
+
+  // 🆕 [일별 걸음수 그래프 - 스크롤] 최근 30일치를 불러와서 좌우로 스크롤해
+  // 과거까지 볼 수 있게 함. 처음 열었을 때는 오늘(가장 오른쪽)이 보이도록
+  // 자동으로 맨 끝까지 스크롤함.
+  static const int _stepsHistoryDays = 30;
+  final ScrollController _stepsChartScrollController = ScrollController();
+  Future<Map<String, int>>? _stepsHistoryFuture; // 🆕 매 rebuild마다 다시 안 불러오게 캐시
+
+  // 🆕 [화면 실시간 표시] 뒤에서 돌아가는 매일 자동기록의 "오늘 걸음수"를 화면에
+  // 실시간으로 보여주기 위한 구독. 이게 없으면 자동 기록이 실제로 잘 되고 있어도
+  // 화면에서는 전혀 확인할 방법이 없었음.
+  StreamSubscription<int>? _liveStepsSub;
+  int? _liveAutoSteps;
+
   bool get _isEditMode => widget.existingRecord != null;
 
   // 🆕 [만보기 연동 1단계] 이 종목이 '걸음수(steps)' 필드를 갖고 있을 때만
@@ -69,11 +101,20 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   @override
   void initState() {
     super.initState();
+    _stepsHistoryFuture = _loadDailyMetricByDate(); // 🆕 [모든 종목 공통] 일별 추이 그래프 데이터는 종목 무관하게 항상 로드
+    // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 불러오기 (없으면 평균값 유지)
+    ExerciseProfileService.getWeightKgOrDefault().then((w) {
+      if (mounted) setState(() => _bodyWeightKg = w);
+    });
     if (_hasStepsField) {
       _loadDailyAutoState(); // 🆕 [매일 자동기록] 토글 초기 상태 불러오기
       ExerciseStepService.loadPreferredSource().then((_) {
         if (mounted) setState(() {}); // 🆕 [2단계] 폰/워치 선택 상태를 화면에 반영
       });
+      _loadLiveAutoSteps(); // 🆕 [화면 실시간 표시] 저장된 오늘 값 먼저 보여주고
+      _liveStepsSub = DailyStepWatcherService.instance.liveTodaySteps.listen((steps) {
+        if (mounted) setState(() => _liveAutoSteps = steps);
+      }); // 🆕 이후로는 실시간 갱신값을 계속 반영
     }
     for (final field in widget.exerciseType.fields) {
       if (field.isCalculated) continue;
@@ -118,6 +159,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   @override
   void dispose() {
     _stepSession?.dispose(); // 🆕 [만보기 연동 1단계] 측정 중이었다면 스트림 구독 해제
+    _liveStepsSub?.cancel(); // 🆕 [화면 실시간 표시] 화면을 나가면 구독 해제
+    _stepsChartScrollController.dispose(); // 🆕 [일별 걸음수 그래프 - 스크롤]
     _durationController.dispose();
     _avgHrController.dispose();
     _maxHrController.dispose();
@@ -172,6 +215,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 🆕 [매일 자동기록] 자정 기준 매일 자동 걸음수 기록 토글
   // ---------------------------------------------------------------------
 
+  // 🆕 [화면 실시간 표시] 화면을 열었을 때, 다음 스트림 이벤트를 기다리지 않고
+  // 이미 저장되어 있는 오늘 자동기록 걸음수를 바로 보여줌.
+  Future<void> _loadLiveAutoSteps() async {
+    final saved = await DailyStepWatcherService.instance.getTodaySavedSteps();
+    if (mounted && saved != null) setState(() => _liveAutoSteps = saved);
+  }
+
   Future<void> _loadDailyAutoState() async {
     final enabled = await DailyStepWatcherService.instance.isEnabled();
     if (mounted) setState(() => _dailyAutoEnabled = enabled);
@@ -191,10 +241,27 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     }
     await ExerciseStepService.setPreferredSource(type);
     setState(() => _stepUnavailable = false);
+
+    // 🆕 [사용성 개선 2026-09-06] 일반 사용자는 "소스 선택"과 "자동기록 켜기"를
+    // 따로 하기 어려워한다는 피드백을 반영. 이제 폰/워치를 고르는 즉시 매일
+    // 자동 기록까지 한 번에 켜진다 - 별도 스위치를 안 눌러도 된다.
+    // 🆕 [버그 수정] 이미 자동기록이 돌아가던 중이었다면, 먼저 멈춰서 이전
+    // 소스 구독을 정리한 뒤 새 소스로 다시 시작해야 실제로 소스가 바뀐다
+    // (안 그러면 setEnabled(true)가 "이미 실행 중"으로 보고 아무것도 안 해서,
+    // 화면상 소스는 바뀐 것처럼 보여도 실제 기록은 계속 이전 소스 걸로 남았음).
+    if (DailyStepWatcherService.instance.isRunning) {
+      DailyStepWatcherService.instance.stop();
+    }
+    setState(() => _liveAutoSteps = null); // 🆕 이전 소스의 값이 잠깐이라도 남아 보이지 않도록 초기화
+    await DailyStepWatcherService.instance.setEnabled(true);
+    setState(() => _dailyAutoEnabled = true);
+
     if (mounted) {
       ExerciseTheme.showLuxeSnackBar(
         context,
-        type == StepSourceType.watch ? '워치(Health Connect/HealthKit) 측정으로 전환했습니다.' : '폰 센서 측정으로 전환했습니다.',
+        type == StepSourceType.watch
+            ? '워치 연결 완료 - 오늘부터 자동으로 기록됩니다.'
+            : '폰 걸음수 자동 기록을 시작합니다.',
       );
     }
   }
@@ -361,7 +428,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         if (distanceKm != null && distanceKm > 0) {
           detail['paceMinPerKm'] = calcPaceMinPerKm(distanceKm: distanceKm, durationMin: durationMin);
           final met = kExerciseMetValues[typeId] ?? 6.0;
-          detail['calories'] = calcCaloriesByMet(met: met, durationMin: durationMin);
+          detail['calories'] = calcCaloriesByMet(met: met, durationMin: durationMin, bodyWeightKg: _bodyWeightKg);
         }
         break;
       case 'swimming':
@@ -458,12 +525,37 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          // 🆕 [사용성 개선] 탭 한 번으로 자동 기록까지 시작된다는 걸 미리 안내
+          Text(
+            '탭 한 번으로 연결과 매일 자동 기록이 함께 시작됩니다.',
+            style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
+          ),
+          const SizedBox(height: 8),
           // 🆕 [2단계] 측정 소스 선택: 폰 센서 ↔ 워치(Health Connect/HealthKit)
           Row(
             children: [
               Expanded(child: _buildSourceChip('📱 폰', StepSourceType.phone)),
               const SizedBox(width: 8),
               Expanded(child: _buildSourceChip('⌚ 워치', StepSourceType.watch)),
+              const SizedBox(width: 8),
+              // 🆕 [실시간성 개선] 워치는 30초→5초 폴링으로 단축했지만, 그마저도
+              // 기다리기 답답할 때 지금 당장 한 번 더 조회해서 바로 확인 가능하게 함.
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () async {
+                  await ExerciseStepService.refreshNow();
+                  if (mounted) ExerciseTheme.showLuxeSnackBar(context, '방금 값을 다시 확인했습니다.');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: ExerciseTheme.pageBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: const Icon(Icons.refresh_rounded, color: ExerciseTheme.brandGolden, size: 18),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -534,9 +626,343 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
                 ),
               ),
+            // 🆕 [화면 실시간 표시] 뒤에서 자동 기록이 실제로 돌아가고 있는지
+            // 눈으로 바로 확인할 수 있도록, 오늘 자동 기록된 걸음수·거리·칼로리를 표시.
+            if (_dailyAutoEnabled) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: ExerciseTheme.brandGolden.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: ExerciseTheme.brandGolden.withOpacity(0.35)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('오늘 자동 기록', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5)),
+                    Text(
+                      _liveAutoSteps == null
+                          ? '불러오는 중...'
+                      // 🆕 [칼로리 추가] 걸음수 기준 추정 칼로리도 거리와 함께 표시
+                          : '$_liveAutoSteps 보 · ${_formatAutoDistance(_liveAutoSteps!)} · ${_estimateCaloriesForSteps(_liveAutoSteps!).round()}kcal',
+                      style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ],
       ),
+    );
+  }
+
+  // 🆕 [칼로리 추정] 걸음수 → 소요시간(분당 약 100보 가정) → MET 공식으로 칼로리 추정.
+  // 저장된 몸무게(_bodyWeightKg)를 반영하며, 입력 안 했으면 평균값으로 계산됨.
+  double _estimateCaloriesForSteps(int steps) {
+    final double estimatedMinutes = steps / 100.0;
+    final double met = kExerciseMetValues['walking'] ?? 3.8;
+    return calcCaloriesByMet(met: met, durationMin: estimatedMinutes.round(), bodyWeightKg: _bodyWeightKg);
+  }
+
+  // 🆕 [화면 실시간 표시] 짧은 거리는 m, 긴 거리는 km로 보기 좋게 표시
+  String _formatAutoDistance(int steps) {
+    final double km = ExerciseStepService.stepsToKm(steps);
+    if (km < 1) return '${(km * 1000).round()}m';
+    return '${km.toStringAsFixed(2)}km';
+  }
+
+  // 🆕 [모든 종목 공통] 걷기는 '걸음수'를, 그 외 종목은 '운동시간(분)'을
+  // 날짜별로 합산해서 조회. 자동기록(걷기)과 수동기록 전부 포함.
+  Future<Map<String, int>> _loadDailyMetricByDate() async {
+    final all = await ExerciseDataService.instance.getAllRecords();
+    final Map<String, int> byDate = {};
+    for (final r in all) {
+      if (r.exerciseTypeId != widget.exerciseType.id) continue;
+      int? value;
+      if (_hasStepsField) {
+        final dynamic stepsRaw = r.detail['steps'];
+        if (stepsRaw is int) value = stepsRaw;
+      } else {
+        value = r.durationMin;
+      }
+      if (value == null) continue;
+      final key = _localDateKey(r.date);
+      byDate[key] = (byDate[key] ?? 0) + value;
+    }
+    return byDate;
+  }
+
+  String _localDateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // 🆕 [운동시간용 눈금 간격] 걸음수(500 고정)와 달리, 종목마다 운동시간
+  // 범위가 천차만별이라 최댓값에 맞춰 보기 좋은 간격(10/20/30/60분)을 고름.
+  int _niceMinuteInterval(int maxVal) {
+    if (maxVal <= 60) return 10;
+    if (maxVal <= 120) return 20;
+    if (maxVal <= 300) return 30;
+    return 60;
+  }
+
+  // 🆕 [모든 종목 공통] 걷기는 X축=일자·Y축=걸음수(500보 간격, 2500보 넘으면
+  // 원점이 1000보로 올라가는 절단 규칙 적용), 그 외 종목은 X축=일자·Y축=
+  // 운동시간(분)으로 동일한 스타일(무지개색·30일 스크롤·칼로리 라벨)을 재사용.
+  Widget _buildDailyTrendChart() {
+    return FutureBuilder<Map<String, int>>(
+      future: _stepsHistoryFuture,
+      builder: (context, snapshot) {
+        final Map<String, int> byDate = snapshot.data ?? {};
+        final DateTime today = DateTime.now();
+        // 🆕 [30일 스크롤] 최근 30일을 전부 불러오고, 화면에서는 좌우로
+        // 밀어서 과거까지 볼 수 있게 함.
+        final List<DateTime> days = List.generate(
+          _stepsHistoryDays,
+              (i) => DateTime(today.year, today.month, today.day).subtract(Duration(days: _stepsHistoryDays - 1 - i)),
+        );
+        final List<int> values = days.map((d) => byDate[_localDateKey(d)] ?? 0).toList();
+        final int maxVal = values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b);
+
+        // 🆕 [축 규칙 - 종목별 분기]
+        // 걷기(걸음수): 기본 원점 500, 2500보 넘으면 원점이 1000으로 올라가며 절단 표시.
+        // 그 외(운동시간 분): 원점 0, 최댓값에 맞는 보기 좋은 간격 자동 계산, 절단 없음.
+        final bool isSteps = _hasStepsField;
+        final bool isBroken = isSteps && maxVal > 2500;
+        final double interval = isSteps ? 500 : _niceMinuteInterval(maxVal).toDouble();
+        final double base = isSteps ? (isBroken ? 1000 : 500) : 0;
+        double top = base;
+        final double minTop = isSteps ? 2500 : (interval * 4);
+        while (top < minTop || top < maxVal + interval) {
+          top += interval;
+        }
+
+        // 🆕 [30일 스크롤] 하루당 슬롯 폭(막대+간격)
+        const double perDaySlotWidth = 46;
+
+        // 🆕 처음 열었을 때 오늘(맨 오른쪽)이 보이도록 자동 스크롤
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_stepsChartScrollController.hasClients) {
+            _stepsChartScrollController.jumpTo(_stepsChartScrollController.position.maxScrollExtent);
+          }
+        });
+
+        final String enTitle = isSteps ? 'DAILY STEPS' : 'DAILY MINUTES';
+        final String koTitle = isSteps ? '일별 걸음수' : '일별 운동시간';
+        final String unit = isSteps ? '보' : '분';
+
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(enTitle, style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10.5)),
+                  const SizedBox(width: 6),
+                  Text('($koTitle)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '좌우로 밀어서 최근 30일까지 볼 수 있습니다. 막대 위 숫자는 그 날의 추정 칼로리입니다.',
+                style: ExerciseTheme.bodyStyle(size: 10, color: Colors.white38),
+              ),
+              const SizedBox(height: 14),
+              if (snapshot.connectionState != ConnectionState.done)
+                const SizedBox(height: 240, child: Center(child: CircularProgressIndicator(color: ExerciseTheme.brandGolden)))
+              else
+                SizedBox(
+                  height: 240,
+                  // 🆕 [Y축 고정] Row로 "고정된 Y축 패널"과 "스크롤되는 날짜+막대 패널"을
+                  // 나란히 배치. Y축 눈금(왼쪽)은 화면에 항상 고정되어 있고, 오른쪽의
+                  // 날짜+막대만 좌우로 스크롤된다.
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 🆕 [고정 Y축 패널] 실제 막대는 없고 눈금(라벨)만 그리는 전용 차트.
+                      // 오른쪽 스크롤 차트와 높이/여백(reservedSize)을 똑같이 맞춰서
+                      // 눈금 위치가 정확히 일치하도록 함.
+                      SizedBox(
+                        width: 52,
+                        height: 240,
+                        child: BarChart(
+                          BarChartData(
+                            minY: base,
+                            maxY: top,
+                            alignment: BarChartAlignment.spaceAround,
+                            gridData: const FlGridData(show: false),
+                            borderData: FlBorderData(
+                              show: true,
+                              border: Border(
+                                left: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.5), width: 1.4),
+                                bottom: BorderSide.none,
+                                top: BorderSide.none,
+                                right: BorderSide.none,
+                              ),
+                            ),
+                            titlesData: FlTitlesData(
+                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              // 🆕 [X축 자리는 숨기되 높이는 오른쪽과 똑같이 맞춤]
+                              bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 28)),
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 48,
+                                  interval: interval,
+                                  getTitlesWidget: (value, meta) {
+                                    if (value < base - 0.5) return const SizedBox.shrink();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 4),
+                                      child: Text(
+                                        '${value.toInt()} •',
+                                        style: const TextStyle(color: Colors.white54, fontSize: 10),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            barGroups: const [], // 🆕 눈금만 그리는 패널이라 막대 없음
+                          ),
+                        ),
+                      ),
+                      // 🆕 [스크롤 패널] 날짜(X축 라벨)와 막대가 여기서 함께 좌우로 스크롤됨
+                      Expanded(
+                        child: SingleChildScrollView(
+                          controller: _stepsChartScrollController,
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: days.length * perDaySlotWidth,
+                            height: 240,
+                            child: Stack(
+                              children: [
+                                BarChart(
+                                  BarChartData(
+                                    minY: base,
+                                    maxY: top,
+                                    alignment: BarChartAlignment.spaceAround,
+                                    gridData: FlGridData(
+                                      show: true,
+                                      drawVerticalLine: false,
+                                      horizontalInterval: interval,
+                                      getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.08), strokeWidth: 1),
+                                    ),
+                                    borderData: FlBorderData(
+                                      show: true,
+                                      border: Border(
+                                        left: BorderSide.none, // 🆕 왼쪽 선은 고정 패널이 담당
+                                        bottom: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.5), width: 1.4),
+                                        top: BorderSide.none,
+                                        right: BorderSide.none,
+                                      ),
+                                    ),
+                                    // 🆕 [칼로리 라벨] 막대 위에 그 날 추정 칼로리를 항상 표시
+                                    barTouchData: BarTouchData(
+                                      enabled: false,
+                                      touchTooltipData: BarTouchTooltipData(
+                                        tooltipBgColor: Colors.transparent,
+                                        tooltipPadding: EdgeInsets.zero,
+                                        tooltipMargin: 4,
+                                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                          if (groupIndex < 0 || groupIndex >= values.length) return null;
+                                          final int kcal = isSteps
+                                              ? _estimateCaloriesForSteps(values[groupIndex]).round()
+                                              : calcCaloriesByMet(
+                                            met: kExerciseMetValues[widget.exerciseType.id] ?? 5.0,
+                                            durationMin: values[groupIndex],
+                                            bodyWeightKg: _bodyWeightKg,
+                                          ).round();
+                                          return BarTooltipItem(
+                                            '${kcal}kcal',
+                                            TextStyle(color: _rainbowWeekColors[days[groupIndex].weekday - 1], fontSize: 9, fontWeight: FontWeight.bold),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    titlesData: FlTitlesData(
+                                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                      // 🆕 [Y축 라벨은 여기서 숨김] 왼쪽 고정 패널이 이미 그리고 있음
+                                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 0)),
+                                      // 🆕 [X축: 일자(날짜)] 막대와 함께 스크롤됨
+                                      bottomTitles: AxisTitles(
+                                        sideTitles: SideTitles(
+                                          showTitles: true,
+                                          reservedSize: 28,
+                                          getTitlesWidget: (value, meta) {
+                                            final int idx = value.toInt();
+                                            if (idx < 0 || idx >= days.length) return const SizedBox.shrink();
+                                            final DateTime d = days[idx];
+                                            return Padding(
+                                              padding: const EdgeInsets.only(top: 8),
+                                              child: Text(
+                                                '${d.day}',
+                                                style: TextStyle(
+                                                  color: _rainbowWeekColors[d.weekday - 1],
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    barGroups: List.generate(days.length, (i) {
+                                      final DateTime d = days[i];
+                                      return BarChartGroupData(
+                                        x: i,
+                                        barRods: [
+                                          BarChartRodData(
+                                            toY: values[i].toDouble().clamp(base, top),
+                                            color: _rainbowWeekColors[d.weekday - 1], // 🆕 요일 고정 무지개색
+                                            width: 20,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                        ],
+                                        showingTooltipIndicators: values[i] > 0 ? [0] : [], // 🆕 칼로리 라벨 항상 표시
+                                      );
+                                    }),
+                                  ),
+                                ),
+                                // 🆕 [가위질(절단) 표시] 걸음수 원점이 500->1000으로 올라간
+                                // 경우에만 표시. 운동시간 차트는 0부터 시작하므로 표시 안 함.
+                                if (isBroken)
+                                  Positioned(
+                                    left: 4,
+                                    bottom: 40,
+                                    child: Transform.rotate(
+                                      angle: -0.4,
+                                      child: CustomPaint(
+                                        size: const Size(26, 12),
+                                        painter: _AxisBreakPainter(color: ExerciseTheme.brandGolden),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (isBroken)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '※ ${unit == '보' ? '걸음수' : '기록'}가 많아 0~${base.toInt()}$unit 구간은 생략해서 표시했습니다.',
+                    style: ExerciseTheme.bodyStyle(size: 10, color: Colors.white38),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -845,6 +1271,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
           ...type.fields.map(_buildField),
 
+          // 🆕 [모든 종목 공통] 걷기의 일별 걸음수 그래프와 같은 형태로,
+          // 걷기가 아닌 종목은 '일별 운동시간(분)' 추이를 대신 보여줌.
+          const SizedBox(height: 12),
+          _buildDailyTrendChart(),
+
           const SizedBox(height: 12),
           BiInline(en: 'MEMO', ko: '메모', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
           const SizedBox(height: 6),
@@ -874,4 +1305,30 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       ),
     );
   }
+}
+
+// 🆕 [일별 걸음수 그래프 - 축 절단 표시] Y축 원점이 0이 아니라는 걸 보여주는
+// 작은 지그재그(가위질) 선. 원점이 500/1000처럼 0이 아닌 값부터 시작할 때만
+// 좌측 하단에 그려서, "이 아래 구간은 생략됐다"는 걸 시각적으로 알려준다.
+class _AxisBreakPainter extends CustomPainter {
+  final Color color;
+  _AxisBreakPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.6
+      ..style = PaintingStyle.stroke;
+    final path = Path();
+    path.moveTo(0, size.height * 0.8);
+    path.lineTo(size.width * 0.3, size.height * 0.2);
+    path.lineTo(size.width * 0.55, size.height * 0.8);
+    path.lineTo(size.width * 0.8, size.height * 0.2);
+    path.lineTo(size.width, size.height * 0.6);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AxisBreakPainter oldDelegate) => oldDelegate.color != color;
 }

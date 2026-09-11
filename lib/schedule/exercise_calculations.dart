@@ -83,10 +83,28 @@ double calcCaloriesByMet({
 
 /// 종목별 대표 MET 값 (Compendium of Physical Activities 근사치).
 /// 정밀한 값이 아니라 "칼로리 자동추정"용 근사 계수임을 명시.
+// 🆕 [MET 계수 완성 - 2026-09-06] 기존엔 golf/swimming/running/walking/hiking/
+// cycling 6개만 등록되어 있었고, 나머지 10개 종목(헬스/필라테스/요가/라켓
+// 3종/팀구기 2종/스키/기타)은 값이 없어서 칼로리 계산 시 임의값(5.0)으로
+// 뭉뚱그려지고 있었다. 미국 스포츠의학회(ACSM) 계열 표준 참고자료인
+// "Compendium of Physical Activities"(Ainsworth et al., 2011)의 일반적인
+// 중간 강도 활동 기준값을 근거로 16개 종목 전체를 채웠다 - Garmin/Apple
+// Health/MyFitnessPal 등 주요 피트니스 앱들이 공통으로 참고하는 자료다.
 const Map<String, double> kExerciseMetValues = {
+  'golf': 4.8, // 클럽을 직접 들고 걷는 일반적인 라운딩 기준
+  'swimming': 7.0, // 보통 강도 자유형 기준
   'running': 9.8, // 보통 속도 조깅 기준
   'walking': 3.8, // 보통 속도 걷기 기준
-  'swimming': 7.0, // 보통 강도 자유형 기준
-  'cycling': 7.5, // 보통 강도 기준
+  'gym': 5.0, // 중간~고강도 웨이트 트레이닝(서킷 포함) 기준
+  'pilates': 3.0, // 일반 강도 필라테스
+  'yoga': 2.5, // 하타요가 등 일반 강도 기준
   'hiking': 6.0,
+  'cycling': 7.5, // 보통 강도 기준
+  'tennis': 7.3, // 일반적인 단식/복식 기준
+  'badminton': 5.5,
+  'tabletennis': 4.0,
+  'basketball': 6.5, // 일반적인(비시합) 경기 기준
+  'soccer': 7.0, // 일반적인(친선/캐주얼) 경기 기준
+  'skiing': 6.0, // 일반 강도 활강 스키 기준
+  'etc': 5.0, // 종목이 명확하지 않은 기타 활동의 평균적인 중간 강도 추정치
 };

@@ -338,7 +338,7 @@ final List<ExerciseType> kDefaultExerciseTypes = [
     icon: '🧘',
     isDefault: true,
     sortOrder: 6,
-    fields: const [
+    fields: [
       ExerciseField(
         key: 'programName',
         type: ExerciseFieldType.text,
@@ -349,6 +349,16 @@ final List<ExerciseType> kDefaultExerciseTypes = [
         type: ExerciseFieldType.select,
         label: '기구 유형',
         options: ['매트', '리포머', '캐딜락', '기타'],
+        isRequired: false,
+      ),
+      // 🆕 [2026-09-06 추가] 어느 부위 위주로 했는지는 필라테스/요가처럼
+      // 부위별 프로그램이 세분화된 종목에서 실질적으로 가장 자주 궁금해지는
+      // 정보인데 기존엔 빠져 있었음.
+      ExerciseField(
+        key: 'focusArea',
+        type: ExerciseFieldType.select,
+        label: '집중 부위',
+        options: ['코어', '전신', '유연성', '자세교정', '재활'],
         isRequired: false,
       ),
       ExerciseField(
@@ -363,6 +373,7 @@ final List<ExerciseType> kDefaultExerciseTypes = [
         label: '강사',
         isRequired: false,
       ),
+      _caloriesField(), // 🆕 [2026-09-06 추가] MET 계수 보완에 맞춰 다른 종목처럼 칼로리 자동계산 노출
     ],
   ),
 
@@ -373,7 +384,7 @@ final List<ExerciseType> kDefaultExerciseTypes = [
     icon: '🧘',
     isDefault: true,
     sortOrder: 7,
-    fields: const [
+    fields: [
       ExerciseField(
         key: 'style',
         type: ExerciseFieldType.select,
@@ -386,12 +397,21 @@ final List<ExerciseType> kDefaultExerciseTypes = [
         type: ExerciseFieldType.text,
         label: '프로그램명',
       ),
+      // 🆕 [2026-09-06 추가] 필라테스와 동일한 이유로 추가
+      ExerciseField(
+        key: 'focusArea',
+        type: ExerciseFieldType.select,
+        label: '집중 부위',
+        options: ['코어', '전신', '유연성', '균형', '이완/명상'],
+        isRequired: false,
+      ),
       ExerciseField(
         key: 'difficulty',
         type: ExerciseFieldType.select,
         label: '난이도',
         options: ['초급', '중급', '고급'],
       ),
+      _caloriesField(), // 🆕 [2026-09-06 추가]
     ],
   ),
 
@@ -515,7 +535,15 @@ final List<ExerciseType> kDefaultExerciseTypes = [
     icon: '⛷️',
     isDefault: true,
     sortOrder: 15,
-    fields: const [
+    fields: [
+      // 🆕 [2026-09-06 추가] 골프의 코스명, 등산의 산/코스명처럼, 스키도
+      // "어디서 탔는지"가 야외 종목 기록의 기본 항목인데 빠져 있었음.
+      ExerciseField(
+        key: 'resort',
+        type: ExerciseFieldType.text,
+        label: '스키장명',
+        isRequired: false,
+      ),
       ExerciseField(
         key: 'slopeDifficulty',
         type: ExerciseFieldType.select,
@@ -541,6 +569,7 @@ final List<ExerciseType> kDefaultExerciseTypes = [
         unit: 'km/h',
         isRequired: false,
       ),
+      _caloriesField(), // 🆕 [2026-09-06 추가]
     ],
   ),
 

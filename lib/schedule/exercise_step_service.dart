@@ -44,6 +44,11 @@ abstract class StepDataSource {
   /// 🆕 [2단계] "오늘 자정부터 지금까지의 누적 걸음수"를 내보내는 스트림.
   /// 폰 센서든 워치든 항상 이 의미로 통일해서 내보낸다.
   Stream<int> todayStepsStream();
+
+  /// 🆕 [실시간성 개선] 지금 당장 한 번 더 조회를 시도. 폴링 기반인 워치
+  /// 소스에서 대기 시간을 건너뛰고 즉시 확인하고 싶을 때 사용. 폰 센서처럼
+  /// 이미 실시간 이벤트 스트림인 소스는 비워둬도 무방함.
+  Future<void> refreshNow();
 }
 
 /// 🆕 [1단계] 폰 자체 만보기 센서 (pedometer 패키지, 안드로이드
@@ -106,10 +111,15 @@ class PhonePedometerSource implements StepDataSource {
       return (event.steps - baseline).clamp(0, 1000000);
     });
   }
+
+  @override
+  Future<void> refreshNow() async {
+    // 🆕 폰 센서는 이미 실시간 이벤트 스트림이라 별도 새로고침이 필요 없음.
+  }
 }
 
 /// 🆕 [2단계] 워치 연동 소스. health 패키지로 Health Connect(안드로이드)/
-/// HealthKit(iOS)에서 "오늘 걸음수"를 주기적으로(30초마다) 조회해서 내보낸다.
+/// HealthKit(iOS)에서 "오늘 걸음수"를 주기적으로(5초마다) 조회해서 내보낸다.
 /// 워치 자체와 직접 통신하지 않고, 워치가 이미 삼성헬스/애플헬스 등에
 /// 동기화해둔 걸음수를 Health Connect/HealthKit을 거쳐 읽어오는 방식이다.
 class WatchHealthStepSource implements StepDataSource {
@@ -139,21 +149,29 @@ class WatchHealthStepSource implements StepDataSource {
     final controller = StreamController<int>.broadcast();
     _controller = controller;
 
-    Future<void> poll() async {
-      try {
-        final now = DateTime.now();
-        final midnight = DateTime(now.year, now.month, now.day);
-        final int steps = await _health.getTotalStepsInInterval(midnight, now) ?? 0;
-        if (!controller.isClosed) controller.add(steps);
-      } catch (e) {
-        // 조회 실패는 조용히 무시하고 다음 폴링에서 재시도 (네트워크 일시 오류 등)
-      }
-    }
-
-    poll(); // 구독 시작하자마자 한 번 즉시 조회
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) => poll());
+    _poll(); // 구독 시작하자마자 한 번 즉시 조회
+    // ✅ [실시간성 개선 2026-09-06] 30초 -> 5초로 단축해서 테스트/확인이
+    // 훨씬 빨라지도록 함. Health Connect/HealthKit 조회는 로컬 데이터라
+    // 자주 조회해도 비용이나 배터리 부담이 크지 않음.
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
     return controller.stream;
   }
+
+  // 🆕 [실시간성 개선] poll 로직을 재사용 가능한 인스턴스 메서드로 분리해서,
+  // 주기적 폴링뿐 아니라 refreshNow()로도 똑같이 호출할 수 있게 함.
+  Future<void> _poll() async {
+    try {
+      final now = DateTime.now();
+      final midnight = DateTime(now.year, now.month, now.day);
+      final int steps = await _health.getTotalStepsInInterval(midnight, now) ?? 0;
+      if (_controller != null && !_controller!.isClosed) _controller!.add(steps);
+    } catch (e) {
+      // 조회 실패는 조용히 무시하고 다음 폴링에서 재시도 (네트워크 일시 오류 등)
+    }
+  }
+
+  @override
+  Future<void> refreshNow() => _poll();
 
   void dispose() {
     _pollTimer?.cancel();
@@ -193,6 +211,10 @@ class ExerciseStepService {
     activeSource = type == StepSourceType.watch ? WatchHealthStepSource() : PhonePedometerSource();
     activeSourceType = type;
   }
+
+  /// 🆕 [실시간성 개선] 지금 사용 중인 소스에서 즉시 한 번 더 값을 조회.
+  /// 워치처럼 폴링 기반인 소스에서 대기 없이 바로 테스트/확인하고 싶을 때 사용.
+  static Future<void> refreshNow() => activeSource.refreshNow();
 
   /// 평균 보폭(m). 걸음수 → 거리(km) 자동 환산에 사용.
   static const double averageStrideMeters = 0.7;
@@ -275,6 +297,13 @@ class DailyStepWatcherService {
   StreamSubscription<int>? _subscription;
   bool _isRunning = false;
 
+  // 🆕 [화면 실시간 표시] 자동 기록이 갱신될 때마다 오늘 걸음수를 흘려보내는
+  // 방송용 스트림. today_exercise_screen.dart가 이걸 구독해서 "뒤에서 자동
+  // 기록이 잘 되고 있는지"를 화면에 실시간으로 보여줄 수 있게 한다. 기존에는
+  // 이 값을 볼 방법이 화면에 전혀 없어서 "0으로 보인다"는 혼란이 있었음.
+  final StreamController<int> _liveStepsController = StreamController<int>.broadcast();
+  Stream<int> get liveTodaySteps => _liveStepsController.stream;
+
   bool get isRunning => _isRunning;
 
   /// 사용자가 "매일 자동 기록"을 켜둔 적이 있는지 확인 (앱 재시작 후에도 기억함)
@@ -312,6 +341,7 @@ class DailyStepWatcherService {
     _subscription = source.todayStepsStream().listen((todaySteps) async {
       final String todayKey = _dateKeyOf(DateTime.now());
       await _upsertAutoRecord(todayKey, todaySteps);
+      _liveStepsController.add(todaySteps); // 🆕 화면에 실시간 반영
     });
   }
 
@@ -325,6 +355,17 @@ class DailyStepWatcherService {
 
   /// 해당 날짜의 자동 걷기 기록을 새로 만들거나(없으면) 갱신(있으면)한다.
   /// id를 날짜 기반으로 고정해서 같은 날에는 절대 중복 생성되지 않는다.
+  /// 🆕 [화면 초기값용] 화면을 처음 열었을 때, 다음 스트림 이벤트가 오기 전까지
+  /// 기다리지 않고 이미 저장되어 있는 오늘 자동기록 걸음수를 바로 보여주기 위한 조회.
+  Future<int?> getTodaySavedSteps() async {
+    final String todayKey = _dateKeyOf(DateTime.now());
+    final all = await ExerciseDataService.instance.getAllRecords();
+    final existing = all.where((r) => r.recordId == '$_kAutoRecordIdPrefix$todayKey').toList();
+    if (existing.isEmpty) return null;
+    final steps = existing.first.detail['steps'];
+    return steps is int ? steps : null;
+  }
+
   Future<void> _upsertAutoRecord(String dateKey, int steps) async {
     final parts = dateKey.split('-');
     final DateTime date = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
