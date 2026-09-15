@@ -30,6 +30,8 @@
 // 있어야 워치 걸음수가 실제로 넘어옴.
 
 import 'dart:async';
+import 'package:flutter/foundation.dart'; // ✅ [2026-09-13 추가] debugPrint 사용
+import 'package:permission_handler/permission_handler.dart'; // ✅ [2026-09-13 추가] 신체활동 인식 권한 명시적 요청용
 import 'package:pedometer/pedometer.dart';
 import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,29 +68,39 @@ class PhonePedometerSource implements StepDataSource {
   @override
   Future<bool> isAvailable() async {
     try {
-      final completer = Completer<bool>();
-      late StreamSubscription sub;
-      sub = Pedometer.stepCountStream.listen(
-            (_) {
-          if (!completer.isCompleted) completer.complete(true);
-          sub.cancel();
-        },
-        onError: (_) {
-          if (!completer.isCompleted) completer.complete(false);
-          sub.cancel();
-        },
-        cancelOnError: true,
-      );
-      return await completer.future.timeout(
-        const Duration(seconds: 3),
-        onTimeout: () {
-          sub.cancel();
-          return false;
-        },
-      );
+      // ✅ [2026-09-13 1차 수정] 권한을 명시적으로 요청하도록 고침.
+      PermissionStatus status = await Permission.activityRecognition.status;
+      debugPrint('[PhonePedometerSource] 신체활동 인식 권한 상태(요청 전)=$status');
+      if (!status.isGranted) {
+        status = await Permission.activityRecognition.request();
+        debugPrint('[PhonePedometerSource] 신체활동 인식 권한 요청 결과=$status');
+      }
+      // ✅ [2026-09-14 추가] "영구 거부(permanentlyDenied)"면 request()를
+      // 아무리 호출해도 시스템 팝업이 다시 안 뜬다(이전에 거부한 적이 있는
+      // 경우 Android 정책). 이 상태를 밖에서 구분할 수 있도록 별도 로그 남김.
+      if (status.isPermanentlyDenied) {
+        debugPrint('[PhonePedometerSource] ⚠️ 영구 거부 상태 - 설정에서 수동으로 켜야 함');
+      }
+      if (!status.isGranted) return false;
+
+      // ✅ [2026-09-14 2차 수정 - 진짜 원인] 걸음수 센서(TYPE_STEP_COUNTER)는
+      // 실제로 "걸음을 내디뎌야만" 이벤트를 보낸다. 예전 코드는 권한 확인 후
+      // 3초 안에 이벤트가 안 오면 "사용 불가"로 판정했는데, 이러면 그 순간
+      // 가만히 있기만 해도(당연히 자주 그럴 수밖에 없음) 매번 실패 처리됐다.
+      // 권한만 확인되면 "사용 가능"으로 판단하고, 실제 걸음 데이터는
+      // todayStepsStream()이 걸을 때마다 알아서 들어오게 둔다.
+      return true;
     } catch (e) {
+      debugPrint('[PhonePedometerSource] isAvailable 오류: $e');
       return false;
     }
+  }
+
+  // ✅ [2026-09-14 추가] 영구 거부 상태인지 밖(화면)에서 확인할 수 있는 헬퍼.
+  // 이 상태면 request()가 아무 효과 없으니, 화면에서 "설정으로 이동" 안내를
+  // 보여줘야 한다.
+  static Future<bool> isPermanentlyDenied() async {
+    return (await Permission.activityRecognition.status).isPermanentlyDenied;
   }
 
   String _dateKeyOf(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -126,18 +138,40 @@ class WatchHealthStepSource implements StepDataSource {
   final Health _health = Health();
   Timer? _pollTimer;
   StreamController<int>? _controller;
+  static bool _configured = false; // ✅ [2026-09-13 추가] 중복 초기화 방지
+
+  // ✅ [2026-09-13 추가] 최신 health 패키지는 권한 요청 전에 반드시 configure()를
+  // 먼저 호출해야 한다. 이게 빠지면 앱이 Health Connect에 아예 등록조차 안 되고
+  // "permissions were not granted" 에러만 계속 반복되는 증상이 나타난다.
+  Future<void> _ensureConfigured() async {
+    if (_configured) return;
+    try {
+      await _health.configure();
+      _configured = true;
+      debugPrint('[WatchHealthStepSource] Health.configure() 완료');
+    } catch (e) {
+      debugPrint('[WatchHealthStepSource] Health.configure() 오류: $e');
+    }
+  }
 
   @override
   Future<bool> isAvailable() async {
     try {
+      await _ensureConfigured(); // ✅ [2026-09-13 추가] 권한 요청 전 반드시 먼저 호출
       const types = [HealthDataType.STEPS];
       const permissions = [HealthDataAccess.READ];
       bool granted = await _health.hasPermissions(types, permissions: permissions) ?? false;
+      debugPrint('[WatchHealthStepSource] hasPermissions=$granted');
       if (!granted) {
         granted = await _health.requestAuthorization(types, permissions: permissions);
+        debugPrint('[WatchHealthStepSource] requestAuthorization 결과=$granted');
       }
       return granted;
     } catch (e) {
+      // ✅ [2026-09-13 추가] 원인 파악용 로그. 실기기 테스트 시 안드로이드
+      // 스튜디오 하단 Logcat/Run 창에서 "[WatchHealthStepSource]"로 검색하면
+      // 정확한 에러 내용을 볼 수 있음.
+      debugPrint('[WatchHealthStepSource] isAvailable 오류: $e');
       return false;
     }
   }
@@ -164,9 +198,14 @@ class WatchHealthStepSource implements StepDataSource {
       final now = DateTime.now();
       final midnight = DateTime(now.year, now.month, now.day);
       final int steps = await _health.getTotalStepsInInterval(midnight, now) ?? 0;
+      // ✅ [2026-09-13 추가] 조회 결과를 항상 로그로 남김 - 권한은 됐는데
+      // 값이 0으로만 나올 때, 진짜 0인지 조회 자체가 실패했는지 구분하기 위함.
+      debugPrint('[WatchHealthStepSource] getTotalStepsInInterval($midnight ~ $now) 결과=$steps');
       if (_controller != null && !_controller!.isClosed) _controller!.add(steps);
     } catch (e) {
-      // 조회 실패는 조용히 무시하고 다음 폴링에서 재시도 (네트워크 일시 오류 등)
+      // ✅ [2026-09-13 추가] 예전엔 조용히 무시했는데, 그러면 왜 0인지 전혀
+      // 알 수가 없어서 로그를 남기도록 변경.
+      debugPrint('[WatchHealthStepSource] _poll 오류: $e');
     }
   }
 
@@ -327,6 +366,14 @@ class DailyStepWatcherService {
   /// 걷기 화면에 안 들어가도 자동으로 다시 감시를 시작함.
   Future<void> resumeIfEnabled() async {
     if (await isEnabled()) {
+      // ✅ [2026-09-14 버그 수정 - 진짜 원인] 예전엔 여기서 바로 start()를
+      // 불러서, ExerciseStepService.activeSource가 아직 기본값(폰)인
+      // 상태로 자동기록이 시작됐다. 사용자가 "워치"를 저장해뒀어도, 앱을
+      // 새로 켤 때마다 이 시점엔 아직 그 설정을 안 불러온 상태라 폰으로
+      // 고정되어 버리고, 나중에 [걷기] 화면을 열어서 칩이 "워치"로 바뀌어
+      // 보여도 뒤에서 도는 자동기록은 계속 폰만 보고 있었다. 먼저 저장된
+      // 선호 소스를 불러온 뒤에 시작하도록 순서를 바로잡았다.
+      await ExerciseStepService.loadPreferredSource();
       await start();
     }
   }

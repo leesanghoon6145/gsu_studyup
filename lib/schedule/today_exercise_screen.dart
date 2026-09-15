@@ -9,13 +9,18 @@
 import 'dart:async'; // 🆕 [화면 실시간 표시] StreamSubscription 사용
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart'; // 🆕 [일별 걸음수 그래프]
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ [2026-09-13 추가] 설정안내 팝업의 "오늘 그만 보기" 저장용
+import 'package:permission_handler/permission_handler.dart'; // ✅ [2026-09-14 추가] 영구거부 시 설정으로 바로 이동시키는 openAppSettings() 사용
 import 'package:google_fonts/google_fonts.dart';
 import 'exercise_models.dart';
 import 'exercise_data_service.dart';
 import 'exercise_calculations.dart';
 import 'exercise_theme.dart';
+import 'app_language_service.dart'; // ✅ [2026-09-06 추가] appLanguage 접근용 (exercise_theme.dart가 재수출하지만 명시적으로도 import)
 import 'exercise_step_service.dart'; // 🆕 [만보기 연동 1단계+매일 자동기록] StepTrackingSession, DailyStepWatcherService
 import 'exercise_profile_service.dart'; // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 반영
+import 'exercise_i18n.dart'; // ✅ [2026-09-06 추가] 필드/옵션/RPE 10개국어 번역 사전
+import 'exercise_type_analysis_screen.dart'; // ✅ [2026-09-13 추가] 하단 "운동분석" 탭 진입용
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -61,6 +66,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   final Map<String, TextEditingController> _textControllers = {};
   final Map<String, String?> _selectValues = {};
+  final Map<String, List<String>> _multiSelectValues = {}; // 🆕 [중복선택] 헬스 운동부위/수영 영법/요가 유형용
   final Map<String, int> _counterValues = {};
   final List<_SetRow> _setRows = [];
 
@@ -83,7 +89,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 자동으로 맨 끝까지 스크롤함.
   static const int _stepsHistoryDays = 30;
   final ScrollController _stepsChartScrollController = ScrollController();
+  final ScrollController _durationChartScrollController = ScrollController(); // 🆕 [8번] 걷기의 시간 그래프용 - 걸음수 그래프와 별개 스크롤
   Future<Map<String, int>>? _stepsHistoryFuture; // 🆕 매 rebuild마다 다시 안 불러오게 캐시
+  Future<Map<String, int>>? _durationHistoryFuture; // 🆕 [8번] 모든 종목 공통 - 운동시간(분) 히스토리
 
   // 🆕 [화면 실시간 표시] 뒤에서 돌아가는 매일 자동기록의 "오늘 걸음수"를 화면에
   // 실시간으로 보여주기 위한 구독. 이게 없으면 자동 기록이 실제로 잘 되고 있어도
@@ -101,7 +109,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   @override
   void initState() {
     super.initState();
-    _stepsHistoryFuture = _loadDailyMetricByDate(); // 🆕 [모든 종목 공통] 일별 추이 그래프 데이터는 종목 무관하게 항상 로드
+    // 🆕 [8번] 시간(분) 그래프는 모든 종목 공통으로 항상 로드
+    _durationHistoryFuture = _loadDurationByDate();
+    // 🆕 [걸음수 그래프] 걷기류(steps 필드가 있는 종목)에서만 별도로 로드
+    if (_hasStepsField) _stepsHistoryFuture = _loadStepsByDate();
     // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 불러오기 (없으면 평균값 유지)
     ExerciseProfileService.getWeightKgOrDefault().then((w) {
       if (mounted) setState(() => _bodyWeightKg = w);
@@ -127,6 +138,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         case ExerciseFieldType.select:
           _selectValues[field.key] = null;
           break;
+        case ExerciseFieldType.multiSelect: // 🆕 [중복선택]
+          _multiSelectValues[field.key] = [];
+          break;
         case ExerciseFieldType.counter:
           _counterValues[field.key] = 0;
           break;
@@ -149,6 +163,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           _textControllers[key]!.text = value.toString();
         } else if (_selectValues.containsKey(key)) {
           _selectValues[key] = value as String?;
+        } else if (_multiSelectValues.containsKey(key)) { // 🆕 [중복선택]
+          _multiSelectValues[key] = (value as List).map((e) => e.toString()).toList();
         } else if (_counterValues.containsKey(key)) {
           _counterValues[key] = value as int;
         }
@@ -161,6 +177,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _stepSession?.dispose(); // 🆕 [만보기 연동 1단계] 측정 중이었다면 스트림 구독 해제
     _liveStepsSub?.cancel(); // 🆕 [화면 실시간 표시] 화면을 나가면 구독 해제
     _stepsChartScrollController.dispose(); // 🆕 [일별 걸음수 그래프 - 스크롤]
+    _durationChartScrollController.dispose(); // 🆕 [8번] 시간 그래프 - 스크롤
     _durationController.dispose();
     _avgHrController.dispose();
     _maxHrController.dispose();
@@ -169,6 +186,132 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  // 🆕 [전 종목 세부기록 영문 보완] 필드 라벨을 "English (한글)" 한 줄로 합쳐서
+  // InputDecoration.labelText처럼 단일 문자열만 받는 자리에도 바로 쓸 수 있게 함.
+  // enLabel이 없는(커스텀) 필드는 한글 라벨만 그대로 보여줌(하위호환).
+  // ✅ [2026-09-06 개편] 언어선택 상태(appLanguage)까지 반영하도록 확장.
+  // - 기본(EN/KO) 모드: "English (한글)" 형태 그대로 유지
+  // - 10개국어 중 하나 선택: exercise_i18n.dart의 사전에서 그 언어 번역을 찾아 보여줌
+  //   (사전에 없으면 영문으로, 영문도 없으면 한글 그대로 - 안전하게 단계적으로 대체)
+  // ✅ [2026-09-13 추가 - 고급 디자인] 종목의 필드 목록을 section(구획) 단위로
+  // 묶어서, 구획이 바뀔 때마다 골드색 소제목+구분선을 넣어 "정리된 명세서"
+  // 느낌으로 보여준다. 숫자/카운터처럼 짧은 값 입력 필드는 한 줄에 2개씩
+  // 나란히 배치해서, 항목이 12~16개로 늘어나도 스크롤이 과하게 길어지지
+  // 않게 한다. section이 없는(커스텀) 필드는 예전처럼 구획 없이 한 줄씩 표시.
+  List<Widget> _buildSectionedFields(List<ExerciseField> fields) {
+    final List<Widget> widgets = [];
+    String? currentSection;
+    final List<ExerciseField> pendingShortFields = [];
+
+    void flushShortFields() {
+      if (pendingShortFields.isEmpty) return;
+      for (int i = 0; i < pendingShortFields.length; i += 2) {
+        final ExerciseField first = pendingShortFields[i];
+        final ExerciseField? second = (i + 1 < pendingShortFields.length) ? pendingShortFields[i + 1] : null;
+        widgets.add(Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _buildField(first)),
+            const SizedBox(width: 10),
+            Expanded(child: second != null ? _buildField(second) : const SizedBox.shrink()),
+          ],
+        ));
+      }
+      pendingShortFields.clear();
+    }
+
+    bool isShortField(ExerciseField f) => f.type == ExerciseFieldType.number || f.type == ExerciseFieldType.counter;
+
+    for (final field in fields) {
+      if (field.section != currentSection) {
+        flushShortFields();
+        currentSection = field.section;
+        if (currentSection != null) {
+          widgets.add(_buildSectionHeader(field.sectionEn ?? currentSection!, currentSection!));
+        }
+      }
+      if (isShortField(field)) {
+        pendingShortFields.add(field);
+      } else {
+        flushShortFields();
+        widgets.add(_buildField(field));
+      }
+    }
+    flushShortFields();
+    return widgets;
+  }
+
+  // ✅ [2026-09-13 추가 - 고급 디자인] 골드 세로 악센트 바 + 영문 소문자(스몰캡스
+  // 느낌) + 한글 + 옅어지는 골드 구분선으로 구성된 구획 소제목.
+  Widget _buildSectionHeader(String en, String ko) {
+    // ✅ [2026-09-14 버그 수정] EN+KO를 한 줄(Row)에 같이 넣다 보니, 이름이 긴
+    // 구획("페어웨이 · 그린 · 페널티" 등)에서 화면 밖으로 밀려 오버플로우가
+    // 났다. EN은 위, KO는 아래로 나눠서 각자 한 줄씩 차지하게 하고, 그래도
+    // 넘칠 만큼 길면 말줄임(...)으로 안전하게 자르도록 재구성.
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(width: 3, height: 15, decoration: BoxDecoration(color: ExerciseTheme.brandGolden, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  en.toUpperCase(),
+                  style: GoogleFonts.gowunBatang(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 10.5, letterSpacing: 0.6),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 11, top: 2),
+            child: Text(
+              ko,
+              style: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.w600, fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [ExerciseTheme.brandGolden.withOpacity(0.35), ExerciseTheme.brandGolden.withOpacity(0.0)]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _bilabel(ExerciseField field) {
+    if (field.enLabel == null || field.enLabel!.isEmpty) return field.label;
+    if (appLanguage.isForeignSelected) {
+      final String? translated = kExerciseTermTranslations[field.enLabel]?[appLanguage.current];
+      return translated ?? field.enLabel!;
+    }
+    return '${field.enLabel} (${field.label})';
+  }
+
+  // ✅ [2026-09-06 추가] select/multiSelect 옵션 값(한글, 실제 저장값) 하나를 화면에
+  // 보여줄 때 언어선택 상태에 맞게 변환. 원리는 _bilabel과 동일함.
+  String _optionLabel(ExerciseField field, String value) {
+    if (field.options == null || field.optionEnLabels == null) return value;
+    final int idx = field.options!.indexOf(value);
+    if (idx < 0 || idx >= field.optionEnLabels!.length) return value;
+    final String en = field.optionEnLabels![idx];
+    if (en.isEmpty) return value;
+    if (appLanguage.isForeignSelected) {
+      final String? translated = kExerciseTermTranslations[en]?[appLanguage.current];
+      return translated ?? en;
+    }
+    return '$en ($value)';
   }
 
   InputDecoration _decoration(String label, {String? unit}) => InputDecoration(
@@ -227,20 +370,187 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     if (mounted) setState(() => _dailyAutoEnabled = enabled);
   }
 
+  // ✅ [2026-09-13 추가] 폰/워치 칩을 탭하면 실제 소스 전환 전에 설정 방법
+  // 안내 팝업을 먼저 보여줌. "오늘 그만 보기"를 누른 적이 있으면(오늘 날짜
+  // 기준) 건너뛰고 바로 전환한다.
+  static const String _kHidePopupKeyPrefix = 'gke_step_setup_popup_hide_until_';
+
+  String _todayKeyForPopup() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<bool> _shouldHideSetupPopup(StepSourceType type) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? saved = prefs.getString('$_kHidePopupKeyPrefix${type.name}');
+    return saved == _todayKeyForPopup();
+  }
+
+  Future<void> _onSourceChipTapped(StepSourceType type) async {
+    final bool hide = await _shouldHideSetupPopup(type);
+    if (!hide && mounted) {
+      await _showSetupGuideDialog(type);
+    }
+    await _switchStepSource(type);
+  }
+
+  // ✅ [2026-09-13 추가] 폰/워치별 상세 설정 방법 안내 팝업.
+  Future<void> _showSetupGuideDialog(StepSourceType type) async {
+    final bool isWatch = type == StepSourceType.watch;
+    final String titleEn = isWatch ? 'WATCH SETUP GUIDE' : 'PHONE SETUP GUIDE';
+    final String titleKo = isWatch ? '워치 연동 설정 방법' : '폰 걸음수 설정 방법';
+
+    final String body = isWatch
+        ? '워치 걸음수가 우리 앱까지 오려면 아래 3단계가 전부 되어 있어야 합니다.\n\n'
+        '① 워치 ↔ 삼성헬스\n'
+        '워치의 Galaxy Wearable 앱이 폰과 페어링되어 있고, 삼성헬스 앱에 실제 걸음수가 찍히는지 확인.\n\n'
+        '② Health Connect 설치 + 동기화 켜기\n'
+        '폰에 "Health Connect" 앱 설치(안드로이드 14+는 기본 내장) → 삼성헬스 앱 → 설정 → '
+        '"Health Connect와 연결하기" → 걸음수 항목 토글 켜기.\n\n'
+        '③ 우리 앱 권한 허용\n'
+        '이 화면에서 워치를 처음 선택하면 권한 요청 팝업이 뜨는데 "허용"을 눌러야 함. '
+        '이미 거부했다면 Health Connect 앱 → 연결된 앱 → GKE StudyUp → 걸음수 읽기 권한 켜기.'
+        : '폰 자체 걸음수 센서를 쓰려면 아래가 되어 있어야 합니다.\n\n'
+        '① 신체 활동 권한 허용\n'
+        '안드로이드 10 이상은 "신체 활동(걸음 수)" 권한을 허용해야 걸음수 센서를 읽을 수 있습니다. '
+        '처음 폰을 선택하면 권한 팝업이 뜨는데 "허용"을 눌러주세요.\n\n'
+        '② 이미 거부했다면\n'
+        '설정 → 앱 → GKE StudyUp → 권한 → 신체 활동 → 허용으로 변경.\n\n'
+        '③ 측정 중엔 폰을 몸에 지니고 있기\n'
+        '주머니나 손에 들고 걸어야 센서가 걸음을 인식합니다.';
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: LuxuryDialogFrame(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  luxuryDialogHeader(
+                    icon: isWatch ? Icons.watch_rounded : Icons.smartphone_rounded,
+                    en: titleEn,
+                    ko: titleKo,
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(color: ExerciseTheme.pageBg, borderRadius: BorderRadius.circular(10)),
+                    child: Text(
+                      body,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.6),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setString('$_kHidePopupKeyPrefix${type.name}', _todayKeyForPopup());
+                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white24),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('오늘 그만 보기', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ExerciseTheme.brandGolden,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('닫기', style: TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // 🆕 [2단계] 측정 소스를 폰 센서 ↔ 워치(Health Connect/HealthKit)로 전환.
   // 측정 중이었다면 먼저 멈추고, 새 소스로 다시 시작해야 하므로 진행 중인
   // 세션은 초기화됨(사용자에게 안내).
   Future<void> _switchStepSource(StepSourceType type) async {
-    if (ExerciseStepService.activeSourceType == type) return;
-    if (_isStepTracking) {
-      _stepSession?.stop();
-      setState(() {
-        _isStepTracking = false;
-        _autoSteps = 0;
-      });
+    // ✅ [2026-09-13 버그 수정] 예전엔 이미 선택된 소스를 다시 탭하면 여기서
+    // 바로 return 해버려서, 권한을 거부했거나 안 뜬 경우 "다시 눌러서
+    // 재요청"할 방법이 전혀 없었다. 이제 같은 소스를 다시 탭해도 아래
+    // isAvailable() 재확인(권한 재요청 포함)까지는 항상 실행한다.
+    final bool sameSourceAsBefore = ExerciseStepService.activeSourceType == type;
+
+    if (!sameSourceAsBefore) {
+      if (_isStepTracking) {
+        _stepSession?.stop();
+        setState(() {
+          _isStepTracking = false;
+          _autoSteps = 0;
+        });
+      }
+      await ExerciseStepService.setPreferredSource(type);
     }
-    await ExerciseStepService.setPreferredSource(type);
     setState(() => _stepUnavailable = false);
+
+    // ✅ [2026-09-13 추가] 권한 팝업이 실제로 뜨는 지점. 여기서 워치라면
+    // Health Connect 권한을, 폰이라면 신체활동 권한을 다시 요청한다.
+    final bool available = await ExerciseStepService.activeSource.isAvailable();
+    if (!available) {
+      setState(() => _stepUnavailable = true);
+      if (mounted) {
+        // ✅ [2026-09-14 추가] "영구 거부" 상태면 시스템 권한 팝업이 다시는
+        // 안 뜨므로(Android 정책), 설명 스낵바 대신 "설정으로 이동" 버튼이
+        // 있는 팝업을 보여줘서 사용자가 직접 켤 수 있게 안내한다.
+        final bool permanentlyDenied = type == StepSourceType.phone && await PhonePedometerSource.isPermanentlyDenied();
+        if (permanentlyDenied && mounted) {
+          final bool? goSettings = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              backgroundColor: ExerciseTheme.containerBg,
+              title: const Text('권한이 꺼져 있습니다', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              content: const Text(
+                '예전에 신체 활동 권한을 거부하신 적이 있어서, 이제는 앱에서 다시 물어보지 못합니다.\n\n설정 화면에서 직접 "신체 활동" 권한을 켜주세요.',
+                style: TextStyle(color: Colors.white70, height: 1.5),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소', style: TextStyle(color: Colors.white54))),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('설정 열기', style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+          if (goSettings == true) await openAppSettings();
+        } else {
+          ExerciseTheme.showLuxeSnackBar(
+            context,
+            type == StepSourceType.watch
+                ? '워치 연결 권한이 아직 허용되지 않았습니다. 위 안내를 다시 확인해주세요.'
+                : '걸음수 센서 권한이 아직 허용되지 않았습니다. 위 안내를 다시 확인해주세요.',
+          );
+        }
+      }
+      return;
+    }
 
     // 🆕 [사용성 개선 2026-09-06] 일반 사용자는 "소스 선택"과 "자동기록 켜기"를
     // 따로 하기 어려워한다는 피드백을 반영. 이제 폰/워치를 고르는 즉시 매일
@@ -354,6 +664,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           final v = _selectValues[field.key];
           if (v != null) detail[field.key] = v;
           break;
+        case ExerciseFieldType.multiSelect: // 🆕 [중복선택] 선택된 항목들을 리스트로 저장
+          final list = _multiSelectValues[field.key];
+          if (list != null && list.isNotEmpty) detail[field.key] = list;
+          break;
         case ExerciseFieldType.counter:
           detail[field.key] = _counterValues[field.key] ?? 0;
           break;
@@ -464,6 +778,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               .toList();
           detail['volumeLoad'] = calcVolumeLoad(sets);
           detail['estimated1rm'] = calcEstimated1Rm(sets);
+          detail['totalSets'] = sets.length; // ✅ [2026-09-14 추가] 빠져있던 계산 - 세트 개수 자동 집계
         }
         break;
     }
@@ -478,7 +793,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     final bool isSelected = ExerciseStepService.activeSourceType == type;
     return InkWell(
       borderRadius: BorderRadius.circular(10),
-      onTap: () => _switchStepSource(type),
+      onTap: () => _onSourceChipTapped(type),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
@@ -568,20 +883,31 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _isStepTracking
-                      ? '측정 중... $_autoSteps 보'
-                      : (_autoSteps > 0 ? '측정 완료: $_autoSteps 보' : '아직 측정 전'),
-                  style: TextStyle(
+                // ✅ [오버플로우 안전화] 좁은 화면에서 걸음수가 커지면(예: "10000 보")
+                // 버튼과 겹치지 않도록 남는 공간만 쓰고 넘치면 줄바꿈되게 함.
+                Expanded(
+                  child: BiInline(
+                    en: _isStepTracking
+                        ? 'Tracking... $_autoSteps steps'
+                        : (_autoSteps > 0 ? 'Done: $_autoSteps steps' : 'Not started yet'),
+                    ko: _isStepTracking
+                        ? '측정 중... $_autoSteps 보'
+                        : (_autoSteps > 0 ? '측정 완료: $_autoSteps 보' : '아직 측정 전'),
                     color: _isStepTracking ? ExerciseTheme.brandGolden : Colors.white70,
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
+                    fontSize: 14,
                   ),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: _toggleStepTracking,
                   icon: Icon(_isStepTracking ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
-                  label: Text(_isStepTracking ? '측정 종료' : '측정 시작'),
+                  label: ExerciseTheme.biButtonLabel(
+                    _isStepTracking ? 'Stop' : 'Start',
+                    _isStepTracking ? '측정 종료' : '측정 시작',
+                    color: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
+                    size: 12.5,
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isStepTracking ? ExerciseTheme.dangerRed : ExerciseTheme.brandGolden,
                     foregroundColor: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
@@ -638,16 +964,30 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: ExerciseTheme.brandGolden.withOpacity(0.35)),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // ✅ [오버플로우 수정 2026-09-06] 예전엔 Row+spaceBetween 한 줄에
+                // 라벨과 값을 같이 넣어서 값이 길어지면 오른쪽이 화면 밖으로
+                // 잘렸다(오버플로우). 라벨은 위, 값은 아래로 세로 배치하고,
+                // 값 부분은 길어질 걸 대비해 좌우로 스크롤되게 만들었다.
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('오늘 자동 기록', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5)),
-                    Text(
-                      _liveAutoSteps == null
-                          ? '불러오는 중...'
-                      // 🆕 [칼로리 추가] 걸음수 기준 추정 칼로리도 거리와 함께 표시
-                          : '$_liveAutoSteps 보 · ${_formatAutoDistance(_liveAutoSteps!)} · ${_estimateCaloriesForSteps(_liveAutoSteps!).round()}kcal',
-                      style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+                    BiInline(
+                      en: "Today's Auto Record",
+                      ko: '오늘 자동 기록',
+                      color: Colors.white70,
+                      fontSize: 10.5,
+                    ),
+                    const SizedBox(height: 4),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Text(
+                        _liveAutoSteps == null
+                            ? 'Loading... / 불러오는 중...'
+                        // 🆕 [칼로리 추가] 걸음수 기준 추정 칼로리도 거리와 함께 표시
+                            : '$_liveAutoSteps steps 보 · ${_formatAutoDistance(_liveAutoSteps!)} · ${_estimateCaloriesForSteps(_liveAutoSteps!).round()}kcal',
+                        style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 14), // 🆕 12 -> 14로 살짝 키움
+                        maxLines: 1,
+                      ),
                     ),
                   ],
                 ),
@@ -674,44 +1014,88 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     return '${km.toStringAsFixed(2)}km';
   }
 
-  // 🆕 [모든 종목 공통] 걷기는 '걸음수'를, 그 외 종목은 '운동시간(분)'을
-  // 날짜별로 합산해서 조회. 자동기록(걷기)과 수동기록 전부 포함.
-  Future<Map<String, int>> _loadDailyMetricByDate() async {
+  // 🆕 [걸음수 그래프 전용] 걷기류(steps 필드가 있는 종목)의 날짜별 걸음수 합계
+  Future<Map<String, int>> _loadStepsByDate() async {
     final all = await ExerciseDataService.instance.getAllRecords();
     final Map<String, int> byDate = {};
     for (final r in all) {
       if (r.exerciseTypeId != widget.exerciseType.id) continue;
-      int? value;
-      if (_hasStepsField) {
-        final dynamic stepsRaw = r.detail['steps'];
-        if (stepsRaw is int) value = stepsRaw;
-      } else {
-        value = r.durationMin;
-      }
-      if (value == null) continue;
+      final dynamic stepsRaw = r.detail['steps'];
+      if (stepsRaw is! int) continue;
       final key = _localDateKey(r.date);
-      byDate[key] = (byDate[key] ?? 0) + value;
+      byDate[key] = (byDate[key] ?? 0) + stepsRaw;
+    }
+    return byDate;
+  }
+
+  // 🆕 [8번 - 시간 그래프] 모든 종목 공통으로 날짜별 운동시간(분) 합계.
+  // 걷기 포함 전 종목에서 항상 사용됨(걷기는 걸음수 그래프에 추가로 보여줌).
+  Future<Map<String, int>> _loadDurationByDate() async {
+    final all = await ExerciseDataService.instance.getAllRecords();
+    final Map<String, int> byDate = {};
+    for (final r in all) {
+      if (r.exerciseTypeId != widget.exerciseType.id) continue;
+      final key = _localDateKey(r.date);
+      byDate[key] = (byDate[key] ?? 0) + r.durationMin;
     }
     return byDate;
   }
 
   String _localDateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  // 🆕 [운동시간용 눈금 간격] 걸음수(500 고정)와 달리, 종목마다 운동시간
-  // 범위가 천차만별이라 최댓값에 맞춰 보기 좋은 간격(10/20/30/60분)을 고름.
-  int _niceMinuteInterval(int maxVal) {
-    if (maxVal <= 60) return 10;
-    if (maxVal <= 120) return 20;
-    if (maxVal <= 300) return 30;
-    return 60;
+  // ✅ [정렬 핵심] 그래프 영역(막대가 그려지는 부분)의 높이. 카드 전체 높이(240)에서
+  // X축 날짜 라벨 높이(28)를 뺀 값. 이 숫자를 Y축 눈금 위치 계산과 BarChart의
+  // bottomTitles reservedSize 양쪽에 동일하게 써서 절대 어긋나지 않게 한다.
+  static const double _chartPlotHeight = 212;
+
+  // 🆕 [Y축 고정] base~top 사이를 interval 간격으로 나눈 눈금들이 그래프 영역
+  // 안에서 위에서부터 몇 px 떨어진 위치에 와야 하는지 직접 계산.
+  List<_YAxisTick> _buildYAxisTickPositions(double base, double top, double interval) {
+    final List<_YAxisTick> ticks = [];
+    double v = base;
+    while (v <= top + 0.01) {
+      final double fraction = (top - v) / (top - base); // top일 때 0(맨 위), base일 때 1(맨 아래)
+      ticks.add(_YAxisTick(value: v, offsetFromTop: fraction * _chartPlotHeight));
+      v += interval;
+    }
+    return ticks;
   }
 
-  // 🆕 [모든 종목 공통] 걷기는 X축=일자·Y축=걸음수(500보 간격, 2500보 넘으면
-  // 원점이 1000보로 올라가는 절단 규칙 적용), 그 외 종목은 X축=일자·Y축=
-  // 운동시간(분)으로 동일한 스타일(무지개색·30일 스크롤·칼로리 라벨)을 재사용.
-  Widget _buildDailyTrendChart() {
+  // ✅ [6·7·8번 - 종목별 시간축 설정] 종목마다 한 세션에 걸리는 시간이 전혀
+  // 달라서(골프 4시간 안팎, 수영/러닝 40분 안팎, 구기 2시간 이상, 등산 5시간
+  // 이상), 각 종목에 맞는 눈금 간격(interval)과 "이 값을 넘으면 원점이
+  // 밀려 올라가며 절단 표시가 뜨는" 기준값(defaultTop)을 따로 둔다.
+  // 걸음수(500/1000/2500 규칙)와 완전히 같은 원리이며, 원점은 항상 0에서
+  // 시작하다가 defaultTop을 넘는 순간에만 한 칸(interval) 밀려 올라간다.
+  _DurationAxisConfig _durationAxisConfigFor(String typeId) {
+    const Map<String, _DurationAxisConfig> configs = {
+      'golf': _DurationAxisConfig(interval: 50, defaultTop: 200), // 한 라운드 약 4시간
+      'swimming': _DurationAxisConfig(interval: 10, defaultTop: 40),
+      'running': _DurationAxisConfig(interval: 10, defaultTop: 40),
+      'walking': _DurationAxisConfig(interval: 20, defaultTop: 80), // 🆕 [8번] 걷기 시간그래프용
+      'gym': _DurationAxisConfig(interval: 15, defaultTop: 90),
+      'pilates': _DurationAxisConfig(interval: 15, defaultTop: 90),
+      'yoga': _DurationAxisConfig(interval: 15, defaultTop: 90),
+      'hiking': _DurationAxisConfig(interval: 60, defaultTop: 300), // 5시간 이상 소요
+      'cycling': _DurationAxisConfig(interval: 30, defaultTop: 120),
+      'tennis': _DurationAxisConfig(interval: 30, defaultTop: 120),
+      'badminton': _DurationAxisConfig(interval: 20, defaultTop: 90),
+      'tabletennis': _DurationAxisConfig(interval: 20, defaultTop: 90),
+      'basketball': _DurationAxisConfig(interval: 30, defaultTop: 120), // 2시간 이상 소요
+      'soccer': _DurationAxisConfig(interval: 30, defaultTop: 120), // 2시간 이상 소요
+      'skiing': _DurationAxisConfig(interval: 30, defaultTop: 180),
+      'etc': _DurationAxisConfig(interval: 20, defaultTop: 100),
+    };
+    return configs[typeId] ?? const _DurationAxisConfig(interval: 20, defaultTop: 100);
+  }
+
+  // 🆕 [파라미터화] isSteps:true면 걸음수 그래프(걷기 전용), false면 운동시간
+  // 그래프(모든 종목 공통, 걷기 포함). 같은 화면 안에 두 그래프가 동시에
+  // 있을 수 있어(걷기의 경우) 서로 다른 Future/ScrollController를 쓴다.
+  Widget _buildDailyTrendChart({required bool isSteps}) {
+    final ScrollController scrollController = isSteps ? _stepsChartScrollController : _durationChartScrollController;
     return FutureBuilder<Map<String, int>>(
-      future: _stepsHistoryFuture,
+      future: isSteps ? _stepsHistoryFuture : _durationHistoryFuture,
       builder: (context, snapshot) {
         final Map<String, int> byDate = snapshot.data ?? {};
         final DateTime today = DateTime.now();
@@ -724,15 +1108,16 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         final List<int> values = days.map((d) => byDate[_localDateKey(d)] ?? 0).toList();
         final int maxVal = values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b);
 
-        // 🆕 [축 규칙 - 종목별 분기]
-        // 걷기(걸음수): 기본 원점 500, 2500보 넘으면 원점이 1000으로 올라가며 절단 표시.
-        // 그 외(운동시간 분): 원점 0, 최댓값에 맞는 보기 좋은 간격 자동 계산, 절단 없음.
-        final bool isSteps = _hasStepsField;
-        final bool isBroken = isSteps && maxVal > 2500;
-        final double interval = isSteps ? 500 : _niceMinuteInterval(maxVal).toDouble();
-        final double base = isSteps ? (isBroken ? 1000 : 500) : 0;
+        // ✅ [축 규칙 - 종목별 분기]
+        // 걸음수: 기본 원점 500, 2500보 넘으면 원점이 1000으로 올라가며 절단 표시.
+        // 운동시간: 기본 원점 0, 종목별 defaultTop을 넘으면 원점이 한 칸(interval)
+        // 밀려 올라가며 절단 표시(6·7·8번 요청).
+        final _DurationAxisConfig durationConfig = _durationAxisConfigFor(widget.exerciseType.id);
+        final bool isBroken = isSteps ? maxVal > 2500 : maxVal > durationConfig.defaultTop;
+        final double interval = isSteps ? 500 : durationConfig.interval;
+        final double base = isSteps ? (isBroken ? 1000 : 500) : (isBroken ? durationConfig.interval : 0);
         double top = base;
-        final double minTop = isSteps ? 2500 : (interval * 4);
+        final double minTop = isSteps ? 2500 : durationConfig.defaultTop;
         while (top < minTop || top < maxVal + interval) {
           top += interval;
         }
@@ -742,8 +1127,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
         // 🆕 처음 열었을 때 오늘(맨 오른쪽)이 보이도록 자동 스크롤
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_stepsChartScrollController.hasClients) {
-            _stepsChartScrollController.jumpTo(_stepsChartScrollController.position.maxScrollExtent);
+          if (scrollController.hasClients) {
+            scrollController.jumpTo(scrollController.position.maxScrollExtent);
           }
         });
 
@@ -775,65 +1160,53 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               else
                 SizedBox(
                   height: 240,
-                  // 🆕 [Y축 고정] Row로 "고정된 Y축 패널"과 "스크롤되는 날짜+막대 패널"을
-                  // 나란히 배치. Y축 눈금(왼쪽)은 화면에 항상 고정되어 있고, 오른쪽의
-                  // 날짜+막대만 좌우로 스크롤된다.
+                  // ✅ [정렬 유지] Y축 전용 BarChart를 따로 그리는 대신, 그래프
+                  // 영역 높이를 직접 계산해서(_chartPlotHeight) 텍스트를 정확한
+                  // 위치에 그린다. 그래프(BarChart)도 top/bottom 예약폭을 똑같은
+                  // 숫자로 명시해서 두 계산이 절대 어긋날 수 없게 만들었다.
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 🆕 [고정 Y축 패널] 실제 막대는 없고 눈금(라벨)만 그리는 전용 차트.
-                      // 오른쪽 스크롤 차트와 높이/여백(reservedSize)을 똑같이 맞춰서
-                      // 눈금 위치가 정확히 일치하도록 함.
+                      // 🆕 [고정 Y축 패널 - 직접 계산] plotHeight(212) 구간에
+                      // 눈금 값 위치를 비율로 직접 계산해서 배치.
                       SizedBox(
                         width: 52,
                         height: 240,
-                        child: BarChart(
-                          BarChartData(
-                            minY: base,
-                            maxY: top,
-                            alignment: BarChartAlignment.spaceAround,
-                            gridData: const FlGridData(show: false),
-                            borderData: FlBorderData(
-                              show: true,
-                              border: Border(
-                                left: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.5), width: 1.4),
-                                bottom: BorderSide.none,
-                                top: BorderSide.none,
-                                right: BorderSide.none,
-                              ),
-                            ),
-                            titlesData: FlTitlesData(
-                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              // 🆕 [X축 자리는 숨기되 높이는 오른쪽과 똑같이 맞춤]
-                              bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 28)),
-                              leftTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 48,
-                                  interval: interval,
-                                  getTitlesWidget: (value, meta) {
-                                    if (value < base - 0.5) return const SizedBox.shrink();
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 4),
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: _chartPlotHeight,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Positioned(
+                                    right: 0,
+                                    top: 0,
+                                    bottom: 0,
+                                    child: Container(width: 1.4, color: ExerciseTheme.brandGolden.withOpacity(0.5)),
+                                  ),
+                                  ..._buildYAxisTickPositions(base, top, interval).map((tick) {
+                                    return Positioned(
+                                      top: tick.offsetFromTop - 7,
+                                      right: 6,
                                       child: Text(
-                                        '${value.toInt()} •',
+                                        '${tick.value.toInt()} •',
                                         style: const TextStyle(color: Colors.white54, fontSize: 10),
                                         textAlign: TextAlign.right,
                                       ),
                                     );
-                                  },
-                                ),
+                                  }),
+                                ],
                               ),
                             ),
-                            barGroups: const [], // 🆕 눈금만 그리는 패널이라 막대 없음
-                          ),
+                            const SizedBox(height: 28), // 🆕 스크롤 패널의 날짜 라벨 높이(bottomTitles)와 동일하게 맞춤
+                          ],
                         ),
                       ),
                       // 🆕 [스크롤 패널] 날짜(X축 라벨)와 막대가 여기서 함께 좌우로 스크롤됨
                       Expanded(
                         child: SingleChildScrollView(
-                          controller: _stepsChartScrollController,
+                          controller: scrollController,
                           scrollDirection: Axis.horizontal,
                           child: SizedBox(
                             width: days.length * perDaySlotWidth,
@@ -884,11 +1257,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                                       ),
                                     ),
                                     titlesData: FlTitlesData(
-                                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                      // 🆕 [Y축 라벨은 여기서 숨김] 왼쪽 고정 패널이 이미 그리고 있음
+                                      // ✅ [정렬 핵심] top/left 예약폭을 0으로 명시해서 실제
+                                      // 그래프 영역 높이가 정확히 _chartPlotHeight(212)가 되도록 함
+                                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 0)),
+                                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 0)),
                                       leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false, reservedSize: 0)),
-                                      // 🆕 [X축: 일자(날짜)] 막대와 함께 스크롤됨
+                                      // 🆕 [X축: 일자(날짜)] 막대와 함께 스크롤됨. 높이(28)는
+                                      // 왼쪽 고정 패널의 하단 여백과 반드시 같아야 함.
                                       bottomTitles: AxisTitles(
                                         sideTitles: SideTitles(
                                           showTitles: true,
@@ -929,8 +1304,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                                     }),
                                   ),
                                 ),
-                                // 🆕 [가위질(절단) 표시] 걸음수 원점이 500->1000으로 올라간
-                                // 경우에만 표시. 운동시간 차트는 0부터 시작하므로 표시 안 함.
+                                // 🆕 [가위질(절단) 표시] 원점이 밀려 올라간 경우에만 표시
                                 if (isBroken)
                                   Positioned(
                                     left: 4,
@@ -982,7 +1356,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             controller: _textControllers[field.key],
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(color: Colors.white),
-            decoration: _decoration(field.label, unit: field.unit),
+            decoration: _decoration(_bilabel(field), unit: field.unit),
           ),
         );
       case ExerciseFieldType.text:
@@ -991,7 +1365,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           child: TextField(
             controller: _textControllers[field.key],
             style: const TextStyle(color: Colors.white),
-            decoration: _decoration(field.label),
+            decoration: _decoration(_bilabel(field)),
           ),
         );
       case ExerciseFieldType.select:
@@ -1001,39 +1375,92 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             initialValue: _selectValues[field.key],
             dropdownColor: ExerciseTheme.containerBgElevated,
             style: const TextStyle(color: Colors.white),
-            decoration: _decoration(field.label),
+            decoration: _decoration(_bilabel(field)),
             items: (field.options ?? [])
-                .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                .map((o) => DropdownMenuItem(value: o, child: Text(_optionLabel(field, o))))
                 .toList(),
             onChanged: (v) => setState(() => _selectValues[field.key] = v),
           ),
         );
+      case ExerciseFieldType.multiSelect: // 🆕 [중복선택] 칩을 여러 개 동시에 켤 수 있는 UI
+        final List<String> selected = _multiSelectValues[field.key] ?? [];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_bilabel(field), style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: (field.options ?? []).map((option) {
+                  final bool isSelected = selected.contains(option);
+                  return FilterChip(
+                    label: Text(_optionLabel(field, option)),
+                    selected: isSelected,
+                    backgroundColor: ExerciseTheme.pageBg,
+                    selectedColor: ExerciseTheme.brandGolden.withOpacity(0.25),
+                    checkmarkColor: ExerciseTheme.brandGolden,
+                    labelStyle: TextStyle(color: isSelected ? ExerciseTheme.brandGolden : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                    side: BorderSide(color: isSelected ? ExerciseTheme.brandGolden : Colors.white24),
+                    onSelected: (v) => setState(() {
+                      final list = _multiSelectValues[field.key] ?? [];
+                      if (v) {
+                        if (!list.contains(option)) list.add(option);
+                      } else {
+                        list.remove(option);
+                      }
+                      _multiSelectValues[field.key] = list;
+                    }),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
       case ExerciseFieldType.counter:
+      // ✅ [2026-09-13 버그 수정] 숫자 카운터를 한 줄에 2개씩 절반 폭으로
+      // 배치하게 되면서, 라벨이 길 때 줄바꿈 없이 그대로 밀려나 +/- 버튼이
+      // 화면 밖으로 밀려서 눌러도 안 눌리는(오버플로우) 문제가 있었다.
+      // 라벨은 위에 2줄까지 줄바꿈되게 하고, +/- 버튼은 훨씬 작고 컴팩트한
+      // 원형 버튼으로 바꿔서 절반 폭 안에서도 절대 넘치지 않게 했다.
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Container(
             decoration: ExerciseTheme.luxeCardDecoration(),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(field.label, style: ExerciseTheme.bodyStyle(color: Colors.white, size: 14)),
+                Text(
+                  _bilabel(field),
+                  style: ExerciseTheme.bodyStyle(color: Colors.white, size: 12.5),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, color: ExerciseTheme.brandGolden),
-                      onPressed: () => setState(() {
+                    _compactCounterButton(
+                      Icons.remove_rounded,
+                          () => setState(() {
                         _counterValues[field.key] = (_counterValues[field.key] ?? 0) - 1;
                         if (_counterValues[field.key]! < 0) _counterValues[field.key] = 0;
                       }),
                     ),
-                    Text(
-                      '${_counterValues[field.key] ?? 0}',
-                      style: ExerciseTheme.titleStyle(size: 16),
+                    SizedBox(
+                      width: 34,
+                      child: Text(
+                        '${_counterValues[field.key] ?? 0}',
+                        textAlign: TextAlign.center,
+                        style: ExerciseTheme.titleStyle(size: 16),
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline, color: ExerciseTheme.brandGolden),
-                      onPressed: () => setState(() {
+                    _compactCounterButton(
+                      Icons.add_rounded,
+                          () => setState(() {
                         _counterValues[field.key] = (_counterValues[field.key] ?? 0) + 1;
                       }),
                     ),
@@ -1048,6 +1475,22 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     }
   }
 
+  // ✅ [2026-09-13 추가] 절반 폭 안에서도 절대 넘치지 않는 작은 원형 +/- 버튼.
+  // 표준 IconButton(최소 48x48)보다 훨씬 작아서(30x30) 2단 배치에 안전함.
+  Widget _compactCounterButton(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: ExerciseTheme.brandGolden.withOpacity(0.12), shape: BoxShape.circle),
+        child: Icon(icon, color: ExerciseTheme.brandGolden, size: 18),
+      ),
+    );
+  }
+
   Widget _buildMultiSetField(ExerciseField field) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1056,7 +1499,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(field.label, style: ExerciseTheme.titleStyle(size: 14)),
+          Text(_bilabel(field), style: ExerciseTheme.titleStyle(size: 14)),
           const SizedBox(height: 10),
           ..._setRows.asMap().entries.map((entry) {
             final i = entry.key;
@@ -1097,6 +1540,59 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             label: ExerciseTheme.biButtonLabel('Add Set', '세트 추가', color: ExerciseTheme.brandGolden, size: 12.5),
           ),
         ],
+      ),
+    );
+  }
+
+  // ✅ [2026-09-13 추가] 화면 맨 아래 "운동입력(현재)/운동분석" 고정 탭.
+  // "운동입력"은 지금 이 화면 자체라 탭 이동 없이 눌러도 그대로 있고,
+  // "운동분석"만 실제로 상세분석 화면으로 넘어감.
+  Widget _buildBottomTabBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: ExerciseTheme.containerBg,
+        border: Border(top: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.2))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildBottomTab(icon: Icons.edit_note_rounded, en: 'INPUT', ko: '운동입력', active: true, onTap: null),
+            ),
+            Container(width: 1, height: 36, color: Colors.white12),
+            Expanded(
+              child: _buildBottomTab(
+                icon: Icons.insights_rounded,
+                en: 'ANALYSIS',
+                ko: '운동분석',
+                active: false,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseTypeAnalysisScreen(type: widget.exerciseType))),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomTab({required IconData icon, required String en, required String ko, required bool active, VoidCallback? onTap}) {
+    final Color color = active ? ExerciseTheme.brandGolden : Colors.white54;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 3),
+            Text(
+              appLanguage.isDefault ? ko : en,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1201,7 +1697,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '자각 운동강도 (RPE $_rpe · ${kRpeLabels[_rpe] ?? ''})',
+                      // ✅ [2026-09-06 개편] 10개국어 선택 시 사전에서 해당 언어로 표시
+                      appLanguage.isForeignSelected
+                          ? '자각 운동강도 (RPE $_rpe · ${kExerciseTermTranslations[kRpeLabelsEn[_rpe]]?[appLanguage.current] ?? kRpeLabelsEn[_rpe] ?? ''})'
+                          : '자각 운동강도 (RPE $_rpe · ${kRpeLabelsEn[_rpe] ?? ''} / ${kRpeLabels[_rpe] ?? ''})',
                       style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ],
@@ -1269,12 +1768,18 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             const SizedBox(height: 12),
           ],
 
-          ...type.fields.map(_buildField),
+          ..._buildSectionedFields(type.fields),
 
-          // 🆕 [모든 종목 공통] 걷기의 일별 걸음수 그래프와 같은 형태로,
-          // 걷기가 아닌 종목은 '일별 운동시간(분)' 추이를 대신 보여줌.
+          // 🆕 [모든 종목 공통] 걷기는 '걸음수' 그래프에 더해 '운동시간' 그래프도
+          // 골프와 동일한 스타일로 함께 보여줌(8번 요청). 그 외 종목은 운동시간
+          // 그래프만 보여줌 - 종목별로 세션 길이가 다르므로(골프 200분, 수영/
+          // 러닝 40분, 구기 120분, 등산 300분 등) 눈금/절단 기준을 종목마다 다르게 함.
           const SizedBox(height: 12),
-          _buildDailyTrendChart(),
+          if (_hasStepsField) ...[
+            _buildDailyTrendChart(isSteps: true),
+            const SizedBox(height: 12),
+          ],
+          _buildDailyTrendChart(isSteps: false),
 
           const SizedBox(height: 12),
           BiInline(en: 'MEMO', ko: '메모', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
@@ -1303,6 +1808,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           const SizedBox(height: 12),
         ],
       ),
+      // ✅ [2026-09-13 추가] 골프 화면 자체 맨 아래에도 "운동입력(현재 화면)/
+      // 운동분석" 두 탭을 고정으로 넣어서, 종목 목록으로 안 나가고도 바로
+      // 분석 화면으로 넘어갈 수 있게 함.
+      bottomNavigationBar: _buildBottomTabBar(),
     );
   }
 }
@@ -1331,4 +1840,18 @@ class _AxisBreakPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AxisBreakPainter oldDelegate) => oldDelegate.color != color;
+}
+
+// 🆕 [Y축 고정] Y축 눈금 하나(값 + 화면상 위치)를 담는 작은 데이터 클래스.
+class _YAxisTick {
+  final double value;
+  final double offsetFromTop;
+  _YAxisTick({required this.value, required this.offsetFromTop});
+}
+
+// ✅ [6·7·8번] 종목별 운동시간 Y축 설정(눈금 간격 + 절단 기준값)을 담는 작은 데이터 클래스.
+class _DurationAxisConfig {
+  final double interval;
+  final double defaultTop;
+  const _DurationAxisConfig({required this.interval, required this.defaultTop});
 }

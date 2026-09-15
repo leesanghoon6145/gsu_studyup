@@ -87,14 +87,14 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
     return Scaffold(
       backgroundColor: ExerciseTheme.pageBg,
       appBar: ExerciseTheme.biAppBar(
-        en: 'EXERCISE ANALYSIS',
-        ko: '운동 분석',
-        enSize: 17,
+        en: 'DAILY OVERALL ANALYSIS',
+        ko: '운동종합분석',
+        enSize: 16,
         koSize: 17,
         translations: const {
-          'JA': '運動分析', 'ZH': '运动分析', 'FR': 'Analyse des exercices', 'DE': 'Sportanalyse',
-          'RU': 'Анализ упражнений', 'AR': 'تحليل التمارين', 'HI': 'व्यायाम विश्लेषण',
-          'VI': 'Phân tích tập luyện', 'ES': 'Análisis de ejercicio', 'TH': 'วิเคราะห์การออกกำลังกาย',
+          'JA': '運動総合分析', 'ZH': '运动综合分析', 'FR': 'Analyse globale', 'DE': 'Gesamtanalyse',
+          'RU': 'Общий анализ', 'AR': 'التحليل الشامل', 'HI': 'समग्र विश्लेषण',
+          'VI': 'Phân tích tổng hợp', 'ES': 'Análisis general', 'TH': 'การวิเคราะห์ภาพรวม',
         },
       ),
       body: _loading
@@ -111,6 +111,13 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ✅ [2026-09-13 추가] "운동종합분석"이라는 이름에 맞게, 그날
+          // 한 모든 종목을 한 군데 모아 종합적으로 보여주는 섹션을
+          // 맨 위에 배치. 아래 주간 추이/랭킹은 보조 정보로 유지.
+          _buildSectionTitle('TODAY - ALL TYPES', '오늘 종합 기록'),
+          const SizedBox(height: 12),
+          _buildTodaySummarySection(),
+          const SizedBox(height: 24),
           _buildSummaryRow(),
           const SizedBox(height: 20),
           _buildSectionTitle('LAST 7 DAYS', '최근 7일 운동시간'),
@@ -134,6 +141,71 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
     );
   }
 
+  // ✅ [2026-09-13 추가] 오늘 날짜에 기록된 모든 종목을 종류별로 합쳐서
+  // (같은 종목을 여러 번 했으면 시간 합산) 카드 목록으로 보여줌. "그날 운동한
+  // 것을 모두 종합분석"한다는 화면 취지에 맞는 핵심 섹션.
+  Widget _buildTodaySummarySection() {
+    final DateTime today = DateTime.now();
+    final String todayKey = _dateKey(today);
+    final List<ExerciseRecord> todayRecords = _records.where((r) => _dateKey(r.date) == todayKey).toList();
+
+    if (todayRecords.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+        child: BiInline(
+          en: 'No exercise recorded today yet',
+          ko: '오늘 아직 기록된 운동이 없습니다',
+          color: Colors.white38,
+          fontSize: 12.5,
+        ),
+      );
+    }
+
+    // 🆕 종목별로 묶어서 시간/세션 수 합산
+    final Map<String, int> minutesByType = {};
+    final Map<String, int> sessionsByType = {};
+    for (final r in todayRecords) {
+      minutesByType[r.exerciseTypeId] = (minutesByType[r.exerciseTypeId] ?? 0) + r.durationMin;
+      sessionsByType[r.exerciseTypeId] = (sessionsByType[r.exerciseTypeId] ?? 0) + 1;
+    }
+    final List<String> typeIds = minutesByType.keys.toList()..sort((a, b) => minutesByType[b]!.compareTo(minutesByType[a]!));
+
+    return Column(
+      children: typeIds.asMap().entries.map((entry) {
+        final int i = entry.key;
+        final String typeId = entry.value;
+        final ExerciseType? type = _typesById[typeId];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: ExerciseTheme.containerBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border(left: BorderSide(color: _rankColorAt(i), width: 4)),
+          ),
+          child: Row(
+            children: [
+              Text(type?.icon ?? '🏃', style: const TextStyle(fontSize: 20)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  type?.name ?? typeId,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+              Text(
+                '${minutesByType[typeId]}분 · ${sessionsByType[typeId]}회',
+                style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildSectionTitle(String en, String ko) {
     return BiInline(en: en, ko: ko, color: ExerciseTheme.goldenLight, fontWeight: FontWeight.bold, fontSize: 14.5);
   }
@@ -144,30 +216,37 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
     final rpeValues = _records.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
     final avgRpe = rpeValues.isEmpty ? 0.0 : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
 
-    return Row(
-      children: [
-        Expanded(child: _summaryCard('SESSIONS', '세션', '$totalSessions')),
-        const SizedBox(width: 10),
-        Expanded(child: _summaryCard('MINUTES', '총 시간(분)', '$totalMinutes')),
-        const SizedBox(width: 10),
-        Expanded(child: _summaryCard('AVG RPE', '평균 강도', avgRpe.toStringAsFixed(1))),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        children: [
+          Expanded(child: _summaryCard('SESSIONS', '세션', '$totalSessions')),
+          const SizedBox(width: 10),
+          Expanded(child: _summaryCard('MINUTES', '총 시간(분)', '$totalMinutes')),
+          const SizedBox(width: 10),
+          Expanded(child: _summaryCard('AVG RPE', '평균 강도', avgRpe.toStringAsFixed(1))),
+        ],
+      ),
     );
   }
 
   Widget _summaryCard(String en, String ko, String value) {
     return Container(
-      height: 92, // 🆕 [2026-09-05 수정] 고정 높이로 3개 카드 크기를 완전히 통일
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      // ✅ [오버플로우 수정] 고정 height:92를 없앰. 글자 크기 설정(접근성)이나
+      // 내용 길이에 따라 92px보다 커지면 카드 바로 아래에 오버플로우 줄무늬가
+      //뜨는 문제가 있었음. 높이를 고정하지 않고 내용에 맞게 자연스럽게
+      // 늘어나게 하면, 3개 카드 구조가 동일하므로 여전히 서로 높이가
+      // 맞춰지면서도 오버플로우가 원천적으로 발생하지 않는다.
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: ExerciseTheme.luxeCardDecoration(highlighted: true), // 🆕 진한 테두리
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(value, style: ExerciseTheme.titleStyle(size: 22)),
+          Text(value, style: ExerciseTheme.titleStyle(size: 22), textAlign: TextAlign.center),
           const SizedBox(height: 8),
           // 🆕 [2026-09-05 수정] 윗줄 영문(명조체) / 아랫줄 한글(노토산스)로 명시적 2줄 배치
-          Text(en, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10)),
-          Text(ko, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10.5)),
+          Text(en, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center),
+          Text(ko, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10.5), textAlign: TextAlign.center),
         ],
       ),
     );

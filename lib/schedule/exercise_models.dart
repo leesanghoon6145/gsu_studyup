@@ -14,6 +14,7 @@ enum ExerciseFieldType {
   number, // 숫자 입력 (예: 거리, 타수, 중량)
   duration, // 시간 입력 (분 단위 저장)
   select, // 사전 정의된 옵션 중 하나 선택
+  multiSelect, // 🆕 [2026-09-06 추가] 사전 정의된 옵션 중 여러 개 선택 (예: 헬스 운동부위, 수영 영법, 요가 스타일)
   counter, // +/- 버튼으로 증감하는 정수
   text, // 자유 텍스트
   multiSet, // 세트별 반복 입력 배열 (예: 헬스 세트x횟수x중량)
@@ -31,8 +32,12 @@ class ExerciseField {
   final String key;
   final ExerciseFieldType type;
   final String label;
+  final String? enLabel; // 🆕 [2026-09-06 추가] 영문 라벨. null이면 화면에서 label(한글)로 대체 표시(사용자가 만든 커스텀 필드 하위호환용)
   final String? unit;
   final List<String>? options;
+  final List<String>? optionEnLabels; // 🆕 [2026-09-06 추가] options와 같은 순서의 영문 표기. 저장되는 실제 값은 계속 options(한글)를 그대로 씀 - 기존 기록과의 하위호환 유지, 화면 표시만 병기함.
+  final String? section; // ✅ [2026-09-13 추가] 세부기록 화면에서 이 필드가 속하는 구획 이름(한글). 예: '라운드 정보', '스코어'. null이면 구획 없이 표시(하위호환).
+  final String? sectionEn; // ✅ [2026-09-13 추가] section의 영문 표기
 
   /// 자동계산 필드 여부 (예: 페이스, SWOLF, 추정1RM). true면 입력 UI 대신 계산된 값만 표시.
   /// 계산 공식은 exercise_calculations.dart 참고.
@@ -44,18 +49,37 @@ class ExerciseField {
     required this.key,
     required this.type,
     required this.label,
+    this.enLabel,
     this.unit,
     this.options,
+    this.optionEnLabels,
+    this.section,
+    this.sectionEn,
     this.isCalculated = false,
     this.isRequired = false,
   });
+
+  // 🆕 [2026-09-06 추가] 옵션 값 하나(한글, 실제 저장값)를 화면에 보여줄 때
+  // "English (한글)" 형태로 변환. optionEnLabels가 없거나 개수가 안 맞으면
+  // 안전하게 한글 그대로 반환(커스텀 필드 하위호환).
+  String optionDisplay(String value) {
+    if (options == null || optionEnLabels == null) return value;
+    final int idx = options!.indexOf(value);
+    if (idx < 0 || idx >= optionEnLabels!.length) return value;
+    final String en = optionEnLabels![idx];
+    return en.isEmpty ? value : '$en ($value)';
+  }
 
   Map<String, dynamic> toJson() => {
     'key': key,
     'type': type.name,
     'label': label,
+    'enLabel': enLabel,
     'unit': unit,
     'options': options,
+    'optionEnLabels': optionEnLabels,
+    'section': section,
+    'sectionEn': sectionEn,
     'isCalculated': isCalculated,
     'isRequired': isRequired,
   };
@@ -65,8 +89,12 @@ class ExerciseField {
       key: json['key'] as String,
       type: exerciseFieldTypeFromString(json['type'] as String),
       label: json['label'] as String,
+      enLabel: json['enLabel'] as String?,
       unit: json['unit'] as String?,
       options: (json['options'] as List?)?.map((e) => e.toString()).toList(),
+      optionEnLabels: (json['optionEnLabels'] as List?)?.map((e) => e.toString()).toList(),
+      section: json['section'] as String?,
+      sectionEn: json['sectionEn'] as String?,
       isCalculated: json['isCalculated'] as bool? ?? false,
       isRequired: json['isRequired'] as bool? ?? false,
     );
@@ -76,8 +104,12 @@ class ExerciseField {
     String? key,
     ExerciseFieldType? type,
     String? label,
+    String? enLabel,
     String? unit,
     List<String>? options,
+    List<String>? optionEnLabels,
+    String? section,
+    String? sectionEn,
     bool? isCalculated,
     bool? isRequired,
   }) {
@@ -85,8 +117,12 @@ class ExerciseField {
       key: key ?? this.key,
       type: type ?? this.type,
       label: label ?? this.label,
+      enLabel: enLabel ?? this.enLabel,
       unit: unit ?? this.unit,
       options: options ?? this.options,
+      optionEnLabels: optionEnLabels ?? this.optionEnLabels,
+      section: section ?? this.section,
+      sectionEn: sectionEn ?? this.sectionEn,
       isCalculated: isCalculated ?? this.isCalculated,
       isRequired: isRequired ?? this.isRequired,
     );
@@ -319,4 +355,19 @@ const Map<int, String> kRpeLabels = {
   8: '힘듦(고강도)',
   9: '매우 고강도',
   10: '최대 노력',
+};
+
+// 🆕 [2026-09-06 추가 - 영문표기 누락분] Borg CR10 스케일 표준 영문 명칭.
+// kRpeLabels(한글)와 반드시 같은 순서로 유지해야 함.
+const Map<int, String> kRpeLabelsEn = {
+  1: 'Very Light',
+  2: 'Light',
+  3: 'Fairly Light',
+  4: 'Moderate',
+  5: 'Somewhat Hard',
+  6: 'Hard',
+  7: 'Very Hard',
+  8: 'Hard (High Intensity)',
+  9: 'Very High Intensity',
+  10: 'Maximal Effort',
 };

@@ -111,7 +111,7 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.insights_rounded, color: ExerciseTheme.brandGolden),
-            tooltip: 'Analysis',
+            tooltip: 'Overall Analysis',
             onPressed: _onAnalysisPressed,
           ),
           // 🆕 [개인정보 - 칼로리 계산용] 몸무게 입력 화면 진입 버튼
@@ -148,6 +148,10 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
   Widget _buildTypeCard(ExerciseType type) {
     final String enName = ExerciseTheme.englishNameForType(type.id, type.name);
 
+    // ✅ [2026-09-13 최종 원복] 종목 허브 화면을 거치던 것도, 카드에 버튼
+    // 2개를 넣던 것도 전부 되돌림. 입력/분석은 이제 각 종목 화면(today_
+    // exercise_screen.dart) 안에 있는 하단 탭으로 접근하므로, 목록 화면은
+    // 원래처럼 카드 전체 탭 한 번으로 바로 입력화면 이동만 하면 됨(깔끔하게).
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => _onTypeTapped(type),
@@ -182,8 +186,6 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
               ],
             ),
             const Spacer(),
-            // 🆕 [배치 변경] 영문명(왼쪽)+한글명(오른쪽, 수정 아이콘 바로 아래)을 한 줄에 배치.
-            // 한글명은 15px 골드색으로 축소해서 세로 공간을 줄여 오버플로우를 해소함.
             appLanguage.isDefault
                 ? Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -112,7 +112,13 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle('SCHEDULE', '일정'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildSectionTitle('SCHEDULE', '일정'),
+                _buildLanguageSelector(context), // 🆕 [2026-09-06 추가] 언어 선택 버튼
+              ],
+            ),
             const SizedBox(height: 12),
             _buildMenuGrid(context, [
               _MenuEntry('📅', 'CALENDAR', '캘린더', () => _navigate(context, const CalendarScreen())),
@@ -218,6 +224,116 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
   void _showComingSoon(BuildContext context, String label) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$label screen is coming soon. ($label 화면은 준비 중입니다.)', style: GoogleFonts.notoSansKr())),
+    );
+  }
+
+  // 🆕 [2026-09-06 추가] 언어 선택 버튼. appLanguage가 ChangeNotifier라서
+  // ListenableBuilder로 감싸두면, 어디서 언어를 바꾸든(이 화면이든 마이페이지든)
+  // 이 버튼의 표시가 자동으로 즉시 갱신됨.
+  Widget _buildLanguageSelector(BuildContext context) {
+    return ListenableBuilder(
+      listenable: appLanguage,
+      builder: (context, _) {
+        return InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _showLanguagePicker(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: _brandGolden.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _brandGolden.withOpacity(0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.language_rounded, color: _brandGolden, size: 15),
+                const SizedBox(width: 5),
+                Text(
+                  appLanguage.current,
+                  style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // 🆕 [2026-09-06 추가] 언어 선택 팝업. "기본(EN+한글 병기)" + 10개 외국어 목록.
+  Future<void> _showLanguagePicker(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true, // 🆕 [오버플로우 수정] 기본 절반 높이 제한을 풀어서 내용에 맞게 커질 수 있게 함
+      builder: (sheetContext) {
+        // 🆕 [오버플로우 수정] 화면 높이의 80%를 넘지 않도록 제한하고, 그 안에서는 스크롤되게 함
+        final double maxHeight = MediaQuery.of(sheetContext).size.height * 0.8;
+        return Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0D1527),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+          child: SingleChildScrollView( // 🆕 [오버플로우 수정] 11개 항목이 화면보다 길어도 스크롤 가능
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('LANGUAGE', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+                Text('언어 선택', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 16),
+                // 🆕 [기본 모드] EN+한글 병기 - languageDisplayNames의 'EN' 항목을 라벨로 사용
+                _buildLanguageOption(
+                  sheetContext,
+                  code: 'EN',
+                  label: AppLanguageService.languageDisplayNames['EN'] ?? 'English + 한글 (기본)',
+                  isSelected: appLanguage.isDefault,
+                ),
+                const Divider(color: Colors.white12, height: 20),
+                // 🆕 [10개 외국어]
+                ...AppLanguageService.foreignLanguageCodes.map((code) {
+                  return _buildLanguageOption(
+                    sheetContext,
+                    code: code,
+                    label: AppLanguageService.languageDisplayNames[code] ?? code,
+                    isSelected: appLanguage.current == code,
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLanguageOption(BuildContext sheetContext, {required String code, required String label, required bool isSelected}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        await appLanguage.setLanguage(code);
+        if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+              color: isSelected ? _brandGolden : Colors.white38,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(color: isSelected ? _brandGolden : Colors.white70, fontSize: 13.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

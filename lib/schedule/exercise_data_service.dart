@@ -26,6 +26,16 @@ class ExerciseDataService {
   static const _kTypesKey = 'exercise_types_v1';
   static const _kRecordsKey = 'exercise_records_v1';
 
+  // ✅ [2026-09-06 추가 - 종목 정의 자동 최신화] 예전엔 종목 정의(필드/영문라벨/
+  // 중복선택 여부 등)를 최초 1회만 seed하고, 그 뒤로는 폰에 저장된 옛날 값을
+  // 계속 재사용해서, exercise_type_data.dart를 아무리 업데이트해도 사용자
+  // 화면에는 반영이 안 되는 문제가 있었다(앱 데이터를 지워야만 해결됨).
+  // 이 버전 번호를 올릴 때마다, 저장된 기본종목 정의를 최신 exercise_type_data.dart
+  // 내용으로 자동 병합(마이그레이션)한다. 기록된 운동 데이터나 사용자가 만든
+  // 커스텀 종목, 숨김 처리 등은 전혀 건드리지 않는다.
+  static const int _kTypesSchemaVersion = 8; // 🆕 [헬스 장비 옵션 추가] 버전
+  static const String _kTypesSchemaVersionKey = 'exercise_types_schema_version';
+
   List<ExerciseType>? _typesCache;
   List<ExerciseRecord>? _recordsCache;
 
@@ -52,12 +62,58 @@ class ExerciseDataService {
       // 최초 실행: 기본 16종 seed
       _typesCache = List<ExerciseType>.from(kDefaultExerciseTypes);
       await _saveTypes();
+      await prefs.setInt(_kTypesSchemaVersionKey, _kTypesSchemaVersion);
     } else {
       final list = jsonDecode(raw) as List;
       _typesCache = list
           .map((e) => ExerciseType.fromJson(e as Map<String, dynamic>))
           .toList();
+
+      // ✅ [자동 최신화] 저장된 버전이 지금 코드의 버전과 다르면, 기본종목
+      // 정의(이름/아이콘/필드 구성)만 exercise_type_data.dart의 최신 내용으로
+      // 새로 덮어쓴다. 사용자가 만든 커스텀 종목과 숨김 여부는 그대로 유지한다.
+      final int savedVersion = prefs.getInt(_kTypesSchemaVersionKey) ?? 1;
+      if (savedVersion != _kTypesSchemaVersion) {
+        _migrateDefaultTypes();
+        await _saveTypes();
+        await prefs.setInt(_kTypesSchemaVersionKey, _kTypesSchemaVersion);
+      }
     }
+  }
+
+  // ✅ [2026-09-06 추가] 저장된 목록 중 "기본 제공 종목"(id가 kDefaultExerciseTypes에
+  // 있는 것들)만 최신 정의로 교체한다. 사용자가 이름을 바꿨거나 숨김 처리한
+  // 경우를 대비해 isHidden/sortOrder는 저장된 값을 그대로 유지하고, 이름/
+  // 아이콘/필드 구성(영문라벨/중복선택 등)만 최신 내용으로 갱신한다. 새로
+  // 추가된 기본종목이 있으면 목록 끝에 추가하고, 사용자가 만든 커스텀
+  // 종목(kDefaultExerciseTypes에 없는 id)은 손대지 않는다.
+  void _migrateDefaultTypes() {
+    final Map<String, ExerciseType> defaultsById = {for (final t in kDefaultExerciseTypes) t.id: t};
+    final List<ExerciseType> merged = [];
+    final Set<String> seenIds = {};
+
+    for (final existing in _typesCache!) {
+      final latestDefault = defaultsById[existing.id];
+      if (latestDefault != null) {
+        // 🆕 기본종목이면 필드/이름/아이콘을 최신으로 교체, 사용자 설정(숨김/순서)은 유지
+        merged.add(existing.copyWith(
+          name: latestDefault.name,
+          icon: latestDefault.icon,
+          fields: latestDefault.fields,
+        ));
+      } else {
+        // 🆕 사용자 커스텀 종목은 그대로 유지
+        merged.add(existing);
+      }
+      seenIds.add(existing.id);
+    }
+
+    // 🆕 새로 추가된 기본종목이 있으면 뒤에 추가
+    for (final def in kDefaultExerciseTypes) {
+      if (!seenIds.contains(def.id)) merged.add(def);
+    }
+
+    _typesCache = merged;
   }
 
   Future<void> _saveTypes() async {

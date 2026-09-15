@@ -27,6 +27,24 @@ class ExerciseTheme {
   static const Color containerBgElevated = Color(0xFF141F38);
   static const Color dangerRed = Color(0xFFDC2626);
 
+  // ✅ [2026-09-13 추가 - 상세분석 공용] 빨주노초파남보 순환 7색. 항목 인덱스로
+  // 색을 찾으면(rainbowCycleColorAt), 같은 인덱스는 항상 같은 색이 되어 "이
+  // 색깔=이 항목"이라는 패턴이 종목이 달라도 시각적으로 학습됨. 7개를
+  // 넘는 항목은 8번째부터 다시 1번 색부터 순환.
+  // ✅ [2026-09-14 색상 변경] 기존 빨주노초파남보(무지개)가 너무 칙칙하다는
+  // 피드백으로, 진파랑/보라/녹색/남색/황금색/주황/노랑 순서로 교체. 채도가
+  // 높고 서로 확실히 구분되는 톤으로 골랐고, 골드는 앱 브랜드컬러와 통일.
+  static const List<Color> rainbowCycle = [
+    Color(0xFF1E40AF), // 진파랑
+    Color(0xFF8B5CF6), // 보라
+    Color(0xFF22C55E), // 녹색
+    Color(0xFF312E81), // 남색
+    Color(0xFFEF4444), // 빨강
+    Color(0xFFF97316), // 주황
+    Color(0xFFFACC15), // 노랑
+  ];
+  static Color rainbowCycleColorAt(int index) => rainbowCycle[index % rainbowCycle.length];
+
   /// 종목 카드 등에 쓰는 고급 컨테이너 데코레이션.
   /// today_timeline_screen의 _buildProgressCard와 동일한 톤(골드 테두리+은은한 글로우).
   static BoxDecoration luxeCardDecoration({bool highlighted = false}) {
