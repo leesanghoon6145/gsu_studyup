@@ -7,14 +7,16 @@ import '../global_lang.dart'; // 👑 글로벌 사전 연결
 import '../services/user_profile_service.dart'; // 🆕 [실사용 전환] 실제 가입자 이름 조회용
 import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [반복 방지] 사람 구분(uid)용
 import '../star_economy.dart'; // 🆕 [버그 수정] DkeStars 클래스 사용을 위한 import 누락 수정 (Undefined name 'DkeStars' 에러의 원인)
-import 'dart:async';
-import '../services/family_link_service.dart';
+import '../services/scholarship_service.dart'; // 🆕 [장학금 방 2026-09-17] "나의 성취별 현황" 카드용 데이터 조회
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [실시간 장학금 금액] 부모님이 선택한 유형을 실시간 구독하기 위함
+import '../services/family_link_service.dart'; // 🆕 [실시간 장학금 금액] getMyLinkCode()/watch() 사용을 위함
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
 
   @override
-  State<MemberAchievementScreen> createState() => _MemberAchievementScreenState();
+  State<MemberAchievementScreen> createState() =>
+      _MemberAchievementScreenState();
 }
 
 class _ThemeColors {
@@ -27,7 +29,7 @@ class _ThemeColors {
 class _ExamRecord {
   final String id;
   final String type; // 주평가, 단원평가, 중간고사, 기말고사, 모의고사
-  final int grade;   // 1, 2, 3학년
+  final int grade; // 1, 2, 3학년
   final int semester; // 1, 2학기
   final DateTime date;
   final String subject;
@@ -35,15 +37,15 @@ class _ExamRecord {
   final double score;
 
   // 🆕 [선배님 지시사항]: 팝업창 저장 데이터 세션 확장 바인딩
-  final String durationText;   // 소요시간 (예: 45분)
+  final String durationText; // 소요시간 (예: 45분)
   final String difficultyLevel; // 난이도 (매우쉬움, 쉬움, 보통, 어려움, 매우어려움)
-  final int starSatisfaction;  // 시험 만족도 (별점 1~5)
+  final int starSatisfaction; // 시험 만족도 (별점 1~5)
   final List<String> errorCauses; // 실수 원인 복수 선택 리스트
-  final String reviewRequired;  // 복습 필요 여부 (필요, 예정, 불필요)
+  final String reviewRequired; // 복습 필요 여부 (필요, 예정, 불필요)
 
   // 모의고사 전용 추가 필드
-  final String mockMonth;      // 몇월 모의고사
-  final String mockRank;       // 등급 또는 석차
+  final String mockMonth; // 몇월 모의고사
+  final String mockRank; // 등급 또는 석차
 
   _ExamRecord({
     required this.id,
@@ -82,13 +84,15 @@ class _ExamRecord {
     'mockRank': mockRank,
   };
 
-// 🆕 [버그 수정 2026-07-29] 필수 필드도 null-안전 처리로 변경.
+  // 🆕 [버그 수정 2026-07-29] 필수 필드도 null-안전 처리로 변경.
   // 기존엔 id/type/grade/semester/date/subject/unit/score 중 단 하나라도 null이거나 형식이 깨지면
   // 이 레코드 하나 때문에 예외가 발생했고, 그 예외가 _loadExamRecords() 전체를 빈 목록으로 만들어서
   // 저장된 성적 기록이 통째로 화면에서 사라지는 문제가 있었음. 아래처럼 각 필드에 안전한 기본값을 두면
   // 손상된 레코드 하나는 기본값으로 채워져 표시되고, 나머지 정상 레코드는 영향받지 않음.
   factory _ExamRecord.fromJson(Map<String, dynamic> json) => _ExamRecord(
-    id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    id:
+        json['id'] as String? ??
+        DateTime.now().millisecondsSinceEpoch.toString(),
     type: json['type'] as String? ?? "주평가",
     grade: (json['grade'] as num?)?.toInt() ?? 1,
     semester: (json['semester'] as num?)?.toInt() ?? 1,
@@ -99,14 +103,19 @@ class _ExamRecord {
     durationText: json['durationText'] as String? ?? "45분",
     difficultyLevel: json['difficultyLevel'] as String? ?? "보통",
     starSatisfaction: (json['starSatisfaction'] as num?)?.toInt() ?? 5,
-    errorCauses: (json['errorCauses'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const ["개념부족"],
+    errorCauses:
+        (json['errorCauses'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const ["개념부족"],
     reviewRequired: json['reviewRequired'] as String? ?? "필요",
     mockMonth: json['mockMonth'] as String? ?? "",
     mockRank: json['mockRank'] as String? ?? "",
   );
 }
 
-class _MemberAchievementScreenState extends State<MemberAchievementScreen> with TickerProviderStateMixin {
+class _MemberAchievementScreenState extends State<MemberAchievementScreen>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   late AnimationController _warningAnimController;
   late Animation<double> _warningAnimation;
@@ -123,15 +132,25 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   List<Map<String, dynamic>> _realSubjectStudyData = [];
 
   final List<Color> _todayColors = [
-    const Color(0xFFFF3B30), const Color(0xFFFF9500), const Color(0xFFFFCC00),
-    const Color(0xFF34C759), const Color(0xFF007AFF), const Color(0xFF0500FF),
-    const Color(0xFFAF52DE), const Color(0xFF5856D6),
+    const Color(0xFFFF3B30),
+    const Color(0xFFFF9500),
+    const Color(0xFFFFCC00),
+    const Color(0xFF34C759),
+    const Color(0xFF007AFF),
+    const Color(0xFF0500FF),
+    const Color(0xFFAF52DE),
+    const Color(0xFF5856D6),
   ];
 
   final List<Color> _weeklyColors = [
-    const Color(0xFF34C759), const Color(0xFF0500FF), const Color(0xFF007AFF),
-    const Color(0xFFAF52DE), const Color(0xFFFF3B30), const Color(0xFFFF9500),
-    const Color(0xFFFFCC00), const Color(0xFF5856D6),
+    const Color(0xFF34C759),
+    const Color(0xFF0500FF),
+    const Color(0xFF007AFF),
+    const Color(0xFFAF52DE),
+    const Color(0xFFFF3B30),
+    const Color(0xFFFF9500),
+    const Color(0xFFFFCC00),
+    const Color(0xFF5856D6),
   ];
 
   final List<Color> _evalColors = [
@@ -146,14 +165,118 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [12개국 확장]: 과목명을 12개 언어로 번역해서 조회하는 맵 + 헬퍼
   static const Map<String, Map<String, String>> _subjectNames = {
-    "수학": {'KO':'수학','EN':'Math','JA':'数学','ZH':'数学','FR':'Maths','DE':'Mathe','RU':'Матем.','AR':'رياضيات','HI':'गणित','VI':'Toán','ES':'Mate','TH':'คณิต'},
-    "영어": {'KO':'영어','EN':'En','JA':'英語','ZH':'英语','FR':'Anglais','DE':'Englisch','RU':'Англ.','AR':'إنجليزي','HI':'अंग्रेज़ी','VI':'Tiếng Anh','ES':'Inglés','TH':'อังกฤษ'},
-    "국어": {'KO':'국어','EN':'Kor','JA':'国語','ZH':'语文','FR':'Coréen','DE':'Koreanisch','RU':'Кор. яз.','AR':'كورية','HI':'कोरियाई','VI':'Tiếng Hàn','ES':'Coreano','TH':'ภาษาเกาหลี'},
-    "과학": {'KO':'과학','EN':'Sci','JA':'理科','ZH':'科学','FR':'Sciences','DE':'Wissen.','RU':'Наука','AR':'علوم','HI':'विज्ञान','VI':'Khoa học','ES':'Ciencia','TH':'วิทย์'},
-    "사회": {'KO':'사회','EN':'Soc','JA':'社会','ZH':'社会','FR':'Sociales','DE':'Sozial.','RU':'Обществ.','AR':'اجتماعيات','HI':'सामाजिक','VI':'Xã hội','ES':'Sociales','TH':'สังคม'},
-    "도덕": {'KO':'도덕','EN':'Eth','JA':'道徳','ZH':'道德','FR':'Éthique','DE':'Ethik','RU':'Этика','AR':'أخلاق','HI':'नैतिक','VI':'Đạo đức','ES':'Ética','TH':'ศีลธรรม'},
-    "역사": {'KO':'역사','EN':'Hist','JA':'歴史','ZH':'历史','FR':'Histoire','DE':'Gesch.','RU':'История','AR':'تاريخ','HI':'इतिहास','VI':'Lịch sử','ES':'Historia','TH':'ประวัติ'},
-    "정보": {'KO':'정보','EN':'Info','JA':'情報','ZH':'信息','FR':'Info','DE':'Info','RU':'Информ.','AR':'معلوماتية','HI':'सूचना','VI':'CNTT','ES':'Informát.','TH':'ไอที'},
+    "수학": {
+      'KO': '수학',
+      'EN': 'Math',
+      'JA': '数学',
+      'ZH': '数学',
+      'FR': 'Maths',
+      'DE': 'Mathe',
+      'RU': 'Матем.',
+      'AR': 'رياضيات',
+      'HI': 'गणित',
+      'VI': 'Toán',
+      'ES': 'Mate',
+      'TH': 'คณิต',
+    },
+    "영어": {
+      'KO': '영어',
+      'EN': 'En',
+      'JA': '英語',
+      'ZH': '英语',
+      'FR': 'Anglais',
+      'DE': 'Englisch',
+      'RU': 'Англ.',
+      'AR': 'إنجليزي',
+      'HI': 'अंग्रेज़ी',
+      'VI': 'Tiếng Anh',
+      'ES': 'Inglés',
+      'TH': 'อังกฤษ',
+    },
+    "국어": {
+      'KO': '국어',
+      'EN': 'Kor',
+      'JA': '国語',
+      'ZH': '语文',
+      'FR': 'Coréen',
+      'DE': 'Koreanisch',
+      'RU': 'Кор. яз.',
+      'AR': 'كورية',
+      'HI': 'कोरियाई',
+      'VI': 'Tiếng Hàn',
+      'ES': 'Coreano',
+      'TH': 'ภาษาเกาหลี',
+    },
+    "과학": {
+      'KO': '과학',
+      'EN': 'Sci',
+      'JA': '理科',
+      'ZH': '科学',
+      'FR': 'Sciences',
+      'DE': 'Wissen.',
+      'RU': 'Наука',
+      'AR': 'علوم',
+      'HI': 'विज्ञान',
+      'VI': 'Khoa học',
+      'ES': 'Ciencia',
+      'TH': 'วิทย์',
+    },
+    "사회": {
+      'KO': '사회',
+      'EN': 'Soc',
+      'JA': '社会',
+      'ZH': '社会',
+      'FR': 'Sociales',
+      'DE': 'Sozial.',
+      'RU': 'Обществ.',
+      'AR': 'اجتماعيات',
+      'HI': 'सामाजिक',
+      'VI': 'Xã hội',
+      'ES': 'Sociales',
+      'TH': 'สังคม',
+    },
+    "도덕": {
+      'KO': '도덕',
+      'EN': 'Eth',
+      'JA': '道徳',
+      'ZH': '道德',
+      'FR': 'Éthique',
+      'DE': 'Ethik',
+      'RU': 'Этика',
+      'AR': 'أخلاق',
+      'HI': 'नैतिक',
+      'VI': 'Đạo đức',
+      'ES': 'Ética',
+      'TH': 'ศีลธรรม',
+    },
+    "역사": {
+      'KO': '역사',
+      'EN': 'Hist',
+      'JA': '歴史',
+      'ZH': '历史',
+      'FR': 'Histoire',
+      'DE': 'Gesch.',
+      'RU': 'История',
+      'AR': 'تاريخ',
+      'HI': 'इतिहास',
+      'VI': 'Lịch sử',
+      'ES': 'Historia',
+      'TH': 'ประวัติ',
+    },
+    "정보": {
+      'KO': '정보',
+      'EN': 'Info',
+      'JA': '情報',
+      'ZH': '信息',
+      'FR': 'Info',
+      'DE': 'Info',
+      'RU': 'Информ.',
+      'AR': 'معلوماتية',
+      'HI': 'सूचना',
+      'VI': 'CNTT',
+      'ES': 'Informát.',
+      'TH': 'ไอที',
+    },
   };
 
   static String _subjectName(String koKey) {
@@ -164,97 +287,1455 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [12개국 UI 문구 카탈로그] + 조회 헬퍼 _t()
   static const Map<String, Map<String, String>> _uiText = {
-    'lv26': {'KO': '학습레벨 26', 'EN': 'Lv.26', 'JA': 'レベル26', 'ZH': '等级26', 'FR': 'Niv. 26', 'DE': 'Lvl. 26', 'RU': 'Уровень 26', 'AR': 'المستوى 26', 'HI': 'लेवल 26', 'VI': 'Cấp 26', 'ES': 'Nivel 26', 'TH': 'เลเวล 26'},
-    'timerDetailDefault': {'KO': '개념 및 심화, 문제풀이 25문제', 'EN': 'Solved concepts and problems, 25 issues', 'JA': '概念と応用問題25問を解答', 'ZH': '概念与拓展，完成25道题', 'FR': 'Concepts et exercices, 25 problèmes résolus', 'DE': 'Konzepte und Übungen, 25 Aufgaben gelöst', 'RU': 'Концепции и задачи, решено 25 заданий', 'AR': 'مفاهيم وتطبيقات، تم حل 25 مسألة', 'HI': 'अवधारणाएं और अभ्यास, 25 प्रश्न हल किए', 'VI': 'Khái niệm và bài tập nâng cao, giải 25 câu', 'ES': 'Conceptos y ejercicios, 25 problemas resueltos', 'TH': 'แนวคิดและโจทย์เชิงลึก แก้ไปแล้ว 25 ข้อ'},
-    'completed': {'KO': '정리함', 'EN': 'COMPLETED', 'JA': '整理済み', 'ZH': '已整理', 'FR': 'TERMINÉ', 'DE': 'ERLEDIGT', 'RU': 'ЗАВЕРШЕНО', 'AR': 'مكتمل', 'HI': 'पूर्ण', 'VI': 'ĐÃ HOÀN THÀNH', 'ES': 'COMPLETADO', 'TH': 'เรียบร้อยแล้ว'},
-    'examSummaryHeader': {'KO': '\n\n[직접 작성 주평가 실시간 연동]\n', 'EN': '\n\n[Live-Linked Weekly Evaluations]\n', 'JA': '\n\n[週次評価のリアルタイム連携]\n', 'ZH': '\n\n[实时联动的每周评估]\n', 'FR': '\n\n[Évaluations hebdomadaires liées en direct]\n', 'DE': '\n\n[Live verknüpfte wöchentliche Bewertungen]\n', 'RU': '\n\n[Еженедельные оценки в реальном времени]\n', 'AR': '\n\n[التقييمات الأسبوعية المرتبطة مباشرة]\n', 'HI': '\n\n[लाइव-लिंक्ड साप्ताहिक मूल्यांकन]\n', 'VI': '\n\n[Đánh giá hằng tuần được liên kết trực tiếp]\n', 'ES': '\n\n[Evaluaciones semanales vinculadas en vivo]\n', 'TH': '\n\n[การประเมินรายสัปดาห์ที่เชื่อมโยงสด]\n'},
-    'diagReportTitle': {'KO': '👑 DKE 교육성취 정밀 진단서', 'EN': '👑 DKE Achievement Diagnosis Report', 'JA': '👑 DKE 教育成果 精密診断書', 'ZH': '👑 DKE 教育成果精密诊断报告', 'FR': '👑 Rapport de diagnostic de réussite DKE', 'DE': '👑 DKE Leistungsdiagnosebericht', 'RU': '👑 Отчёт по диагностике успеваемости DKE', 'AR': '👑 تقرير تشخيص التحصيل الدراسي DKE', 'HI': '👑 DKE उपलब्धि निदान रिपोर्ट', 'VI': '👑 Báo cáo chẩn đoán thành tích DKE', 'ES': '👑 Informe de diagnóstico de logros DKE', 'TH': '👑 รายงานวินิจฉัยผลสัมฤทธิ์ DKE'},
-    'mockMonthLabel': {'KO': '• 몇 월 모의고사 (직접 입력)', 'EN': '• Which Month (custom input)', 'JA': '• 何月の模試か（直接入力）', 'ZH': '• 几月的模拟考（自定义输入）', 'FR': '• Quel mois (saisie libre)', 'DE': '• Welcher Monat (freie Eingabe)', 'RU': '• Какой месяц (произвольный ввод)', 'AR': '• أي شهر (إدخال مخصص)', 'HI': '• कौन सा महीना (कस्टम इनपुट)', 'VI': '• Tháng nào (nhập tùy chỉnh)', 'ES': '• Qué mes (entrada personalizada)', 'TH': '• เดือนไหน (กรอกเอง)'},
-    'mockRankLabel': {'KO': '• 등급 또는 석차 (직접 입력)', 'EN': '• Grade or Rank (custom input)', 'JA': '• 等級または順位（直接入力）', 'ZH': '• 等级或排名（自定义输入）', 'FR': '• Note ou rang (saisie libre)', 'DE': '• Note oder Rang (freie Eingabe)', 'RU': '• Оценка или ранг (произвольный ввод)', 'AR': '• الدرجة أو الترتيب (إدخال مخصص)', 'HI': '• ग्रेड या रैंक (कस्टम इनपुट)', 'VI': '• Xếp hạng hoặc thứ hạng (nhập tùy chỉnh)', 'ES': '• Nota o clasificación (entrada personalizada)', 'TH': '• เกรดหรืออันดับ (กรอกเอง)'},
-    'label1Duration': {'KO': '1. 소요시간 (직접 입력)', 'EN': '1. Duration (custom input)', 'JA': '1. 所要時間（直接入力）', 'ZH': '1. 所用时间（自定义输入）', 'FR': '1. Durée (saisie libre)', 'DE': '1. Dauer (freie Eingabe)', 'RU': '1. Продолжительность (произвольный ввод)', 'AR': '1. المدة (إدخال مخصص)', 'HI': '1. अवधि (कस्टम इनपुट)', 'VI': '1. Thời gian (nhập tùy chỉnh)', 'ES': '1. Duración (entrada personalizada)', 'TH': '1. ระยะเวลา (กรอกเอง)'},
-    'label2Difficulty': {'KO': '2. 난이도 설정 (단일 선택)', 'EN': '2. Difficulty (single select)', 'JA': '2. 難易度設定（単一選択）', 'ZH': '2. 难度设置（单选）', 'FR': '2. Difficulté (choix unique)', 'DE': '2. Schwierigkeit (Einzelauswahl)', 'RU': '2. Сложность (один вариант)', 'AR': '2. مستوى الصعوبة (اختيار واحد)', 'HI': '2. कठिनाई स्तर (एकल चयन)', 'VI': '2. Độ khó (chọn một)', 'ES': '2. Dificultad (selección única)', 'TH': '2. ระดับความยาก (เลือกเดียว)'},
-    'label3Satisfaction': {'KO': '3. 시험 만족도 지표', 'EN': '3. Satisfaction Rating', 'JA': '3. 試験満足度指標', 'ZH': '3. 考试满意度指标', 'FR': '3. Indice de satisfaction', 'DE': '3. Zufriedenheitsbewertung', 'RU': '3. Оценка удовлетворённости', 'AR': '3. مؤشر الرضا عن الاختبار', 'HI': '3. संतुष्टि रेटिंग', 'VI': '3. Mức độ hài lòng', 'ES': '3. Índice de satisfacción', 'TH': '3. คะแนนความพึงพอใจ'},
-    'label4ErrorMulti': {'KO': '4. 실수 원인 진단 (복수 선택 가능)', 'EN': '4. Error Causes (multi-select)', 'JA': '4. ミスの原因診断（複数選択可）', 'ZH': '4. 失分原因诊断（可多选）', 'FR': '4. Causes d\'erreurs (choix multiple)', 'DE': '4. Fehlerursachen (Mehrfachauswahl)', 'RU': '4. Причины ошибок (можно выбрать несколько)', 'AR': '4. أسباب الأخطاء (اختيار متعدد)', 'HI': '4. गलती के कारण (बहु-चयन)', 'VI': '4. Nguyên nhân sai sót (chọn nhiều)', 'ES': '4. Causas de error (selección múltiple)', 'TH': '4. สาเหตุข้อผิดพลาด (เลือกได้หลายข้อ)'},
-    'label5ReviewSelect': {'KO': '5. 복습 필요 여부 선택', 'EN': '5. Review Needed?', 'JA': '5. 復習が必要か選択', 'ZH': '5. 是否需要复习', 'FR': '5. Révision nécessaire ?', 'DE': '5. Wiederholung nötig?', 'RU': '5. Нужно повторение?', 'AR': '5. هل تحتاج إلى مراجعة؟', 'HI': '5. क्या पुनरीक्षण आवश्यक है?', 'VI': '5. Có cần ôn lại không?', 'ES': '5. ¿Necesita repaso?', 'TH': '5. ต้องทบทวนหรือไม่'},
-    'confirmBtn': {'KO': '확인', 'EN': 'Confirm', 'JA': '確認', 'ZH': '确认', 'FR': 'Confirmer', 'DE': 'Bestätigen', 'RU': 'Подтвердить', 'AR': 'تأكيد', 'HI': 'पुष्टि करें', 'VI': 'Xác nhận', 'ES': 'Confirmar', 'TH': 'ยืนยัน'},
-    'label1DurationShort': {'KO': '1. 시험 소요시간', 'EN': '1. Duration', 'JA': '1. 試験所要時間', 'ZH': '1. 考试用时', 'FR': '1. Durée', 'DE': '1. Dauer', 'RU': '1. Продолжительность', 'AR': '1. المدة', 'HI': '1. अवधि', 'VI': '1. Thời gian', 'ES': '1. Duración', 'TH': '1. ระยะเวลา'},
-    'label2DifficultyShort': {'KO': '2. 출제 난이도', 'EN': '2. Difficulty', 'JA': '2. 出題難易度', 'ZH': '2. 出题难度', 'FR': '2. Difficulté', 'DE': '2. Schwierigkeit', 'RU': '2. Сложность', 'AR': '2. مستوى الصعوبة', 'HI': '2. कठिनाई', 'VI': '2. Độ khó', 'ES': '2. Dificultad', 'TH': '2. ความยาก'},
-    'label3SatisfactionShort': {'KO': '3. 시험 만족도', 'EN': '3. Satisfaction', 'JA': '3. 試験満足度', 'ZH': '3. 考试满意度', 'FR': '3. Satisfaction', 'DE': '3. Zufriedenheit', 'RU': '3. Удовлетворённость', 'AR': '3. الرضا', 'HI': '3. संतुष्टि', 'VI': '3. Mức hài lòng', 'ES': '3. Satisfacción', 'TH': '3. ความพึงพอใจ'},
-    'label4ErrorShort': {'KO': '4. 주요 실수 원인', 'EN': '4. Error Causes', 'JA': '4. 主なミス原因', 'ZH': '4. 主要失分原因', 'FR': '4. Causes d\'erreurs', 'DE': '4. Fehlerursachen', 'RU': '4. Причины ошибок', 'AR': '4. أسباب الأخطاء', 'HI': '4. गलती के कारण', 'VI': '4. Nguyên nhân sai sót', 'ES': '4. Causas de error', 'TH': '4. สาเหตุข้อผิดพลาด'},
-    'label5ReviewShort': {'KO': '5. 복습 필요 여부', 'EN': '5. Review Needed', 'JA': '5. 復習の必要性', 'ZH': '5. 是否需要复习', 'FR': '5. Révision nécessaire', 'DE': '5. Wiederholung nötig', 'RU': '5. Нужно повторение', 'AR': '5. الحاجة للمراجعة', 'HI': '5. पुनरीक्षण आवश्यक', 'VI': '5. Cần ôn lại', 'ES': '5. Necesita repaso', 'TH': '5. ต้องทบทวน'},
-    'totalReport': {'KO': '종합 리포트', 'EN': 'Total Report', 'JA': '総合レポート', 'ZH': '综合报告', 'FR': 'Rapport global', 'DE': 'Gesamtbericht', 'RU': 'Общий отчёт', 'AR': 'التقرير الشامل', 'HI': 'समग्र रिपोर्ट', 'VI': 'Báo cáo tổng hợp', 'ES': 'Informe general', 'TH': 'รายงานสรุป'},
-    'detailedAnalytics': {'KO': '상세분석기록', 'EN': 'Detailed Analytics', 'JA': '詳細分析記録', 'ZH': '详细分析记录', 'FR': 'Analyse détaillée', 'DE': 'Detaillierte Analyse', 'RU': 'Подробная аналитика', 'AR': 'تحليل تفصيلي', 'HI': 'विस्तृत विश्लेषण', 'VI': 'Phân tích chi tiết', 'ES': 'Análisis detallado', 'TH': 'บันทึกวิเคราะห์เชิงลึก'},
-    'nextLevelRoad': {'KO': '학습레벨로드', 'EN': 'Next Level Road', 'JA': '次のレベルへの道', 'ZH': '下一等级之路', 'FR': 'Vers le niveau suivant', 'DE': 'Weg zum nächsten Level', 'RU': 'Путь к следующему уровню', 'AR': 'الطريق إلى المستوى التالي', 'HI': 'अगले स्तर की राह', 'VI': 'Lộ trình cấp độ tiếp theo', 'ES': 'Camino al siguiente nivel', 'TH': 'เส้นทางสู่เลเวลถัดไป'},
-    'todaySessionsTitle': {'KO': '오늘 학습한 과목', 'EN': "Today's Study Sessions", 'JA': '本日の学習科目', 'ZH': '今日学习科目', 'FR': "Sessions d'étude du jour", 'DE': 'Heutige Lernsitzungen', 'RU': 'Сегодняшние занятия', 'AR': 'جلسات الدراسة اليوم', 'HI': 'आज के अध्ययन सत्र', 'VI': 'Buổi học hôm nay', 'ES': 'Sesiones de estudio de hoy', 'TH': 'วิชาที่เรียนวันนี้'},
-    'noSessionsToday': {'KO': '오늘 진행한 학습 세션이 아직 없습니다.', 'EN': 'No study sessions recorded today yet.', 'JA': '本日の学習セッションはまだありません。', 'ZH': '今天还没有学习记录。', 'FR': "Aucune session d'étude aujourd'hui pour l'instant.", 'DE': 'Heute wurden noch keine Lernsitzungen aufgezeichnet.', 'RU': 'Сегодня пока нет записанных занятий.', 'AR': 'لا توجد جلسات دراسة مسجلة اليوم بعد.', 'HI': 'आज तक कोई अध्ययन सत्र दर्ज नहीं हुआ।', 'VI': 'Hôm nay chưa có buổi học nào được ghi lại.', 'ES': 'Aún no se han registrado sesiones de estudio hoy.', 'TH': 'วันนี้ยังไม่มีการบันทึกการเรียน'},
+    'lv26': {
+      'KO': '학습레벨 26',
+      'EN': 'Lv.26',
+      'JA': 'レベル26',
+      'ZH': '等级26',
+      'FR': 'Niv. 26',
+      'DE': 'Lvl. 26',
+      'RU': 'Уровень 26',
+      'AR': 'المستوى 26',
+      'HI': 'लेवल 26',
+      'VI': 'Cấp 26',
+      'ES': 'Nivel 26',
+      'TH': 'เลเวล 26',
+    },
+    'timerDetailDefault': {
+      'KO': '개념 및 심화, 문제풀이 25문제',
+      'EN': 'Solved concepts and problems, 25 issues',
+      'JA': '概念と応用問題25問を解答',
+      'ZH': '概念与拓展，完成25道题',
+      'FR': 'Concepts et exercices, 25 problèmes résolus',
+      'DE': 'Konzepte und Übungen, 25 Aufgaben gelöst',
+      'RU': 'Концепции и задачи, решено 25 заданий',
+      'AR': 'مفاهيم وتطبيقات، تم حل 25 مسألة',
+      'HI': 'अवधारणाएं और अभ्यास, 25 प्रश्न हल किए',
+      'VI': 'Khái niệm và bài tập nâng cao, giải 25 câu',
+      'ES': 'Conceptos y ejercicios, 25 problemas resueltos',
+      'TH': 'แนวคิดและโจทย์เชิงลึก แก้ไปแล้ว 25 ข้อ',
+    },
+    'completed': {
+      'KO': '정리함',
+      'EN': 'COMPLETED',
+      'JA': '整理済み',
+      'ZH': '已整理',
+      'FR': 'TERMINÉ',
+      'DE': 'ERLEDIGT',
+      'RU': 'ЗАВЕРШЕНО',
+      'AR': 'مكتمل',
+      'HI': 'पूर्ण',
+      'VI': 'ĐÃ HOÀN THÀNH',
+      'ES': 'COMPLETADO',
+      'TH': 'เรียบร้อยแล้ว',
+    },
+    'examSummaryHeader': {
+      'KO': '\n\n[직접 작성 주평가 실시간 연동]\n',
+      'EN': '\n\n[Live-Linked Weekly Evaluations]\n',
+      'JA': '\n\n[週次評価のリアルタイム連携]\n',
+      'ZH': '\n\n[实时联动的每周评估]\n',
+      'FR': '\n\n[Évaluations hebdomadaires liées en direct]\n',
+      'DE': '\n\n[Live verknüpfte wöchentliche Bewertungen]\n',
+      'RU': '\n\n[Еженедельные оценки в реальном времени]\n',
+      'AR': '\n\n[التقييمات الأسبوعية المرتبطة مباشرة]\n',
+      'HI': '\n\n[लाइव-लिंक्ड साप्ताहिक मूल्यांकन]\n',
+      'VI': '\n\n[Đánh giá hằng tuần được liên kết trực tiếp]\n',
+      'ES': '\n\n[Evaluaciones semanales vinculadas en vivo]\n',
+      'TH': '\n\n[การประเมินรายสัปดาห์ที่เชื่อมโยงสด]\n',
+    },
+    'diagReportTitle': {
+      'KO': '👑 DKE 교육성취 정밀 진단서',
+      'EN': '👑 DKE Achievement Diagnosis Report',
+      'JA': '👑 DKE 教育成果 精密診断書',
+      'ZH': '👑 DKE 教育成果精密诊断报告',
+      'FR': '👑 Rapport de diagnostic de réussite DKE',
+      'DE': '👑 DKE Leistungsdiagnosebericht',
+      'RU': '👑 Отчёт по диагностике успеваемости DKE',
+      'AR': '👑 تقرير تشخيص التحصيل الدراسي DKE',
+      'HI': '👑 DKE उपलब्धि निदान रिपोर्ट',
+      'VI': '👑 Báo cáo chẩn đoán thành tích DKE',
+      'ES': '👑 Informe de diagnóstico de logros DKE',
+      'TH': '👑 รายงานวินิจฉัยผลสัมฤทธิ์ DKE',
+    },
+    'mockMonthLabel': {
+      'KO': '• 몇 월 모의고사 (직접 입력)',
+      'EN': '• Which Month (custom input)',
+      'JA': '• 何月の模試か（直接入力）',
+      'ZH': '• 几月的模拟考（自定义输入）',
+      'FR': '• Quel mois (saisie libre)',
+      'DE': '• Welcher Monat (freie Eingabe)',
+      'RU': '• Какой месяц (произвольный ввод)',
+      'AR': '• أي شهر (إدخال مخصص)',
+      'HI': '• कौन सा महीना (कस्टम इनपुट)',
+      'VI': '• Tháng nào (nhập tùy chỉnh)',
+      'ES': '• Qué mes (entrada personalizada)',
+      'TH': '• เดือนไหน (กรอกเอง)',
+    },
+    'mockRankLabel': {
+      'KO': '• 등급 또는 석차 (직접 입력)',
+      'EN': '• Grade or Rank (custom input)',
+      'JA': '• 等級または順位（直接入力）',
+      'ZH': '• 等级或排名（自定义输入）',
+      'FR': '• Note ou rang (saisie libre)',
+      'DE': '• Note oder Rang (freie Eingabe)',
+      'RU': '• Оценка или ранг (произвольный ввод)',
+      'AR': '• الدرجة أو الترتيب (إدخال مخصص)',
+      'HI': '• ग्रेड या रैंक (कस्टम इनपुट)',
+      'VI': '• Xếp hạng hoặc thứ hạng (nhập tùy chỉnh)',
+      'ES': '• Nota o clasificación (entrada personalizada)',
+      'TH': '• เกรดหรืออันดับ (กรอกเอง)',
+    },
+    'label1Duration': {
+      'KO': '1. 소요시간 (직접 입력)',
+      'EN': '1. Duration (custom input)',
+      'JA': '1. 所要時間（直接入力）',
+      'ZH': '1. 所用时间（自定义输入）',
+      'FR': '1. Durée (saisie libre)',
+      'DE': '1. Dauer (freie Eingabe)',
+      'RU': '1. Продолжительность (произвольный ввод)',
+      'AR': '1. المدة (إدخال مخصص)',
+      'HI': '1. अवधि (कस्टम इनपुट)',
+      'VI': '1. Thời gian (nhập tùy chỉnh)',
+      'ES': '1. Duración (entrada personalizada)',
+      'TH': '1. ระยะเวลา (กรอกเอง)',
+    },
+    'label2Difficulty': {
+      'KO': '2. 난이도 설정 (단일 선택)',
+      'EN': '2. Difficulty (single select)',
+      'JA': '2. 難易度設定（単一選択）',
+      'ZH': '2. 难度设置（单选）',
+      'FR': '2. Difficulté (choix unique)',
+      'DE': '2. Schwierigkeit (Einzelauswahl)',
+      'RU': '2. Сложность (один вариант)',
+      'AR': '2. مستوى الصعوبة (اختيار واحد)',
+      'HI': '2. कठिनाई स्तर (एकल चयन)',
+      'VI': '2. Độ khó (chọn một)',
+      'ES': '2. Dificultad (selección única)',
+      'TH': '2. ระดับความยาก (เลือกเดียว)',
+    },
+    'label3Satisfaction': {
+      'KO': '3. 시험 만족도 지표',
+      'EN': '3. Satisfaction Rating',
+      'JA': '3. 試験満足度指標',
+      'ZH': '3. 考试满意度指标',
+      'FR': '3. Indice de satisfaction',
+      'DE': '3. Zufriedenheitsbewertung',
+      'RU': '3. Оценка удовлетворённости',
+      'AR': '3. مؤشر الرضا عن الاختبار',
+      'HI': '3. संतुष्टि रेटिंग',
+      'VI': '3. Mức độ hài lòng',
+      'ES': '3. Índice de satisfacción',
+      'TH': '3. คะแนนความพึงพอใจ',
+    },
+    'label4ErrorMulti': {
+      'KO': '4. 실수 원인 진단 (복수 선택 가능)',
+      'EN': '4. Error Causes (multi-select)',
+      'JA': '4. ミスの原因診断（複数選択可）',
+      'ZH': '4. 失分原因诊断（可多选）',
+      'FR': '4. Causes d\'erreurs (choix multiple)',
+      'DE': '4. Fehlerursachen (Mehrfachauswahl)',
+      'RU': '4. Причины ошибок (можно выбрать несколько)',
+      'AR': '4. أسباب الأخطاء (اختيار متعدد)',
+      'HI': '4. गलती के कारण (बहु-चयन)',
+      'VI': '4. Nguyên nhân sai sót (chọn nhiều)',
+      'ES': '4. Causas de error (selección múltiple)',
+      'TH': '4. สาเหตุข้อผิดพลาด (เลือกได้หลายข้อ)',
+    },
+    'label5ReviewSelect': {
+      'KO': '5. 복습 필요 여부 선택',
+      'EN': '5. Review Needed?',
+      'JA': '5. 復習が必要か選択',
+      'ZH': '5. 是否需要复习',
+      'FR': '5. Révision nécessaire ?',
+      'DE': '5. Wiederholung nötig?',
+      'RU': '5. Нужно повторение?',
+      'AR': '5. هل تحتاج إلى مراجعة؟',
+      'HI': '5. क्या पुनरीक्षण आवश्यक है?',
+      'VI': '5. Có cần ôn lại không?',
+      'ES': '5. ¿Necesita repaso?',
+      'TH': '5. ต้องทบทวนหรือไม่',
+    },
+    'confirmBtn': {
+      'KO': '확인',
+      'EN': 'Confirm',
+      'JA': '確認',
+      'ZH': '确认',
+      'FR': 'Confirmer',
+      'DE': 'Bestätigen',
+      'RU': 'Подтвердить',
+      'AR': 'تأكيد',
+      'HI': 'पुष्टि करें',
+      'VI': 'Xác nhận',
+      'ES': 'Confirmar',
+      'TH': 'ยืนยัน',
+    },
+    'label1DurationShort': {
+      'KO': '1. 시험 소요시간',
+      'EN': '1. Duration',
+      'JA': '1. 試験所要時間',
+      'ZH': '1. 考试用时',
+      'FR': '1. Durée',
+      'DE': '1. Dauer',
+      'RU': '1. Продолжительность',
+      'AR': '1. المدة',
+      'HI': '1. अवधि',
+      'VI': '1. Thời gian',
+      'ES': '1. Duración',
+      'TH': '1. ระยะเวลา',
+    },
+    'label2DifficultyShort': {
+      'KO': '2. 출제 난이도',
+      'EN': '2. Difficulty',
+      'JA': '2. 出題難易度',
+      'ZH': '2. 出题难度',
+      'FR': '2. Difficulté',
+      'DE': '2. Schwierigkeit',
+      'RU': '2. Сложность',
+      'AR': '2. مستوى الصعوبة',
+      'HI': '2. कठिनाई',
+      'VI': '2. Độ khó',
+      'ES': '2. Dificultad',
+      'TH': '2. ความยาก',
+    },
+    'label3SatisfactionShort': {
+      'KO': '3. 시험 만족도',
+      'EN': '3. Satisfaction',
+      'JA': '3. 試験満足度',
+      'ZH': '3. 考试满意度',
+      'FR': '3. Satisfaction',
+      'DE': '3. Zufriedenheit',
+      'RU': '3. Удовлетворённость',
+      'AR': '3. الرضا',
+      'HI': '3. संतुष्टि',
+      'VI': '3. Mức hài lòng',
+      'ES': '3. Satisfacción',
+      'TH': '3. ความพึงพอใจ',
+    },
+    'label4ErrorShort': {
+      'KO': '4. 주요 실수 원인',
+      'EN': '4. Error Causes',
+      'JA': '4. 主なミス原因',
+      'ZH': '4. 主要失分原因',
+      'FR': '4. Causes d\'erreurs',
+      'DE': '4. Fehlerursachen',
+      'RU': '4. Причины ошибок',
+      'AR': '4. أسباب الأخطاء',
+      'HI': '4. गलती के कारण',
+      'VI': '4. Nguyên nhân sai sót',
+      'ES': '4. Causas de error',
+      'TH': '4. สาเหตุข้อผิดพลาด',
+    },
+    'label5ReviewShort': {
+      'KO': '5. 복습 필요 여부',
+      'EN': '5. Review Needed',
+      'JA': '5. 復習の必要性',
+      'ZH': '5. 是否需要复习',
+      'FR': '5. Révision nécessaire',
+      'DE': '5. Wiederholung nötig',
+      'RU': '5. Нужно повторение',
+      'AR': '5. الحاجة للمراجعة',
+      'HI': '5. पुनरीक्षण आवश्यक',
+      'VI': '5. Cần ôn lại',
+      'ES': '5. Necesita repaso',
+      'TH': '5. ต้องทบทวน',
+    },
+    'totalReport': {
+      'KO': '종합 리포트',
+      'EN': 'Total Report',
+      'JA': '総合レポート',
+      'ZH': '综合报告',
+      'FR': 'Rapport global',
+      'DE': 'Gesamtbericht',
+      'RU': 'Общий отчёт',
+      'AR': 'التقرير الشامل',
+      'HI': 'समग्र रिपोर्ट',
+      'VI': 'Báo cáo tổng hợp',
+      'ES': 'Informe general',
+      'TH': 'รายงานสรุป',
+    },
+    'detailedAnalytics': {
+      'KO': '상세분석기록',
+      'EN': 'Detailed Analytics',
+      'JA': '詳細分析記録',
+      'ZH': '详细分析记录',
+      'FR': 'Analyse détaillée',
+      'DE': 'Detaillierte Analyse',
+      'RU': 'Подробная аналитика',
+      'AR': 'تحليل تفصيلي',
+      'HI': 'विस्तृत विश्लेषण',
+      'VI': 'Phân tích chi tiết',
+      'ES': 'Análisis detallado',
+      'TH': 'บันทึกวิเคราะห์เชิงลึก',
+    },
+    'nextLevelRoad': {
+      'KO': '학습레벨로드',
+      'EN': 'Next Level Road',
+      'JA': '次のレベルへの道',
+      'ZH': '下一等级之路',
+      'FR': 'Vers le niveau suivant',
+      'DE': 'Weg zum nächsten Level',
+      'RU': 'Путь к следующему уровню',
+      'AR': 'الطريق إلى المستوى التالي',
+      'HI': 'अगले स्तर की राह',
+      'VI': 'Lộ trình cấp độ tiếp theo',
+      'ES': 'Camino al siguiente nivel',
+      'TH': 'เส้นทางสู่เลเวลถัดไป',
+    },
+    'todaySessionsTitle': {
+      'KO': '오늘 학습한 과목',
+      'EN': "Today's Study Sessions",
+      'JA': '本日の学習科目',
+      'ZH': '今日学习科目',
+      'FR': "Sessions d'étude du jour",
+      'DE': 'Heutige Lernsitzungen',
+      'RU': 'Сегодняшние занятия',
+      'AR': 'جلسات الدراسة اليوم',
+      'HI': 'आज के अध्ययन सत्र',
+      'VI': 'Buổi học hôm nay',
+      'ES': 'Sesiones de estudio de hoy',
+      'TH': 'วิชาที่เรียนวันนี้',
+    },
+    'noSessionsToday': {
+      'KO': '오늘 진행한 학습 세션이 아직 없습니다.',
+      'EN': 'No study sessions recorded today yet.',
+      'JA': '本日の学習セッションはまだありません。',
+      'ZH': '今天还没有学习记录。',
+      'FR': "Aucune session d'étude aujourd'hui pour l'instant.",
+      'DE': 'Heute wurden noch keine Lernsitzungen aufgezeichnet.',
+      'RU': 'Сегодня пока нет записанных занятий.',
+      'AR': 'لا توجد جلسات دراسة مسجلة اليوم بعد.',
+      'HI': 'आज तक कोई अध्ययन सत्र दर्ज नहीं हुआ।',
+      'VI': 'Hôm nay chưa có buổi học nào được ghi lại.',
+      'ES': 'Aún no se han registrado sesiones de estudio hoy.',
+      'TH': 'วันนี้ยังไม่มีการบันทึกการเรียน',
+    },
     // 🆕 [요청 2026-09-04] 날짜별 조회(좌우 화살표)에서 "오늘"이 아닌 과거 날짜를 볼 때 쓰는 일반화된 문구.
-    'noSessionsOnDate': {'KO': '해당 날짜에 진행한 학습 세션이 없습니다.', 'EN': 'No study sessions recorded on this date.', 'JA': 'この日の学習セッションはありません。', 'ZH': '该日期没有学习记录。', 'FR': "Aucune session d'étude enregistrée à cette date.", 'DE': 'An diesem Tag wurden keine Lernsitzungen aufgezeichnet.', 'RU': 'В этот день нет записанных занятий.', 'AR': 'لا توجد جلسات دراسة مسجلة في هذا التاريخ.', 'HI': 'इस तिथि पर कोई अध्ययन सत्र दर्ज नहीं है।', 'VI': 'Không có buổi học nào được ghi lại vào ngày này.', 'ES': 'No se registraron sesiones de estudio en esta fecha.', 'TH': 'ไม่มีการบันทึกการเรียนในวันนี้'},
+    'noSessionsOnDate': {
+      'KO': '해당 날짜에 진행한 학습 세션이 없습니다.',
+      'EN': 'No study sessions recorded on this date.',
+      'JA': 'この日の学習セッションはありません。',
+      'ZH': '该日期没有学习记录。',
+      'FR': "Aucune session d'étude enregistrée à cette date.",
+      'DE': 'An diesem Tag wurden keine Lernsitzungen aufgezeichnet.',
+      'RU': 'В этот день нет записанных занятий.',
+      'AR': 'لا توجد جلسات دراسة مسجلة في هذا التاريخ.',
+      'HI': 'इस तिथि पर कोई अध्ययन सत्र दर्ज नहीं है।',
+      'VI': 'Không có buổi học nào được ghi lại vào ngày này.',
+      'ES': 'No se registraron sesiones de estudio en esta fecha.',
+      'TH': 'ไม่มีการบันทึกการเรียนในวันนี้',
+    },
     // 🆕 [요청 2026-09-04] "오늘"이 아닌 날짜의 카드 제목에 쓰이는 일반 명칭 ("MM/DD 학습한 과목" 형태로 조합)
-    'sessionsGenericTitle': {'KO': '학습한 과목', 'EN': 'Study Sessions', 'JA': '学習科目', 'ZH': '学习科目', 'FR': "Sessions d'étude", 'DE': 'Lernsitzungen', 'RU': 'Занятия', 'AR': 'جلسات الدراسة', 'HI': 'अध्ययन सत्र', 'VI': 'Buổi học', 'ES': 'Sesiones de estudio', 'TH': 'วิชาที่เรียน'},
+    'sessionsGenericTitle': {
+      'KO': '학습한 과목',
+      'EN': 'Study Sessions',
+      'JA': '学習科目',
+      'ZH': '学习科目',
+      'FR': "Sessions d'étude",
+      'DE': 'Lernsitzungen',
+      'RU': 'Занятия',
+      'AR': 'جلسات الدراسة',
+      'HI': 'अध्ययन सत्र',
+      'VI': 'Buổi học',
+      'ES': 'Sesiones de estudio',
+      'TH': 'วิชาที่เรียน',
+    },
     // 🆕 [위험한 오류 수정 2026-09-05] 세션 목록/리포트에서 강의/평가를 명확히 구분 표시하기 위한 라벨.
-    'lectureLabel': {'KO': '강의', 'EN': 'Lecture', 'JA': '講義', 'ZH': '讲课', 'FR': 'Cours', 'DE': 'Vorlesung', 'RU': 'Лекция', 'AR': 'محاضرة', 'HI': 'व्याख्यान', 'VI': 'Bài giảng', 'ES': 'Clase', 'TH': 'บรรยาย'},
-    'evaluationLabel': {'KO': '평가', 'EN': 'Evaluation', 'JA': '評価', 'ZH': '评估', 'FR': 'Évaluation', 'DE': 'Bewertung', 'RU': 'Оценка', 'AR': 'تقييم', 'HI': 'मूल्यांकन', 'VI': 'Đánh giá', 'ES': 'Evaluación', 'TH': 'ประเมิน'},
-    'sessionOrdinal': {'KO': '교시', 'EN': 'Session', 'JA': '時限目', 'ZH': '节', 'FR': 'Séance', 'DE': 'Einheit', 'RU': 'Занятие', 'AR': 'حصة', 'HI': 'सत्र', 'VI': 'Tiết', 'ES': 'Sesión', 'TH': 'คาบ'},
-    'minutesUnitSuffix': {'KO': '분', 'EN': 'min', 'JA': '分', 'ZH': '分钟', 'FR': 'min', 'DE': 'Min', 'RU': 'мин', 'AR': 'دقيقة', 'HI': 'मिनट', 'VI': 'phút', 'ES': 'min', 'TH': 'นาที'},
-    'starsCount': {'KO': '23,487 개', 'EN': '23,487 Stars', 'JA': '23,487個', 'ZH': '23,487颗', 'FR': '23 487 étoiles', 'DE': '23.487 Sterne', 'RU': '23 487 звёзд', 'AR': '23,487 نجمة', 'HI': '23,487 स्टार्स', 'VI': '23.487 sao', 'ES': '23.487 estrellas', 'TH': '23,487 ดาว'},
+    'lectureLabel': {
+      'KO': '강의',
+      'EN': 'Lecture',
+      'JA': '講義',
+      'ZH': '讲课',
+      'FR': 'Cours',
+      'DE': 'Vorlesung',
+      'RU': 'Лекция',
+      'AR': 'محاضرة',
+      'HI': 'व्याख्यान',
+      'VI': 'Bài giảng',
+      'ES': 'Clase',
+      'TH': 'บรรยาย',
+    },
+    'evaluationLabel': {
+      'KO': '평가',
+      'EN': 'Evaluation',
+      'JA': '評価',
+      'ZH': '评估',
+      'FR': 'Évaluation',
+      'DE': 'Bewertung',
+      'RU': 'Оценка',
+      'AR': 'تقييم',
+      'HI': 'मूल्यांकन',
+      'VI': 'Đánh giá',
+      'ES': 'Evaluación',
+      'TH': 'ประเมิน',
+    },
+    'sessionOrdinal': {
+      'KO': '교시',
+      'EN': 'Session',
+      'JA': '時限目',
+      'ZH': '节',
+      'FR': 'Séance',
+      'DE': 'Einheit',
+      'RU': 'Занятие',
+      'AR': 'حصة',
+      'HI': 'सत्र',
+      'VI': 'Tiết',
+      'ES': 'Sesión',
+      'TH': 'คาบ',
+    },
+    'minutesUnitSuffix': {
+      'KO': '분',
+      'EN': 'min',
+      'JA': '分',
+      'ZH': '分钟',
+      'FR': 'min',
+      'DE': 'Min',
+      'RU': 'мин',
+      'AR': 'دقيقة',
+      'HI': 'मिनट',
+      'VI': 'phút',
+      'ES': 'min',
+      'TH': 'นาที',
+    },
+    'starsCount': {
+      'KO': '23,487 개',
+      'EN': '23,487 Stars',
+      'JA': '23,487個',
+      'ZH': '23,487颗',
+      'FR': '23 487 étoiles',
+      'DE': '23.487 Sterne',
+      'RU': '23 487 звёзд',
+      'AR': '23,487 نجمة',
+      'HI': '23,487 स्टार्स',
+      'VI': '23.487 sao',
+      'ES': '23.487 estrellas',
+      'TH': '23,487 ดาว',
+    },
     // 🆕 [데이터 연결] 아래 4개는 실제 숫자와 조합해서 쓰는 "단위/접두어" 문구 (숫자 자체는 더 이상 하드코딩하지 않음)
-    'levelPrefix': {'KO': '학습레벨 ', 'EN': 'Lv.', 'JA': 'レベル', 'ZH': '等级', 'FR': 'Niv. ', 'DE': 'Lvl. ', 'RU': 'Уровень ', 'AR': 'المستوى ', 'HI': 'लेवल ', 'VI': 'Cấp ', 'ES': 'Nivel ', 'TH': 'เลเวล '},
-    'starsUnitSuffix': {'KO': '개', 'EN': 'Stars', 'JA': '個', 'ZH': '颗', 'FR': 'étoiles', 'DE': 'Sterne', 'RU': 'звёзд', 'AR': 'نجمة', 'HI': 'स्टार्स', 'VI': 'sao', 'ES': 'estrellas', 'TH': 'ดาว'},
-    'hoursUnitSuffix': {'KO': '시간', 'EN': 'hrs', 'JA': '時間', 'ZH': '小时', 'FR': 'h', 'DE': 'Std.', 'RU': 'ч', 'AR': 'ساعة', 'HI': 'घंटे', 'VI': 'giờ', 'ES': 'h', 'TH': 'ชม.'},
-    'dataCollectingMsg': {'KO': '데이터 수집중', 'EN': 'Collecting data', 'JA': 'データ収集中', 'ZH': '数据收集中', 'FR': 'Collecte de données...', 'DE': 'Daten werden gesammelt', 'RU': 'Сбор данных...', 'AR': 'جمع البيانات...', 'HI': 'डेटा एकत्रित हो रहा है', 'VI': 'Đang thu thập dữ liệu', 'ES': 'Recopilando datos...', 'TH': 'กำลังรวบรวมข้อมูล'},
-    'friendRank': {'KO': '친구 학습 랭킹: ', 'EN': 'Friend Rank: ', 'JA': '友達学習ランキング: ', 'ZH': '好友学习排名：', 'FR': 'Classement amis : ', 'DE': 'Freunde-Rang: ', 'RU': 'Рейтинг друзей: ', 'AR': 'ترتيب الأصدقاء: ', 'HI': 'मित्र रैंक: ', 'VI': 'Xếp hạng bạn bè: ', 'ES': 'Ranking de amigos: ', 'TH': 'อันดับเพื่อน: '},
-    'rank3': {'KO': '3위\n\n', 'EN': '#3\n\n', 'JA': '3位\n\n', 'ZH': '第3名\n\n', 'FR': '#3\n\n', 'DE': '#3\n\n', 'RU': '#3\n\n', 'AR': '#3\n\n', 'HI': '#3\n\n', 'VI': '#3\n\n', 'ES': '#3\n\n', 'TH': 'อันดับ 3\n\n'},
-    'globalRank': {'KO': '전 세계 학습 랭킹:\n', 'EN': 'Global Rank:\n', 'JA': '世界学習ランキング：\n', 'ZH': '全球学习排名：\n', 'FR': 'Classement mondial :\n', 'DE': 'Weltweiter Rang:\n', 'RU': 'Мировой рейтинг:\n', 'AR': 'الترتيب العالمي:\n', 'HI': 'वैश्विक रैंक:\n', 'VI': 'Xếp hạng toàn cầu:\n', 'ES': 'Ranking mundial:\n', 'TH': 'อันดับโลก:\n'},
-    'top12pct': {'KO': '상위 1.2%', 'EN': 'Top 1.2%', 'JA': '上位1.2%', 'ZH': '前1.2%', 'FR': 'Top 1,2 %', 'DE': 'Top 1,2 %', 'RU': 'Топ 1,2%', 'AR': 'الأعلى 1.2٪', 'HI': 'शीर्ष 1.2%', 'VI': 'Top 1.2%', 'ES': 'Top 1.2%', 'TH': 'ท็อป 1.2%'},
-    'targetUniversity': {'KO': '목표 대학', 'EN': 'Target University', 'JA': '目標大学', 'ZH': '目标大学', 'FR': 'Université cible', 'DE': 'Zieluniversität', 'RU': 'Целевой университет', 'AR': 'الجامعة المستهدفة', 'HI': 'लक्ष्य विश्वविद्यालय', 'VI': 'Trường mục tiêu', 'ES': 'Universidad objetivo', 'TH': 'มหาวิทยาลัยเป้าหมาย'},
-    'snu': {'KO': '서울대학교', 'EN': 'Seoul National University', 'JA': 'ソウル大学校', 'ZH': '首尔大学', 'FR': 'Université Nationale de Séoul', 'DE': 'Nationaluniversität Seoul', 'RU': 'Сеульский национальный университет', 'AR': 'جامعة سيول الوطنية', 'HI': 'सियोल नेशनल यूनिवर्सिटी', 'VI': 'Đại học Quốc gia Seoul', 'ES': 'Universidad Nacional de Seúl', 'TH': 'มหาวิทยาลัยแห่งชาติโซล'},
-    'goalAttainment': {'KO': '목표 달성도', 'EN': 'Goal Attainment', 'JA': '目標達成度', 'ZH': '目标达成度', 'FR': 'Taux d\'atteinte', 'DE': 'Zielerreichung', 'RU': 'Достижение цели', 'AR': 'نسبة تحقيق الهدف', 'HI': 'लक्ष्य प्राप्ति', 'VI': 'Mức đạt mục tiêu', 'ES': 'Logro de objetivos', 'TH': 'อัตราการบรรลุเป้าหมาย'},
-    'todayVsYesterday': {'KO': '어제 대비 오늘 ', 'EN': 'Today vs Yesterday ', 'JA': '昨日比 本日 ', 'ZH': '今日较昨日 ', 'FR': 'Aujourd\'hui vs hier ', 'DE': 'Heute vs. gestern ', 'RU': 'Сегодня к вчера ', 'AR': 'اليوم مقارنة بالأمس ', 'HI': 'आज बनाम कल ', 'VI': 'Hôm nay so với hôm qua ', 'ES': 'Hoy vs ayer ', 'TH': 'วันนี้เทียบเมื่อวาน '},
-    'mostImprovedSubject': {'KO': '가장 성장한 학습과목\n', 'EN': 'Most Improved Subject\n', 'JA': '最も伸びた科目\n', 'ZH': '进步最大的科目\n', 'FR': 'Matière la plus améliorée\n', 'DE': 'Am meisten verbessertes Fach\n', 'RU': 'Предмет с наибольшим ростом\n', 'AR': 'أكثر مادة تحسنًا\n', 'HI': 'सबसे अधिक सुधार वाला विषय\n', 'VI': 'Môn học tiến bộ nhất\n', 'ES': 'Materia más mejorada\n', 'TH': 'วิชาที่พัฒนามากที่สุด\n'},
-    'mostStudiedSubject': {'KO': '가장 많이 학습한 과목\n', 'EN': 'Most Studied Subject\n', 'JA': '最も学習した科目\n', 'ZH': '学习最多的科目\n', 'FR': 'Matière la plus étudiée\n', 'DE': 'Meist gelerntes Fach\n', 'RU': 'Самый изучаемый предмет\n', 'AR': 'أكثر مادة تمت دراستها\n', 'HI': 'सबसे अधिक पढ़ा गया विषय\n', 'VI': 'Môn học được học nhiều nhất\n', 'ES': 'Materia más estudiada\n', 'TH': 'วิชาที่เรียนมากที่สุด\n'},
-    'totalStudyTimeLabel': {'KO': '총 학습시간:\n', 'EN': 'Total Study Time:\n', 'JA': '総学習時間：\n', 'ZH': '总学习时间：\n', 'FR': 'Temps d\'étude total :\n', 'DE': 'Gesamte Lernzeit:\n', 'RU': 'Общее время учёбы:\n', 'AR': 'إجمالي وقت الدراسة:\n', 'HI': 'कुल अध्ययन समय:\n', 'VI': 'Tổng thời gian học:\n', 'ES': 'Tiempo total de estudio:\n', 'TH': 'เวลาเรียนทั้งหมด:\n'},
-    'totalStudyHours': {'KO': '1,257시간', 'EN': '1,257 hrs', 'JA': '1,257時間', 'ZH': '1,257小时', 'FR': '1 257 h', 'DE': '1.257 Std.', 'RU': '1 257 ч', 'AR': '1,257 ساعة', 'HI': '1,257 घंटे', 'VI': '1.257 giờ', 'ES': '1.257 h', 'TH': '1,257 ชม.'},
-    'studyTime': {'KO': '과목 학습 시간', 'EN': 'Subject Study Time', 'JA': '科目別学習時間', 'ZH': '科目学习时间', 'FR': 'Temps d\'étude par matière', 'DE': 'Lernzeit pro Fach', 'RU': 'Время учёбы по предметам', 'AR': 'وقت الدراسة حسب المادة', 'HI': 'विषयवार अध्ययन समय', 'VI': 'Thời gian học theo môn', 'ES': 'Tiempo de estudio por materia', 'TH': 'เวลาเรียนตามวิชา'},
-    'dailyTotalStudyTime': {'KO': '일일 전체 학습시간', 'EN': 'Daily Total Study Time', 'JA': '日別総学習時間', 'ZH': '每日总学习时间', 'FR': 'Temps d\'étude quotidien total', 'DE': 'Tägliche Gesamtlernzeit', 'RU': 'Общее время учёбы за день', 'AR': 'إجمالي وقت الدراسة اليومي', 'HI': 'दैनिक कुल अध्ययन समय', 'VI': 'Tổng thời gian học mỗi ngày', 'ES': 'Tiempo total de estudio diario', 'TH': 'เวลาเรียนรวมต่อวัน'},
-    'daily': {'KO': '일 간', 'EN': 'Daily', 'JA': '日別', 'ZH': '日', 'FR': 'Jour', 'DE': 'Täglich', 'RU': 'День', 'AR': 'يومي', 'HI': 'दैनिक', 'VI': 'Ngày', 'ES': 'Diario', 'TH': 'รายวัน'},
-    'weekly': {'KO': '주 간', 'EN': 'Weekly', 'JA': '週別', 'ZH': '周', 'FR': 'Semaine', 'DE': 'Wöchentlich', 'RU': 'Неделя', 'AR': 'أسبوعي', 'HI': 'साप्ताहिक', 'VI': 'Tuần', 'ES': 'Semanal', 'TH': 'รายสัปดาห์'},
-    'monthly': {'KO': '월 간', 'EN': 'Monthly', 'JA': '月別', 'ZH': '月', 'FR': 'Mois', 'DE': 'Monatlich', 'RU': 'Месяц', 'AR': 'شهري', 'HI': 'मासिक', 'VI': 'Tháng', 'ES': 'Mensual', 'TH': 'รายเดือน'},
-    'yearly': {'KO': '연 간', 'EN': 'Yearly', 'JA': '年別', 'ZH': '年', 'FR': 'Année', 'DE': 'Jährlich', 'RU': 'Год', 'AR': 'سنوي', 'HI': 'वार्षिक', 'VI': 'Năm', 'ES': 'Anual', 'TH': 'รายปี'},
-    'myScoreRecord': {'KO': '나의 성적 기록 직접 작성', 'EN': 'My Score Self Record', 'JA': '自分の成績を記録する', 'ZH': '自主记录我的成绩', 'FR': 'Mon carnet de notes', 'DE': 'Meine Notenaufzeichnung', 'RU': 'Мои записи об оценках', 'AR': 'سجل درجاتي الخاص', 'HI': 'मेरा स्कोर रिकॉर्ड', 'VI': 'Tự ghi điểm của tôi', 'ES': 'Mi registro de notas', 'TH': 'บันทึกคะแนนของฉัน'},
-    'yearSelect': {'KO': '년도 선택', 'EN': 'Year', 'JA': '年を選択', 'ZH': '选择年份', 'FR': 'Année', 'DE': 'Jahr', 'RU': 'Год', 'AR': 'السنة', 'HI': 'वर्ष', 'VI': 'Năm', 'ES': 'Año', 'TH': 'ปี'},
-    'monthSelect': {'KO': '월 선택', 'EN': 'Month', 'JA': '月を選択', 'ZH': '选择月份', 'FR': 'Mois', 'DE': 'Monat', 'RU': 'Месяц', 'AR': 'الشهر', 'HI': 'महीना', 'VI': 'Tháng', 'ES': 'Mes', 'TH': 'เดือน'},
-    'weekSelect': {'KO': '주 선택', 'EN': 'Week', 'JA': '週を選択', 'ZH': '选择周次', 'FR': 'Semaine', 'DE': 'Woche', 'RU': 'Неделя', 'AR': 'الأسبوع', 'HI': 'सप्ताह', 'VI': 'Tuần', 'ES': 'Semana', 'TH': 'สัปดาห์'},
-    'bigUnitSelect': {'KO': '대단원 선택', 'EN': 'Major Unit', 'JA': '大単元を選択', 'ZH': '选择大单元', 'FR': 'Unité principale', 'DE': 'Haupteinheit', 'RU': 'Основной раздел', 'AR': 'الوحدة الرئيسية', 'HI': 'मुख्य यूनिट', 'VI': 'Chương lớn', 'ES': 'Unidad principal', 'TH': 'บทหลัก'},
-    'midUnitSelect': {'KO': '중단원 선택', 'EN': 'Sub Unit', 'JA': '中単元を選択', 'ZH': '选择中单元', 'FR': 'Sous-unité', 'DE': 'Untereinheit', 'RU': 'Подраздел', 'AR': 'الوحدة الفرعية', 'HI': 'सब-यूनिट', 'VI': 'Chương nhỏ', 'ES': 'Subunidad', 'TH': 'บทย่อย'},
-    'semesterSelect': {'KO': '학기 선택', 'EN': 'Semester', 'JA': '学期を選択', 'ZH': '选择学期', 'FR': 'Semestre', 'DE': 'Semester', 'RU': 'Семестр', 'AR': 'الفصل الدراسي', 'HI': 'सेमेस्टर', 'VI': 'Học kỳ', 'ES': 'Semestre', 'TH': 'ภาคเรียน'},
-    'chartTarget': {'KO': '그래프 출력 타겟 지정 (학년 / 학기)', 'EN': 'Chart Target (Grade / Semester)', 'JA': 'グラフ対象指定（学年／学期）', 'ZH': '图表目标设置（年级／学期）', 'FR': 'Cible du graphique (année / semestre)', 'DE': 'Diagrammziel (Klasse / Semester)', 'RU': 'Цель графика (класс / семестр)', 'AR': 'هدف الرسم البياني (الصف / الفصل)', 'HI': 'चार्ट लक्ष्य (कक्षा / सेमेस्टर)', 'VI': 'Mục tiêu biểu đồ (khối / học kỳ)', 'ES': 'Objetivo del gráfico (grado / semestre)', 'TH': 'เป้าหมายกราฟ (ระดับชั้น/ภาคเรียน)'},
-    'newRecordGradeSemesterLabel': {'KO': '지금 입력할 새 기록의 학년 / 학기', 'EN': 'Grade / Semester for this new entry', 'JA': '今回入力する記録の学年／学期', 'ZH': '本次输入记录的年级／学期', 'FR': 'Année / semestre de cette nouvelle entrée', 'DE': 'Klasse / Semester für diesen neuen Eintrag', 'RU': 'Класс / семестр для новой записи', 'AR': 'الصف / الفصل لهذا السجل الجديد', 'HI': 'इस नई प्रविष्टि के लिए कक्षा / सेमेस्टर', 'VI': 'Khối / học kỳ cho mục nhập mới này', 'ES': 'Grado / semestre para esta nueva entrada', 'TH': 'ระดับชั้น/ภาคเรียนสำหรับรายการใหม่นี้'},
-    'gradeLabel': {'KO': '학년', 'EN': 'Grade', 'JA': '学年', 'ZH': '年级', 'FR': 'Année', 'DE': 'Klasse', 'RU': 'Класс', 'AR': 'الصف', 'HI': 'कक्षा', 'VI': 'Khối lớp', 'ES': 'Grado', 'TH': 'ระดับชั้น'},
-    'semesterLabel': {'KO': '학기', 'EN': 'Semester', 'JA': '学期', 'ZH': '学期', 'FR': 'Semestre', 'DE': 'Semester', 'RU': 'Семестр', 'AR': 'الفصل الدراسي', 'HI': 'सेमेस्टर', 'VI': 'Học kỳ', 'ES': 'Semestre', 'TH': 'ภาคเรียน'},
-    'subjectHint': {'KO': '과목생성', 'EN': 'Subject', 'JA': '科目作成', 'ZH': '创建科目', 'FR': 'Matière', 'DE': 'Fach', 'RU': 'Предмет', 'AR': 'المادة', 'HI': 'विषय', 'VI': 'Môn học', 'ES': 'Materia', 'TH': 'วิชา'},
-    'unitHint': {'KO': '단원생성', 'EN': 'Unit', 'JA': '単元作成', 'ZH': '创建单元', 'FR': 'Unité', 'DE': 'Einheit', 'RU': 'Раздел', 'AR': 'الوحدة', 'HI': 'यूनिट', 'VI': 'Chương', 'ES': 'Unidad', 'TH': 'บท'},
-    'scoreHint': {'KO': '점수', 'EN': 'Score', 'JA': '点数', 'ZH': '分数', 'FR': 'Score', 'DE': 'Punktzahl', 'RU': 'Балл', 'AR': 'الدرجة', 'HI': 'स्कोर', 'VI': 'Điểm', 'ES': 'Puntuación', 'TH': 'คะแนน'},
-    'saveBtn': {'KO': '저장', 'EN': 'Save', 'JA': '保存', 'ZH': '保存', 'FR': 'Enregistrer', 'DE': 'Speichern', 'RU': 'Сохранить', 'AR': 'حفظ', 'HI': 'सहेजें', 'VI': 'Lưu', 'ES': 'Guardar', 'TH': 'บันทึก'},
-    'onlyRecordedSubjectsChart': {'KO': '평가가 기록된 과목만 그래프에 나타나게한다', 'EN': 'Only subjects with recorded evaluations appear on the chart.', 'JA': '評価が記録された科目だけがグラフに表示されます。', 'ZH': '仅显示已记录评估的科目。', 'FR': 'Seules les matières évaluées apparaissent sur le graphique.', 'DE': 'Nur bewertete Fächer werden im Diagramm angezeigt.', 'RU': 'На графике отображаются только оценённые предметы.', 'AR': 'تظهر في الرسم البياني فقط المواد التي تم تسجيل تقييم لها.', 'HI': 'चार्ट में केवल मूल्यांकित विषय ही दिखाए जाते हैं।', 'VI': 'Chỉ các môn đã có điểm đánh giá mới hiển thị trên biểu đồ.', 'ES': 'Solo las materias con evaluaciones registradas aparecen en el gráfico.', 'TH': 'กราฟจะแสดงเฉพาะวิชาที่มีการบันทึกผลประเมินเท่านั้น'},
-    'average': {'KO': '평균', 'EN': 'Average', 'JA': '平均', 'ZH': '平均', 'FR': 'Moyenne', 'DE': 'Durchschnitt', 'RU': 'Среднее', 'AR': 'المتوسط', 'HI': 'औसत', 'VI': 'Trung bình', 'ES': 'Promedio', 'TH': 'ค่าเฉลี่ย'},
-    'lifeBalance': {'KO': '종합 생활 균형', 'EN': 'Comprehensive Life Balance', 'JA': '総合生活バランス', 'ZH': '综合生活平衡', 'FR': 'Équilibre de vie global', 'DE': 'Ganzheitliche Lebensbalance', 'RU': 'Общий баланс жизни', 'AR': 'التوازن الشامل في الحياة', 'HI': 'समग्र जीवन संतुलन', 'VI': 'Cân bằng cuộc sống tổng thể', 'ES': 'Equilibrio integral de vida', 'TH': 'ความสมดุลชีวิตโดยรวม'},
-    'lifeBalanceSub': {'KO': '(종합 생활 균형 밸런스 분석)', 'EN': '(Comprehensive life balance analysis)', 'JA': '（総合生活バランス分析）', 'ZH': '（综合生活平衡分析）', 'FR': '(Analyse de l\'équilibre de vie global)', 'DE': '(Analyse der ganzheitlichen Lebensbalance)', 'RU': '(Анализ общего баланса жизни)', 'AR': '(تحليل التوازن الشامل في الحياة)', 'HI': '(समग्र जीवन संतुलन विश्लेषण)', 'VI': '(Phân tích cân bằng cuộc sống tổng thể)', 'ES': '(Análisis del equilibrio integral de vida)', 'TH': '(การวิเคราะห์ความสมดุลชีวิตโดยรวม)'},
-    'dbSyncTitle': {'KO': '데이터베이스 동기화 알림', 'EN': 'Database Sync Notification', 'JA': 'データベース同期通知', 'ZH': '数据库同步通知', 'FR': 'Notification de synchronisation', 'DE': 'Datenbank-Synchronisierung', 'RU': 'Уведомление о синхронизации', 'AR': 'إشعار مزامنة قاعدة البيانات', 'HI': 'डेटाबेस सिंक सूचना', 'VI': 'Thông báo đồng bộ dữ liệu', 'ES': 'Notificación de sincronización', 'TH': 'การแจ้งเตือนซิงค์ข้อมูล'},
-    'dbSyncSub': {'KO': '(데이터를 안전하게 동기화 중입니다...)', 'EN': '(Synchronizing data storage safely...)', 'JA': '（データを安全に同期しています...）', 'ZH': '（正在安全同步数据...）', 'FR': '(Synchronisation sécurisée des données...)', 'DE': '(Daten werden sicher synchronisiert...)', 'RU': '(Безопасная синхронизация данных...)', 'AR': '(تتم مزامنة البيانات بأمان...)', 'HI': '(डेटा को सुरक्षित रूप से सिंक किया जा रहा है...)', 'VI': '(Đang đồng bộ dữ liệu an toàn...)', 'ES': '(Sincronizando datos de forma segura...)', 'TH': '(กำลังซิงค์ข้อมูลอย่างปลอดภัย...)'},
-    'mockDiagTitle': {'KO': '모의고사 정밀 평가 진단', 'EN': 'Mock Exam Detailed Diagnosis', 'JA': '模試精密評価診断', 'ZH': '模拟考试精密诊断', 'FR': 'Diagnostic détaillé de l\'examen blanc', 'DE': 'Detaillierte Diagnose des Testexamens', 'RU': 'Подробная диагностика пробного экзамена', 'AR': 'تشخيص دقيق للاختبار التجريبي', 'HI': 'मॉक परीक्षा विस्तृत निदान', 'VI': 'Chẩn đoán chi tiết kỳ thi thử', 'ES': 'Diagnóstico detallado del examen simulado', 'TH': 'การวินิจฉัยเชิงลึกข้อสอบจำลอง'},
-    'examDiagTitle': {'KO': '시험 성취도 세부 피드백 설정', 'EN': 'Exam Achievement Feedback Setup', 'JA': '試験成果詳細フィードバック設定', 'ZH': '考试成果详细反馈设置', 'FR': 'Configuration du retour détaillé sur l\'examen', 'DE': 'Detailliertes Feedback zur Prüfungsleistung', 'RU': 'Настройка подробной обратной связи по экзамену', 'AR': 'إعداد ملاحظات تفصيلية عن نتيجة الاختبار', 'HI': 'परीक्षा उपलब्धि विस्तृत फ़ीडबैक सेटअप', 'VI': 'Thiết lập phản hồi chi tiết về kết quả thi', 'ES': 'Configuración de retroalimentación detallada del examen', 'TH': 'ตั้งค่าฟีดแบ็กผลสอบแบบละเอียด'},
-    'emptyFallbackShort': {'KO': '현재 해당 카테고리에 누적된 데이터셋이 식별되지 않아 기본 정성 분석을 수행합니다.\n\n학습자의 메타인지 상태는 평균치에 도달했으나 실전 정합성을 높이기 위한 개념 오답 관리가 요구됩니다. 용기를 잃지 말고 내일의 세션에 몰입하십시오.', 'EN': 'No accumulated dataset found for this category, so a general qualitative analysis is provided.\n\nThe learner\'s metacognitive state is average, but reviewing conceptual mistakes will help solidify readiness. Stay confident and stay focused for tomorrow\'s session.', 'JA': 'このカテゴリーには蓄積データが見つからないため、基本的な定性分析を行います。\n\n学習者のメタ認知状態は平均的ですが、実戦力を高めるには概念の誤答管理が必要です。勇気を失わず、明日のセッションに集中しましょう。', 'ZH': '该类别暂无累积数据，因此进行基础定性分析。\n\n学习者的元认知水平处于平均水平，但需要加强概念性错题管理以提升实战能力。请保持信心，专注于明天的学习。', 'FR': 'Aucune donnée cumulée n\'a été trouvée pour cette catégorie ; une analyse qualitative générale est donc fournie.\n\nLe niveau métacognitif de l\'apprenant est moyen, mais revoir les erreurs conceptuelles renforcera sa préparation. Restez confiant pour la prochaine session.', 'DE': 'Für diese Kategorie wurden keine gesammelten Daten gefunden, daher wird eine allgemeine qualitative Analyse bereitgestellt.\n\nDer metakognitive Zustand des Lernenden ist durchschnittlich, aber die Überprüfung konzeptioneller Fehler wird die Vorbereitung stärken. Bleiben Sie zuversichtlich für die nächste Sitzung.', 'RU': 'Накопленных данных по этой категории не найдено, поэтому предоставлен общий качественный анализ.\n\nМетакогнитивное состояние учащегося среднее, но разбор концептуальных ошибок поможет закрепить готовность. Сохраняйте уверенность перед следующим занятием.', 'AR': 'لم يتم العثور على بيانات متراكمة لهذه الفئة، لذا يتم تقديم تحليل نوعي عام.\n\nحالة الإدراك الفوقي للمتعلم متوسطة، ولكن مراجعة الأخطاء المفاهيمية ستعزز الاستعداد. حافظ على ثقتك وركز على الجلسة القادمة.', 'HI': 'इस श्रेणी के लिए कोई संचित डेटा नहीं मिला, इसलिए एक सामान्य गुणात्मक विश्लेषण प्रदान किया गया है।\n\nसीखने वाले की मेटाकॉग्निटिव स्थिति औसत है, लेकिन वैचारिक गलतियों की समीक्षा तैयारी को मजबूत करेगी। आत्मविश्वास बनाए रखें और आगामी सत्र पर ध्यान दें।', 'VI': 'Không tìm thấy dữ liệu tích lũy cho hạng mục này, vì vậy đây là phân tích định tính chung.\n\nTrạng thái nhận thức của người học ở mức trung bình, nhưng việc xem lại các lỗi khái niệm sẽ giúp cải thiện. Hãy giữ tự tin và tập trung cho buổi học tiếp theo.', 'ES': 'No se encontraron datos acumulados para esta categoría, por lo que se ofrece un análisis cualitativo general.\n\nEl estado metacognitivo del estudiante es promedio, pero revisar los errores conceptuales fortalecerá su preparación. Mantén la confianza para la próxima sesión.', 'TH': 'ไม่พบข้อมูลสะสมในหมวดนี้ จึงขอนำเสนอการวิเคราะห์เชิงคุณภาพทั่วไป\n\nสภาวะการรู้คิดของผู้เรียนอยู่ในระดับเฉลี่ย แต่การทบทวนข้อผิดพลาดด้านแนวคิดจะช่วยเสริมความพร้อม รักษาความมั่นใจและตั้งใจกับครั้งถัดไป'},
-    'emptyFallbackLong': {'KO': '현재 해당 카테고리에 누적된 성적 메트릭이 식별되지 않아 기본 정성 분석을 수행합니다.\n\n학습자의 메타인지(자신의 인지 활동을 모니터링하고 조절하는 능력) 수준은 양호하나 과목 간 편차가 존재할 수 있습니다. 실전에서 흔들리지 않기 위해서는 개념 정합성 확인 프로세스를 고도화해야 합니다. 언제나 가능성이 열려있으니 포기하지 말고 전진합시다.', 'EN': 'No accumulated score metrics were found for this category, so a general qualitative analysis is provided.\n\nThe learner\'s metacognitive level appears sound, though gaps between subjects may exist. To stay steady under real test conditions, strengthen the concept-verification process. Possibility is always open — keep moving forward.', 'JA': 'このカテゴリーには蓄積された成績データが見つからないため、基本的な定性分析を行います。\n\n学習者のメタ認知（自身の認知活動を監視・調整する能力）は良好ですが、科目間の差が存在する可能性があります。実戦で動揺しないためには概念の整合性確認プロセスを高度化する必要があります。可能性は常に開かれているので、諦めずに前進しましょう。', 'ZH': '该类别暂无累积成绩数据，因此进行基础定性分析。\n\n学习者的元认知水平（监控和调节自身认知活动的能力）良好，但学科间可能存在差异。为了在实战中保持稳定，需要提升概念一致性确认流程。可能性始终存在，不要放弃，继续前进。', 'FR': 'Aucune métrique de score cumulée n\'a été trouvée pour cette catégorie ; une analyse qualitative générale est donc fournie.\n\nLe niveau métacognitif de l\'apprenant semble bon, bien que des écarts entre matières puissent exister. Pour rester stable en conditions réelles, il faut renforcer le processus de vérification des concepts. Les possibilités restent ouvertes — continuez d\'avancer.', 'DE': 'Für diese Kategorie wurden keine gesammelten Notenmetriken gefunden, daher wird eine allgemeine qualitative Analyse bereitgestellt.\n\nDas metakognitive Niveau des Lernenden erscheint solide, wobei Unterschiede zwischen Fächern bestehen können. Um unter realen Testbedingungen stabil zu bleiben, sollte der Konzeptüberprüfungsprozess gestärkt werden. Die Möglichkeit bleibt immer offen — bleiben Sie in Bewegung.', 'RU': 'Накопленных показателей успеваемости по этой категории не найдено, поэтому предоставлен общий качественный анализ.\n\nМетакогнитивный уровень учащегося выглядит хорошим, хотя между предметами могут быть расхождения. Чтобы сохранять устойчивость в реальных условиях, нужно усилить процесс проверки концепций. Возможность всегда открыта — продолжайте двигаться вперёд.', 'AR': 'لم يتم العثور على مقاييس درجات متراكمة لهذه الفئة، لذا يتم تقديم تحليل نوعي عام.\n\nيبدو مستوى الإدراك الفوقي للمتعلم جيدًا، على الرغم من احتمال وجود فجوات بين المواد. للحفاظ على الثبات في ظروف الاختبار الحقيقية، يجب تعزيز عملية التحقق من المفاهيم. الإمكانية مفتوحة دائمًا — استمر في التقدم.', 'HI': 'इस श्रेणी के लिए कोई संचित स्कोर मेट्रिक्स नहीं मिला, इसलिए एक सामान्य गुणात्मक विश्लेषण प्रदान किया गया है।\n\nसीखने वाले का मेटाकॉग्निटिव स्तर अच्छा प्रतीत होता है, हालांकि विषयों के बीच अंतर हो सकता है। वास्तविक परीक्षा स्थितियों में स्थिर रहने के लिए, अवधारणा-सत्यापन प्रक्रिया को मजबूत करें। संभावना हमेशा खुली है — आगे बढ़ते रहें।', 'VI': 'Không tìm thấy chỉ số điểm tích lũy cho hạng mục này, vì vậy đây là phân tích định tính chung.\n\nMức độ nhận thức của người học có vẻ tốt, dù có thể có sự chênh lệch giữa các môn. Để giữ ổn định trong điều kiện thi thực tế, cần củng cố quy trình xác minh khái niệm. Khả năng luôn rộng mở — hãy tiếp tục tiến lên.', 'ES': 'No se encontraron métricas de puntuación acumuladas para esta categoría, por lo que se ofrece un análisis cualitativo general.\n\nEl nivel metacognitivo del estudiante parece sólido, aunque puede haber diferencias entre materias. Para mantenerse estable en condiciones de examen real, fortalece el proceso de verificación de conceptos. La posibilidad siempre está abierta: sigue avanzando.', 'TH': 'ไม่พบข้อมูลคะแนนสะสมในหมวดนี้ จึงขอนำเสนอการวิเคราะห์เชิงคุณภาพทั่วไป\n\nระดับการรู้คิดของผู้เรียนดูเหมาะสมดี แม้อาจมีความแตกต่างระหว่างวิชา เพื่อรักษาความมั่นคงในสถานการณ์สอบจริง ควรเสริมกระบวนการตรวจสอบแนวคิดให้แข็งแกร่งขึ้น โอกาสเปิดกว้างเสมอ อย่าหยุดที่จะก้าวต่อไป'},
-    'achievementWord': {'KO': '성취도', 'EN': 'Achievement', 'JA': '成果', 'ZH': '成就度', 'FR': 'Réussite', 'DE': 'Leistung', 'RU': 'Успеваемость', 'AR': 'التحصيل', 'HI': 'उपलब्धि', 'VI': 'Thành tích', 'ES': 'Logro', 'TH': 'ผลสัมฤทธิ์'},
-    'highSchoolGrade2': {'KO': 'GKE 고등학교 2학년', 'EN': 'GKE High School, Grade 11', 'JA': 'GKE高校2年生', 'ZH': 'GKE高中二年级', 'FR': 'GKE Lycée, 2e année', 'DE': 'GKE Gymnasium, 2. Klasse', 'RU': 'GKE школа, 2 курс', 'AR': 'GKE الصف الثاني الثانوي', 'HI': 'GKE हाई स्कूल कक्षा 2', 'VI': 'GKE Cấp 3, lớp 11', 'ES': 'GKE Bachillerato, 2º año', 'TH': 'GKE มัธยมปลาย ปีที่ 2'},
-    'recentFeedbackPrefix': {'KO': '[최근 작성]', 'EN': '[Recent]', 'JA': '[最近作成]', 'ZH': '[最近]', 'FR': '[Récent]', 'DE': '[Zuletzt]', 'RU': '[Недавнее]', 'AR': '[الأحدث]', 'HI': '[हाल का]', 'VI': '[Gần đây]', 'ES': '[Reciente]', 'TH': '[ล่าสุด]'},
-    'achievementFeedbackMetrics': {'KO': '성취 피드백 메트릭스', 'EN': 'Achievement Feedback Metrics', 'JA': '成果フィードバック指標', 'ZH': '成果反馈指标', 'FR': 'Indicateurs de progression', 'DE': 'Leistungs-Feedback-Metriken', 'RU': 'Метрики обратной связи по успеваемости', 'AR': 'مؤشرات ملاحظات التحصيل', 'HI': 'उपलब्धि फ़ीडबैक मेट्रिक्स', 'VI': 'Chỉ số phản hồi thành tích', 'ES': 'Métricas de retroalimentación de logros', 'TH': 'ตัวชี้วัดฟีดแบ็กผลสัมฤทธิ์'},
-    'targetSubjectLabel': {'KO': '타겟 과목', 'EN': 'Target', 'JA': '対象科目', 'ZH': '目标科目', 'FR': 'Matière ciblée', 'DE': 'Zielfach', 'RU': 'Целевой предмет', 'AR': 'المادة المستهدفة', 'HI': 'लक्ष्य विषय', 'VI': 'Môn mục tiêu', 'ES': 'Materia objetivo', 'TH': 'วิชาเป้าหมาย'},
-    'scoreLabel': {'KO': '점수', 'EN': 'Score', 'JA': '点数', 'ZH': '分数', 'FR': 'Score', 'DE': 'Punktzahl', 'RU': 'Балл', 'AR': 'الدرجة', 'HI': 'स्कोर', 'VI': 'Điểm', 'ES': 'Puntuación', 'TH': 'คะแนน'},
-    'viewAnalysisReport': {'KO': '분석 보고서 조회하기', 'EN': 'View Analysis Report', 'JA': '分析レポートを見る', 'ZH': '查看分析报告', 'FR': 'Voir le rapport d\'analyse', 'DE': 'Analysebericht ansehen', 'RU': 'Просмотреть отчёт анализа', 'AR': 'عرض تقرير التحليل', 'HI': 'विश्लेषण रिपोर्ट देखें', 'VI': 'Xem báo cáo phân tích', 'ES': 'Ver informe de análisis', 'TH': 'ดูรายงานการวิเคราะห์'},
-    'entryAndHistory': {'KO': '입력 및 과거 선택 조회', 'EN': 'Entry & History', 'JA': '入力と履歴の確認', 'ZH': '输入与历史查看', 'FR': 'Saisie et historique', 'DE': 'Eingabe & Verlauf', 'RU': 'Ввод и история', 'AR': 'الإدخال والسجل', 'HI': 'प्रविष्टि और इतिहास', 'VI': 'Nhập liệu & lịch sử', 'ES': 'Entrada e historial', 'TH': 'บันทึกและประวัติ'},
-    'summaryReportBody': {'KO': '[종합 리포트]\n\n자기주도 학습 1교시\n1번 학습일시: 2026-06-18 21:36 ~ 22:36 끝남 UTC\n2. 학습과목: 수학\n3. 학습시간: 72분 / 90분\n4. 목표달성률: 80%\n5. 별 갯수: ****(4/5)\n\n자기주도학습 2교시\n1번 학습일시:\n2026-06-18 21:36 ~ 22:36 끝남 UTC\n2. 학습과목: 영어\n3. 학습시간: 72분 / 90분\n4. 목표달성률: 80%\n5. 별 갯수: ****(4/5)\n\n[종합 진단 피드백]\n금일 진행된 이규현 회원의 학습 세션은 시간 관리와 핵심 문항 분석 면에서 고도의 진취성을 나타냈습니다. 계획된 90분의 집중 타임라인 중 실제 몰입 시간의 밀도가 높았으며, 과목 간 균형도 안정적입니다. 다만 학습 개시 단계에서 개념 정립에 소요되는 시간이 평균치보다 다소 길어지는 지체 현상이 관찰되었습니다. 이는 후반부 응용 문제 풀이의 정밀도를 저해하는 요인이 될 수 있으므로, 초기 몰입 속도를 제고하려는 의도적인 노력이 요구됩니다. 전반적인 과목 이해도는 상위권 진입에 무리가 없는 수준이나, 오답을 선별하고 피드백 리포트를 구성할 때 본인의 주관적 판단에만 의존하는 경향은 확실히 교정해야 할 지점입니다. 현재 유지하고 있는 연속 학습의 패턴은 장기적 성과 도출을 위한 훌륭한 기반이 되므로, 스스로의 역량을 확신하고 정진하기 바랍니다. 미진한 영역을 명확히 보완하여 내일의 학습 효율성을 한층 더 고도화할 수 있도록 냉철하게 관리해 나갈 것을 엄중히 제언합니다.', 'EN': '[Total Report]\n\nSelf-Directed Learning Session 1\n1. TIMESTAMP: 2026-06-18 21:36 ~ 22:36 End UTC\n2. SUBJECT: Math\n3. TIME: 72 Mins / 90 Mins\n4. ACHIEVEMENT RATE: 80%\n5. STARS: ****(4/5)\n\nSelf-Directed Learning Session 2\n1. TIMESTAMP:\n2026-06-18 21:36 ~ 22:36 End UTC\n2. SUBJECT: En\n3. TIME: 72 Mins / 90 Mins\n4. ACHIEVEMENT RATE: 80%\n5. STARS: ****(4/5)\n\nToday\'s learning sessions showed great progress. Keep moving forward toward your target with strong motivation.', 'JA': '[総合レポート]\n\n自己主導学習 第1時限\n1. 学習日時：2026-06-18 21:36〜22:36 終了 UTC\n2. 学習科目：数学\n3. 学習時間：72分／90分\n4. 目標達成率：80%\n5. 星の数：****(4/5)\n\n自己主導学習 第2時限\n1. 学習日時：\n2026-06-18 21:36〜22:36 終了 UTC\n2. 学習科目：英語\n3. 学習時間：72分／90分\n4. 目標達成率：80%\n5. 星の数：****(4/5)\n\n[総合診断フィードバック]\n本日のイ・ギュヒョン会員の学習セッションは時間管理と重要項目の分析において高い積極性を示しました。よく集中して取り組めていますが、概念整理に時間がかかる傾向が見られます。明日はより早く集中に入れるよう意識してみましょう。', 'ZH': '[综合报告]\n\n自主学习 第1节\n1. 学习时间：2026-06-18 21:36～22:36 结束 UTC\n2. 学习科目：数学\n3. 学习时长：72分钟／90分钟\n4. 目标达成率：80%\n5. 星星数量：****(4/5)\n\n自主学习 第2节\n1. 学习时间：\n2026-06-18 21:36～22:36 结束 UTC\n2. 学习科目：英语\n3. 学习时长：72分钟／90分钟\n4. 目标达成率：80%\n5. 星星数量：****(4/5)\n\n[综合诊断反馈]\n今日李圭贤会员的学习表现出较高的时间管理与重点分析能力。整体学习节奏稳定，但在概念梳理阶段耗时略长于平均水平。建议明天从一开始就加快进入专注状态。', 'FR': '[Rapport global]\n\nSession d\'apprentissage autonome 1\n1. HORODATAGE : 2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATIÈRE : Maths\n3. DURÉE : 72 min / 90 min\n4. TAUX DE RÉUSSITE : 80 %\n5. ÉTOILES : ****(4/5)\n\nSession d\'apprentissage autonome 2\n1. HORODATAGE :\n2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATIÈRE : Anglais\n3. DURÉE : 72 min / 90 min\n4. TAUX DE RÉUSSITE : 80 %\n5. ÉTOILES : ****(4/5)\n\n[Retour de diagnostic global]\nLa session d\'apprentissage de Lee Gyu-hyun d\'aujourd\'hui a montré une bonne gestion du temps et une analyse solide des points clés. Le rythme reste stable, mais la phase de mise en place des concepts prend un peu plus de temps que la moyenne. Essayez de démarrer plus rapidement demain.', 'DE': '[Gesamtbericht]\n\nSelbstgesteuerte Lerneinheit 1\n1. ZEITSTEMPEL: 2026-06-18 21:36 ~ 22:36 Ende UTC\n2. FACH: Mathe\n3. DAUER: 72 Min / 90 Min\n4. ERFOLGSQUOTE: 80 %\n5. STERNE: ****(4/5)\n\nSelbstgesteuerte Lerneinheit 2\n1. ZEITSTEMPEL:\n2026-06-18 21:36 ~ 22:36 Ende UTC\n2. FACH: Englisch\n3. DAUER: 72 Min / 90 Min\n4. ERFOLGSQUOTE: 80 %\n5. STERNE: ****(4/5)\n\n[Gesamtdiagnose-Feedback]\nDie heutige Lernsitzung von Lee Gyu-hyun zeigte gutes Zeitmanagement und eine solide Analyse der Kernpunkte. Das Tempo bleibt stabil, doch die Konzeptaufbauphase dauert etwas länger als der Durchschnitt. Morgen sollte der Fokus schneller aufgebaut werden.', 'RU': '[Общий отчёт]\n\nСамостоятельное занятие 1\n1. ВРЕМЯ: 2026-06-18 21:36 ~ 22:36 Завершено UTC\n2. ПРЕДМЕТ: Математика\n3. ВРЕМЯ ЗАНЯТИЯ: 72 мин / 90 мин\n4. ДОСТИЖЕНИЕ ЦЕЛИ: 80%\n5. ЗВЁЗДЫ: ****(4/5)\n\nСамостоятельное занятие 2\n1. ВРЕМЯ:\n2026-06-18 21:36 ~ 22:36 Завершено UTC\n2. ПРЕДМЕТ: Английский\n3. ВРЕМЯ ЗАНЯТИЯ: 72 мин / 90 мин\n4. ДОСТИЖЕНИЕ ЦЕЛИ: 80%\n5. ЗВЁЗДЫ: ****(4/5)\n\n[Общая диагностическая обратная связь]\nСегодняшнее занятие ученика Ли Гю Хёна показало хороший тайм-менеджмент и качественный анализ ключевых заданий. Темп остаётся стабильным, но этап усвоения понятий занимает немного больше времени, чем в среднем. Завтра стоит быстрее выходить на нужную концентрацию.', 'AR': '[التقرير الشامل]\n\nجلسة التعلم الذاتي 1\n1. الوقت: 2026-06-18 21:36 ~ 22:36 انتهى UTC\n2. المادة: رياضيات\n3. المدة: 72 دقيقة / 90 دقيقة\n4. نسبة تحقيق الهدف: 80٪\n5. النجوم: ****(4/5)\n\nجلسة التعلم الذاتي 2\n1. الوقت:\n2026-06-18 21:36 ~ 22:36 انتهى UTC\n2. المادة: إنجليزي\n3. المدة: 72 دقيقة / 90 دقيقة\n4. نسبة تحقيق الهدف: 80٪\n5. النجوم: ****(4/5)\n\n[ملاحظات التشخيص الشامل]\nأظهرت جلسة تعلم لي جيو-هيون اليوم إدارة جيدة للوقت وتحليلًا قويًا للنقاط الأساسية. الوتيرة مستقرة، لكن مرحلة بناء المفاهيم استغرقت وقتًا أطول قليلاً من المتوسط. يُنصح بالتركيز بشكل أسرع غدًا.', 'HI': '[समग्र रिपोर्ट]\n\nस्व-निर्देशित शिक्षण सत्र 1\n1. समय: 2026-06-18 21:36 ~ 22:36 समाप्त UTC\n2. विषय: गणित\n3. अवधि: 72 मिनट / 90 मिनट\n4. लक्ष्य प्राप्ति दर: 80%\n5. स्टार: ****(4/5)\n\nस्व-निर्देशित शिक्षण सत्र 2\n1. समय:\n2026-06-18 21:36 ~ 22:36 समाप्त UTC\n2. विषय: अंग्रेज़ी\n3. अवधि: 72 मिनट / 90 मिनट\n4. लक्ष्य प्राप्ति दर: 80%\n5. स्टार: ****(4/5)\n\n[समग्र निदान फ़ीडबैक]\nआज ली ग्यू-ह्युन के अध्ययन सत्र में समय प्रबंधन और मुख्य बिंदुओं का विश्लेषण अच्छा रहा। गति स्थिर है, लेकिन अवधारणा-निर्माण चरण में औसत से थोड़ा अधिक समय लगा। कल जल्दी ध्यान केंद्रित करने का प्रयास करें।', 'VI': '[Báo cáo tổng hợp]\n\nBuổi học tự định hướng 1\n1. THỜI GIAN: 2026-06-18 21:36 ~ 22:36 Kết thúc UTC\n2. MÔN HỌC: Toán\n3. THỜI LƯỢNG: 72 phút / 90 phút\n4. TỶ LỆ ĐẠT MỤC TIÊU: 80%\n5. SỐ SAO: ****(4/5)\n\nBuổi học tự định hướng 2\n1. THỜI GIAN:\n2026-06-18 21:36 ~ 22:36 Kết thúc UTC\n2. MÔN HỌC: Tiếng Anh\n3. THỜI LƯỢNG: 72 phút / 90 phút\n4. TỶ LỆ ĐẠT MỤC TIÊU: 80%\n5. SỐ SAO: ****(4/5)\n\n[Phản hồi chẩn đoán tổng hợp]\nBuổi học hôm nay của Lee Gyu-hyun cho thấy khả năng quản lý thời gian tốt và phân tích trọng điểm chắc chắn. Nhịp độ ổn định, nhưng giai đoạn xây dựng khái niệm mất nhiều thời gian hơn mức trung bình. Ngày mai nên tập trung nhanh hơn ngay từ đầu.', 'ES': '[Informe general]\n\nSesión de aprendizaje autónomo 1\n1. MARCA DE TIEMPO: 2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATERIA: Matemáticas\n3. DURACIÓN: 72 min / 90 min\n4. TASA DE LOGRO: 80%\n5. ESTRELLAS: ****(4/5)\n\nSesión de aprendizaje autónomo 2\n1. MARCA DE TIEMPO:\n2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATERIA: Inglés\n3. DURACIÓN: 72 min / 90 min\n4. TASA DE LOGRO: 80%\n5. ESTRELLAS: ****(4/5)\n\n[Retroalimentación de diagnóstico general]\nLa sesión de estudio de hoy de Lee Gyu-hyun mostró buena gestión del tiempo y un análisis sólido de los puntos clave. El ritmo se mantiene estable, aunque la fase de consolidación de conceptos tomó algo más de tiempo que el promedio. Se recomienda concentrarse más rápido desde el inicio de mañana.', 'TH': '[รายงานสรุป]\n\nช่วงเรียนด้วยตนเอง ครั้งที่ 1\n1. เวลา: 2026-06-18 21:36 ~ 22:36 สิ้นสุด UTC\n2. วิชา: คณิตศาสตร์\n3. ระยะเวลา: 72 นาที / 90 นาที\n4. อัตราการบรรลุเป้าหมาย: 80%\n5. จำนวนดาว: ****(4/5)\n\nช่วงเรียนด้วยตนเอง ครั้งที่ 2\n1. เวลา:\n2026-06-18 21:36 ~ 22:36 สิ้นสุด UTC\n2. วิชา: ภาษาอังกฤษ\n3. ระยะเวลา: 72 นาที / 90 นาที\n4. อัตราการบรรลุเป้าหมาย: 80%\n5. จำนวนดาว: ****(4/5)\n\n[ฟีดแบ็กการวินิจฉัยโดยรวม]\nช่วงเรียนของ Lee Gyu-hyun วันนี้แสดงถึงการจัดการเวลาที่ดีและการวิเคราะห์ประเด็นสำคัญที่มั่นคง จังหวะการเรียนคงที่ดี แต่ขั้นตอนปูพื้นแนวคิดใช้เวลานานกว่าค่าเฉลี่ยเล็กน้อย ควรตั้งใจโฟกัสให้เร็วขึ้นตั้งแต่เริ่มพรุ่งนี้'},
-    'detailedReportBody': {'KO': '[상세분석기록]\n\n• 상세내용: 개념 및 심화,문제풀이 25문제\n• 오답노타: 정리함\n• 이 해 도: 80%\n• 난 이 도: 보통\n• 집중도: 높음\n• 학습컨디션: 좋음\n• 다음목표: 함수 심화문제\n\n[심층 교육 제언]\n차기 목표로 설정된 함수 심화 파트는 고도의 논리적 추론이 수반되는 영역이나, 현재 이규현 회원이 보여준 오답 정리 정밀도와 개념 분석력이라면 충분히 안정적으로 돌파해 낼 수 있습니다. 장래의 목표를 실현하기 위한 과정에서 마주하는 고난도 문항은 성장의 기회가 될 것입니다. 단, 난이도가 보통인 문항 스펙트럼에서도 실수가 일부 식별된 점은 자만을 경계하고 기초를 더 철저히 해야 한다는 경고입니다. 스스로의 가능성을 믿고 의욕적으로 도전하되 명밀하게 검토하는 태도를 기르십시오.', 'EN': '[Detailed Analytics]\n\n• DETAILS: Concepts & Problems, 25 issues\n• INCORRECT NOTE: COMPLETED\n• UNDERSTANDING: 80%\n• DIFFICULTY: Normal\n• CONCENTRATION: High\n• CONDITION: Good\n• NEXT GOAL: Advanced Function Problems\n\nYour potential is unlimited. Learn from your minor mistakes and focus deeper on the next advanced targets.', 'JA': '[詳細分析記録]\n\n• 詳細内容：概念と応用、25問を解答\n• 誤答ノート：整理済み\n• 理解度：80%\n• 難易度：普通\n• 集中度：高い\n• 学習状態：良好\n• 次の目標：関数の応用問題\n\n[深層教育アドバイス]\n次の目標である関数の応用パートは高度な論理的推論を要しますが、現在の誤答整理の精度と概念分析力があれば十分に突破できます。自信を持って挑戦しつつ、慎重に確認する姿勢を保ちましょう。', 'ZH': '[详细分析记录]\n\n• 详细内容：概念与拓展，共25题\n• 错题笔记：已整理\n• 理解度：80%\n• 难度：普通\n• 专注度：高\n• 学习状态：良好\n• 下一目标：函数拓展题\n\n[深度教育建议]\n下一目标——函数拓展部分需要较强的逻辑推理能力，但凭借目前的错题整理精度和概念分析力，完全可以稳步突破。请保持自信积极挑战，同时养成细致检查的习惯。', 'FR': '[Analyse détaillée]\n\n• DÉTAILS : Concepts et exercices, 25 problèmes\n• NOTE D\'ERREUR : TERMINÉ\n• COMPRÉHENSION : 80 %\n• DIFFICULTÉ : Normale\n• CONCENTRATION : Élevée\n• ÉTAT : Bon\n• PROCHAIN OBJECTIF : Problèmes de fonctions avancés\n\nVotre potentiel est illimité. Apprenez de vos petites erreurs et concentrez-vous davantage sur les prochains objectifs avancés.', 'DE': '[Detaillierte Analyse]\n\n• DETAILS: Konzepte & Übungen, 25 Aufgaben\n• FEHLERNOTIZ: ERLEDIGT\n• VERSTÄNDNIS: 80 %\n• SCHWIERIGKEIT: Normal\n• KONZENTRATION: Hoch\n• ZUSTAND: Gut\n• NÄCHSTES ZIEL: Fortgeschrittene Funktionsaufgaben\n\nIhr Potenzial ist unbegrenzt. Lernen Sie aus kleinen Fehlern und konzentrieren Sie sich stärker auf die nächsten fortgeschrittenen Ziele.', 'RU': '[Подробная аналитика]\n\n• ДЕТАЛИ: Концепции и задачи, 25 заданий\n• ЗАМЕТКА ОБ ОШИБКАХ: ЗАВЕРШЕНО\n• ПОНИМАНИЕ: 80%\n• СЛОЖНОСТЬ: Средняя\n• КОНЦЕНТРАЦИЯ: Высокая\n• СОСТОЯНИЕ: Хорошее\n• СЛЕДУЮЩАЯ ЦЕЛЬ: Продвинутые задачи по функциям\n\nВаш потенциал безграничен. Учитесь на небольших ошибках и глубже сосредоточьтесь на следующих продвинутых целях.', 'AR': '[تحليل تفصيلي]\n\n• التفاصيل: مفاهيم وتطبيقات، 25 مسألة\n• ملاحظة الأخطاء: مكتمل\n• الفهم: 80٪\n• الصعوبة: متوسطة\n• التركيز: مرتفع\n• الحالة: جيدة\n• الهدف التالي: مسائل الدوال المتقدمة\n\nإمكاناتك غير محدودة. تعلّم من أخطائك الصغيرة وركّز بعمق أكبر على الأهداف المتقدمة القادمة.', 'HI': '[विस्तृत विश्लेषण]\n\n• विवरण: अवधारणाएं और अभ्यास, 25 प्रश्न\n• त्रुटि नोट: पूर्ण\n• समझ: 80%\n• कठिनाई: सामान्य\n• एकाग्रता: उच्च\n• स्थिति: अच्छी\n• अगला लक्ष्य: उन्नत फलन प्रश्न\n\nआपकी क्षमता असीम है। छोटी गलतियों से सीखें और आगामी उन्नत लक्ष्यों पर अधिक गहराई से ध्यान दें।', 'VI': '[Phân tích chi tiết]\n\n• CHI TIẾT: Khái niệm và bài tập, 25 câu\n• GHI CHÚ LỖI: ĐÃ HOÀN THÀNH\n• MỨC HIỂU: 80%\n• ĐỘ KHÓ: Trung bình\n• TẬP TRUNG: Cao\n• TRẠNG THÁI: Tốt\n• MỤC TIÊU TIẾP THEO: Bài tập hàm số nâng cao\n\nTiềm năng của bạn là vô hạn. Hãy học từ những lỗi nhỏ và tập trung sâu hơn vào các mục tiêu nâng cao tiếp theo.', 'ES': '[Análisis detallado]\n\n• DETALLES: Conceptos y ejercicios, 25 problemas\n• NOTA DE ERRORES: COMPLETADO\n• COMPRENSIÓN: 80%\n• DIFICULTAD: Normal\n• CONCENTRACIÓN: Alta\n• CONDICIÓN: Buena\n• PRÓXIMO OBJETIVO: Problemas avanzados de funciones\n\nTu potencial es ilimitado. Aprende de tus pequeños errores y concéntrate más en los próximos objetivos avanzados.', 'TH': '[บันทึกวิเคราะห์เชิงลึก]\n\n• รายละเอียด: แนวคิดและโจทย์เชิงลึก 25 ข้อ\n• บันทึกข้อผิดพลาด: เรียบร้อยแล้ว\n• ความเข้าใจ: 80%\n• ความยาก: ปานกลาง\n• สมาธิ: สูง\n• สภาพการเรียน: ดี\n• เป้าหมายถัดไป: โจทย์ฟังก์ชันขั้นสูง\n\nศักยภาพของคุณไม่มีขีดจำกัด เรียนรู้จากข้อผิดพลาดเล็กๆ และตั้งใจกับเป้าหมายขั้นสูงถัดไปให้มากขึ้น'},
+    'levelPrefix': {
+      'KO': '학습레벨 ',
+      'EN': 'Lv.',
+      'JA': 'レベル',
+      'ZH': '等级',
+      'FR': 'Niv. ',
+      'DE': 'Lvl. ',
+      'RU': 'Уровень ',
+      'AR': 'المستوى ',
+      'HI': 'लेवल ',
+      'VI': 'Cấp ',
+      'ES': 'Nivel ',
+      'TH': 'เลเวล ',
+    },
+    'starsUnitSuffix': {
+      'KO': '개',
+      'EN': 'Stars',
+      'JA': '個',
+      'ZH': '颗',
+      'FR': 'étoiles',
+      'DE': 'Sterne',
+      'RU': 'звёзд',
+      'AR': 'نجمة',
+      'HI': 'स्टार्स',
+      'VI': 'sao',
+      'ES': 'estrellas',
+      'TH': 'ดาว',
+    },
+    'hoursUnitSuffix': {
+      'KO': '시간',
+      'EN': 'hrs',
+      'JA': '時間',
+      'ZH': '小时',
+      'FR': 'h',
+      'DE': 'Std.',
+      'RU': 'ч',
+      'AR': 'ساعة',
+      'HI': 'घंटे',
+      'VI': 'giờ',
+      'ES': 'h',
+      'TH': 'ชม.',
+    },
+    'dataCollectingMsg': {
+      'KO': '데이터 수집중',
+      'EN': 'Collecting data',
+      'JA': 'データ収集中',
+      'ZH': '数据收集中',
+      'FR': 'Collecte de données...',
+      'DE': 'Daten werden gesammelt',
+      'RU': 'Сбор данных...',
+      'AR': 'جمع البيانات...',
+      'HI': 'डेटा एकत्रित हो रहा है',
+      'VI': 'Đang thu thập dữ liệu',
+      'ES': 'Recopilando datos...',
+      'TH': 'กำลังรวบรวมข้อมูล',
+    },
+    'friendRank': {
+      'KO': '친구 학습 랭킹: ',
+      'EN': 'Friend Rank: ',
+      'JA': '友達学習ランキング: ',
+      'ZH': '好友学习排名：',
+      'FR': 'Classement amis : ',
+      'DE': 'Freunde-Rang: ',
+      'RU': 'Рейтинг друзей: ',
+      'AR': 'ترتيب الأصدقاء: ',
+      'HI': 'मित्र रैंक: ',
+      'VI': 'Xếp hạng bạn bè: ',
+      'ES': 'Ranking de amigos: ',
+      'TH': 'อันดับเพื่อน: ',
+    },
+    'rank3': {
+      'KO': '3위\n\n',
+      'EN': '#3\n\n',
+      'JA': '3位\n\n',
+      'ZH': '第3名\n\n',
+      'FR': '#3\n\n',
+      'DE': '#3\n\n',
+      'RU': '#3\n\n',
+      'AR': '#3\n\n',
+      'HI': '#3\n\n',
+      'VI': '#3\n\n',
+      'ES': '#3\n\n',
+      'TH': 'อันดับ 3\n\n',
+    },
+    'globalRank': {
+      'KO': '전 세계 학습 랭킹:\n',
+      'EN': 'Global Rank:\n',
+      'JA': '世界学習ランキング：\n',
+      'ZH': '全球学习排名：\n',
+      'FR': 'Classement mondial :\n',
+      'DE': 'Weltweiter Rang:\n',
+      'RU': 'Мировой рейтинг:\n',
+      'AR': 'الترتيب العالمي:\n',
+      'HI': 'वैश्विक रैंक:\n',
+      'VI': 'Xếp hạng toàn cầu:\n',
+      'ES': 'Ranking mundial:\n',
+      'TH': 'อันดับโลก:\n',
+    },
+    'top12pct': {
+      'KO': '상위 1.2%',
+      'EN': 'Top 1.2%',
+      'JA': '上位1.2%',
+      'ZH': '前1.2%',
+      'FR': 'Top 1,2 %',
+      'DE': 'Top 1,2 %',
+      'RU': 'Топ 1,2%',
+      'AR': 'الأعلى 1.2٪',
+      'HI': 'शीर्ष 1.2%',
+      'VI': 'Top 1.2%',
+      'ES': 'Top 1.2%',
+      'TH': 'ท็อป 1.2%',
+    },
+    'targetUniversity': {
+      'KO': '목표 대학',
+      'EN': 'Target University',
+      'JA': '目標大学',
+      'ZH': '目标大学',
+      'FR': 'Université cible',
+      'DE': 'Zieluniversität',
+      'RU': 'Целевой университет',
+      'AR': 'الجامعة المستهدفة',
+      'HI': 'लक्ष्य विश्वविद्यालय',
+      'VI': 'Trường mục tiêu',
+      'ES': 'Universidad objetivo',
+      'TH': 'มหาวิทยาลัยเป้าหมาย',
+    },
+    'snu': {
+      'KO': '서울대학교',
+      'EN': 'Seoul National University',
+      'JA': 'ソウル大学校',
+      'ZH': '首尔大学',
+      'FR': 'Université Nationale de Séoul',
+      'DE': 'Nationaluniversität Seoul',
+      'RU': 'Сеульский национальный университет',
+      'AR': 'جامعة سيول الوطنية',
+      'HI': 'सियोल नेशनल यूनिवर्सिटी',
+      'VI': 'Đại học Quốc gia Seoul',
+      'ES': 'Universidad Nacional de Seúl',
+      'TH': 'มหาวิทยาลัยแห่งชาติโซล',
+    },
+    'goalAttainment': {
+      'KO': '목표 달성도',
+      'EN': 'Goal Attainment',
+      'JA': '目標達成度',
+      'ZH': '目标达成度',
+      'FR': 'Taux d\'atteinte',
+      'DE': 'Zielerreichung',
+      'RU': 'Достижение цели',
+      'AR': 'نسبة تحقيق الهدف',
+      'HI': 'लक्ष्य प्राप्ति',
+      'VI': 'Mức đạt mục tiêu',
+      'ES': 'Logro de objetivos',
+      'TH': 'อัตราการบรรลุเป้าหมาย',
+    },
+    'todayVsYesterday': {
+      'KO': '어제 대비 오늘 ',
+      'EN': 'Today vs Yesterday ',
+      'JA': '昨日比 本日 ',
+      'ZH': '今日较昨日 ',
+      'FR': 'Aujourd\'hui vs hier ',
+      'DE': 'Heute vs. gestern ',
+      'RU': 'Сегодня к вчера ',
+      'AR': 'اليوم مقارنة بالأمس ',
+      'HI': 'आज बनाम कल ',
+      'VI': 'Hôm nay so với hôm qua ',
+      'ES': 'Hoy vs ayer ',
+      'TH': 'วันนี้เทียบเมื่อวาน ',
+    },
+    'mostImprovedSubject': {
+      'KO': '가장 성장한 학습과목\n',
+      'EN': 'Most Improved Subject\n',
+      'JA': '最も伸びた科目\n',
+      'ZH': '进步最大的科目\n',
+      'FR': 'Matière la plus améliorée\n',
+      'DE': 'Am meisten verbessertes Fach\n',
+      'RU': 'Предмет с наибольшим ростом\n',
+      'AR': 'أكثر مادة تحسنًا\n',
+      'HI': 'सबसे अधिक सुधार वाला विषय\n',
+      'VI': 'Môn học tiến bộ nhất\n',
+      'ES': 'Materia más mejorada\n',
+      'TH': 'วิชาที่พัฒนามากที่สุด\n',
+    },
+    'mostStudiedSubject': {
+      'KO': '가장 많이 학습한 과목\n',
+      'EN': 'Most Studied Subject\n',
+      'JA': '最も学習した科目\n',
+      'ZH': '学习最多的科目\n',
+      'FR': 'Matière la plus étudiée\n',
+      'DE': 'Meist gelerntes Fach\n',
+      'RU': 'Самый изучаемый предмет\n',
+      'AR': 'أكثر مادة تمت دراستها\n',
+      'HI': 'सबसे अधिक पढ़ा गया विषय\n',
+      'VI': 'Môn học được học nhiều nhất\n',
+      'ES': 'Materia más estudiada\n',
+      'TH': 'วิชาที่เรียนมากที่สุด\n',
+    },
+    'totalStudyTimeLabel': {
+      'KO': '총 학습시간:\n',
+      'EN': 'Total Study Time:\n',
+      'JA': '総学習時間：\n',
+      'ZH': '总学习时间：\n',
+      'FR': 'Temps d\'étude total :\n',
+      'DE': 'Gesamte Lernzeit:\n',
+      'RU': 'Общее время учёбы:\n',
+      'AR': 'إجمالي وقت الدراسة:\n',
+      'HI': 'कुल अध्ययन समय:\n',
+      'VI': 'Tổng thời gian học:\n',
+      'ES': 'Tiempo total de estudio:\n',
+      'TH': 'เวลาเรียนทั้งหมด:\n',
+    },
+    'totalStudyHours': {
+      'KO': '1,257시간',
+      'EN': '1,257 hrs',
+      'JA': '1,257時間',
+      'ZH': '1,257小时',
+      'FR': '1 257 h',
+      'DE': '1.257 Std.',
+      'RU': '1 257 ч',
+      'AR': '1,257 ساعة',
+      'HI': '1,257 घंटे',
+      'VI': '1.257 giờ',
+      'ES': '1.257 h',
+      'TH': '1,257 ชม.',
+    },
+    'studyTime': {
+      'KO': '과목 학습 시간',
+      'EN': 'Subject Study Time',
+      'JA': '科目別学習時間',
+      'ZH': '科目学习时间',
+      'FR': 'Temps d\'étude par matière',
+      'DE': 'Lernzeit pro Fach',
+      'RU': 'Время учёбы по предметам',
+      'AR': 'وقت الدراسة حسب المادة',
+      'HI': 'विषयवार अध्ययन समय',
+      'VI': 'Thời gian học theo môn',
+      'ES': 'Tiempo de estudio por materia',
+      'TH': 'เวลาเรียนตามวิชา',
+    },
+    'dailyTotalStudyTime': {
+      'KO': '일일 전체 학습시간',
+      'EN': 'Daily Total Study Time',
+      'JA': '日別総学習時間',
+      'ZH': '每日总学习时间',
+      'FR': 'Temps d\'étude quotidien total',
+      'DE': 'Tägliche Gesamtlernzeit',
+      'RU': 'Общее время учёбы за день',
+      'AR': 'إجمالي وقت الدراسة اليومي',
+      'HI': 'दैनिक कुल अध्ययन समय',
+      'VI': 'Tổng thời gian học mỗi ngày',
+      'ES': 'Tiempo total de estudio diario',
+      'TH': 'เวลาเรียนรวมต่อวัน',
+    },
+    'daily': {
+      'KO': '일 간',
+      'EN': 'Daily',
+      'JA': '日別',
+      'ZH': '日',
+      'FR': 'Jour',
+      'DE': 'Täglich',
+      'RU': 'День',
+      'AR': 'يومي',
+      'HI': 'दैनिक',
+      'VI': 'Ngày',
+      'ES': 'Diario',
+      'TH': 'รายวัน',
+    },
+    'weekly': {
+      'KO': '주 간',
+      'EN': 'Weekly',
+      'JA': '週別',
+      'ZH': '周',
+      'FR': 'Semaine',
+      'DE': 'Wöchentlich',
+      'RU': 'Неделя',
+      'AR': 'أسبوعي',
+      'HI': 'साप्ताहिक',
+      'VI': 'Tuần',
+      'ES': 'Semanal',
+      'TH': 'รายสัปดาห์',
+    },
+    'monthly': {
+      'KO': '월 간',
+      'EN': 'Monthly',
+      'JA': '月別',
+      'ZH': '月',
+      'FR': 'Mois',
+      'DE': 'Monatlich',
+      'RU': 'Месяц',
+      'AR': 'شهري',
+      'HI': 'मासिक',
+      'VI': 'Tháng',
+      'ES': 'Mensual',
+      'TH': 'รายเดือน',
+    },
+    'yearly': {
+      'KO': '연 간',
+      'EN': 'Yearly',
+      'JA': '年別',
+      'ZH': '年',
+      'FR': 'Année',
+      'DE': 'Jährlich',
+      'RU': 'Год',
+      'AR': 'سنوي',
+      'HI': 'वार्षिक',
+      'VI': 'Năm',
+      'ES': 'Anual',
+      'TH': 'รายปี',
+    },
+    'myScoreRecord': {
+      'KO': '나의 성적 기록 직접 작성',
+      'EN': 'My Score Self Record',
+      'JA': '自分の成績を記録する',
+      'ZH': '自主记录我的成绩',
+      'FR': 'Mon carnet de notes',
+      'DE': 'Meine Notenaufzeichnung',
+      'RU': 'Мои записи об оценках',
+      'AR': 'سجل درجاتي الخاص',
+      'HI': 'मेरा स्कोर रिकॉर्ड',
+      'VI': 'Tự ghi điểm của tôi',
+      'ES': 'Mi registro de notas',
+      'TH': 'บันทึกคะแนนของฉัน',
+    },
+    'yearSelect': {
+      'KO': '년도 선택',
+      'EN': 'Year',
+      'JA': '年を選択',
+      'ZH': '选择年份',
+      'FR': 'Année',
+      'DE': 'Jahr',
+      'RU': 'Год',
+      'AR': 'السنة',
+      'HI': 'वर्ष',
+      'VI': 'Năm',
+      'ES': 'Año',
+      'TH': 'ปี',
+    },
+    'monthSelect': {
+      'KO': '월 선택',
+      'EN': 'Month',
+      'JA': '月を選択',
+      'ZH': '选择月份',
+      'FR': 'Mois',
+      'DE': 'Monat',
+      'RU': 'Месяц',
+      'AR': 'الشهر',
+      'HI': 'महीना',
+      'VI': 'Tháng',
+      'ES': 'Mes',
+      'TH': 'เดือน',
+    },
+    'weekSelect': {
+      'KO': '주 선택',
+      'EN': 'Week',
+      'JA': '週を選択',
+      'ZH': '选择周次',
+      'FR': 'Semaine',
+      'DE': 'Woche',
+      'RU': 'Неделя',
+      'AR': 'الأسبوع',
+      'HI': 'सप्ताह',
+      'VI': 'Tuần',
+      'ES': 'Semana',
+      'TH': 'สัปดาห์',
+    },
+    'bigUnitSelect': {
+      'KO': '대단원 선택',
+      'EN': 'Major Unit',
+      'JA': '大単元を選択',
+      'ZH': '选择大单元',
+      'FR': 'Unité principale',
+      'DE': 'Haupteinheit',
+      'RU': 'Основной раздел',
+      'AR': 'الوحدة الرئيسية',
+      'HI': 'मुख्य यूनिट',
+      'VI': 'Chương lớn',
+      'ES': 'Unidad principal',
+      'TH': 'บทหลัก',
+    },
+    'midUnitSelect': {
+      'KO': '중단원 선택',
+      'EN': 'Sub Unit',
+      'JA': '中単元を選択',
+      'ZH': '选择中单元',
+      'FR': 'Sous-unité',
+      'DE': 'Untereinheit',
+      'RU': 'Подраздел',
+      'AR': 'الوحدة الفرعية',
+      'HI': 'सब-यूनिट',
+      'VI': 'Chương nhỏ',
+      'ES': 'Subunidad',
+      'TH': 'บทย่อย',
+    },
+    'semesterSelect': {
+      'KO': '학기 선택',
+      'EN': 'Semester',
+      'JA': '学期を選択',
+      'ZH': '选择学期',
+      'FR': 'Semestre',
+      'DE': 'Semester',
+      'RU': 'Семестр',
+      'AR': 'الفصل الدراسي',
+      'HI': 'सेमेस्टर',
+      'VI': 'Học kỳ',
+      'ES': 'Semestre',
+      'TH': 'ภาคเรียน',
+    },
+    'chartTarget': {
+      'KO': '그래프 출력 타겟 지정 (학년 / 학기)',
+      'EN': 'Chart Target (Grade / Semester)',
+      'JA': 'グラフ対象指定（学年／学期）',
+      'ZH': '图表目标设置（年级／学期）',
+      'FR': 'Cible du graphique (année / semestre)',
+      'DE': 'Diagrammziel (Klasse / Semester)',
+      'RU': 'Цель графика (класс / семестр)',
+      'AR': 'هدف الرسم البياني (الصف / الفصل)',
+      'HI': 'चार्ट लक्ष्य (कक्षा / सेमेस्टर)',
+      'VI': 'Mục tiêu biểu đồ (khối / học kỳ)',
+      'ES': 'Objetivo del gráfico (grado / semestre)',
+      'TH': 'เป้าหมายกราฟ (ระดับชั้น/ภาคเรียน)',
+    },
+    'newRecordGradeSemesterLabel': {
+      'KO': '지금 입력할 새 기록의 학년 / 학기',
+      'EN': 'Grade / Semester for this new entry',
+      'JA': '今回入力する記録の学年／学期',
+      'ZH': '本次输入记录的年级／学期',
+      'FR': 'Année / semestre de cette nouvelle entrée',
+      'DE': 'Klasse / Semester für diesen neuen Eintrag',
+      'RU': 'Класс / семестр для новой записи',
+      'AR': 'الصف / الفصل لهذا السجل الجديد',
+      'HI': 'इस नई प्रविष्टि के लिए कक्षा / सेमेस्टर',
+      'VI': 'Khối / học kỳ cho mục nhập mới này',
+      'ES': 'Grado / semestre para esta nueva entrada',
+      'TH': 'ระดับชั้น/ภาคเรียนสำหรับรายการใหม่นี้',
+    },
+    'gradeLabel': {
+      'KO': '학년',
+      'EN': 'Grade',
+      'JA': '学年',
+      'ZH': '年级',
+      'FR': 'Année',
+      'DE': 'Klasse',
+      'RU': 'Класс',
+      'AR': 'الصف',
+      'HI': 'कक्षा',
+      'VI': 'Khối lớp',
+      'ES': 'Grado',
+      'TH': 'ระดับชั้น',
+    },
+    'semesterLabel': {
+      'KO': '학기',
+      'EN': 'Semester',
+      'JA': '学期',
+      'ZH': '学期',
+      'FR': 'Semestre',
+      'DE': 'Semester',
+      'RU': 'Семестр',
+      'AR': 'الفصل الدراسي',
+      'HI': 'सेमेस्टर',
+      'VI': 'Học kỳ',
+      'ES': 'Semestre',
+      'TH': 'ภาคเรียน',
+    },
+    'subjectHint': {
+      'KO': '과목생성',
+      'EN': 'Subject',
+      'JA': '科目作成',
+      'ZH': '创建科目',
+      'FR': 'Matière',
+      'DE': 'Fach',
+      'RU': 'Предмет',
+      'AR': 'المادة',
+      'HI': 'विषय',
+      'VI': 'Môn học',
+      'ES': 'Materia',
+      'TH': 'วิชา',
+    },
+    'unitHint': {
+      'KO': '단원생성',
+      'EN': 'Unit',
+      'JA': '単元作成',
+      'ZH': '创建单元',
+      'FR': 'Unité',
+      'DE': 'Einheit',
+      'RU': 'Раздел',
+      'AR': 'الوحدة',
+      'HI': 'यूनिट',
+      'VI': 'Chương',
+      'ES': 'Unidad',
+      'TH': 'บท',
+    },
+    'scoreHint': {
+      'KO': '점수',
+      'EN': 'Score',
+      'JA': '点数',
+      'ZH': '分数',
+      'FR': 'Score',
+      'DE': 'Punktzahl',
+      'RU': 'Балл',
+      'AR': 'الدرجة',
+      'HI': 'स्कोर',
+      'VI': 'Điểm',
+      'ES': 'Puntuación',
+      'TH': 'คะแนน',
+    },
+    'saveBtn': {
+      'KO': '저장',
+      'EN': 'Save',
+      'JA': '保存',
+      'ZH': '保存',
+      'FR': 'Enregistrer',
+      'DE': 'Speichern',
+      'RU': 'Сохранить',
+      'AR': 'حفظ',
+      'HI': 'सहेजें',
+      'VI': 'Lưu',
+      'ES': 'Guardar',
+      'TH': 'บันทึก',
+    },
+    'onlyRecordedSubjectsChart': {
+      'KO': '평가가 기록된 과목만 그래프에 나타나게한다',
+      'EN': 'Only subjects with recorded evaluations appear on the chart.',
+      'JA': '評価が記録された科目だけがグラフに表示されます。',
+      'ZH': '仅显示已记录评估的科目。',
+      'FR': 'Seules les matières évaluées apparaissent sur le graphique.',
+      'DE': 'Nur bewertete Fächer werden im Diagramm angezeigt.',
+      'RU': 'На графике отображаются только оценённые предметы.',
+      'AR': 'تظهر في الرسم البياني فقط المواد التي تم تسجيل تقييم لها.',
+      'HI': 'चार्ट में केवल मूल्यांकित विषय ही दिखाए जाते हैं।',
+      'VI': 'Chỉ các môn đã có điểm đánh giá mới hiển thị trên biểu đồ.',
+      'ES':
+          'Solo las materias con evaluaciones registradas aparecen en el gráfico.',
+      'TH': 'กราฟจะแสดงเฉพาะวิชาที่มีการบันทึกผลประเมินเท่านั้น',
+    },
+    'average': {
+      'KO': '평균',
+      'EN': 'Average',
+      'JA': '平均',
+      'ZH': '平均',
+      'FR': 'Moyenne',
+      'DE': 'Durchschnitt',
+      'RU': 'Среднее',
+      'AR': 'المتوسط',
+      'HI': 'औसत',
+      'VI': 'Trung bình',
+      'ES': 'Promedio',
+      'TH': 'ค่าเฉลี่ย',
+    },
+    'lifeBalance': {
+      'KO': '종합 생활 균형',
+      'EN': 'Comprehensive Life Balance',
+      'JA': '総合生活バランス',
+      'ZH': '综合生活平衡',
+      'FR': 'Équilibre de vie global',
+      'DE': 'Ganzheitliche Lebensbalance',
+      'RU': 'Общий баланс жизни',
+      'AR': 'التوازن الشامل في الحياة',
+      'HI': 'समग्र जीवन संतुलन',
+      'VI': 'Cân bằng cuộc sống tổng thể',
+      'ES': 'Equilibrio integral de vida',
+      'TH': 'ความสมดุลชีวิตโดยรวม',
+    },
+    'lifeBalanceSub': {
+      'KO': '(종합 생활 균형 밸런스 분석)',
+      'EN': '(Comprehensive life balance analysis)',
+      'JA': '（総合生活バランス分析）',
+      'ZH': '（综合生活平衡分析）',
+      'FR': '(Analyse de l\'équilibre de vie global)',
+      'DE': '(Analyse der ganzheitlichen Lebensbalance)',
+      'RU': '(Анализ общего баланса жизни)',
+      'AR': '(تحليل التوازن الشامل في الحياة)',
+      'HI': '(समग्र जीवन संतुलन विश्लेषण)',
+      'VI': '(Phân tích cân bằng cuộc sống tổng thể)',
+      'ES': '(Análisis del equilibrio integral de vida)',
+      'TH': '(การวิเคราะห์ความสมดุลชีวิตโดยรวม)',
+    },
+    // 🆕 [장학금 방 다국어 2026-09-18] 하단 탭 라벨
+    'liveAchievementTab': {
+      'KO': '실시간 학습성취',
+      'EN': 'Live Achievement',
+      'JA': 'リアルタイム学習成果',
+      'ZH': '实时学习成就',
+      'FR': 'Réussite en direct',
+      'DE': 'Live-Leistung',
+      'RU': 'Успеваемость в реальном времени',
+      'AR': 'الإنجاز الفوري',
+      'HI': 'लाइव उपलब्धि',
+      'VI': 'Thành tích trực tiếp',
+      'ES': 'Logro en vivo',
+      'TH': 'ผลสัมฤทธิ์เรียลไทม์',
+    },
+    'liveStarsTab': {
+      'KO': '실시간 성취별',
+      'EN': 'Live Stars',
+      'JA': 'リアルタイム星',
+      'ZH': '实时成就星',
+      'FR': 'Étoiles en direct',
+      'DE': 'Live-Sterne',
+      'RU': 'Звёзды в реальном времени',
+      'AR': 'النجوم الفورية',
+      'HI': 'लाइव सितारे',
+      'VI': 'Sao trực tiếp',
+      'ES': 'Estrellas en vivo',
+      'TH': 'ดาวเรียลไทม์',
+    },
+    // 🆕 카드 제목
+    'liveStatusCardTitle': {
+      'KO': '실시간 학습 현황',
+      'EN': 'Live Study Status',
+      'JA': 'リアルタイム学習状況',
+      'ZH': '实时学习现状',
+      'FR': "État d'étude en direct",
+      'DE': 'Live-Lernstatus',
+      'RU': 'Статус обучения в реальном времени',
+      'AR': 'حالة الدراسة الفورية',
+      'HI': 'लाइव अध्ययन स्थिति',
+      'VI': 'Tình trạng học trực tiếp',
+      'ES': 'Estado de estudio en vivo',
+      'TH': 'สถานะการเรียนเรียลไทม์',
+    },
+    'achievementStarsCardTitle': {
+      'KO': '나의 성취별 현황',
+      'EN': 'My Achievement Stars',
+      'JA': '私の達成スター状況',
+      'ZH': '我的成就星现状',
+      'FR': "Mes étoiles de réussite",
+      'DE': 'Meine Erfolgssterne',
+      'RU': 'Мои звёзды достижений',
+      'AR': 'نجوم إنجازاتي',
+      'HI': 'मेरे उपलब्धि सितारे',
+      'VI': 'Sao thành tích của tôi',
+      'ES': 'Mis estrellas de logro',
+      'TH': 'ดาวความสำเร็จของฉัน',
+    },
+    'monthlyBaseStarsLabel': {
+      'KO': '기본별(학습시간)',
+      'EN': 'Base Stars (Study Time)',
+      'JA': '基本スター（学習時間）',
+      'ZH': '基础星（学习时间）',
+      'FR': 'Étoiles de base (temps)',
+      'DE': 'Basissterne (Lernzeit)',
+      'RU': 'Базовые звёзды (время)',
+      'AR': 'نجوم أساسية (وقت الدراسة)',
+      'HI': 'आधार सितारे (समय)',
+      'VI': 'Sao cơ bản (thời gian)',
+      'ES': 'Estrellas base (tiempo)',
+      'TH': 'ดาวพื้นฐาน (เวลาเรียน)',
+    },
+    'bonusStarsLabel': {
+      'KO': '보너스별',
+      'EN': 'Bonus Stars',
+      'JA': 'ボーナススター',
+      'ZH': '奖励星',
+      'FR': 'Étoiles bonus',
+      'DE': 'Bonussterne',
+      'RU': 'Бонусные звёзды',
+      'AR': 'نجوم إضافية',
+      'HI': 'बोनस सितारे',
+      'VI': 'Sao thưởng',
+      'ES': 'Estrellas bonus',
+      'TH': 'ดาวโบนัส',
+    },
+    'monthlyTotalStarsLabel': {
+      'KO': '이번 달 누적 별',
+      'EN': "This Month's Stars",
+      'JA': '今月の累積スター',
+      'ZH': '本月累计星',
+      'FR': 'Étoiles de ce mois-ci',
+      'DE': 'Sterne diesen Monat',
+      'RU': 'Звёзды за месяц',
+      'AR': 'نجوم هذا الشهر',
+      'HI': 'इस महीने के सितारे',
+      'VI': 'Sao tháng này',
+      'ES': 'Estrellas de este mes',
+      'TH': 'ดาวสะสมเดือนนี้',
+    },
+    'bonusBreakdownTitle': {
+      'KO': '보너스별 상세 내역',
+      'EN': 'Bonus Star Details',
+      'JA': 'ボーナススター詳細',
+      'ZH': '奖励星详情',
+      'FR': 'Détails des étoiles bonus',
+      'DE': 'Bonusstern-Details',
+      'RU': 'Подробности бонусных звёзд',
+      'AR': 'تفاصيل النجوم الإضافية',
+      'HI': 'बोनस सितारे विवरण',
+      'VI': 'Chi tiết sao thưởng',
+      'ES': 'Detalles de estrellas bonus',
+      'TH': 'รายละเอียดดาวโบนัส',
+    },
+    'howToEarnStarsBtn': {
+      'KO': '별은 어떻게 모으나요?',
+      'EN': 'How do I earn stars?',
+      'JA': '星はどうやって集める？',
+      'ZH': '如何获得星星？',
+      'FR': 'Comment gagner des étoiles ?',
+      'DE': 'Wie sammle ich Sterne?',
+      'RU': 'Как заработать звёзды?',
+      'AR': 'كيف أكسب النجوم؟',
+      'HI': 'सितारे कैसे कमाएं?',
+      'VI': 'Làm sao để nhận sao?',
+      'ES': '¿Cómo gano estrellas?',
+      'TH': 'สะสมดาวได้อย่างไร?',
+    },
+    'scholarshipNoticeTitle': {
+      'KO': '⭐ 별을 모으는 방법',
+      'EN': '⭐ How to Earn Stars',
+      'JA': '⭐ 星の集め方',
+      'ZH': '⭐ 如何获得星星',
+      'FR': '⭐ Comment gagner des étoiles',
+      'DE': '⭐ So sammelst du Sterne',
+      'RU': '⭐ Как заработать звёзды',
+      'AR': '⭐ كيفية كسب النجوم',
+      'HI': '⭐ सितारे कैसे कमाएं',
+      'VI': '⭐ Cách nhận sao',
+      'ES': '⭐ Cómo ganar estrellas',
+      'TH': '⭐ วิธีสะสมดาว',
+    },
+    'typeNotSelectedYet': {
+      'KO': '이번 달 장학금 유형이 아직 선택되지 않았어요. 부모님께서 곧 정해주실 거예요!',
+      'EN':
+          "This month's scholarship type hasn't been chosen yet. Your parents will pick one soon!",
+      'JA': '今月の奨学金タイプはまだ選択されていません。まもなく保護者が決めてくれます！',
+      'ZH': '本月奖学金类型尚未选择，家长很快会为你决定！',
+      'FR':
+          "Le type de bourse de ce mois n'a pas encore été choisi. Vos parents le feront bientôt !",
+      'DE':
+          'Der Stipendientyp für diesen Monat wurde noch nicht gewählt. Deine Eltern entscheiden bald!',
+      'RU':
+          'Тип стипендии за этот месяц ещё не выбран. Родители скоро выберут!',
+      'AR': 'لم يتم اختيار نوع المنحة لهذا الشهر بعد. سيحدده والداك قريبًا!',
+      'HI':
+          'इस महीने की छात्रवृत्ति का प्रकार अभी तय नहीं हुआ। आपके माता-पिता जल्द ही चुनेंगे!',
+      'VI':
+          'Loại học bổng tháng này chưa được chọn. Bố mẹ con sẽ chọn sớm thôi!',
+      'ES':
+          'Aún no se ha elegido el tipo de beca de este mes. ¡Tus padres lo elegirán pronto!',
+      'TH':
+          'ยังไม่ได้เลือกประเภททุนการศึกษาของเดือนนี้ พ่อแม่ของหนูจะเลือกเร็วๆ นี้!',
+    },
+    'thisMonthEstimatedScholarship': {
+      'KO': '이번 달 예상 장학금',
+      'EN': "This Month's Estimated Scholarship",
+      'JA': '今月の予想奨学金',
+      'ZH': '本月预计奖学金',
+      'FR': 'Bourse estimée ce mois-ci',
+      'DE': 'Geschätztes Stipendium diesen Monat',
+      'RU': 'Ожидаемая стипендия за месяц',
+      'AR': 'المنحة المتوقعة لهذا الشهر',
+      'HI': 'इस महीने की अनुमानित छात्रवृत्ति',
+      'VI': 'Học bổng dự kiến tháng này',
+      'ES': 'Beca estimada de este mes',
+      'TH': 'ทุนการศึกษาโดยประมาณเดือนนี้',
+    },
+    'dbSyncTitle': {
+      'KO': '데이터베이스 동기화 알림',
+      'EN': 'Database Sync Notification',
+      'JA': 'データベース同期通知',
+      'ZH': '数据库同步通知',
+      'FR': 'Notification de synchronisation',
+      'DE': 'Datenbank-Synchronisierung',
+      'RU': 'Уведомление о синхронизации',
+      'AR': 'إشعار مزامنة قاعدة البيانات',
+      'HI': 'डेटाबेस सिंक सूचना',
+      'VI': 'Thông báo đồng bộ dữ liệu',
+      'ES': 'Notificación de sincronización',
+      'TH': 'การแจ้งเตือนซิงค์ข้อมูล',
+    },
+    'dbSyncSub': {
+      'KO': '(데이터를 안전하게 동기화 중입니다...)',
+      'EN': '(Synchronizing data storage safely...)',
+      'JA': '（データを安全に同期しています...）',
+      'ZH': '（正在安全同步数据...）',
+      'FR': '(Synchronisation sécurisée des données...)',
+      'DE': '(Daten werden sicher synchronisiert...)',
+      'RU': '(Безопасная синхронизация данных...)',
+      'AR': '(تتم مزامنة البيانات بأمان...)',
+      'HI': '(डेटा को सुरक्षित रूप से सिंक किया जा रहा है...)',
+      'VI': '(Đang đồng bộ dữ liệu an toàn...)',
+      'ES': '(Sincronizando datos de forma segura...)',
+      'TH': '(กำลังซิงค์ข้อมูลอย่างปลอดภัย...)',
+    },
+    'mockDiagTitle': {
+      'KO': '모의고사 정밀 평가 진단',
+      'EN': 'Mock Exam Detailed Diagnosis',
+      'JA': '模試精密評価診断',
+      'ZH': '模拟考试精密诊断',
+      'FR': 'Diagnostic détaillé de l\'examen blanc',
+      'DE': 'Detaillierte Diagnose des Testexamens',
+      'RU': 'Подробная диагностика пробного экзамена',
+      'AR': 'تشخيص دقيق للاختبار التجريبي',
+      'HI': 'मॉक परीक्षा विस्तृत निदान',
+      'VI': 'Chẩn đoán chi tiết kỳ thi thử',
+      'ES': 'Diagnóstico detallado del examen simulado',
+      'TH': 'การวินิจฉัยเชิงลึกข้อสอบจำลอง',
+    },
+    'examDiagTitle': {
+      'KO': '시험 성취도 세부 피드백 설정',
+      'EN': 'Exam Achievement Feedback Setup',
+      'JA': '試験成果詳細フィードバック設定',
+      'ZH': '考试成果详细反馈设置',
+      'FR': 'Configuration du retour détaillé sur l\'examen',
+      'DE': 'Detailliertes Feedback zur Prüfungsleistung',
+      'RU': 'Настройка подробной обратной связи по экзамену',
+      'AR': 'إعداد ملاحظات تفصيلية عن نتيجة الاختبار',
+      'HI': 'परीक्षा उपलब्धि विस्तृत फ़ीडबैक सेटअप',
+      'VI': 'Thiết lập phản hồi chi tiết về kết quả thi',
+      'ES': 'Configuración de retroalimentación detallada del examen',
+      'TH': 'ตั้งค่าฟีดแบ็กผลสอบแบบละเอียด',
+    },
+    'emptyFallbackShort': {
+      'KO':
+          '현재 해당 카테고리에 누적된 데이터셋이 식별되지 않아 기본 정성 분석을 수행합니다.\n\n학습자의 메타인지 상태는 평균치에 도달했으나 실전 정합성을 높이기 위한 개념 오답 관리가 요구됩니다. 용기를 잃지 말고 내일의 세션에 몰입하십시오.',
+      'EN':
+          'No accumulated dataset found for this category, so a general qualitative analysis is provided.\n\nThe learner\'s metacognitive state is average, but reviewing conceptual mistakes will help solidify readiness. Stay confident and stay focused for tomorrow\'s session.',
+      'JA':
+          'このカテゴリーには蓄積データが見つからないため、基本的な定性分析を行います。\n\n学習者のメタ認知状態は平均的ですが、実戦力を高めるには概念の誤答管理が必要です。勇気を失わず、明日のセッションに集中しましょう。',
+      'ZH':
+          '该类别暂无累积数据，因此进行基础定性分析。\n\n学习者的元认知水平处于平均水平，但需要加强概念性错题管理以提升实战能力。请保持信心，专注于明天的学习。',
+      'FR':
+          'Aucune donnée cumulée n\'a été trouvée pour cette catégorie ; une analyse qualitative générale est donc fournie.\n\nLe niveau métacognitif de l\'apprenant est moyen, mais revoir les erreurs conceptuelles renforcera sa préparation. Restez confiant pour la prochaine session.',
+      'DE':
+          'Für diese Kategorie wurden keine gesammelten Daten gefunden, daher wird eine allgemeine qualitative Analyse bereitgestellt.\n\nDer metakognitive Zustand des Lernenden ist durchschnittlich, aber die Überprüfung konzeptioneller Fehler wird die Vorbereitung stärken. Bleiben Sie zuversichtlich für die nächste Sitzung.',
+      'RU':
+          'Накопленных данных по этой категории не найдено, поэтому предоставлен общий качественный анализ.\n\nМетакогнитивное состояние учащегося среднее, но разбор концептуальных ошибок поможет закрепить готовность. Сохраняйте уверенность перед следующим занятием.',
+      'AR':
+          'لم يتم العثور على بيانات متراكمة لهذه الفئة، لذا يتم تقديم تحليل نوعي عام.\n\nحالة الإدراك الفوقي للمتعلم متوسطة، ولكن مراجعة الأخطاء المفاهيمية ستعزز الاستعداد. حافظ على ثقتك وركز على الجلسة القادمة.',
+      'HI':
+          'इस श्रेणी के लिए कोई संचित डेटा नहीं मिला, इसलिए एक सामान्य गुणात्मक विश्लेषण प्रदान किया गया है।\n\nसीखने वाले की मेटाकॉग्निटिव स्थिति औसत है, लेकिन वैचारिक गलतियों की समीक्षा तैयारी को मजबूत करेगी। आत्मविश्वास बनाए रखें और आगामी सत्र पर ध्यान दें।',
+      'VI':
+          'Không tìm thấy dữ liệu tích lũy cho hạng mục này, vì vậy đây là phân tích định tính chung.\n\nTrạng thái nhận thức của người học ở mức trung bình, nhưng việc xem lại các lỗi khái niệm sẽ giúp cải thiện. Hãy giữ tự tin và tập trung cho buổi học tiếp theo.',
+      'ES':
+          'No se encontraron datos acumulados para esta categoría, por lo que se ofrece un análisis cualitativo general.\n\nEl estado metacognitivo del estudiante es promedio, pero revisar los errores conceptuales fortalecerá su preparación. Mantén la confianza para la próxima sesión.',
+      'TH':
+          'ไม่พบข้อมูลสะสมในหมวดนี้ จึงขอนำเสนอการวิเคราะห์เชิงคุณภาพทั่วไป\n\nสภาวะการรู้คิดของผู้เรียนอยู่ในระดับเฉลี่ย แต่การทบทวนข้อผิดพลาดด้านแนวคิดจะช่วยเสริมความพร้อม รักษาความมั่นใจและตั้งใจกับครั้งถัดไป',
+    },
+    'emptyFallbackLong': {
+      'KO':
+          '현재 해당 카테고리에 누적된 성적 메트릭이 식별되지 않아 기본 정성 분석을 수행합니다.\n\n학습자의 메타인지(자신의 인지 활동을 모니터링하고 조절하는 능력) 수준은 양호하나 과목 간 편차가 존재할 수 있습니다. 실전에서 흔들리지 않기 위해서는 개념 정합성 확인 프로세스를 고도화해야 합니다. 언제나 가능성이 열려있으니 포기하지 말고 전진합시다.',
+      'EN':
+          'No accumulated score metrics were found for this category, so a general qualitative analysis is provided.\n\nThe learner\'s metacognitive level appears sound, though gaps between subjects may exist. To stay steady under real test conditions, strengthen the concept-verification process. Possibility is always open — keep moving forward.',
+      'JA':
+          'このカテゴリーには蓄積された成績データが見つからないため、基本的な定性分析を行います。\n\n学習者のメタ認知（自身の認知活動を監視・調整する能力）は良好ですが、科目間の差が存在する可能性があります。実戦で動揺しないためには概念の整合性確認プロセスを高度化する必要があります。可能性は常に開かれているので、諦めずに前進しましょう。',
+      'ZH':
+          '该类别暂无累积成绩数据，因此进行基础定性分析。\n\n学习者的元认知水平（监控和调节自身认知活动的能力）良好，但学科间可能存在差异。为了在实战中保持稳定，需要提升概念一致性确认流程。可能性始终存在，不要放弃，继续前进。',
+      'FR':
+          'Aucune métrique de score cumulée n\'a été trouvée pour cette catégorie ; une analyse qualitative générale est donc fournie.\n\nLe niveau métacognitif de l\'apprenant semble bon, bien que des écarts entre matières puissent exister. Pour rester stable en conditions réelles, il faut renforcer le processus de vérification des concepts. Les possibilités restent ouvertes — continuez d\'avancer.',
+      'DE':
+          'Für diese Kategorie wurden keine gesammelten Notenmetriken gefunden, daher wird eine allgemeine qualitative Analyse bereitgestellt.\n\nDas metakognitive Niveau des Lernenden erscheint solide, wobei Unterschiede zwischen Fächern bestehen können. Um unter realen Testbedingungen stabil zu bleiben, sollte der Konzeptüberprüfungsprozess gestärkt werden. Die Möglichkeit bleibt immer offen — bleiben Sie in Bewegung.',
+      'RU':
+          'Накопленных показателей успеваемости по этой категории не найдено, поэтому предоставлен общий качественный анализ.\n\nМетакогнитивный уровень учащегося выглядит хорошим, хотя между предметами могут быть расхождения. Чтобы сохранять устойчивость в реальных условиях, нужно усилить процесс проверки концепций. Возможность всегда открыта — продолжайте двигаться вперёд.',
+      'AR':
+          'لم يتم العثور على مقاييس درجات متراكمة لهذه الفئة، لذا يتم تقديم تحليل نوعي عام.\n\nيبدو مستوى الإدراك الفوقي للمتعلم جيدًا، على الرغم من احتمال وجود فجوات بين المواد. للحفاظ على الثبات في ظروف الاختبار الحقيقية، يجب تعزيز عملية التحقق من المفاهيم. الإمكانية مفتوحة دائمًا — استمر في التقدم.',
+      'HI':
+          'इस श्रेणी के लिए कोई संचित स्कोर मेट्रिक्स नहीं मिला, इसलिए एक सामान्य गुणात्मक विश्लेषण प्रदान किया गया है।\n\nसीखने वाले का मेटाकॉग्निटिव स्तर अच्छा प्रतीत होता है, हालांकि विषयों के बीच अंतर हो सकता है। वास्तविक परीक्षा स्थितियों में स्थिर रहने के लिए, अवधारणा-सत्यापन प्रक्रिया को मजबूत करें। संभावना हमेशा खुली है — आगे बढ़ते रहें।',
+      'VI':
+          'Không tìm thấy chỉ số điểm tích lũy cho hạng mục này, vì vậy đây là phân tích định tính chung.\n\nMức độ nhận thức của người học có vẻ tốt, dù có thể có sự chênh lệch giữa các môn. Để giữ ổn định trong điều kiện thi thực tế, cần củng cố quy trình xác minh khái niệm. Khả năng luôn rộng mở — hãy tiếp tục tiến lên.',
+      'ES':
+          'No se encontraron métricas de puntuación acumuladas para esta categoría, por lo que se ofrece un análisis cualitativo general.\n\nEl nivel metacognitivo del estudiante parece sólido, aunque puede haber diferencias entre materias. Para mantenerse estable en condiciones de examen real, fortalece el proceso de verificación de conceptos. La posibilidad siempre está abierta: sigue avanzando.',
+      'TH':
+          'ไม่พบข้อมูลคะแนนสะสมในหมวดนี้ จึงขอนำเสนอการวิเคราะห์เชิงคุณภาพทั่วไป\n\nระดับการรู้คิดของผู้เรียนดูเหมาะสมดี แม้อาจมีความแตกต่างระหว่างวิชา เพื่อรักษาความมั่นคงในสถานการณ์สอบจริง ควรเสริมกระบวนการตรวจสอบแนวคิดให้แข็งแกร่งขึ้น โอกาสเปิดกว้างเสมอ อย่าหยุดที่จะก้าวต่อไป',
+    },
+    'achievementWord': {
+      'KO': '성취도',
+      'EN': 'Achievement',
+      'JA': '成果',
+      'ZH': '成就度',
+      'FR': 'Réussite',
+      'DE': 'Leistung',
+      'RU': 'Успеваемость',
+      'AR': 'التحصيل',
+      'HI': 'उपलब्धि',
+      'VI': 'Thành tích',
+      'ES': 'Logro',
+      'TH': 'ผลสัมฤทธิ์',
+    },
+    'highSchoolGrade2': {
+      'KO': 'GKE 고등학교 2학년',
+      'EN': 'GKE High School, Grade 11',
+      'JA': 'GKE高校2年生',
+      'ZH': 'GKE高中二年级',
+      'FR': 'GKE Lycée, 2e année',
+      'DE': 'GKE Gymnasium, 2. Klasse',
+      'RU': 'GKE школа, 2 курс',
+      'AR': 'GKE الصف الثاني الثانوي',
+      'HI': 'GKE हाई स्कूल कक्षा 2',
+      'VI': 'GKE Cấp 3, lớp 11',
+      'ES': 'GKE Bachillerato, 2º año',
+      'TH': 'GKE มัธยมปลาย ปีที่ 2',
+    },
+    'recentFeedbackPrefix': {
+      'KO': '[최근 작성]',
+      'EN': '[Recent]',
+      'JA': '[最近作成]',
+      'ZH': '[最近]',
+      'FR': '[Récent]',
+      'DE': '[Zuletzt]',
+      'RU': '[Недавнее]',
+      'AR': '[الأحدث]',
+      'HI': '[हाल का]',
+      'VI': '[Gần đây]',
+      'ES': '[Reciente]',
+      'TH': '[ล่าสุด]',
+    },
+    'achievementFeedbackMetrics': {
+      'KO': '성취 피드백 메트릭스',
+      'EN': 'Achievement Feedback Metrics',
+      'JA': '成果フィードバック指標',
+      'ZH': '成果反馈指标',
+      'FR': 'Indicateurs de progression',
+      'DE': 'Leistungs-Feedback-Metriken',
+      'RU': 'Метрики обратной связи по успеваемости',
+      'AR': 'مؤشرات ملاحظات التحصيل',
+      'HI': 'उपलब्धि फ़ीडबैक मेट्रिक्स',
+      'VI': 'Chỉ số phản hồi thành tích',
+      'ES': 'Métricas de retroalimentación de logros',
+      'TH': 'ตัวชี้วัดฟีดแบ็กผลสัมฤทธิ์',
+    },
+    'targetSubjectLabel': {
+      'KO': '타겟 과목',
+      'EN': 'Target',
+      'JA': '対象科目',
+      'ZH': '目标科目',
+      'FR': 'Matière ciblée',
+      'DE': 'Zielfach',
+      'RU': 'Целевой предмет',
+      'AR': 'المادة المستهدفة',
+      'HI': 'लक्ष्य विषय',
+      'VI': 'Môn mục tiêu',
+      'ES': 'Materia objetivo',
+      'TH': 'วิชาเป้าหมาย',
+    },
+    'scoreLabel': {
+      'KO': '점수',
+      'EN': 'Score',
+      'JA': '点数',
+      'ZH': '分数',
+      'FR': 'Score',
+      'DE': 'Punktzahl',
+      'RU': 'Балл',
+      'AR': 'الدرجة',
+      'HI': 'स्कोर',
+      'VI': 'Điểm',
+      'ES': 'Puntuación',
+      'TH': 'คะแนน',
+    },
+    'viewAnalysisReport': {
+      'KO': '분석 보고서 조회하기',
+      'EN': 'View Analysis Report',
+      'JA': '分析レポートを見る',
+      'ZH': '查看分析报告',
+      'FR': 'Voir le rapport d\'analyse',
+      'DE': 'Analysebericht ansehen',
+      'RU': 'Просмотреть отчёт анализа',
+      'AR': 'عرض تقرير التحليل',
+      'HI': 'विश्लेषण रिपोर्ट देखें',
+      'VI': 'Xem báo cáo phân tích',
+      'ES': 'Ver informe de análisis',
+      'TH': 'ดูรายงานการวิเคราะห์',
+    },
+    'entryAndHistory': {
+      'KO': '입력 및 과거 선택 조회',
+      'EN': 'Entry & History',
+      'JA': '入力と履歴の確認',
+      'ZH': '输入与历史查看',
+      'FR': 'Saisie et historique',
+      'DE': 'Eingabe & Verlauf',
+      'RU': 'Ввод и история',
+      'AR': 'الإدخال والسجل',
+      'HI': 'प्रविष्टि और इतिहास',
+      'VI': 'Nhập liệu & lịch sử',
+      'ES': 'Entrada e historial',
+      'TH': 'บันทึกและประวัติ',
+    },
+    'summaryReportBody': {
+      'KO':
+          '[종합 리포트]\n\n자기주도 학습 1교시\n1번 학습일시: 2026-06-18 21:36 ~ 22:36 끝남 UTC\n2. 학습과목: 수학\n3. 학습시간: 72분 / 90분\n4. 목표달성률: 80%\n5. 별 갯수: ****(4/5)\n\n자기주도학습 2교시\n1번 학습일시:\n2026-06-18 21:36 ~ 22:36 끝남 UTC\n2. 학습과목: 영어\n3. 학습시간: 72분 / 90분\n4. 목표달성률: 80%\n5. 별 갯수: ****(4/5)\n\n[종합 진단 피드백]\n금일 진행된 이규현 회원의 학습 세션은 시간 관리와 핵심 문항 분석 면에서 고도의 진취성을 나타냈습니다. 계획된 90분의 집중 타임라인 중 실제 몰입 시간의 밀도가 높았으며, 과목 간 균형도 안정적입니다. 다만 학습 개시 단계에서 개념 정립에 소요되는 시간이 평균치보다 다소 길어지는 지체 현상이 관찰되었습니다. 이는 후반부 응용 문제 풀이의 정밀도를 저해하는 요인이 될 수 있으므로, 초기 몰입 속도를 제고하려는 의도적인 노력이 요구됩니다. 전반적인 과목 이해도는 상위권 진입에 무리가 없는 수준이나, 오답을 선별하고 피드백 리포트를 구성할 때 본인의 주관적 판단에만 의존하는 경향은 확실히 교정해야 할 지점입니다. 현재 유지하고 있는 연속 학습의 패턴은 장기적 성과 도출을 위한 훌륭한 기반이 되므로, 스스로의 역량을 확신하고 정진하기 바랍니다. 미진한 영역을 명확히 보완하여 내일의 학습 효율성을 한층 더 고도화할 수 있도록 냉철하게 관리해 나갈 것을 엄중히 제언합니다.',
+      'EN':
+          '[Total Report]\n\nSelf-Directed Learning Session 1\n1. TIMESTAMP: 2026-06-18 21:36 ~ 22:36 End UTC\n2. SUBJECT: Math\n3. TIME: 72 Mins / 90 Mins\n4. ACHIEVEMENT RATE: 80%\n5. STARS: ****(4/5)\n\nSelf-Directed Learning Session 2\n1. TIMESTAMP:\n2026-06-18 21:36 ~ 22:36 End UTC\n2. SUBJECT: En\n3. TIME: 72 Mins / 90 Mins\n4. ACHIEVEMENT RATE: 80%\n5. STARS: ****(4/5)\n\nToday\'s learning sessions showed great progress. Keep moving forward toward your target with strong motivation.',
+      'JA':
+          '[総合レポート]\n\n自己主導学習 第1時限\n1. 学習日時：2026-06-18 21:36〜22:36 終了 UTC\n2. 学習科目：数学\n3. 学習時間：72分／90分\n4. 目標達成率：80%\n5. 星の数：****(4/5)\n\n自己主導学習 第2時限\n1. 学習日時：\n2026-06-18 21:36〜22:36 終了 UTC\n2. 学習科目：英語\n3. 学習時間：72分／90分\n4. 目標達成率：80%\n5. 星の数：****(4/5)\n\n[総合診断フィードバック]\n本日のイ・ギュヒョン会員の学習セッションは時間管理と重要項目の分析において高い積極性を示しました。よく集中して取り組めていますが、概念整理に時間がかかる傾向が見られます。明日はより早く集中に入れるよう意識してみましょう。',
+      'ZH':
+          '[综合报告]\n\n自主学习 第1节\n1. 学习时间：2026-06-18 21:36～22:36 结束 UTC\n2. 学习科目：数学\n3. 学习时长：72分钟／90分钟\n4. 目标达成率：80%\n5. 星星数量：****(4/5)\n\n自主学习 第2节\n1. 学习时间：\n2026-06-18 21:36～22:36 结束 UTC\n2. 学习科目：英语\n3. 学习时长：72分钟／90分钟\n4. 目标达成率：80%\n5. 星星数量：****(4/5)\n\n[综合诊断反馈]\n今日李圭贤会员的学习表现出较高的时间管理与重点分析能力。整体学习节奏稳定，但在概念梳理阶段耗时略长于平均水平。建议明天从一开始就加快进入专注状态。',
+      'FR':
+          '[Rapport global]\n\nSession d\'apprentissage autonome 1\n1. HORODATAGE : 2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATIÈRE : Maths\n3. DURÉE : 72 min / 90 min\n4. TAUX DE RÉUSSITE : 80 %\n5. ÉTOILES : ****(4/5)\n\nSession d\'apprentissage autonome 2\n1. HORODATAGE :\n2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATIÈRE : Anglais\n3. DURÉE : 72 min / 90 min\n4. TAUX DE RÉUSSITE : 80 %\n5. ÉTOILES : ****(4/5)\n\n[Retour de diagnostic global]\nLa session d\'apprentissage de Lee Gyu-hyun d\'aujourd\'hui a montré une bonne gestion du temps et une analyse solide des points clés. Le rythme reste stable, mais la phase de mise en place des concepts prend un peu plus de temps que la moyenne. Essayez de démarrer plus rapidement demain.',
+      'DE':
+          '[Gesamtbericht]\n\nSelbstgesteuerte Lerneinheit 1\n1. ZEITSTEMPEL: 2026-06-18 21:36 ~ 22:36 Ende UTC\n2. FACH: Mathe\n3. DAUER: 72 Min / 90 Min\n4. ERFOLGSQUOTE: 80 %\n5. STERNE: ****(4/5)\n\nSelbstgesteuerte Lerneinheit 2\n1. ZEITSTEMPEL:\n2026-06-18 21:36 ~ 22:36 Ende UTC\n2. FACH: Englisch\n3. DAUER: 72 Min / 90 Min\n4. ERFOLGSQUOTE: 80 %\n5. STERNE: ****(4/5)\n\n[Gesamtdiagnose-Feedback]\nDie heutige Lernsitzung von Lee Gyu-hyun zeigte gutes Zeitmanagement und eine solide Analyse der Kernpunkte. Das Tempo bleibt stabil, doch die Konzeptaufbauphase dauert etwas länger als der Durchschnitt. Morgen sollte der Fokus schneller aufgebaut werden.',
+      'RU':
+          '[Общий отчёт]\n\nСамостоятельное занятие 1\n1. ВРЕМЯ: 2026-06-18 21:36 ~ 22:36 Завершено UTC\n2. ПРЕДМЕТ: Математика\n3. ВРЕМЯ ЗАНЯТИЯ: 72 мин / 90 мин\n4. ДОСТИЖЕНИЕ ЦЕЛИ: 80%\n5. ЗВЁЗДЫ: ****(4/5)\n\nСамостоятельное занятие 2\n1. ВРЕМЯ:\n2026-06-18 21:36 ~ 22:36 Завершено UTC\n2. ПРЕДМЕТ: Английский\n3. ВРЕМЯ ЗАНЯТИЯ: 72 мин / 90 мин\n4. ДОСТИЖЕНИЕ ЦЕЛИ: 80%\n5. ЗВЁЗДЫ: ****(4/5)\n\n[Общая диагностическая обратная связь]\nСегодняшнее занятие ученика Ли Гю Хёна показало хороший тайм-менеджмент и качественный анализ ключевых заданий. Темп остаётся стабильным, но этап усвоения понятий занимает немного больше времени, чем в среднем. Завтра стоит быстрее выходить на нужную концентрацию.',
+      'AR':
+          '[التقرير الشامل]\n\nجلسة التعلم الذاتي 1\n1. الوقت: 2026-06-18 21:36 ~ 22:36 انتهى UTC\n2. المادة: رياضيات\n3. المدة: 72 دقيقة / 90 دقيقة\n4. نسبة تحقيق الهدف: 80٪\n5. النجوم: ****(4/5)\n\nجلسة التعلم الذاتي 2\n1. الوقت:\n2026-06-18 21:36 ~ 22:36 انتهى UTC\n2. المادة: إنجليزي\n3. المدة: 72 دقيقة / 90 دقيقة\n4. نسبة تحقيق الهدف: 80٪\n5. النجوم: ****(4/5)\n\n[ملاحظات التشخيص الشامل]\nأظهرت جلسة تعلم لي جيو-هيون اليوم إدارة جيدة للوقت وتحليلًا قويًا للنقاط الأساسية. الوتيرة مستقرة، لكن مرحلة بناء المفاهيم استغرقت وقتًا أطول قليلاً من المتوسط. يُنصح بالتركيز بشكل أسرع غدًا.',
+      'HI':
+          '[समग्र रिपोर्ट]\n\nस्व-निर्देशित शिक्षण सत्र 1\n1. समय: 2026-06-18 21:36 ~ 22:36 समाप्त UTC\n2. विषय: गणित\n3. अवधि: 72 मिनट / 90 मिनट\n4. लक्ष्य प्राप्ति दर: 80%\n5. स्टार: ****(4/5)\n\nस्व-निर्देशित शिक्षण सत्र 2\n1. समय:\n2026-06-18 21:36 ~ 22:36 समाप्त UTC\n2. विषय: अंग्रेज़ी\n3. अवधि: 72 मिनट / 90 मिनट\n4. लक्ष्य प्राप्ति दर: 80%\n5. स्टार: ****(4/5)\n\n[समग्र निदान फ़ीडबैक]\nआज ली ग्यू-ह्युन के अध्ययन सत्र में समय प्रबंधन और मुख्य बिंदुओं का विश्लेषण अच्छा रहा। गति स्थिर है, लेकिन अवधारणा-निर्माण चरण में औसत से थोड़ा अधिक समय लगा। कल जल्दी ध्यान केंद्रित करने का प्रयास करें।',
+      'VI':
+          '[Báo cáo tổng hợp]\n\nBuổi học tự định hướng 1\n1. THỜI GIAN: 2026-06-18 21:36 ~ 22:36 Kết thúc UTC\n2. MÔN HỌC: Toán\n3. THỜI LƯỢNG: 72 phút / 90 phút\n4. TỶ LỆ ĐẠT MỤC TIÊU: 80%\n5. SỐ SAO: ****(4/5)\n\nBuổi học tự định hướng 2\n1. THỜI GIAN:\n2026-06-18 21:36 ~ 22:36 Kết thúc UTC\n2. MÔN HỌC: Tiếng Anh\n3. THỜI LƯỢNG: 72 phút / 90 phút\n4. TỶ LỆ ĐẠT MỤC TIÊU: 80%\n5. SỐ SAO: ****(4/5)\n\n[Phản hồi chẩn đoán tổng hợp]\nBuổi học hôm nay của Lee Gyu-hyun cho thấy khả năng quản lý thời gian tốt và phân tích trọng điểm chắc chắn. Nhịp độ ổn định, nhưng giai đoạn xây dựng khái niệm mất nhiều thời gian hơn mức trung bình. Ngày mai nên tập trung nhanh hơn ngay từ đầu.',
+      'ES':
+          '[Informe general]\n\nSesión de aprendizaje autónomo 1\n1. MARCA DE TIEMPO: 2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATERIA: Matemáticas\n3. DURACIÓN: 72 min / 90 min\n4. TASA DE LOGRO: 80%\n5. ESTRELLAS: ****(4/5)\n\nSesión de aprendizaje autónomo 2\n1. MARCA DE TIEMPO:\n2026-06-18 21:36 ~ 22:36 Fin UTC\n2. MATERIA: Inglés\n3. DURACIÓN: 72 min / 90 min\n4. TASA DE LOGRO: 80%\n5. ESTRELLAS: ****(4/5)\n\n[Retroalimentación de diagnóstico general]\nLa sesión de estudio de hoy de Lee Gyu-hyun mostró buena gestión del tiempo y un análisis sólido de los puntos clave. El ritmo se mantiene estable, aunque la fase de consolidación de conceptos tomó algo más de tiempo que el promedio. Se recomienda concentrarse más rápido desde el inicio de mañana.',
+      'TH':
+          '[รายงานสรุป]\n\nช่วงเรียนด้วยตนเอง ครั้งที่ 1\n1. เวลา: 2026-06-18 21:36 ~ 22:36 สิ้นสุด UTC\n2. วิชา: คณิตศาสตร์\n3. ระยะเวลา: 72 นาที / 90 นาที\n4. อัตราการบรรลุเป้าหมาย: 80%\n5. จำนวนดาว: ****(4/5)\n\nช่วงเรียนด้วยตนเอง ครั้งที่ 2\n1. เวลา:\n2026-06-18 21:36 ~ 22:36 สิ้นสุด UTC\n2. วิชา: ภาษาอังกฤษ\n3. ระยะเวลา: 72 นาที / 90 นาที\n4. อัตราการบรรลุเป้าหมาย: 80%\n5. จำนวนดาว: ****(4/5)\n\n[ฟีดแบ็กการวินิจฉัยโดยรวม]\nช่วงเรียนของ Lee Gyu-hyun วันนี้แสดงถึงการจัดการเวลาที่ดีและการวิเคราะห์ประเด็นสำคัญที่มั่นคง จังหวะการเรียนคงที่ดี แต่ขั้นตอนปูพื้นแนวคิดใช้เวลานานกว่าค่าเฉลี่ยเล็กน้อย ควรตั้งใจโฟกัสให้เร็วขึ้นตั้งแต่เริ่มพรุ่งนี้',
+    },
+    'detailedReportBody': {
+      'KO':
+          '[상세분석기록]\n\n• 상세내용: 개념 및 심화,문제풀이 25문제\n• 오답노타: 정리함\n• 이 해 도: 80%\n• 난 이 도: 보통\n• 집중도: 높음\n• 학습컨디션: 좋음\n• 다음목표: 함수 심화문제\n\n[심층 교육 제언]\n차기 목표로 설정된 함수 심화 파트는 고도의 논리적 추론이 수반되는 영역이나, 현재 이규현 회원이 보여준 오답 정리 정밀도와 개념 분석력이라면 충분히 안정적으로 돌파해 낼 수 있습니다. 장래의 목표를 실현하기 위한 과정에서 마주하는 고난도 문항은 성장의 기회가 될 것입니다. 단, 난이도가 보통인 문항 스펙트럼에서도 실수가 일부 식별된 점은 자만을 경계하고 기초를 더 철저히 해야 한다는 경고입니다. 스스로의 가능성을 믿고 의욕적으로 도전하되 명밀하게 검토하는 태도를 기르십시오.',
+      'EN':
+          '[Detailed Analytics]\n\n• DETAILS: Concepts & Problems, 25 issues\n• INCORRECT NOTE: COMPLETED\n• UNDERSTANDING: 80%\n• DIFFICULTY: Normal\n• CONCENTRATION: High\n• CONDITION: Good\n• NEXT GOAL: Advanced Function Problems\n\nYour potential is unlimited. Learn from your minor mistakes and focus deeper on the next advanced targets.',
+      'JA':
+          '[詳細分析記録]\n\n• 詳細内容：概念と応用、25問を解答\n• 誤答ノート：整理済み\n• 理解度：80%\n• 難易度：普通\n• 集中度：高い\n• 学習状態：良好\n• 次の目標：関数の応用問題\n\n[深層教育アドバイス]\n次の目標である関数の応用パートは高度な論理的推論を要しますが、現在の誤答整理の精度と概念分析力があれば十分に突破できます。自信を持って挑戦しつつ、慎重に確認する姿勢を保ちましょう。',
+      'ZH':
+          '[详细分析记录]\n\n• 详细内容：概念与拓展，共25题\n• 错题笔记：已整理\n• 理解度：80%\n• 难度：普通\n• 专注度：高\n• 学习状态：良好\n• 下一目标：函数拓展题\n\n[深度教育建议]\n下一目标——函数拓展部分需要较强的逻辑推理能力，但凭借目前的错题整理精度和概念分析力，完全可以稳步突破。请保持自信积极挑战，同时养成细致检查的习惯。',
+      'FR':
+          '[Analyse détaillée]\n\n• DÉTAILS : Concepts et exercices, 25 problèmes\n• NOTE D\'ERREUR : TERMINÉ\n• COMPRÉHENSION : 80 %\n• DIFFICULTÉ : Normale\n• CONCENTRATION : Élevée\n• ÉTAT : Bon\n• PROCHAIN OBJECTIF : Problèmes de fonctions avancés\n\nVotre potentiel est illimité. Apprenez de vos petites erreurs et concentrez-vous davantage sur les prochains objectifs avancés.',
+      'DE':
+          '[Detaillierte Analyse]\n\n• DETAILS: Konzepte & Übungen, 25 Aufgaben\n• FEHLERNOTIZ: ERLEDIGT\n• VERSTÄNDNIS: 80 %\n• SCHWIERIGKEIT: Normal\n• KONZENTRATION: Hoch\n• ZUSTAND: Gut\n• NÄCHSTES ZIEL: Fortgeschrittene Funktionsaufgaben\n\nIhr Potenzial ist unbegrenzt. Lernen Sie aus kleinen Fehlern und konzentrieren Sie sich stärker auf die nächsten fortgeschrittenen Ziele.',
+      'RU':
+          '[Подробная аналитика]\n\n• ДЕТАЛИ: Концепции и задачи, 25 заданий\n• ЗАМЕТКА ОБ ОШИБКАХ: ЗАВЕРШЕНО\n• ПОНИМАНИЕ: 80%\n• СЛОЖНОСТЬ: Средняя\n• КОНЦЕНТРАЦИЯ: Высокая\n• СОСТОЯНИЕ: Хорошее\n• СЛЕДУЮЩАЯ ЦЕЛЬ: Продвинутые задачи по функциям\n\nВаш потенциал безграничен. Учитесь на небольших ошибках и глубже сосредоточьтесь на следующих продвинутых целях.',
+      'AR':
+          '[تحليل تفصيلي]\n\n• التفاصيل: مفاهيم وتطبيقات، 25 مسألة\n• ملاحظة الأخطاء: مكتمل\n• الفهم: 80٪\n• الصعوبة: متوسطة\n• التركيز: مرتفع\n• الحالة: جيدة\n• الهدف التالي: مسائل الدوال المتقدمة\n\nإمكاناتك غير محدودة. تعلّم من أخطائك الصغيرة وركّز بعمق أكبر على الأهداف المتقدمة القادمة.',
+      'HI':
+          '[विस्तृत विश्लेषण]\n\n• विवरण: अवधारणाएं और अभ्यास, 25 प्रश्न\n• त्रुटि नोट: पूर्ण\n• समझ: 80%\n• कठिनाई: सामान्य\n• एकाग्रता: उच्च\n• स्थिति: अच्छी\n• अगला लक्ष्य: उन्नत फलन प्रश्न\n\nआपकी क्षमता असीम है। छोटी गलतियों से सीखें और आगामी उन्नत लक्ष्यों पर अधिक गहराई से ध्यान दें।',
+      'VI':
+          '[Phân tích chi tiết]\n\n• CHI TIẾT: Khái niệm và bài tập, 25 câu\n• GHI CHÚ LỖI: ĐÃ HOÀN THÀNH\n• MỨC HIỂU: 80%\n• ĐỘ KHÓ: Trung bình\n• TẬP TRUNG: Cao\n• TRẠNG THÁI: Tốt\n• MỤC TIÊU TIẾP THEO: Bài tập hàm số nâng cao\n\nTiềm năng của bạn là vô hạn. Hãy học từ những lỗi nhỏ và tập trung sâu hơn vào các mục tiêu nâng cao tiếp theo.',
+      'ES':
+          '[Análisis detallado]\n\n• DETALLES: Conceptos y ejercicios, 25 problemas\n• NOTA DE ERRORES: COMPLETADO\n• COMPRENSIÓN: 80%\n• DIFICULTAD: Normal\n• CONCENTRACIÓN: Alta\n• CONDICIÓN: Buena\n• PRÓXIMO OBJETIVO: Problemas avanzados de funciones\n\nTu potencial es ilimitado. Aprende de tus pequeños errores y concéntrate más en los próximos objetivos avanzados.',
+      'TH':
+          '[บันทึกวิเคราะห์เชิงลึก]\n\n• รายละเอียด: แนวคิดและโจทย์เชิงลึก 25 ข้อ\n• บันทึกข้อผิดพลาด: เรียบร้อยแล้ว\n• ความเข้าใจ: 80%\n• ความยาก: ปานกลาง\n• สมาธิ: สูง\n• สภาพการเรียน: ดี\n• เป้าหมายถัดไป: โจทย์ฟังก์ชันขั้นสูง\n\nศักยภาพของคุณไม่มีขีดจำกัด เรียนรู้จากข้อผิดพลาดเล็กๆ และตั้งใจกับเป้าหมายขั้นสูงถัดไปให้มากขึ้น',
+    },
   };
 
   static String _t(String key) {
@@ -263,27 +1744,35 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? key;
   }
 
-  // 🆕 [데이터 연결-버그 수정] 그래프 함수(_buildAdvancedChartDashboard)는 절대 손대지 않고,
-  // 이 getter가 반환하는 "데이터 소스"만 실제 기록 기반으로 교체합니다.
-  // (그래프 내부는 그대로 이 리스트를 baseMinutes × 기간별 배수로 계산하는 기존 로직을 그대로 사용함)
+  // 🆕 [데이터 연결-버그 수정] 그래프 함수(_buildAdvancedChartDashboard)는 이 getter가
+  // 반환하는 "데이터 소스"를 실제 기록 기반으로 사용합니다.
+  // 🆕 [위험한 오류 수정 2026-09-06] 예전엔 baseMinutes(하루 평균) × 기간별 배수로
+  // 주/월/연을 "추정"했으나, 실제와 크게 어긋날 수 있어 폐기하고 weekRealMinutes/
+  // monthRealMinutes/yearRealMinutes(그 기간 실제 합산 분)를 그대로 사용하도록 변경함.
   List<Map<String, dynamic>> get _masterSubjectData => _realSubjectStudyData;
 
   // 🆕 [데이터 연결] timer_screen.dart가 세션마다 저장하는 'dke_history_{과목명}' 실제 기록을
   // 모든 과목에 대해 훑어서(SharedPreferences.getKeys() 사용, 과목명을 미리 알 필요 없음) 집계합니다.
   // - hasStudiedToday/Weekly/Monthly/Yearly: 실제 그 기간에 학습한 적이 있는지 여부(정확함)
-  // - baseMinutes: "과목당 실제로 공부한 날의 평균 학습분(分)" — 그래프 함수가 이 값에 기간별 배수를
-  //   곱해서 주/월/연을 추정하는 기존 구조이기 때문에, "오늘 0분이라도 이번 주엔 공부했다"가
-  //   반영되도록 평균값을 사용합니다. (그래프 함수 자체의 배수 로직은 이번에 손대지 않았습니다)
+  // - todayRealMinutes/weekRealMinutes/monthRealMinutes/yearRealMinutes: 각 기간 안에 실제로
+  //   쌓인 학습 분(分)을 그대로 합산한 값. (baseMinutes는 참고용으로 남겨두었으나 그래프 계산에는
+  //   더 이상 사용하지 않음 — 추정이 아닌 실제 합산치만 사용)
   Future<void> _loadRealSubjectStudyData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final Set<String> allKeys = prefs.getKeys();
-      final Iterable<String> historyKeys = allKeys.where((k) => k.startsWith('dke_history_'));
+      final Iterable<String> historyKeys = allKeys.where(
+        (k) => k.startsWith('dke_history_'),
+      );
 
       final DateTime now = DateTime.now();
       final DateTime todayStart = DateTime(now.year, now.month, now.day);
-      final DateTime yesterdayStart = todayStart.subtract(const Duration(days: 1));
-      final DateTime weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+      final DateTime yesterdayStart = todayStart.subtract(
+        const Duration(days: 1),
+      );
+      final DateTime weekStart = todayStart.subtract(
+        Duration(days: now.weekday - 1),
+      );
       final DateTime monthStart = DateTime(now.year, now.month, 1);
       final DateTime yearStart = DateTime(now.year, 1, 1);
 
@@ -303,10 +1792,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         final List<String>? entries = prefs.getStringList(key);
         if (entries == null || entries.isEmpty) continue;
 
-        bool studiedToday = false, studiedWeekly = false, studiedMonthly = false, studiedYearly = false;
+        bool studiedToday = false,
+            studiedWeekly = false,
+            studiedMonthly = false,
+            studiedYearly = false;
         int totalMinutesAllTime = 0;
         int subjectTodayMinutes = 0; // 🆕 이 과목의 오늘 학습분
         int subjectYesterdayMinutes = 0; // 🆕 이 과목의 어제 학습분
+        // 🆕 [위험한 오류 수정 2026-09-06] 주/월/연 그래프가 "하루 평균 × 가정 일수"로
+        // 추정(extrapolation)하던 방식은 실제와 크게 어긋날 수 있어서 폐기함.
+        // 대신 실제 기간(이번 주/이번 달/올해) 안에 쌓인 분(分)을 직접 그대로 합산함.
+        int subjectWeekMinutes = 0;
+        int subjectMonthMinutes = 0;
+        int subjectYearMinutes = 0;
         final Set<String> activeDayKeys = {};
         double latestScoreRatio = 0.0;
         DateTime? latestTimestamp;
@@ -314,13 +1812,30 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         for (final raw in entries) {
           try {
             final Map<String, dynamic> item = jsonDecode(raw);
-            final DateTime ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal() ?? now;
-            final int durationSeconds = (item['durationSeconds'] as num?)?.toInt() ?? 0;
+            final DateTime ts =
+                DateTime.tryParse(
+                  item['timestamp']?.toString() ?? '',
+                )?.toLocal() ??
+                now;
+            final int durationSeconds =
+                (item['durationSeconds'] as num?)?.toInt() ?? 0;
             final int minutes = (durationSeconds / 60).round();
 
-            if (!ts.isBefore(yearStart)) studiedYearly = true;
-            if (!ts.isBefore(monthStart)) studiedMonthly = true;
-            if (!ts.isBefore(weekStart)) studiedWeekly = true;
+            // 🆕 [위험한 오류 수정 2026-09-06] 각 기간에 해당하면 "그 기간에 공부했는지" 여부뿐 아니라
+            // 실제 학습 분(分)도 함께 그대로 합산함(각 조건은 서로 독립적 — 한 기록이 여러 기간에
+            // 동시에 포함될 수 있음, 예: 오늘 기록은 주/월/연 합계에도 모두 포함됨).
+            if (!ts.isBefore(yearStart)) {
+              studiedYearly = true;
+              subjectYearMinutes += minutes;
+            }
+            if (!ts.isBefore(monthStart)) {
+              studiedMonthly = true;
+              subjectMonthMinutes += minutes;
+            }
+            if (!ts.isBefore(weekStart)) {
+              studiedWeekly = true;
+              subjectWeekMinutes += minutes;
+            }
             if (!ts.isBefore(todayStart)) studiedToday = true;
 
             totalMinutesAllTime += minutes;
@@ -344,7 +1859,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           }
         }
 
-        if (!(studiedToday || studiedWeekly || studiedMonthly || studiedYearly)) continue;
+        if (!(studiedToday || studiedWeekly || studiedMonthly || studiedYearly))
+          continue;
 
         grandTotalMinutes += totalMinutesAllTime;
         if (totalMinutesAllTime > topSubjectMinutes) {
@@ -360,7 +1876,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         }
 
         final int activeDays = activeDayKeys.isEmpty ? 1 : activeDayKeys.length;
-        final int avgMinutesPerActiveDay = (totalMinutesAllTime / activeDays).round();
+        final int avgMinutesPerActiveDay = (totalMinutesAllTime / activeDays)
+            .round();
 
         aggregated.add({
           "subject": subjectName,
@@ -373,6 +1890,12 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           "hasStudiedMonthly": studiedMonthly,
           "hasStudiedYearly": studiedYearly,
           "baseMinutes": avgMinutesPerActiveDay,
+          // 🆕 [위험한 오류 수정 2026-09-06] 주/월/연 그래프가 실제로 사용할 "그 기간에 실제
+          // 쌓인 분(分)" — 더 이상 baseMinutes에 임의의 배수를 곱해 추정하지 않음.
+          "todayRealMinutes": subjectTodayMinutes,
+          "weekRealMinutes": subjectWeekMinutes,
+          "monthRealMinutes": subjectMonthMinutes,
+          "yearRealMinutes": subjectYearMinutes,
           "isStarEligible": true,
         });
       }
@@ -397,11 +1920,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     // 여기서는 별도로 다시 합산하지 않고 로딩 시 함께 채워둔 값을 사용합니다.
     return _realTotalMinutesCache;
   }
+
   int _realTotalMinutesCache = 0;
 
   // 🆕 [데이터 연결] "일일 전체 학습시간" 가로스크롤 그래프용 - 기록 있는 날짜만, 최대 15일치
   List<Map<String, dynamic>> _dailyTotalHistory = [];
   final ScrollController _dailyTotalScrollController = ScrollController();
+
   // 🆕 [요청 2026-09-04] 주평가 "월 선택" 가로 스크롤을 현재 월 위치로 자동 이동시키기 위한 컨트롤러.
   final ScrollController _monthScrollController = ScrollController();
   bool _monthRowAutoScrolled = false; // 한 번만 자동 스크롤하고, 이후 사용자가 직접 스크롤한 위치는 존중함
@@ -420,7 +1945,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 목표 달성도(%) = 오늘 학습분 / 유동 목표(_dynamicDailyGoalMinutes) × 100. 100%를 넘으면 100으로 고정.
   int get _realGoalAttainmentPercent {
-    final int pct = ((_todayTotalStudyMinutes / _dynamicDailyGoalMinutes) * 100).round();
+    final int pct = ((_todayTotalStudyMinutes / _dynamicDailyGoalMinutes) * 100)
+        .round();
     return pct.clamp(0, 100);
   }
 
@@ -429,7 +1955,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     if (_yesterdayTotalStudyMinutes <= 0) {
       return _todayTotalStudyMinutes > 0 ? 100 : 0;
     }
-    return (((_todayTotalStudyMinutes - _yesterdayTotalStudyMinutes) / _yesterdayTotalStudyMinutes) * 100).round();
+    return (((_todayTotalStudyMinutes - _yesterdayTotalStudyMinutes) /
+                _yesterdayTotalStudyMinutes) *
+            100)
+        .round();
   }
 
   // 🆕 [데이터 연결] 가장 많이 학습한 과목(전체 기간 누적 분 기준) - "가장 많이 학습한 과목" 표시용
@@ -460,7 +1989,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     try {
       final prefs = await SharedPreferences.getInstance();
       final Set<String> allKeys = prefs.getKeys();
-      final Iterable<String> historyKeys = allKeys.where((k) => k.startsWith('dke_history_'));
+      final Iterable<String> historyKeys = allKeys.where(
+        (k) => k.startsWith('dke_history_'),
+      );
 
       final Map<String, int> minutesByDay = {};
       final Map<String, DateTime> dateByDayKey = {};
@@ -471,8 +2002,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         for (final raw in entries) {
           try {
             final Map<String, dynamic> item = jsonDecode(raw);
-            final DateTime ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal() ?? DateTime.now();
-            final int durationSeconds = (item['durationSeconds'] as num?)?.toInt() ?? 0;
+            final DateTime ts =
+                DateTime.tryParse(
+                  item['timestamp']?.toString() ?? '',
+                )?.toLocal() ??
+                DateTime.now();
+            final int durationSeconds =
+                (item['durationSeconds'] as num?)?.toInt() ?? 0;
             final int minutes = (durationSeconds / 60).round();
             final String dayKey = "${ts.year}-${ts.month}-${ts.day}";
             minutesByDay[dayKey] = (minutesByDay[dayKey] ?? 0) + minutes;
@@ -488,10 +2024,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           .map((e) => {"date": dateByDayKey[e.key]!, "totalMinutes": e.value})
           .toList();
 
-      list.sort((a, b) => (a["date"] as DateTime).compareTo(b["date"] as DateTime));
+      list.sort(
+        (a, b) => (a["date"] as DateTime).compareTo(b["date"] as DateTime),
+      );
 
       // 최근(=날짜가 가장 늦은) 15개까지만 유지 - 오늘이 마지막(맨 오른쪽) 항목이 됨
-      final List<Map<String, dynamic>> last15 = list.length > 15 ? list.sublist(list.length - 15) : list;
+      final List<Map<String, dynamic>> last15 = list.length > 15
+          ? list.sublist(list.length - 15)
+          : list;
 
       if (!mounted) return;
       setState(() {
@@ -501,7 +2041,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       // 🆕 오늘 날짜가 항상 화면 맨 오른쪽에 보이도록, 로딩 후 스크롤을 맨 끝으로 자동 이동
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_dailyTotalScrollController.hasClients) {
-          _dailyTotalScrollController.jumpTo(_dailyTotalScrollController.position.maxScrollExtent);
+          _dailyTotalScrollController.jumpTo(
+            _dailyTotalScrollController.position.maxScrollExtent,
+          );
         }
       });
     } catch (e) {
@@ -521,10 +2063,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [데이터 연결] 성적 기록을 불러오는 동안 잠깐 빈 화면이 보이지 않도록 하는 로딩 플래그
   bool _isRecordsLoading = true;
+
   // 🆕 [데이터 연결] 마이페이지에서 실제로 저장한 목표 대학을 그대로 반영 (기존엔 '서울대학교' 고정값이었음)
   String? _realTargetUniversity;
+
   // 🆕 [데이터 연결] 마이페이지에서 실제로 저장한 목표 대학을 그대로 반영 (기존엔 '서울대학교' 고정값이었음)
   String? _realUserName;
+
   // 🆕 [요청 2026-09-04] 회원가입 시 입력한 실제 학교명/학년. "GKE 고등학교 2학년" 고정 문구 대체용.
   String? _realSchoolName;
   String? _realGrade;
@@ -554,23 +2099,215 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   String _inputYear = "${DateTime.now().year}년";
   String _inputMonth = "${DateTime.now().month}월";
   String _inputWeek = _computeCurrentWeekOfMonth();
-  Set<String> _inputBigUnits = {"대단원 1"}; // 🆕 [요청] 대단원도 중단원과 동일하게 다중선택(범위) 가능하도록 전환
-  Set<String> _inputMidUnits = {"중단원 1"}; // 🆕 [버그 수정] 중단원 여러 개(범위) 선택 가능하도록 단일값→집합으로 전환
+  Set<String> _inputBigUnits = {
+    "대단원 1",
+  }; // 🆕 [요청] 대단원도 중단원과 동일하게 다중선택(범위) 가능하도록 전환
+  Set<String> _inputMidUnits = {
+    "중단원 1",
+  }; // 🆕 [버그 수정] 중단원 여러 개(범위) 선택 가능하도록 단일값→집합으로 전환
   String _inputSemesterGroup = "1학기";
 
   _ExamRecord? _lastSavedRecordForDisplay;
 
   // 🆕 [6번] 서버(클라우드) 저장소 재조회 스로틀링용 마지막 동기화 시각
+  // 🆕 [6번] 서버(클라우드) 저장소 재조회 스로틀링용 마지막 동기화 시각
   DateTime? _lastRemoteSyncAt;
   static const Duration _remoteSyncInterval = Duration(hours: 1);
+
+  // ============================================================================
+  // 🆕 [장학금 방 2026-09-17] "실시간 학습 현황" / "나의 성취별 현황" 카드용 상태값.
+  // 이 화면이 이미 로드해둔 데이터(_totalStars, _currentLevelNumber,
+  // _todayTotalStudyMinutes 등)는 그대로 재사용하고, 여기서는 scholarship_service.dart가
+  // 별도로 관리하는 "월간 기본별/보너스별" 데이터만 새로 불러옵니다.
+  // ============================================================================
+  int _scholarshipMonthlyBaseStars = 0;
+  int _scholarshipMonthlyBonusStars = 0;
+  Map<String, int> _scholarshipBonusBreakdown = {};
+  bool _isScholarshipDataLoading = true;
+  bool _isLiveStatusCardExpanded = true; // 기본값: 펼쳐진 상태로 시작
+  bool _isAchievementStarsCardExpanded = false;
+  int _currentBottomTab = 0; // 🆕 [장학금 방 UI 개편 2026-09-17] 0=실시간 학습성취, 1=실시간 성취별
+  String? _abandonedCodeForPopup; // 🆕 [방치 코드 정리 2026-09-18] 팝업으로 안내할 방치된 예전 코드
+  String? _myLinkCode; // 🆕 [실시간 장학금 금액] 부모님의 유형 선택을 실시간 구독하기 위한 내 연결 코드
+
+  // 🆕 [장학금 방] 보너스별 항목 코드 → 한글 라벨 + 지급 별 개수 (안내문과 반드시 일치)
+  // 🆕 [장학금 방 다국어 2026-09-18] 보너스 항목 라벨 12개국어
+  static const Map<String, Map<String, String>> _bonusTypeLabelMap = {
+    'timer70': {
+      'KO': '타이머 70% 이상 완주',
+      'EN': 'Timer 70%+ Complete',
+      'JA': 'タイマー70%以上完走',
+      'ZH': '计时器完成70%以上',
+      'FR': 'Minuteur 70%+ terminé',
+      'DE': 'Timer 70%+ abgeschlossen',
+      'RU': 'Таймер завершён на 70%+',
+      'AR': 'إكمال المؤقت 70%+',
+      'HI': 'टाइमर 70%+ पूर्ण',
+      'VI': 'Hoàn thành hẹn giờ 70%+',
+      'ES': 'Temporizador 70%+ completo',
+      'TH': 'จับเวลาครบ 70%+',
+    },
+    'recordwrite': {
+      'KO': '학습기록 작성',
+      'EN': 'Study Record Written',
+      'JA': '学習記録作成',
+      'ZH': '撰写学习记录',
+      'FR': "Fiche d'étude rédigée",
+      'DE': 'Lernprotokoll erstellt',
+      'RU': 'Запись обучения создана',
+      'AR': 'كتابة سجل الدراسة',
+      'HI': 'अध्ययन रिकॉर्ड लिखा गया',
+      'VI': 'Đã ghi chép học tập',
+      'ES': 'Registro de estudio escrito',
+      'TH': 'บันทึกการเรียนแล้ว',
+    },
+    'weekly': {
+      'KO': '주간평가 기록',
+      'EN': 'Weekly Assessment Logged',
+      'JA': '週間評価記録',
+      'ZH': '周评估记录',
+      'FR': 'Éval. hebdo enregistrée',
+      'DE': 'Wochentest erfasst',
+      'RU': 'Недельная оценка записана',
+      'AR': 'تسجيل التقييم الأسبوعي',
+      'HI': 'साप्ताहिक मूल्यांकन दर्ज',
+      'VI': 'Đã ghi đánh giá tuần',
+      'ES': 'Evaluación semanal registrada',
+      'TH': 'บันทึกประเมินรายสัปดาห์',
+    },
+    'unittest': {
+      'KO': '단원평가 기록',
+      'EN': 'Unit Test Logged',
+      'JA': '単元テスト記録',
+      'ZH': '单元测验记录',
+      'FR': "Contrôle d'unité enregistré",
+      'DE': 'Einheitstest erfasst',
+      'RU': 'Тест по разделу записан',
+      'AR': 'تسجيل اختبار الوحدة',
+      'HI': 'इकाई परीक्षण दर्ज',
+      'VI': 'Đã ghi kiểm tra bài',
+      'ES': 'Examen de unidad registrado',
+      'TH': 'บันทึกทดสอบบทแล้ว',
+    },
+    'midterm': {
+      'KO': '중간고사 기록',
+      'EN': 'Midterm Logged',
+      'JA': '中間試験記録',
+      'ZH': '期中考试记录',
+      'FR': 'Examen partiel enregistré',
+      'DE': 'Zwischenprüfung erfasst',
+      'RU': 'Промежуточный экзамен записан',
+      'AR': 'تسجيل اختبار منتصف الفصل',
+      'HI': 'मध्यावधि परीक्षा दर्ज',
+      'VI': 'Đã ghi thi giữa kỳ',
+      'ES': 'Examen parcial registrado',
+      'TH': 'บันทึกสอบกลางภาคแล้ว',
+    },
+    'final': {
+      'KO': '기말고사 기록',
+      'EN': 'Final Exam Logged',
+      'JA': '期末試験記録',
+      'ZH': '期末考试记录',
+      'FR': 'Examen final enregistré',
+      'DE': 'Abschlussprüfung erfasst',
+      'RU': 'Итоговый экзамен записан',
+      'AR': 'تسجيل الاختبار النهائي',
+      'HI': 'अंतिम परीक्षा दर्ज',
+      'VI': 'Đã ghi thi cuối kỳ',
+      'ES': 'Examen final registrado',
+      'TH': 'บันทึกสอบปลายภาคแล้ว',
+    },
+    'mock': {
+      'KO': '모의고사 기록',
+      'EN': 'Mock Exam Logged',
+      'JA': '模試記録',
+      'ZH': '模拟考试记录',
+      'FR': 'Examen blanc enregistré',
+      'DE': 'Probeprüfung erfasst',
+      'RU': 'Пробный экзамен записан',
+      'AR': 'تسجيل الاختبار التجريبي',
+      'HI': 'मॉक परीक्षा दर्ज',
+      'VI': 'Đã ghi thi thử',
+      'ES': 'Examen simulacro registrado',
+      'TH': 'บันทึกสอบจำลองแล้ว',
+    },
+    'dailyattend': {
+      'KO': '일일 출석 보너스',
+      'EN': 'Daily Attendance Bonus',
+      'JA': '日次出席ボーナス',
+      'ZH': '每日出勤奖励',
+      'FR': 'Bonus de présence quotidien',
+      'DE': 'Täglicher Anwesenheitsbonus',
+      'RU': 'Ежедневный бонус посещаемости',
+      'AR': 'مكافأة الحضور اليومي',
+      'HI': 'दैनिक उपस्थिति बोनस',
+      'VI': 'Thưởng chuyên cần ngày',
+      'ES': 'Bono de asistencia diaria',
+      'TH': 'โบนัสการเข้าเรียนรายวัน',
+    },
+    'weeklyattend': {
+      'KO': '주간 개근 보너스',
+      'EN': 'Weekly Perfect Attendance',
+      'JA': '週間皆勤ボーナス',
+      'ZH': '每周全勤奖励',
+      'FR': 'Bonus de présence parfaite hebdo',
+      'DE': 'Wöchentlicher Vollanwesenheitsbonus',
+      'RU': 'Недельный бонус за посещаемость',
+      'AR': 'مكافأة الحضور الأسبوعي الكامل',
+      'HI': 'साप्ताहिक पूर्ण उपस्थिति बोनस',
+      'VI': 'Thưởng chuyên cần tuần',
+      'ES': 'Bono de asistencia perfecta semanal',
+      'TH': 'โบนัสขยันเรียนรายสัปดาห์',
+    },
+    'monthlyattend': {
+      'KO': '월간 개근 보너스',
+      'EN': 'Monthly Perfect Attendance',
+      'JA': '月間皆勤ボーナス',
+      'ZH': '每月全勤奖励',
+      'FR': 'Bonus de présence parfaite mensuel',
+      'DE': 'Monatlicher Vollanwesenheitsbonus',
+      'RU': 'Месячный бонус за посещаемость',
+      'AR': 'مكافأة الحضور الشهري الكامل',
+      'HI': 'मासिक पूर्ण उपस्थिति बोनस',
+      'VI': 'Thưởng chuyên cần tháng',
+      'ES': 'Bono de asistencia perfecta mensual',
+      'TH': 'โบนัสขยันเรียนรายเดือน',
+    },
+  };
+
+  static String _bonusLabel(String key) {
+    final m = _bonusTypeLabelMap[key];
+    if (m == null) return key;
+    return m[DkeLang.current] ?? m['EN'] ?? m['KO'] ?? key;
+  }
+
+  static const Map<String, int> _bonusTypeStarAmount = {
+    'timer70': ScholarshipService.bonusTimer70Completion,
+    'recordwrite': ScholarshipService.bonusRecordWrite,
+    'weekly': ScholarshipService.bonusWeeklyAssessment,
+    'unittest': ScholarshipService.bonusUnitTest,
+    'midterm': ScholarshipService.bonusMidterm,
+    'final': ScholarshipService.bonusFinalExam,
+    'mock': ScholarshipService.bonusMockExam,
+    'dailyattend': ScholarshipService.bonusDailyAttendance,
+    'weeklyattend': ScholarshipService.bonusWeeklyAttendance,
+    'monthlyattend': ScholarshipService.bonusMonthlyAttendance,
+  };
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() { if (!_tabController.indexIsChanging) setState(() {}); });
-    _warningAnimController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this)..repeat(reverse: true);
-    _warningAnimation = Tween<double>(begin: 0.0, end: 10.0).animate(CurvedAnimation(parent: _warningAnimController, curve: Curves.easeInOut));
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) setState(() {});
+    });
+    _warningAnimController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat(reverse: true);
+    _warningAnimation = Tween<double>(begin: 0.0, end: 10.0).animate(
+      CurvedAnimation(parent: _warningAnimController, curve: Curves.easeInOut),
+    );
 
     _syncTimerSharedDataPackets();
     _loadExamRecords(); // 🆕 [데이터 연결] 가상 데이터 대신 실제 저장된 성적 기록을 불러옴
@@ -580,9 +2317,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     _loadDailyTotalHistory(); // 🆕 [데이터 연결] 일일 전체 학습시간(가로스크롤) 그래프용 데이터 로드
     _loadRealUserName(); // 🆕 [데이터 연결 2026-07-29] 실제 가입자 이름 불러옴
     _loadRealSchoolGrade(); // 🆕 [요청 2026-09-04] 실제 학교명/학년 불러옴
-    _loadSessionsForDate(_selectedSessionDate); // 🆕 [요청 2026-09-04] 선택 날짜(기본값 오늘) 학습 세션 불러옴
+    _loadSessionsForDate(
+      _selectedSessionDate,
+    ); // 🆕 [요청 2026-09-04] 선택 날짜(기본값 오늘) 학습 세션 불러옴
+    _loadScholarshipSummary(); // 🆕 [장학금 방 2026-09-17] "나의 성취별 현황" 카드용 월간 별 데이터 로드
+    _checkAbandonedCode(); // 🆕 [방치 코드 정리 2026-09-18] 5주 이상 방치된 예전 코드가 있는지 확인
     // 🆕 [요청 2026-09-04] 첫 프레임이 렌더링된 직후, "주평가" 월 선택 가로 스크롤을 현재 월 위치로 이동.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollMonthRowToCurrent());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollMonthRowToCurrent(),
+    );
   }
 
   // 🆕 [요청 2026-09-04] "월 선택" 가로 스크롤 목록이 항상 1월부터 시작해서 현재 월이
@@ -593,7 +2336,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     if (!_monthScrollController.hasClients) return;
     final int currentMonthIndex = DateTime.now().month - 1; // 0-based
     const double itemExtent = 58.0; // "N월" 칩 1개의 대략적인 폭(패딩+글자+여백 포함 추정치)
-    double target = (currentMonthIndex * itemExtent) - itemExtent; // 현재 월 바로 앞칸부터 보이도록 약간의 여유
+    double target =
+        (currentMonthIndex * itemExtent) -
+        itemExtent; // 현재 월 바로 앞칸부터 보이도록 약간의 여유
     if (target < 0) target = 0;
     final double maxScroll = _monthScrollController.position.maxScrollExtent;
     if (target > maxScroll) target = maxScroll;
@@ -615,6 +2360,93 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     } catch (e) {
       debugPrint("[MemberAchievement] 별/레벨 불러오기 실패: $e");
     }
+  }
+
+  // ============================================================================
+  // 🆕 [장학금 방 2026-09-17] 월간 기본별(star_economy.dart에서 읽기만 함)과
+  // 보너스별(scholarship_service.dart) 요약을 불러옵니다. 기존 별 적립 로직에는
+  // 전혀 관여하지 않고, 이미 저장된 결과만 조회합니다.
+  // ============================================================================
+  Future<void> _loadScholarshipSummary() async {
+    try {
+      final int base = await ScholarshipService.getMonthlyBaseStars();
+      final int bonus = await ScholarshipService.getMonthlyBonusStars();
+      final Map<String, int> breakdown =
+          await ScholarshipService.getMonthlyBonusBreakdown();
+      final String? myCode =
+          await FamilyLinkService.getMyLinkCode(); // 🆕 [실시간 장학금 금액]
+      if (!mounted) return;
+      setState(() {
+        _scholarshipMonthlyBaseStars = base;
+        _scholarshipMonthlyBonusStars = bonus;
+        _scholarshipBonusBreakdown = breakdown;
+        _myLinkCode = myCode;
+        _isScholarshipDataLoading = false;
+      });
+    } catch (e) {
+      debugPrint("[MemberAchievement] 장학금 요약 불러오기 실패: $e");
+      if (!mounted) return;
+      setState(() => _isScholarshipDataLoading = false);
+    }
+  }
+
+  // ============================================================================
+  // 🆕 [방치 코드 정리 2026-09-18] 화면이 열릴 때 한 번, "5주 이상 방치된 예전
+  // 코드"가 있는지 서버에 물어보고, 있으면 팝업으로 안내함. 절대 자동으로
+  // 지우지 않으며, 학생이 팝업에서 "삭제"를 직접 눌러야만 실제로 지워짐.
+  // "나중에"를 누르면 이번 화면 세션에서는 다시 묻지 않되, 다음에 앱을
+  // 다시 열면(그 코드를 계속 안 지웠다면) 또 안내함.
+  // ============================================================================
+  Future<void> _checkAbandonedCode() async {
+    try {
+      final String? abandoned = await FamilyLinkService.findAbandonedOwnCode();
+      if (!mounted || abandoned == null) return;
+      setState(() => _abandonedCodeForPopup = abandoned);
+      _showAbandonedCodeDialog(abandoned);
+    } catch (e) {
+      debugPrint("[MemberAchievement] 방치 코드 확인 실패(무시): $e");
+    }
+  }
+
+  void _showAbandonedCodeDialog(String code) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0D1527),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          "예전 코드 정리",
+          style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Text(
+          "예전에 만든 코드($code)가 5주 넘게 사용되지 않았어요.\n"
+              "학습 기록도 전혀 없는 상태입니다.\n\n"
+              "더 이상 필요 없다면 삭제하시겠어요?\n"
+              "(원하지 않으시면 그냥 닫으셔도 되고, 코드는 계속 남아있습니다)",
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text("나중에", style: GoogleFonts.notoSansKr(color: Colors.white60, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _ThemeColors.brandGolden),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await FamilyLinkService.deleteAbandonedCode(code);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("예전 코드($code)를 삭제했습니다.")),
+                );
+              }
+            },
+            child: Text("삭제", style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   // 🆕 [데이터 연결 2026-07-29] 실제 가입자 이름 불러오기.
@@ -655,7 +2487,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   // 실제 값으로 조합해서 보여주고, 하나라도 비어있으면(가입 당시 미입력, 학부모/일반 계정 등)
   // 기존 고정 문구("GKE 고등학교 2학년" + 이름)로 안전하게 대체합니다.
   String get _schoolGradeNameDisplay {
-    final String name = _realUserName ?? (DkeLang.current == 'KO' ? "학습자" : "Learner");
+    final String name =
+        _realUserName ?? (DkeLang.current == 'KO' ? "학습자" : "Learner");
     if ((_realSchoolName ?? '').isNotEmpty && (_realGrade ?? '').isNotEmpty) {
       return "$_realSchoolName $_realGrade $name";
     }
@@ -665,7 +2498,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   }
 
   // ============================================================================
-// 🆕 [버그 수정 2026-07-29] 레코드 목록 전체를 한 번에 변환하다가 하나라도 실패하면
+  // 🆕 [버그 수정 2026-07-29] 레코드 목록 전체를 한 번에 변환하다가 하나라도 실패하면
   // 전체가 빈 목록이 되어버리던 문제를 수정. 이제 레코드 하나씩 개별적으로 파싱해서,
   // 손상된 레코드 하나만 건너뛰고 나머지 정상 레코드는 모두 정상적으로 불러옵니다.
   Future<void> _loadExamRecords() async {
@@ -678,31 +2511,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         final List<dynamic> decoded = jsonDecode(recordsJson);
         for (final e in decoded) {
           try {
-            loaded.add(_ExamRecord.fromJson(Map<String, dynamic>.from(e as Map)));
+            loaded.add(
+              _ExamRecord.fromJson(Map<String, dynamic>.from(e as Map)),
+            );
           } catch (itemError) {
+            // 개별 레코드 하나가 손상되어 있어도 나머지 레코드는 정상적으로 계속 불러옵니다.
             debugPrint("[MemberAchievement] 손상된 성적 기록 1건 건너뜀: $itemError");
           }
         }
       }
 
       if (!mounted) return;
-
-      // 🆕 [버그 수정 2026-09-08] 조회 필터가 항상 고정 기본값(2학년/1학기)이라, 다른
-      // 학년으로 저장한 기록은 안 보이는 것처럼 느껴지던 문제 - 가장 최근 기록 기준으로
-      // 필터를 자동으로 맞춰줍니다.
-      if (loaded.isNotEmpty) {
-        final _ExamRecord latest = loaded.last;
-        _filterGrade = latest.grade;
-        _filterSemester = latest.semester;
-        _inputGrade = latest.grade;
-        _inputSemester = latest.semester;
-        if (latest.type == "중간고사" || latest.type == "기말고사") {
-          _inputSemesterGroup = latest.semester == 1 ? "1학기" : "2학기";
-        }
-        _selectedExamType = latest.type;
-        _filterExamType = latest.type;
-      }
-
       setState(() {
         _allRecords = loaded;
         _lastSavedRecordForDisplay = loaded.isNotEmpty ? loaded.last : null;
@@ -722,7 +2541,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   Future<void> _persistExamRecords() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String encoded = jsonEncode(_allRecords.map((r) => r.toJson()).toList());
+      final String encoded = jsonEncode(
+        _allRecords.map((r) => r.toJson()).toList(),
+      );
       await prefs.setString('gke_exam_records', encoded);
     } catch (e) {
       debugPrint("[MemberAchievement] 성적 기록 저장 실패: $e");
@@ -740,7 +2561,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       final String? saved = prefs.getString('saved_target_university');
       if (!mounted) return;
       setState(() {
-        _realTargetUniversity = (saved != null && saved.isNotEmpty) ? saved : null;
+        _realTargetUniversity = (saved != null && saved.isNotEmpty)
+            ? saved
+            : null;
       });
     } catch (e) {
       debugPrint("[MemberAchievement] 목표 대학 불러오기 실패: $e");
@@ -749,14 +2572,20 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   List<_ExamRecord> _getFilteredRecords(String type) {
     return _allRecords.where((rec) {
-      bool baseMatch = rec.type == type
-          && rec.grade == _filterGrade
-          && rec.semester == _filterSemester;
+      bool baseMatch =
+          rec.type == type &&
+          rec.grade == _filterGrade &&
+          rec.semester == _filterSemester;
 
       if (type == "주평가") {
-        return baseMatch && rec.unit.contains(_inputYear) && rec.unit.contains(_inputMonth) && rec.unit.contains(_inputWeek);
+        return baseMatch &&
+            rec.unit.contains(_inputYear) &&
+            rec.unit.contains(_inputMonth) &&
+            rec.unit.contains(_inputWeek);
       } else if (type == "단원평가") {
-        return baseMatch && _inputBigUnits.any((bu) => rec.unit.contains(bu)) && _inputMidUnits.any((mu) => rec.unit.contains(mu));
+        return baseMatch &&
+            _inputBigUnits.any((bu) => rec.unit.contains(bu)) &&
+            _inputMidUnits.any((mu) => rec.unit.contains(mu));
       } else {
         return baseMatch && rec.unit.contains(_inputSemesterGroup);
       }
@@ -782,7 +2611,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         _timerDetails = _t('timerDetailDefault');
         _timerScore = 100;
         _timerIncorrect = _t('completed');
-        _timerDurationMinutes = tempSeconds != null ? (tempSeconds ~/ 60 == 0 ? 72 : tempSeconds ~/ 60) : 72;
+        _timerDurationMinutes = tempSeconds != null
+            ? (tempSeconds ~/ 60 == 0 ? 72 : tempSeconds ~/ 60)
+            : 72;
       });
       // 로컬 저장소 읽기는 무료이므로 실시간 반영. 원격(클라우드) 동기화 시각만 별도 기록.
       _lastRemoteSyncAt = DateTime.now();
@@ -814,7 +2645,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     final String personKey = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
 
     final String libraryKey = 'dke_diagnosis_library_${lang}_${type}_$bucket';
-    final String seenKey = 'dke_diagnosis_seen_${personKey}_${lang}_${type}_$bucket';
+    final String seenKey =
+        'dke_diagnosis_seen_${personKey}_${lang}_${type}_$bucket';
 
     final List<String> library = prefs.getStringList(libraryKey) ?? [];
     final List<String> seenIndices = prefs.getStringList(seenKey) ?? [];
@@ -829,7 +2661,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
     // TODO(향후 플스토어 출시 직전): tier == AiTier.pro / AiTier.light 분기에 따라
     // 실제 AI API 호출로 교체. 지금은 기존 규칙 기반(랜덤 문구 조합) 생성 로직을 그대로 사용.
-    final String generated = _buildRuleBasedDiagnosisText(type: type, score: score, subject: subject);
+    final String generated = _buildRuleBasedDiagnosisText(
+      type: type,
+      score: score,
+      subject: subject,
+    );
     library.add(generated);
     await prefs.setStringList(libraryKey, library);
     seenIndices.add('${library.length - 1}');
@@ -839,34 +2675,422 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [12개국 확장] 진단 문단 뱅크: 한국어/영어는 기존 2개 버전 유지, 나머지 10개 언어는 1개 버전
   static const Map<String, Map<String, List<String>>> _diagOpenings = {
-    'good': {'KO': ['이번 평가에서 90점 이상의 우수한 고득점을 기록한 것은 학습자의 숨겨진 잠재력이 마침내 표면 위로 발현되기 시작했음을 증명하는 매우 기쁜 소식입니다. ', '이번에 달성한 높은 성적은 그동안 묵묵히 쌓아온 학습의 밀도가 드디어 가시적인 성과로 도출되었음을 시사하는 대단히 고무적인 결과물입니다. '], 'EN': ['Scoring above 90 on this evaluation is wonderful news — it shows the learner\'s hidden potential is finally surfacing. ', 'This high score signals that the quiet, steady effort invested until now has finally produced a clearly visible result. '], 'JA': ['今回90点以上の優秀な高得点を記録したことは、学習者の隠れた潜在力がついに表面化し始めたことを示す非常に嬉しい知らせです。'], 'ZH': ['本次评估取得90分以上的优异成绩，说明学习者潜藏的实力终于开始显现，这是非常令人欣喜的结果。'], 'FR': ['Obtenir plus de 90 points à cette évaluation est une excellente nouvelle : le potentiel caché de l\'apprenant commence enfin à se révéler.'], 'DE': ['Eine Punktzahl von über 90 bei dieser Bewertung ist eine großartige Nachricht — das verborgene Potenzial des Lernenden zeigt sich endlich.'], 'RU': ['Результат выше 90 баллов на этой оценке — прекрасная новость: скрытый потенциал ученика наконец начал проявляться.'], 'AR': ['الحصول على أكثر من 90 درجة في هذا التقييم خبر رائع يدل على أن الإمكانات الكامنة لدى المتعلم بدأت تظهر أخيرًا.'], 'HI': ['इस मूल्यांकन में 90 से अधिक अंक प्राप्त करना बहुत अच्छी खबर है — यह दिखाता है कि सीखने वाले की छिपी क्षमता आखिरकार सामने आने लगी है।'], 'VI': ['Đạt trên 90 điểm trong lần đánh giá này là tin rất đáng mừng — tiềm năng tiềm ẩn của người học cuối cùng đã bắt đầu bộc lộ.'], 'ES': ['Obtener más de 90 puntos en esta evaluación es una excelente noticia: el potencial oculto del estudiante finalmente está saliendo a la luz.'], 'TH': ['การได้คะแนนมากกว่า 90 ในการประเมินครั้งนี้เป็นข่าวดีมาก แสดงว่าศักยภาพที่ซ่อนอยู่ของผู้เรียนเริ่มปรากฏออกมาแล้ว']},
-    'mid': {'KO': ['현재 도달한 성취도의 위치는 조금만 더 정밀하게 메타인지(자신의 인지 활동을 모니터링하고 조절하는 능력)를 조율하면 언제든 만점까지 단숨에 바라볼 수 있는 고지가 바로 눈앞에 와 있는 단계입니다. ', '이번에 확보한 상위권 점수는 안정적인 성장을 의미하지만, 동시에 조금의 임계점만 넘어서면 언제든 최상위권의 벽을 깨부수고 만점으로 직행할 수 있는 가장 중요한 기로의 점수대입니다. '], 'EN': ['This score sits right at the doorstep of a perfect score — a little sharper metacognitive tuning is all that stands between here and the top. ', 'This upper-tier score reflects steady growth, but it also sits at the exact tipping point where one more push could break straight through to the very top. '], 'JA': ['現在到達した成績のポジションは、もう少し精密にメタ認知（自身の認知活動を監視・調整する能力）を調整すれば、いつでも満点を視野に入れられる段階です。'], 'ZH': ['目前所处的成绩位置，只要再稍微精细地调节元认知（监控并调节自身认知活动的能力），随时都有望冲击满分。'], 'FR': ['Le niveau actuel n\'est qu\'à un pas d\'un score parfait — un réglage plus fin de la métacognition suffirait pour franchir le cap.'], 'DE': ['Das aktuelle Niveau liegt direkt vor der Bestnote — eine feinere metakognitive Justierung genügt, um den letzten Schritt zu schaffen.'], 'RU': ['Текущий уровень находится буквально на пороге максимального балла — небольшая настройка метапознания способна привести к вершине.'], 'AR': ['المستوى الحالي يقترب كثيرًا من الدرجة الكاملة — يكفي ضبط أدق للإدراك الفوقي للوصول إلى القمة في أي وقت.'], 'HI': ['वर्तमान स्कोर पूर्ण अंकों की दहलीज पर है — थोड़ा और सटीक मेटाकॉग्निटिव समायोजन शिखर तक पहुंचा सकता है।'], 'VI': ['Vị trí điểm số hiện tại đã rất gần điểm tuyệt đối — chỉ cần điều chỉnh nhận thức tinh tế hơn một chút là có thể vươn tới đỉnh cao.'], 'ES': ['El nivel actual está a un paso del puntaje perfecto: un ajuste metacognitivo más preciso podría llevarte a la cima en cualquier momento.'], 'TH': ['ตำแหน่งคะแนนตอนนี้อยู่ใกล้คะแนนเต็มมาก เพียงปรับกระบวนการรู้คิดให้ละเอียดขึ้นอีกนิดก็สามารถไปถึงจุดสูงสุดได้ทุกเมื่อ']},
-    'seventy': {'KO': ['이번 평가에서 기록한 70점대의 수치는 학습자가 현재 지닌 역량에 비해 다소 아쉬운 결과이며, 현재의 약점을 방치할 경우 아래 점수대로 내려갈 수 있는 경계선에 있습니다. ', '현재 포지션은 탄탄한 도약이냐 지체냐를 결정짓는 중대한 기로입니다. 구조적 점검이 신속하게 이루어지지 않는다면 다음 평가에서 예상치 못한 하락세를 맞이할 위험이 공존합니다. '], 'EN': ['This 70s-range score falls a bit short of the learner\'s real ability, and leaving current weak points unaddressed risks a slide into the lower range. ', 'This is a genuine fork in the road between a strong leap forward and stagnation. Without a quick structural check, an unexpected drop could show up on the next evaluation. '], 'JA': ['今回の評価で記録された70点台の数値は、学習者が現在持つ実力に比べてやや惜しい結果であり、現在の弱点を放置すればさらに下の点数帯に落ちる可能性がある境界線にあります。'], 'ZH': ['本次评估记录的70分段成绩，相较于学习者当前实际具备的能力略显可惜，若放任目前的弱点不管，很可能滑向更低的分数段。'], 'FR': ['Ce score dans les 70 est un peu en deçà du véritable niveau de l\'apprenant, et ignorer les faiblesses actuelles risque de faire chuter encore le résultat.'], 'DE': ['Dieses Ergebnis im 70er-Bereich liegt etwas unter dem tatsächlichen Können des Lernenden, und wenn die aktuellen Schwächen ignoriert werden, droht ein weiterer Abstieg.'], 'RU': ['Результат в диапазоне 70 баллов немного не дотягивает до реального уровня ученика, и если не устранить текущие слабости, есть риск дальнейшего снижения.'], 'AR': ['هذه النتيجة في السبعينيات أقل قليلاً من القدرة الحقيقية للمتعلم، وإهمال نقاط الضعف الحالية قد يؤدي إلى مزيد من التراجع.'], 'HI': ['70 के दशक का यह स्कोर सीखने वाले की वास्तविक क्षमता से थोड़ा कम है, और वर्तमान कमजोरियों को नज़रअंदाज़ करने से स्कोर और गिर सकता है।'], 'VI': ['Điểm số trong khoảng 70 này thấp hơn một chút so với năng lực thực sự của người học, và nếu bỏ qua điểm yếu hiện tại, điểm số có thể tiếp tục giảm.'], 'ES': ['Este puntaje en el rango de los 70 queda un poco por debajo de la capacidad real del estudiante, y si se ignoran las debilidades actuales, podría bajar aún más.'], 'TH': ['คะแนนช่วง 70 นี้ต่ำกว่าความสามารถที่แท้จริงของผู้เรียนเล็กน้อย และหากปล่อยจุดอ่อนปัจจุบันไว้ อาจทำให้คะแนนลดลงไปอีก']},
-    'sixty': {'KO': ['현재 누적된 60점대의 성취도는 교과 개념의 정착 단계에서 예상보다 깊은 균열이 발생했음을 나타내며, 신속히 반등의 불씨를 지피지 않으면 하락세를 멈추기 어려운 주의 단계입니다. ', '현재 점수대는 냉정하게 직시했을 때 하위권으로 정착할 것인가, 혹은 상위권으로 치고 올라갈 것인가를 가르는 매우 엄중한 인지적 기로에 서 있음을 뜻합니다. '], 'EN': ['A score in the 60s points to a deeper-than-expected crack in the foundation, and without acting quickly, the downward trend will be hard to stop. ', 'Looking at this honestly, this score sits right at the fork between settling into the lower tier or fighting back up toward the top. '], 'JA': ['現在累積された60点台の成績は、教科概念の定着段階で予想より深い亀裂が生じたことを示しており、迅速に反騰の火種を灯さなければ下降を止めにくい注意段階です。'], 'ZH': ['目前累积的60分段成绩，说明在学科概念巩固阶段出现了比预期更深的裂痕，若不尽快点燃反弹的契机，下滑趋势将很难止住，需引起重视。'], 'FR': ['Ce score dans les 60 révèle une fissure plus profonde que prévu dans la consolidation des concepts ; sans réaction rapide, la baisse sera difficile à enrayer.'], 'DE': ['Diese Punktzahl im 60er-Bereich zeigt einen tieferen Riss in der Konzeptfestigung als erwartet; ohne schnelles Gegensteuern wird der Abwärtstrend schwer zu stoppen sein.'], 'RU': ['Результат в диапазоне 60 баллов указывает на более глубокий разрыв в закреплении понятий, чем ожидалось; без быстрой реакции остановить спад будет трудно.'], 'AR': ['هذه النتيجة في الستينيات تكشف عن فجوة أعمق من المتوقع في ترسيخ المفاهيم؛ وبدون تحرك سريع، سيصعب وقف التراجع.'], 'HI': ['60 के दशक का यह स्कोर अवधारणा सुदृढ़ीकरण में अपेक्षा से अधिक गहरी दरार दिखाता है; तेज़ी से कार्रवाई किए बिना गिरावट को रोकना मुश्किल होगा।'], 'VI': ['Điểm số trong khoảng 60 này cho thấy một vết nứt sâu hơn dự kiến trong việc củng cố khái niệm; nếu không hành động nhanh, xu hướng giảm sẽ khó ngăn lại.'], 'ES': ['Este puntaje en el rango de los 60 revela una grieta más profunda de lo esperado en la consolidación de conceptos; sin actuar rápido, será difícil detener la caída.'], 'TH': ['คะแนนช่วง 60 นี้แสดงถึงรอยร้าวในการปูพื้นฐานแนวคิดที่ลึกกว่าที่คาดไว้ หากไม่รีบดำเนินการ แนวโน้มขาลงจะหยุดได้ยาก']},
-    'low': {'KO': ['현재 기록된 평가 수치는 기초 개념 정착 단계에서 전반적인 재조정과 보완이 시급함을 가리키는 엄중한 진단서입니다. ', '현재의 지표는 학습 프로세스 전체에 걸쳐 개념적 누수가 누적되었음을 경고하고 있으며, 즉각적인 학습 루틴의 전면적인 개혁이 필요한 순간입니다. '], 'EN': ['This score is a serious signal that the foundational concepts need a full reset and reinforcement. ', 'This result warns that conceptual gaps have accumulated across the whole learning process, and the study routine needs an immediate, full overhaul. '], 'JA': ['現在記録された評価数値は、基礎概念の定着段階で全般的な再調整と補完が急がれることを示す厳重な診断書です。'], 'ZH': ['当前记录的评估结果，是一份严肃的诊断书，表明在基础概念巩固阶段亟需全面调整与补强。'], 'FR': ['Ce résultat est un signal sérieux indiquant qu\'un réajustement complet des concepts fondamentaux est nécessaire de toute urgence.'], 'DE': ['Dieses Ergebnis ist ein ernstes Signal dafür, dass eine umfassende Neuausrichtung der Grundkonzepte dringend erforderlich ist.'], 'RU': ['Этот результат — серьёзный сигнал о том, что необходима срочная и всесторонняя перестройка базовых понятий.'], 'AR': ['هذه النتيجة إشارة جادة إلى ضرورة إعادة ضبط شاملة وعاجلة للمفاهيم الأساسية.'], 'HI': ['यह स्कोर एक गंभीर संकेत है कि बुनियादी अवधारणाओं में तत्काल और व्यापक पुनर्समायोजन आवश्यक है।'], 'VI': ['Kết quả này là tín hiệu nghiêm túc cho thấy cần điều chỉnh và củng cố toàn diện các khái niệm nền tảng ngay lập tức.'], 'ES': ['Este resultado es una señal seria de que se necesita un reajuste integral y urgente de los conceptos fundamentales.'], 'TH': ['ผลคะแนนนี้เป็นสัญญาณที่ต้องให้ความสำคัญว่าจำเป็นต้องปรับพื้นฐานแนวคิดใหม่อย่างเร่งด่วนและครอบคลุม']},
+    'good': {
+      'KO': [
+        '이번 평가에서 90점 이상의 우수한 고득점을 기록한 것은 학습자의 숨겨진 잠재력이 마침내 표면 위로 발현되기 시작했음을 증명하는 매우 기쁜 소식입니다. ',
+        '이번에 달성한 높은 성적은 그동안 묵묵히 쌓아온 학습의 밀도가 드디어 가시적인 성과로 도출되었음을 시사하는 대단히 고무적인 결과물입니다. ',
+      ],
+      'EN': [
+        'Scoring above 90 on this evaluation is wonderful news — it shows the learner\'s hidden potential is finally surfacing. ',
+        'This high score signals that the quiet, steady effort invested until now has finally produced a clearly visible result. ',
+      ],
+      'JA': ['今回90点以上の優秀な高得点を記録したことは、学習者の隠れた潜在力がついに表面化し始めたことを示す非常に嬉しい知らせです。'],
+      'ZH': ['本次评估取得90分以上的优异成绩，说明学习者潜藏的实力终于开始显现，这是非常令人欣喜的结果。'],
+      'FR': [
+        'Obtenir plus de 90 points à cette évaluation est une excellente nouvelle : le potentiel caché de l\'apprenant commence enfin à se révéler.',
+      ],
+      'DE': [
+        'Eine Punktzahl von über 90 bei dieser Bewertung ist eine großartige Nachricht — das verborgene Potenzial des Lernenden zeigt sich endlich.',
+      ],
+      'RU': [
+        'Результат выше 90 баллов на этой оценке — прекрасная новость: скрытый потенциал ученика наконец начал проявляться.',
+      ],
+      'AR': [
+        'الحصول على أكثر من 90 درجة في هذا التقييم خبر رائع يدل على أن الإمكانات الكامنة لدى المتعلم بدأت تظهر أخيرًا.',
+      ],
+      'HI': [
+        'इस मूल्यांकन में 90 से अधिक अंक प्राप्त करना बहुत अच्छी खबर है — यह दिखाता है कि सीखने वाले की छिपी क्षमता आखिरकार सामने आने लगी है।',
+      ],
+      'VI': [
+        'Đạt trên 90 điểm trong lần đánh giá này là tin rất đáng mừng — tiềm năng tiềm ẩn của người học cuối cùng đã bắt đầu bộc lộ.',
+      ],
+      'ES': [
+        'Obtener más de 90 puntos en esta evaluación es una excelente noticia: el potencial oculto del estudiante finalmente está saliendo a la luz.',
+      ],
+      'TH': [
+        'การได้คะแนนมากกว่า 90 ในการประเมินครั้งนี้เป็นข่าวดีมาก แสดงว่าศักยภาพที่ซ่อนอยู่ของผู้เรียนเริ่มปรากฏออกมาแล้ว',
+      ],
+    },
+    'mid': {
+      'KO': [
+        '현재 도달한 성취도의 위치는 조금만 더 정밀하게 메타인지(자신의 인지 활동을 모니터링하고 조절하는 능력)를 조율하면 언제든 만점까지 단숨에 바라볼 수 있는 고지가 바로 눈앞에 와 있는 단계입니다. ',
+        '이번에 확보한 상위권 점수는 안정적인 성장을 의미하지만, 동시에 조금의 임계점만 넘어서면 언제든 최상위권의 벽을 깨부수고 만점으로 직행할 수 있는 가장 중요한 기로의 점수대입니다. ',
+      ],
+      'EN': [
+        'This score sits right at the doorstep of a perfect score — a little sharper metacognitive tuning is all that stands between here and the top. ',
+        'This upper-tier score reflects steady growth, but it also sits at the exact tipping point where one more push could break straight through to the very top. ',
+      ],
+      'JA': [
+        '現在到達した成績のポジションは、もう少し精密にメタ認知（自身の認知活動を監視・調整する能力）を調整すれば、いつでも満点を視野に入れられる段階です。',
+      ],
+      'ZH': ['目前所处的成绩位置，只要再稍微精细地调节元认知（监控并调节自身认知活动的能力），随时都有望冲击满分。'],
+      'FR': [
+        'Le niveau actuel n\'est qu\'à un pas d\'un score parfait — un réglage plus fin de la métacognition suffirait pour franchir le cap.',
+      ],
+      'DE': [
+        'Das aktuelle Niveau liegt direkt vor der Bestnote — eine feinere metakognitive Justierung genügt, um den letzten Schritt zu schaffen.',
+      ],
+      'RU': [
+        'Текущий уровень находится буквально на пороге максимального балла — небольшая настройка метапознания способна привести к вершине.',
+      ],
+      'AR': [
+        'المستوى الحالي يقترب كثيرًا من الدرجة الكاملة — يكفي ضبط أدق للإدراك الفوقي للوصول إلى القمة في أي وقت.',
+      ],
+      'HI': [
+        'वर्तमान स्कोर पूर्ण अंकों की दहलीज पर है — थोड़ा और सटीक मेटाकॉग्निटिव समायोजन शिखर तक पहुंचा सकता है।',
+      ],
+      'VI': [
+        'Vị trí điểm số hiện tại đã rất gần điểm tuyệt đối — chỉ cần điều chỉnh nhận thức tinh tế hơn một chút là có thể vươn tới đỉnh cao.',
+      ],
+      'ES': [
+        'El nivel actual está a un paso del puntaje perfecto: un ajuste metacognitivo más preciso podría llevarte a la cima en cualquier momento.',
+      ],
+      'TH': [
+        'ตำแหน่งคะแนนตอนนี้อยู่ใกล้คะแนนเต็มมาก เพียงปรับกระบวนการรู้คิดให้ละเอียดขึ้นอีกนิดก็สามารถไปถึงจุดสูงสุดได้ทุกเมื่อ',
+      ],
+    },
+    'seventy': {
+      'KO': [
+        '이번 평가에서 기록한 70점대의 수치는 학습자가 현재 지닌 역량에 비해 다소 아쉬운 결과이며, 현재의 약점을 방치할 경우 아래 점수대로 내려갈 수 있는 경계선에 있습니다. ',
+        '현재 포지션은 탄탄한 도약이냐 지체냐를 결정짓는 중대한 기로입니다. 구조적 점검이 신속하게 이루어지지 않는다면 다음 평가에서 예상치 못한 하락세를 맞이할 위험이 공존합니다. ',
+      ],
+      'EN': [
+        'This 70s-range score falls a bit short of the learner\'s real ability, and leaving current weak points unaddressed risks a slide into the lower range. ',
+        'This is a genuine fork in the road between a strong leap forward and stagnation. Without a quick structural check, an unexpected drop could show up on the next evaluation. ',
+      ],
+      'JA': [
+        '今回の評価で記録された70点台の数値は、学習者が現在持つ実力に比べてやや惜しい結果であり、現在の弱点を放置すればさらに下の点数帯に落ちる可能性がある境界線にあります。',
+      ],
+      'ZH': ['本次评估记录的70分段成绩，相较于学习者当前实际具备的能力略显可惜，若放任目前的弱点不管，很可能滑向更低的分数段。'],
+      'FR': [
+        'Ce score dans les 70 est un peu en deçà du véritable niveau de l\'apprenant, et ignorer les faiblesses actuelles risque de faire chuter encore le résultat.',
+      ],
+      'DE': [
+        'Dieses Ergebnis im 70er-Bereich liegt etwas unter dem tatsächlichen Können des Lernenden, und wenn die aktuellen Schwächen ignoriert werden, droht ein weiterer Abstieg.',
+      ],
+      'RU': [
+        'Результат в диапазоне 70 баллов немного не дотягивает до реального уровня ученика, и если не устранить текущие слабости, есть риск дальнейшего снижения.',
+      ],
+      'AR': [
+        'هذه النتيجة في السبعينيات أقل قليلاً من القدرة الحقيقية للمتعلم، وإهمال نقاط الضعف الحالية قد يؤدي إلى مزيد من التراجع.',
+      ],
+      'HI': [
+        '70 के दशक का यह स्कोर सीखने वाले की वास्तविक क्षमता से थोड़ा कम है, और वर्तमान कमजोरियों को नज़रअंदाज़ करने से स्कोर और गिर सकता है।',
+      ],
+      'VI': [
+        'Điểm số trong khoảng 70 này thấp hơn một chút so với năng lực thực sự của người học, và nếu bỏ qua điểm yếu hiện tại, điểm số có thể tiếp tục giảm.',
+      ],
+      'ES': [
+        'Este puntaje en el rango de los 70 queda un poco por debajo de la capacidad real del estudiante, y si se ignoran las debilidades actuales, podría bajar aún más.',
+      ],
+      'TH': [
+        'คะแนนช่วง 70 นี้ต่ำกว่าความสามารถที่แท้จริงของผู้เรียนเล็กน้อย และหากปล่อยจุดอ่อนปัจจุบันไว้ อาจทำให้คะแนนลดลงไปอีก',
+      ],
+    },
+    'sixty': {
+      'KO': [
+        '현재 누적된 60점대의 성취도는 교과 개념의 정착 단계에서 예상보다 깊은 균열이 발생했음을 나타내며, 신속히 반등의 불씨를 지피지 않으면 하락세를 멈추기 어려운 주의 단계입니다. ',
+        '현재 점수대는 냉정하게 직시했을 때 하위권으로 정착할 것인가, 혹은 상위권으로 치고 올라갈 것인가를 가르는 매우 엄중한 인지적 기로에 서 있음을 뜻합니다. ',
+      ],
+      'EN': [
+        'A score in the 60s points to a deeper-than-expected crack in the foundation, and without acting quickly, the downward trend will be hard to stop. ',
+        'Looking at this honestly, this score sits right at the fork between settling into the lower tier or fighting back up toward the top. ',
+      ],
+      'JA': [
+        '現在累積された60点台の成績は、教科概念の定着段階で予想より深い亀裂が生じたことを示しており、迅速に反騰の火種を灯さなければ下降を止めにくい注意段階です。',
+      ],
+      'ZH': ['目前累积的60分段成绩，说明在学科概念巩固阶段出现了比预期更深的裂痕，若不尽快点燃反弹的契机，下滑趋势将很难止住，需引起重视。'],
+      'FR': [
+        'Ce score dans les 60 révèle une fissure plus profonde que prévu dans la consolidation des concepts ; sans réaction rapide, la baisse sera difficile à enrayer.',
+      ],
+      'DE': [
+        'Diese Punktzahl im 60er-Bereich zeigt einen tieferen Riss in der Konzeptfestigung als erwartet; ohne schnelles Gegensteuern wird der Abwärtstrend schwer zu stoppen sein.',
+      ],
+      'RU': [
+        'Результат в диапазоне 60 баллов указывает на более глубокий разрыв в закреплении понятий, чем ожидалось; без быстрой реакции остановить спад будет трудно.',
+      ],
+      'AR': [
+        'هذه النتيجة في الستينيات تكشف عن فجوة أعمق من المتوقع في ترسيخ المفاهيم؛ وبدون تحرك سريع، سيصعب وقف التراجع.',
+      ],
+      'HI': [
+        '60 के दशक का यह स्कोर अवधारणा सुदृढ़ीकरण में अपेक्षा से अधिक गहरी दरार दिखाता है; तेज़ी से कार्रवाई किए बिना गिरावट को रोकना मुश्किल होगा।',
+      ],
+      'VI': [
+        'Điểm số trong khoảng 60 này cho thấy một vết nứt sâu hơn dự kiến trong việc củng cố khái niệm; nếu không hành động nhanh, xu hướng giảm sẽ khó ngăn lại.',
+      ],
+      'ES': [
+        'Este puntaje en el rango de los 60 revela una grieta más profunda de lo esperado en la consolidación de conceptos; sin actuar rápido, será difícil detener la caída.',
+      ],
+      'TH': [
+        'คะแนนช่วง 60 นี้แสดงถึงรอยร้าวในการปูพื้นฐานแนวคิดที่ลึกกว่าที่คาดไว้ หากไม่รีบดำเนินการ แนวโน้มขาลงจะหยุดได้ยาก',
+      ],
+    },
+    'low': {
+      'KO': [
+        '현재 기록된 평가 수치는 기초 개념 정착 단계에서 전반적인 재조정과 보완이 시급함을 가리키는 엄중한 진단서입니다. ',
+        '현재의 지표는 학습 프로세스 전체에 걸쳐 개념적 누수가 누적되었음을 경고하고 있으며, 즉각적인 학습 루틴의 전면적인 개혁이 필요한 순간입니다. ',
+      ],
+      'EN': [
+        'This score is a serious signal that the foundational concepts need a full reset and reinforcement. ',
+        'This result warns that conceptual gaps have accumulated across the whole learning process, and the study routine needs an immediate, full overhaul. ',
+      ],
+      'JA': ['現在記録された評価数値は、基礎概念の定着段階で全般的な再調整と補完が急がれることを示す厳重な診断書です。'],
+      'ZH': ['当前记录的评估结果，是一份严肃的诊断书，表明在基础概念巩固阶段亟需全面调整与补强。'],
+      'FR': [
+        'Ce résultat est un signal sérieux indiquant qu\'un réajustement complet des concepts fondamentaux est nécessaire de toute urgence.',
+      ],
+      'DE': [
+        'Dieses Ergebnis ist ein ernstes Signal dafür, dass eine umfassende Neuausrichtung der Grundkonzepte dringend erforderlich ist.',
+      ],
+      'RU': [
+        'Этот результат — серьёзный сигнал о том, что необходима срочная и всесторонняя перестройка базовых понятий.',
+      ],
+      'AR': [
+        'هذه النتيجة إشارة جادة إلى ضرورة إعادة ضبط شاملة وعاجلة للمفاهيم الأساسية.',
+      ],
+      'HI': [
+        'यह स्कोर एक गंभीर संकेत है कि बुनियादी अवधारणाओं में तत्काल और व्यापक पुनर्समायोजन आवश्यक है।',
+      ],
+      'VI': [
+        'Kết quả này là tín hiệu nghiêm túc cho thấy cần điều chỉnh và củng cố toàn diện các khái niệm nền tảng ngay lập tức.',
+      ],
+      'ES': [
+        'Este resultado es una señal seria de que se necesita un reajuste integral y urgente de los conceptos fundamentales.',
+      ],
+      'TH': [
+        'ผลคะแนนนี้เป็นสัญญาณที่ต้องให้ความสำคัญว่าจำเป็นต้องปรับพื้นฐานแนวคิดใหม่อย่างเร่งด่วนและครอบคลุม',
+      ],
+    },
   };
 
   static const Map<String, Map<String, List<String>>> _diagClosings = {
-    'good': {'KO': ['그러나 현재의 기초 체급을 고려할 때, 이번 결과에 취해 단 한순간이라도 안일해지는 즉시 성적은 하락세로 돌아설 수 있습니다. 진정한 만점자로 안착하기 위해서는 실전에서 발생한 미세한 균열을 메워야 하므로, 틀린 문제는 반드시 누적 오답정리(틀린 원인을 기록하고 분석하는 과정)를 완수하고 최소 3번 이상 반복하여 완전히 본인의 것으로 만드는 철저한 회독 습관을 기르십시오. 자만하지 않고 이 정합성 확인 루틴을 성실히 유지한다면, 다음 실전에서도 흔들리지 않는 진짜 탑클래스로 우뚝 설 것입니다.', '다만 지금의 위치에서 방심하여 루틴이 느슨해진다면 차기 평가에서는 아쉬운 결과를 맛보게 될 수 있습니다. 완전무결한 성취를 지속하기 위해서는 취약 문항의 누적 오답정리(틀린 원인을 기록하고 분석하는 과정)를 철저히 이행하고, 오답을 3번 이상 재차 정밀 분석하여 풀어내는 훈련이 필수적입니다. 나태함을 경계하고 메타인지 루틴을 사수하여 흔들림 없는 정점에 도달하십시오.'], 'EN': ['That said, given the current foundation, even a moment of complacency could send the score back down. To truly lock in top-tier status, log every mistake in an error journal, review it at least three times, and make it fully your own. Keep this consistency routine honest and unshaken results in the next real test will follow.', 'Be careful not to let the routine loosen just because of this win — a lapse now could mean a disappointing result next time. Keep logging and re-analyzing every weak item at least three times. Guard against complacency and protect your metacognitive routine to reach an unshakeable peak.'], 'JA': ['ただし現在の基礎レベルを考えると、この結果に浮かれて一瞬でも油断すればすぐに成績は下降する可能性があります。真のトップクラスとして定着するためには、間違えた問題は必ず誤答ノート（間違えた原因を記録・分析する過程）を完成させ、最低3回以上繰り返して完全に自分のものにする徹底した復習習慣を身につけてください。慢心せずこの整合性確認ルーティンを誠実に維持すれば、次の実戦でも揺るがない本物のトップクラスとして立つでしょう。'], 'ZH': ['不过考虑到目前的基础水平，若因这次结果而有片刻松懈，成绩很可能立刻出现下滑。要真正稳居顶尖水平，必须将错题整理（记录并分析出错原因的过程）坚持完成，并至少反复复习三次以上，使其完全内化为自己的知识。只要不骄傲自满、认真维持这一巩固流程，下次实战中也能稳如泰山地站在真正的顶尖行列。'], 'FR': ['Cependant, compte tenu du niveau actuel des bases, le moindre relâchement pourrait faire chuter les résultats. Pour consolider durablement ce niveau, notez chaque erreur dans un journal, révisez-la au moins trois fois et faites-en une habitude rigoureuse. En maintenant cette routine avec sérieux, vous resterez stable au sommet lors de la prochaine évaluation.'], 'DE': ['Angesichts der aktuellen Grundlagen könnte jedoch schon ein Moment der Nachlässigkeit die Note wieder sinken lassen. Um wirklich an der Spitze zu bleiben, sollten Sie jeden Fehler in einem Fehlerprotokoll festhalten, mindestens dreimal wiederholen und vollständig verinnerlichen. Bleiben Sie diszipliniert bei dieser Routine, um auch beim nächsten Test stabil an der Spitze zu stehen.'], 'RU': ['Однако, учитывая текущий уровень базы, малейшее самодовольство может привести к падению результатов. Чтобы закрепиться на вершине, обязательно фиксируйте каждую ошибку в журнале ошибок, повторяйте её минимум три раза и полностью усваивайте. Сохраняя эту дисциплину, вы останетесь уверенно на вершине и в следующий раз.'], 'AR': ['لكن نظرًا للمستوى الأساسي الحالي، فإن أي تراخٍ ولو للحظة قد يؤدي إلى تراجع النتيجة. للحفاظ على مكانتك في القمة، سجّل كل خطأ في دفتر الأخطاء وراجعه ثلاث مرات على الأقل حتى تتقنه تمامًا. حافظ على هذا الروتين بجدية لتبقى ثابتًا في القمة في الاختبار القادم أيضًا.'], 'HI': ['लेकिन वर्तमान आधार स्तर को देखते हुए, इस परिणाम से एक पल के लिए भी लापरवाह होना स्कोर को नीचे ला सकता है। शीर्ष स्तर पर स्थिर रहने के लिए, हर गलती को एक त्रुटि पत्रिका में दर्ज करें, कम से कम तीन बार दोहराएं और उसे पूरी तरह आत्मसात करें। इस अनुशासन को बनाए रखें ताकि अगली बार भी शीर्ष पर मजबूती से खड़े रहें।'], 'VI': ['Tuy nhiên, xét theo nền tảng hiện tại, chỉ cần một khoảnh khắc lơ là cũng có thể khiến điểm số giảm sút. Để duy trì vững chắc vị trí hàng đầu, hãy ghi lại mọi lỗi sai vào nhật ký lỗi, ôn lại ít nhất ba lần và biến nó thành kiến thức của riêng mình. Duy trì kỷ luật này để tiếp tục đứng vững ở vị trí cao trong lần đánh giá tới.'], 'ES': ['Sin embargo, dado el nivel base actual, un momento de exceso de confianza podría hacer bajar la puntuación. Para consolidarte en la cima, registra cada error en un diario de errores, repásalo al menos tres veces y asimílalo por completo. Mantén esta rutina con disciplina para seguir firme en la cima la próxima vez.'], 'TH': ['อย่างไรก็ตาม เมื่อพิจารณาระดับพื้นฐานในปัจจุบัน หากเผลอตัวแม้เพียงชั่วขณะ คะแนนก็อาจลดลงได้ทันที เพื่อรักษาตำแหน่งระดับสูงสุดอย่างแท้จริง ควรบันทึกทุกข้อผิดพลาดลงในสมุดบันทึกข้อผิดพลาดและทบทวนอย่างน้อย 3 ครั้งจนเป็นความรู้ของตัวเองอย่างสมบูรณ์ รักษาวินัยนี้ไว้เพื่อยืนหยัดอยู่จุดสูงสุดอย่างมั่นคงในครั้งต่อไป']},
-    'mid': {'KO': ['지금 단계에서 가장 유의해야 할 것은 \'이 정도면 됐다\'는 주관적인 안주와 타협입니다. 문항 분석 시 개념 스키마(지식의 구조적 네트워크)의 뼈대는 훌륭하나, 조건 해석의 정밀도가 다소 부족하여 감점이 발생하고 있습니다. 취약 단원의 고난도 변형 문제를 집중 공략하고 실전 시간 안배의 정밀도를 한 단계만 가속화하십시오. 정상으로 가는 마지막 관문이니, 조금만 더 고도의 학업적 몰입도를 발휘해 만점의 영광을 함께 쟁취합시다!', '현재 상태에서 성장을 한 단계 더 정체시키는 원인은 주관적인 안일함에 있을 수 있습니다. 인지 구조 내의 기본 스키마(지식의 구조적 네트워크)는 안정적이나, 세부 변별 과정에서 집중력의 미세한 누수가 관찰됩니다. 안일함을 지워내고 문항 단독 피드백 검토 단계를 한층 더 확장하십시오. 조금만 더 치열하게 벽을 두드린다면 반드시 차기 세션에서 만점을 거머쥘 수 있습니다.'], 'EN': ['The biggest risk right now is settling for \'good enough.\' The core concept structure is solid, but precision in reading question conditions is costing points. Target the hardest variant problems in weak units and tighten exam-time pacing one more notch. This is the final gate to the top — push a little harder and claim it!', 'The one thing holding growth back may be quiet complacency. The core knowledge structure is stable, but small lapses in concentration show up during fine-grained discrimination. Shed the complacency and expand item-by-item review. A bit more persistence and a perfect score is within reach next session.'], 'JA': ['今の段階で最も気をつけるべきは「これくらいで十分」という主観的な妥協です。問題分析の際、概念スキーマ（知識の構造的ネットワーク）の骨組みは優れていますが、条件解釈の精密さがやや不足して減点が生じています。弱点単元の高難度応用問題を集中攻略し、実戦の時間配分の精度をもう一段階高めてください。頂上への最後の関門なので、もう少し学業への没入度を高めて満点の栄光を勝ち取りましょう！'], 'ZH': ['目前阶段最需要警惕的就是“这样就够了”的主观妥协心态。分析题目时，概念框架（知识的结构性网络）已经相当扎实，但对条件的解读精度略有不足，从而导致失分。请集中攻克薄弱单元的高难度变式题，并将实战时间分配的精度再提升一个层次。这是通往顶峰的最后一关，只要再多投入一点学习专注度，就能共同夺得满分的荣耀！'], 'FR': ['À ce stade, le principal danger est de se satisfaire d\'un « c\'est déjà bien ». La structure conceptuelle est solide, mais la précision dans l\'interprétation des énoncés fait encore perdre des points. Concentrez-vous sur les variantes les plus difficiles des unités faibles et affinez la gestion du temps en conditions réelles. C\'est la dernière étape avant le sommet — un effort supplémentaire suffira à décrocher la perfection !'], 'DE': ['In dieser Phase besteht die größte Gefahr darin, sich mit „das reicht schon“ zufriedenzugeben. Die Konzeptstruktur ist solide, doch die Präzision beim Verständnis der Aufgabenbedingungen kostet noch Punkte. Konzentrieren Sie sich auf die schwierigsten Variantenaufgaben der schwachen Einheiten und verfeinern Sie das Zeitmanagement unter Prüfungsbedingungen. Dies ist das letzte Tor zum Gipfel — mit etwas mehr Einsatz ist die Bestnote erreichbar!'], 'RU': ['На этом этапе главная опасность — успокоиться на достигнутом. Концептуальная база прочная, но точность понимания условий заданий пока стоит баллов. Сосредоточьтесь на самых сложных вариациях заданий в слабых разделах и отточите распределение времени на экзамене. Это последний рубеж перед вершиной — ещё немного усилий, и максимальный балл будет достигнут!'], 'AR': ['في هذه المرحلة، أكبر خطر هو الرضا بـ«هذا يكفي». البنية المفاهيمية قوية، لكن دقة فهم شروط الأسئلة ما زالت تكلفك درجات. ركّز على أصعب أنواع الأسئلة في الوحدات الضعيفة، واضبط إدارة الوقت في ظروف الاختبار الحقيقية بدقة أكبر. هذه هي البوابة الأخيرة نحو القمة — القليل من الجهد الإضافي كافٍ لتحقيق الدرجة الكاملة!'], 'HI': ['इस चरण में सबसे बड़ा खतरा है \'इतना ही काफी है\' सोचकर संतुष्ट हो जाना। अवधारणा संरचना मजबूत है, लेकिन प्रश्नों की शर्तों को समझने की सटीकता में अभी भी अंक छूट रहे हैं। कमजोर यूनिट्स के सबसे कठिन प्रश्नों पर ध्यान केंद्रित करें और वास्तविक परीक्षा समय प्रबंधन को और सटीक बनाएं। यह शिखर की अंतिम सीढ़ी है — थोड़ा और प्रयास और पूर्ण अंक आपके हैं!'], 'VI': ['Ở giai đoạn này, nguy hiểm lớn nhất là hài lòng với suy nghĩ \'thế này là đủ rồi\'. Cấu trúc khái niệm đã vững, nhưng độ chính xác khi hiểu điều kiện câu hỏi vẫn khiến mất điểm. Hãy tập trung vào các dạng bài khó nhất ở những chương yếu, đồng thời tinh chỉnh việc phân bổ thời gian làm bài thực tế. Đây là cánh cửa cuối cùng trước đỉnh cao — chỉ cần nỗ lực thêm một chút là đạt điểm tuyệt đối!'], 'ES': ['En esta etapa, el mayor peligro es conformarse con un \'esto ya es suficiente\'. La estructura conceptual es sólida, pero la precisión al interpretar las condiciones de las preguntas todavía resta puntos. Concéntrate en las variantes más difíciles de las unidades débiles y afina la gestión del tiempo en condiciones reales. Esta es la última puerta hacia la cima: ¡un poco más de esfuerzo y la puntuación perfecta será tuya!'], 'TH': ['ในขั้นตอนนี้ สิ่งที่ต้องระวังที่สุดคือความคิดที่ว่า \'แค่นี้ก็พอแล้ว\' โครงสร้างแนวคิดแข็งแรงดี แต่ความแม่นยำในการตีความเงื่อนไขโจทย์ยังทำให้เสียคะแนนอยู่ ควรมุ่งเน้นโจทย์แบบยากในหน่วยที่ยังอ่อน และปรับการจัดสรรเวลาสอบจริงให้แม่นยำขึ้นอีกขั้น นี่คือด่านสุดท้ายก่อนถึงจุดสูงสุด เพียงทุ่มเทเพิ่มอีกนิดก็จะได้คะแนนเต็ม!']},
-    'seventy': {'KO': ['하지만 역설적으로, 지금 이 순간 올바른 피드백을 통해 노력을 올바르게 투입한다면 전체 점수대 중 가장 폭발적이고 드라마틱하게 성적이 오를 수 있는 최고의 황금 구간이기도 합니다. 발생하는 오답들은 구조적 오인(개념의 뼈대를 잘못 이해하고 오답을 도출하는 현상)을 다듬으면 충분히 해결 가능한 자산입니다. 기본 원리 분석부터 차근차근 다시 정립하여 취약점을 지워내십시오. 가장 극적인 반등의 주인공은 바로 학습자가 될 수 있습니다.', '좌절할 필요는 전혀 없습니다. 이 구간은 문제점을 명확히 인지하고 혁신하기만 하면 교과과정 전체에서 가장 웅장한 점수 상승 폭을 기록할 수 있는 기회의 땅입니다. 현재의 부진은 눈으로만 대충 훑어본 인지적 기만(이해했다고 착각하는 심리 상태)에서 비롯된 균열일 뿐입니다. 오늘부터 취약 단원 기본서 피드백을 차분하고 독하게 이행해 나간다면 차기 평가에서 가장 놀라운 도약을 이루어낼 것입니다.'], 'EN': ['Ironically, this is also the golden zone where the right feedback applied right now can produce the single biggest jump in scores across the whole range. Most of the current mistakes trace back to misreading concept structure — a fixable asset once corrected. Rebuild from first principles, unit by unit, and erase the weak spots. The most dramatic turnaround story could belong to this learner.', 'There\'s no need to feel discouraged. Once the real problem is clearly identified, this range offers the biggest potential score jump in the whole curriculum. The current slump mostly comes from skimming material without truly absorbing it. Starting today, work calmly and thoroughly through core-textbook feedback on weak units for the most dramatic leap yet.'], 'JA': ['しかし逆説的に、今この瞬間正しいフィードバックを通じて努力を正しく投入すれば、全体の点数帯の中で最も劇的に成績が上がる可能性を秘めた黄金区間でもあります。発生している誤答は構造的誤解（概念の骨組みを誤って理解し誤答を導く現象）を整えれば十分解決可能な資産です。基本原理の分析から一つずつ再構築して弱点を消してください。最も劇的な反騰の主人公はまさに学習者になれます。'], 'ZH': ['然而矛盾的是，如果此刻能通过正确的反馈投入恰当的努力，这也正是整个分数段中最有可能实现戏剧性飞跃的黄金区间。目前出现的错题，只要纠正结构性误解（错误理解概念框架而导致答错的现象），完全是可以解决的宝贵资产。请从基本原理分析开始，逐步重建，消除薄弱环节。最具戏剧性的逆转主角完全可能就是这位学习者。'], 'FR': ['Paradoxalement, c\'est aussi la zone la plus propice à un bond spectaculaire si le bon effort est fourni maintenant. La plupart des erreurs viennent d\'une mauvaise compréhension de la structure conceptuelle — un point tout à fait corrigible. Reconstruisez les bases unité par unité pour effacer les faiblesses ; le plus grand rebond pourrait bien être signé par cet apprenant.'], 'DE': ['Paradoxerweise ist dies auch der Bereich, in dem der richtige Einsatz jetzt den dramatischsten Sprung in der Punktzahl bewirken kann. Die meisten Fehler beruhen auf einem Missverständnis der Konzeptstruktur — ein durchaus behebbarer Punkt. Bauen Sie die Grundlagen Einheit für Einheit neu auf, um die Schwächen zu beseitigen; der größte Aufschwung könnte genau von diesem Lernenden kommen.'], 'RU': ['Как ни парадоксально, именно этот диапазон даёт наибольший потенциал для резкого скачка результатов при правильных усилиях сейчас. Большинство ошибок связано с неверным пониманием концептуальной структуры — это вполне исправимо. Перестройте основы раздел за разделом, чтобы устранить слабые места; самый впечатляющий рывок вполне может совершить именно этот ученик.'], 'AR': ['من المفارقات أن هذا النطاق يوفر أكبر إمكانية لقفزة درامية في النتيجة إذا بُذل الجهد الصحيح الآن. معظم الأخطاء الحالية ناتجة عن سوء فهم للبنية المفاهيمية، وهو أمر قابل للتصحيح تمامًا. أعد بناء الأساسيات وحدة تلو الأخرى لإزالة نقاط الضعف؛ قد يكون هذا المتعلم بطل أكبر قفزة في النتائج.'], 'HI': ['विडंबना यह है कि सही प्रयास से यह श्रेणी सबसे नाटकीय स्कोर उछाल की संभावना भी रखती है। अधिकांश गलतियां अवधारणा संरचना की गलतफहमी से आती हैं — जिसे सुधारा जा सकता है। कमजोरियों को मिटाने के लिए यूनिट-दर-यूनिट आधार फिर से बनाएं; सबसे नाटकीय वापसी की कहानी इसी सीखने वाले की हो सकती है।'], 'VI': ['Trớ trêu thay, đây cũng chính là vùng điểm có tiềm năng bứt phá ngoạn mục nhất nếu nỗ lực đúng cách ngay từ bây giờ. Hầu hết lỗi sai đến từ việc hiểu sai cấu trúc khái niệm — điều hoàn toàn có thể khắc phục. Hãy xây dựng lại nền tảng từng chương một để xóa bỏ điểm yếu; câu chuyện bứt phá ấn tượng nhất có thể chính là của người học này.'], 'ES': ['Paradójicamente, este también es el rango con mayor potencial de un salto dramático en la puntuación si se aplica el esfuerzo correcto ahora. La mayoría de los errores provienen de una mala comprensión de la estructura conceptual, algo totalmente corregible. Reconstruye las bases unidad por unidad para eliminar las debilidades; el protagonista del giro más espectacular bien podría ser este estudiante.'], 'TH': ['ที่น่าแปลกคือ ช่วงคะแนนนี้กลับมีศักยภาพในการพลิกผันคะแนนได้มากที่สุด หากทุ่มเทอย่างถูกวิธีตั้งแต่ตอนนี้ ข้อผิดพลาดส่วนใหญ่มาจากความเข้าใจผิดในโครงสร้างแนวคิด ซึ่งแก้ไขได้อย่างแน่นอน ควรปรับพื้นฐานใหม่ทีละหน่วยเพื่อลบล้างจุดอ่อน เรื่องราวการพลิกผันที่น่าทึ่งที่สุดอาจเป็นของผู้เรียนคนนี้ก็ได้']},
-    'sixty': {'KO': ['불안해하기보다는 학습 습관의 구조적 전환이 시급함을 깨닫는 계기로 삼아야 합니다. 주관적인 인지적 기만(완전히 이해하지 못했음에도 이해했다고 착각하는 상태)을 완전히 걷어내고, 기본 스키마(지식의 구조적 네트워크) 확장에 몰입해야 합니다. 틀린 문항을 단순히 확인하는 것에 그치지 말고 원리를 파고드는 깊이 있는 복습 루틴을 오늘부터 즉시 가속화하십시오. 지금의 경각심을 변화의 발판으로 삼는다면 충분히 반등할 수 있습니다.', '현재의 성적은 노력이 부족했다기보다는 문항을 분석하고 접근하는 과정에서 고질적인 구조적 오인(개념의 뼈대를 잘못 매핑하는 현상)이 반복되고 있음을 방증합니다. 느슨해진 오답 정비 체계를 철저히 다시 채찍질하고, 핵심 원리 중심의 복습 인프라를 전면 재구축하십시오. 지금 태도를 혁신하지 않으면 다음 평가의 반등은 어려워집니다. 마음을 다잡고 오늘부터 집중도를 극대화합시다.'], 'EN': ['Rather than worry, treat this as the signal that study habits need a structural overhaul. Drop the illusion of understanding, and commit fully to rebuilding the core concept structure. Don\'t just check off wrong answers — dig into the underlying principles starting today. Turn this alarm into the springboard for a real turnaround.', 'This score likely reflects not a lack of effort but a recurring habit of misreading concept structure. Rebuild the error-review system from the ground up around core principles. Without a real change in approach, the next evaluation won\'t turn around either — so commit fully starting today.'], 'JA': ['不安になるよりも、学習習慣の構造的転換が急務であることに気づく契機とすべきです。主観的な認知的欺瞞（完全に理解していないのに理解したと錯覚する状態）を完全に取り除き、基本スキーマ（知識の構造的ネットワーク）の拡張に没頭してください。間違えた問題を単に確認するだけでなく、原理を掘り下げる深みのある復習ルーティンを今日から即座に加速させてください。今の警戒心を変化の足場とすれば十分に反騰できます。'], 'ZH': ['与其感到不安，不如把这当作意识到学习习惯需要结构性转变的契机。请彻底摆脱“自以为理解了”的认知错觉，全力投入基础知识框架（知识的结构性网络）的扩展。不要只是确认错题，而要从今天起立刻加快深入原理的复习节奏。只要把现在的警觉当作改变的跳板，完全有机会实现反弹。'], 'FR': ['Plutôt que de s\'inquiéter, voyez-y le signal qu\'une refonte des habitudes d\'étude est nécessaire. Abandonnez l\'illusion de compréhension et investissez pleinement dans la reconstruction de la structure conceptuelle de base. Ne vous contentez pas de vérifier les erreurs — creusez les principes sous-jacents dès aujourd\'hui. Transformez cette vigilance en tremplin pour un vrai rebond.'], 'DE': ['Statt sich zu sorgen, sollte dies als Signal für eine strukturelle Überarbeitung der Lerngewohnheiten dienen. Verabschieden Sie sich von der Illusion des Verstehens und investieren Sie voll in den Wiederaufbau der grundlegenden Konzeptstruktur. Prüfen Sie Fehler nicht nur oberflächlich — gehen Sie den zugrunde liegenden Prinzipien ab heute intensiv auf den Grund. Verwandeln Sie diese Wachsamkeit in ein Sprungbrett für einen echten Aufschwung.'], 'RU': ['Вместо беспокойства воспримите это как сигнал к структурной перестройке учебных привычек. Откажитесь от иллюзии понимания и полностью посвятите себя восстановлению базовой концептуальной структуры. Не просто проверяйте ошибки — с сегодняшнего дня углубляйтесь в лежащие в основе принципы. Превратите эту тревогу в трамплин для настоящего подъёма.'], 'AR': ['بدلاً من القلق، اعتبر هذا إشارة إلى ضرورة إعادة هيكلة عادات الدراسة. تخلَّ عن وهم الفهم واستثمر جهدك بالكامل في إعادة بناء البنية المفاهيمية الأساسية. لا تكتفِ بمراجعة الأخطاء سطحيًا — تعمّق في المبادئ الأساسية ابتداءً من اليوم. حوّل هذا التنبيه إلى نقطة انطلاق لتحسن حقيقي.'], 'HI': ['चिंता करने के बजाय, इसे अध्ययन की आदतों में संरचनात्मक बदलाव की आवश्यकता का संकेत मानें। समझने के भ्रम को छोड़ें और मूल अवधारणा संरचना के पुनर्निर्माण में पूरी तरह जुट जाएं। गलतियों की सिर्फ जांच न करें — आज से ही अंतर्निहित सिद्धांतों में गहराई से उतरें। इस सतर्कता को वास्तविक सुधार का आधार बनाएं।'], 'VI': ['Thay vì lo lắng, hãy xem đây là tín hiệu cho thấy cần thay đổi cấu trúc thói quen học tập. Từ bỏ ảo tưởng đã hiểu và toàn tâm đầu tư xây dựng lại cấu trúc khái niệm cơ bản. Đừng chỉ kiểm tra lỗi sai qua loa — hãy đào sâu các nguyên lý nền tảng ngay từ hôm nay. Biến sự cảnh giác này thành bàn đạp cho một sự cải thiện thực sự.'], 'ES': ['En lugar de preocuparte, considera esto una señal de que los hábitos de estudio necesitan una reestructuración. Abandona la ilusión de haber entendido e invierte por completo en reconstruir la estructura conceptual básica. No te limites a revisar los errores superficialmente: profundiza en los principios subyacentes desde hoy. Convierte esta alerta en el trampolín para una mejora real.'], 'TH': ['แทนที่จะกังวล ควรมองว่านี่คือสัญญาณว่าต้องปรับโครงสร้างพฤติกรรมการเรียนใหม่ ละทิ้งภาพลวงตาว่าเข้าใจแล้ว และทุ่มเทสร้างโครงสร้างแนวคิดพื้นฐานขึ้นใหม่อย่างเต็มที่ อย่าแค่ตรวจข้อผิดพลาดผ่านๆ แต่ให้เจาะลึกหลักการพื้นฐานตั้งแต่วันนี้ เปลี่ยนความตื่นตัวนี้ให้เป็นจุดเริ่มต้นของการพลิกฟื้นที่แท้จริง']},
-    'low': {'KO': ['기초가 흔들린 상태에서 문제 풀이에만 집착하는 것은 인지적 과부하를 가중시킬 뿐입니다. 조급한 마음을 완전히 가라앉히고, 단원별 교과서 핵심 원리 분석과 기본 어휘 스키마(지식의 구조적 네트워크) 빌딩에 즉각 착수하십시오. 기초부터 차근차근 벽돌을 쌓아 올린다면 성적은 반드시 정직하게 반응합니다. 나태해진 마음을 다잡고 오늘 밤부터 기초 평정 수치를 메우는 복습에 집중해 주십시오.', '현재 발생하는 대부분의 오답은 구조적 오인(개념의 기본 뼈대를 오해하는 현상)을 방치한 채 진도만 나간 부작용입니다. 지금 당장 멈추어 서서 취약 단원의 개념을 완벽히 소화하는 인내의 시간이 절대적으로 요구됩니다. 무기력함에 빠지지 말고, 베이스라인부터 다시 견고하게 다지겠다는 단단한 각오로 오늘부터 학습 속도와 밀도를 점진적으로 끌어올려 주십시오.'], 'EN': ['Pushing straight into more problems while the foundation is shaky only adds cognitive overload. Slow down, and start immediately with unit-by-unit textbook fundamentals and basic concept-building. Scores respond honestly to bricks laid one at a time from the ground up. Refocus tonight on filling the foundational gaps.', 'Most of the current mistakes come from pushing through material while misunderstanding core concepts. Stop now and take the time needed to fully digest the weak units. Don\'t fall into discouragement — commit to rebuilding the baseline and gradually raising study pace and depth starting today.'], 'JA': ['基礎が揺らいでいる状態で問題演習にばかり執着するのは、認知的過負荷を加重するだけです。焦る気持ちを完全に落ち着かせ、単元別教科書の核心原理分析と基本語彙スキーマ（知識の構造的ネットワーク）構築に即座に着手してください。基礎からじっくり積み上げれば、成績は必ず正直に反応します。今夜から基礎固めの復習に集中してください。'], 'ZH': ['在基础尚不牢固的情况下一味执着于刷题，只会加重认知负荷。请彻底平复急躁的心态，立即着手逐单元梳理教材核心原理，构建基础词汇框架（知识的结构性网络）。只要从基础一步步扎实积累，成绩必然会诚实地作出回应。请从今晚开始专注于弥补基础的复习。'], 'FR': ['S\'acharner sur les exercices alors que les bases vacillent ne fait qu\'aggraver la surcharge cognitive. Calmez-vous complètement et commencez immédiatement par une analyse des principes fondamentaux, unité par unité. En construisant patiemment depuis la base, les résultats répondront honnêtement. Concentrez-vous dès ce soir sur le renforcement des fondamentaux.'], 'DE': ['Sich bei wackligen Grundlagen nur auf das Üben von Aufgaben zu versteifen, erhöht nur die kognitive Überlastung. Beruhigen Sie sich vollständig und beginnen Sie sofort mit einer einheitenweisen Analyse der Kernprinzipien. Wenn die Grundlagen Stein für Stein aufgebaut werden, reagieren die Noten ehrlich darauf. Konzentrieren Sie sich ab heute Abend auf die Grundlagenwiederholung.'], 'RU': ['Упорное решение задач при шатких основах лишь усиливает когнитивную перегрузку. Полностью успокойтесь и немедленно начните разбор ключевых принципов по разделам. Если выстраивать основы кирпичик за кирпичиком, результаты честно отреагируют. Сегодня же вечером сосредоточьтесь на повторении основ.'], 'AR': ['الإصرار على حل المزيد من المسائل بينما الأساس غير ثابت يزيد فقط من العبء الإدراكي. اهدأ تمامًا وابدأ فورًا بتحليل المبادئ الأساسية وحدة تلو الأخرى. عند بناء الأساس لبنة بلبنة، ستستجيب النتيجة بصدق. ركّز الليلة على مراجعة الأساسيات.'], 'HI': ['जब आधार ही कमजोर है, तो केवल अभ्यास प्रश्नों पर अड़े रहना केवल संज्ञानात्मक बोझ बढ़ाता है। पूरी तरह शांत हों और तुरंत यूनिट-दर-यूनिट मूल सिद्धांतों के विश्लेषण से शुरुआत करें। यदि आधार ईंट-दर-ईंट मजबूत किया जाए, तो स्कोर निश्चित रूप से ईमानदारी से प्रतिक्रिया देगा। आज रात से ही आधार को मजबूत करने वाले पुनरीक्षण पर ध्यान दें।'], 'VI': ['Khi nền tảng còn lung lay mà cứ cố làm thêm bài tập chỉ khiến quá tải nhận thức. Hãy bình tĩnh hoàn toàn và bắt đầu ngay việc phân tích nguyên lý cốt lõi theo từng chương. Khi xây nền tảng từng viên gạch một cách chắc chắn, điểm số chắc chắn sẽ phản ánh trung thực. Hãy tập trung củng cố nền tảng ngay từ tối nay.'], 'ES': ['Insistir en más ejercicios cuando la base aún es inestable solo aumenta la sobrecarga cognitiva. Cálmate por completo y comienza de inmediato con un análisis de los principios básicos unidad por unidad. Si construyes la base ladrillo a ladrillo, la puntuación responderá con honestidad. Concéntrate esta misma noche en repasar los fundamentos.'], 'TH': ['การมุ่งแต่ทำโจทย์ทั้งที่พื้นฐานยังไม่มั่นคงมีแต่จะเพิ่มภาระทางความคิด ควรใจเย็นลงอย่างเต็มที่และเริ่มวิเคราะห์หลักการสำคัญทีละหน่วยทันที หากค่อยๆ สร้างพื้นฐานอย่างมั่นคงทีละก้าว คะแนนจะตอบสนองอย่างซื่อตรงแน่นอน ตั้งแต่คืนนี้ควรตั้งใจทบทวนเพื่อเสริมพื้นฐานให้แข็งแรง']},
+    'good': {
+      'KO': [
+        '그러나 현재의 기초 체급을 고려할 때, 이번 결과에 취해 단 한순간이라도 안일해지는 즉시 성적은 하락세로 돌아설 수 있습니다. 진정한 만점자로 안착하기 위해서는 실전에서 발생한 미세한 균열을 메워야 하므로, 틀린 문제는 반드시 누적 오답정리(틀린 원인을 기록하고 분석하는 과정)를 완수하고 최소 3번 이상 반복하여 완전히 본인의 것으로 만드는 철저한 회독 습관을 기르십시오. 자만하지 않고 이 정합성 확인 루틴을 성실히 유지한다면, 다음 실전에서도 흔들리지 않는 진짜 탑클래스로 우뚝 설 것입니다.',
+        '다만 지금의 위치에서 방심하여 루틴이 느슨해진다면 차기 평가에서는 아쉬운 결과를 맛보게 될 수 있습니다. 완전무결한 성취를 지속하기 위해서는 취약 문항의 누적 오답정리(틀린 원인을 기록하고 분석하는 과정)를 철저히 이행하고, 오답을 3번 이상 재차 정밀 분석하여 풀어내는 훈련이 필수적입니다. 나태함을 경계하고 메타인지 루틴을 사수하여 흔들림 없는 정점에 도달하십시오.',
+      ],
+      'EN': [
+        'That said, given the current foundation, even a moment of complacency could send the score back down. To truly lock in top-tier status, log every mistake in an error journal, review it at least three times, and make it fully your own. Keep this consistency routine honest and unshaken results in the next real test will follow.',
+        'Be careful not to let the routine loosen just because of this win — a lapse now could mean a disappointing result next time. Keep logging and re-analyzing every weak item at least three times. Guard against complacency and protect your metacognitive routine to reach an unshakeable peak.',
+      ],
+      'JA': [
+        'ただし現在の基礎レベルを考えると、この結果に浮かれて一瞬でも油断すればすぐに成績は下降する可能性があります。真のトップクラスとして定着するためには、間違えた問題は必ず誤答ノート（間違えた原因を記録・分析する過程）を完成させ、最低3回以上繰り返して完全に自分のものにする徹底した復習習慣を身につけてください。慢心せずこの整合性確認ルーティンを誠実に維持すれば、次の実戦でも揺るがない本物のトップクラスとして立つでしょう。',
+      ],
+      'ZH': [
+        '不过考虑到目前的基础水平，若因这次结果而有片刻松懈，成绩很可能立刻出现下滑。要真正稳居顶尖水平，必须将错题整理（记录并分析出错原因的过程）坚持完成，并至少反复复习三次以上，使其完全内化为自己的知识。只要不骄傲自满、认真维持这一巩固流程，下次实战中也能稳如泰山地站在真正的顶尖行列。',
+      ],
+      'FR': [
+        'Cependant, compte tenu du niveau actuel des bases, le moindre relâchement pourrait faire chuter les résultats. Pour consolider durablement ce niveau, notez chaque erreur dans un journal, révisez-la au moins trois fois et faites-en une habitude rigoureuse. En maintenant cette routine avec sérieux, vous resterez stable au sommet lors de la prochaine évaluation.',
+      ],
+      'DE': [
+        'Angesichts der aktuellen Grundlagen könnte jedoch schon ein Moment der Nachlässigkeit die Note wieder sinken lassen. Um wirklich an der Spitze zu bleiben, sollten Sie jeden Fehler in einem Fehlerprotokoll festhalten, mindestens dreimal wiederholen und vollständig verinnerlichen. Bleiben Sie diszipliniert bei dieser Routine, um auch beim nächsten Test stabil an der Spitze zu stehen.',
+      ],
+      'RU': [
+        'Однако, учитывая текущий уровень базы, малейшее самодовольство может привести к падению результатов. Чтобы закрепиться на вершине, обязательно фиксируйте каждую ошибку в журнале ошибок, повторяйте её минимум три раза и полностью усваивайте. Сохраняя эту дисциплину, вы останетесь уверенно на вершине и в следующий раз.',
+      ],
+      'AR': [
+        'لكن نظرًا للمستوى الأساسي الحالي، فإن أي تراخٍ ولو للحظة قد يؤدي إلى تراجع النتيجة. للحفاظ على مكانتك في القمة، سجّل كل خطأ في دفتر الأخطاء وراجعه ثلاث مرات على الأقل حتى تتقنه تمامًا. حافظ على هذا الروتين بجدية لتبقى ثابتًا في القمة في الاختبار القادم أيضًا.',
+      ],
+      'HI': [
+        'लेकिन वर्तमान आधार स्तर को देखते हुए, इस परिणाम से एक पल के लिए भी लापरवाह होना स्कोर को नीचे ला सकता है। शीर्ष स्तर पर स्थिर रहने के लिए, हर गलती को एक त्रुटि पत्रिका में दर्ज करें, कम से कम तीन बार दोहराएं और उसे पूरी तरह आत्मसात करें। इस अनुशासन को बनाए रखें ताकि अगली बार भी शीर्ष पर मजबूती से खड़े रहें।',
+      ],
+      'VI': [
+        'Tuy nhiên, xét theo nền tảng hiện tại, chỉ cần một khoảnh khắc lơ là cũng có thể khiến điểm số giảm sút. Để duy trì vững chắc vị trí hàng đầu, hãy ghi lại mọi lỗi sai vào nhật ký lỗi, ôn lại ít nhất ba lần và biến nó thành kiến thức của riêng mình. Duy trì kỷ luật này để tiếp tục đứng vững ở vị trí cao trong lần đánh giá tới.',
+      ],
+      'ES': [
+        'Sin embargo, dado el nivel base actual, un momento de exceso de confianza podría hacer bajar la puntuación. Para consolidarte en la cima, registra cada error en un diario de errores, repásalo al menos tres veces y asimílalo por completo. Mantén esta rutina con disciplina para seguir firme en la cima la próxima vez.',
+      ],
+      'TH': [
+        'อย่างไรก็ตาม เมื่อพิจารณาระดับพื้นฐานในปัจจุบัน หากเผลอตัวแม้เพียงชั่วขณะ คะแนนก็อาจลดลงได้ทันที เพื่อรักษาตำแหน่งระดับสูงสุดอย่างแท้จริง ควรบันทึกทุกข้อผิดพลาดลงในสมุดบันทึกข้อผิดพลาดและทบทวนอย่างน้อย 3 ครั้งจนเป็นความรู้ของตัวเองอย่างสมบูรณ์ รักษาวินัยนี้ไว้เพื่อยืนหยัดอยู่จุดสูงสุดอย่างมั่นคงในครั้งต่อไป',
+      ],
+    },
+    'mid': {
+      'KO': [
+        '지금 단계에서 가장 유의해야 할 것은 \'이 정도면 됐다\'는 주관적인 안주와 타협입니다. 문항 분석 시 개념 스키마(지식의 구조적 네트워크)의 뼈대는 훌륭하나, 조건 해석의 정밀도가 다소 부족하여 감점이 발생하고 있습니다. 취약 단원의 고난도 변형 문제를 집중 공략하고 실전 시간 안배의 정밀도를 한 단계만 가속화하십시오. 정상으로 가는 마지막 관문이니, 조금만 더 고도의 학업적 몰입도를 발휘해 만점의 영광을 함께 쟁취합시다!',
+        '현재 상태에서 성장을 한 단계 더 정체시키는 원인은 주관적인 안일함에 있을 수 있습니다. 인지 구조 내의 기본 스키마(지식의 구조적 네트워크)는 안정적이나, 세부 변별 과정에서 집중력의 미세한 누수가 관찰됩니다. 안일함을 지워내고 문항 단독 피드백 검토 단계를 한층 더 확장하십시오. 조금만 더 치열하게 벽을 두드린다면 반드시 차기 세션에서 만점을 거머쥘 수 있습니다.',
+      ],
+      'EN': [
+        'The biggest risk right now is settling for \'good enough.\' The core concept structure is solid, but precision in reading question conditions is costing points. Target the hardest variant problems in weak units and tighten exam-time pacing one more notch. This is the final gate to the top — push a little harder and claim it!',
+        'The one thing holding growth back may be quiet complacency. The core knowledge structure is stable, but small lapses in concentration show up during fine-grained discrimination. Shed the complacency and expand item-by-item review. A bit more persistence and a perfect score is within reach next session.',
+      ],
+      'JA': [
+        '今の段階で最も気をつけるべきは「これくらいで十分」という主観的な妥協です。問題分析の際、概念スキーマ（知識の構造的ネットワーク）の骨組みは優れていますが、条件解釈の精密さがやや不足して減点が生じています。弱点単元の高難度応用問題を集中攻略し、実戦の時間配分の精度をもう一段階高めてください。頂上への最後の関門なので、もう少し学業への没入度を高めて満点の栄光を勝ち取りましょう！',
+      ],
+      'ZH': [
+        '目前阶段最需要警惕的就是“这样就够了”的主观妥协心态。分析题目时，概念框架（知识的结构性网络）已经相当扎实，但对条件的解读精度略有不足，从而导致失分。请集中攻克薄弱单元的高难度变式题，并将实战时间分配的精度再提升一个层次。这是通往顶峰的最后一关，只要再多投入一点学习专注度，就能共同夺得满分的荣耀！',
+      ],
+      'FR': [
+        'À ce stade, le principal danger est de se satisfaire d\'un « c\'est déjà bien ». La structure conceptuelle est solide, mais la précision dans l\'interprétation des énoncés fait encore perdre des points. Concentrez-vous sur les variantes les plus difficiles des unités faibles et affinez la gestion du temps en conditions réelles. C\'est la dernière étape avant le sommet — un effort supplémentaire suffira à décrocher la perfection !',
+      ],
+      'DE': [
+        'In dieser Phase besteht die größte Gefahr darin, sich mit „das reicht schon“ zufriedenzugeben. Die Konzeptstruktur ist solide, doch die Präzision beim Verständnis der Aufgabenbedingungen kostet noch Punkte. Konzentrieren Sie sich auf die schwierigsten Variantenaufgaben der schwachen Einheiten und verfeinern Sie das Zeitmanagement unter Prüfungsbedingungen. Dies ist das letzte Tor zum Gipfel — mit etwas mehr Einsatz ist die Bestnote erreichbar!',
+      ],
+      'RU': [
+        'На этом этапе главная опасность — успокоиться на достигнутом. Концептуальная база прочная, но точность понимания условий заданий пока стоит баллов. Сосредоточьтесь на самых сложных вариациях заданий в слабых разделах и отточите распределение времени на экзамене. Это последний рубеж перед вершиной — ещё немного усилий, и максимальный балл будет достигнут!',
+      ],
+      'AR': [
+        'في هذه المرحلة، أكبر خطر هو الرضا بـ«هذا يكفي». البنية المفاهيمية قوية، لكن دقة فهم شروط الأسئلة ما زالت تكلفك درجات. ركّز على أصعب أنواع الأسئلة في الوحدات الضعيفة، واضبط إدارة الوقت في ظروف الاختبار الحقيقية بدقة أكبر. هذه هي البوابة الأخيرة نحو القمة — القليل من الجهد الإضافي كافٍ لتحقيق الدرجة الكاملة!',
+      ],
+      'HI': [
+        'इस चरण में सबसे बड़ा खतरा है \'इतना ही काफी है\' सोचकर संतुष्ट हो जाना। अवधारणा संरचना मजबूत है, लेकिन प्रश्नों की शर्तों को समझने की सटीकता में अभी भी अंक छूट रहे हैं। कमजोर यूनिट्स के सबसे कठिन प्रश्नों पर ध्यान केंद्रित करें और वास्तविक परीक्षा समय प्रबंधन को और सटीक बनाएं। यह शिखर की अंतिम सीढ़ी है — थोड़ा और प्रयास और पूर्ण अंक आपके हैं!',
+      ],
+      'VI': [
+        'Ở giai đoạn này, nguy hiểm lớn nhất là hài lòng với suy nghĩ \'thế này là đủ rồi\'. Cấu trúc khái niệm đã vững, nhưng độ chính xác khi hiểu điều kiện câu hỏi vẫn khiến mất điểm. Hãy tập trung vào các dạng bài khó nhất ở những chương yếu, đồng thời tinh chỉnh việc phân bổ thời gian làm bài thực tế. Đây là cánh cửa cuối cùng trước đỉnh cao — chỉ cần nỗ lực thêm một chút là đạt điểm tuyệt đối!',
+      ],
+      'ES': [
+        'En esta etapa, el mayor peligro es conformarse con un \'esto ya es suficiente\'. La estructura conceptual es sólida, pero la precisión al interpretar las condiciones de las preguntas todavía resta puntos. Concéntrate en las variantes más difíciles de las unidades débiles y afina la gestión del tiempo en condiciones reales. Esta es la última puerta hacia la cima: ¡un poco más de esfuerzo y la puntuación perfecta será tuya!',
+      ],
+      'TH': [
+        'ในขั้นตอนนี้ สิ่งที่ต้องระวังที่สุดคือความคิดที่ว่า \'แค่นี้ก็พอแล้ว\' โครงสร้างแนวคิดแข็งแรงดี แต่ความแม่นยำในการตีความเงื่อนไขโจทย์ยังทำให้เสียคะแนนอยู่ ควรมุ่งเน้นโจทย์แบบยากในหน่วยที่ยังอ่อน และปรับการจัดสรรเวลาสอบจริงให้แม่นยำขึ้นอีกขั้น นี่คือด่านสุดท้ายก่อนถึงจุดสูงสุด เพียงทุ่มเทเพิ่มอีกนิดก็จะได้คะแนนเต็ม!',
+      ],
+    },
+    'seventy': {
+      'KO': [
+        '하지만 역설적으로, 지금 이 순간 올바른 피드백을 통해 노력을 올바르게 투입한다면 전체 점수대 중 가장 폭발적이고 드라마틱하게 성적이 오를 수 있는 최고의 황금 구간이기도 합니다. 발생하는 오답들은 구조적 오인(개념의 뼈대를 잘못 이해하고 오답을 도출하는 현상)을 다듬으면 충분히 해결 가능한 자산입니다. 기본 원리 분석부터 차근차근 다시 정립하여 취약점을 지워내십시오. 가장 극적인 반등의 주인공은 바로 학습자가 될 수 있습니다.',
+        '좌절할 필요는 전혀 없습니다. 이 구간은 문제점을 명확히 인지하고 혁신하기만 하면 교과과정 전체에서 가장 웅장한 점수 상승 폭을 기록할 수 있는 기회의 땅입니다. 현재의 부진은 눈으로만 대충 훑어본 인지적 기만(이해했다고 착각하는 심리 상태)에서 비롯된 균열일 뿐입니다. 오늘부터 취약 단원 기본서 피드백을 차분하고 독하게 이행해 나간다면 차기 평가에서 가장 놀라운 도약을 이루어낼 것입니다.',
+      ],
+      'EN': [
+        'Ironically, this is also the golden zone where the right feedback applied right now can produce the single biggest jump in scores across the whole range. Most of the current mistakes trace back to misreading concept structure — a fixable asset once corrected. Rebuild from first principles, unit by unit, and erase the weak spots. The most dramatic turnaround story could belong to this learner.',
+        'There\'s no need to feel discouraged. Once the real problem is clearly identified, this range offers the biggest potential score jump in the whole curriculum. The current slump mostly comes from skimming material without truly absorbing it. Starting today, work calmly and thoroughly through core-textbook feedback on weak units for the most dramatic leap yet.',
+      ],
+      'JA': [
+        'しかし逆説的に、今この瞬間正しいフィードバックを通じて努力を正しく投入すれば、全体の点数帯の中で最も劇的に成績が上がる可能性を秘めた黄金区間でもあります。発生している誤答は構造的誤解（概念の骨組みを誤って理解し誤答を導く現象）を整えれば十分解決可能な資産です。基本原理の分析から一つずつ再構築して弱点を消してください。最も劇的な反騰の主人公はまさに学習者になれます。',
+      ],
+      'ZH': [
+        '然而矛盾的是，如果此刻能通过正确的反馈投入恰当的努力，这也正是整个分数段中最有可能实现戏剧性飞跃的黄金区间。目前出现的错题，只要纠正结构性误解（错误理解概念框架而导致答错的现象），完全是可以解决的宝贵资产。请从基本原理分析开始，逐步重建，消除薄弱环节。最具戏剧性的逆转主角完全可能就是这位学习者。',
+      ],
+      'FR': [
+        'Paradoxalement, c\'est aussi la zone la plus propice à un bond spectaculaire si le bon effort est fourni maintenant. La plupart des erreurs viennent d\'une mauvaise compréhension de la structure conceptuelle — un point tout à fait corrigible. Reconstruisez les bases unité par unité pour effacer les faiblesses ; le plus grand rebond pourrait bien être signé par cet apprenant.',
+      ],
+      'DE': [
+        'Paradoxerweise ist dies auch der Bereich, in dem der richtige Einsatz jetzt den dramatischsten Sprung in der Punktzahl bewirken kann. Die meisten Fehler beruhen auf einem Missverständnis der Konzeptstruktur — ein durchaus behebbarer Punkt. Bauen Sie die Grundlagen Einheit für Einheit neu auf, um die Schwächen zu beseitigen; der größte Aufschwung könnte genau von diesem Lernenden kommen.',
+      ],
+      'RU': [
+        'Как ни парадоксально, именно этот диапазон даёт наибольший потенциал для резкого скачка результатов при правильных усилиях сейчас. Большинство ошибок связано с неверным пониманием концептуальной структуры — это вполне исправимо. Перестройте основы раздел за разделом, чтобы устранить слабые места; самый впечатляющий рывок вполне может совершить именно этот ученик.',
+      ],
+      'AR': [
+        'من المفارقات أن هذا النطاق يوفر أكبر إمكانية لقفزة درامية في النتيجة إذا بُذل الجهد الصحيح الآن. معظم الأخطاء الحالية ناتجة عن سوء فهم للبنية المفاهيمية، وهو أمر قابل للتصحيح تمامًا. أعد بناء الأساسيات وحدة تلو الأخرى لإزالة نقاط الضعف؛ قد يكون هذا المتعلم بطل أكبر قفزة في النتائج.',
+      ],
+      'HI': [
+        'विडंबना यह है कि सही प्रयास से यह श्रेणी सबसे नाटकीय स्कोर उछाल की संभावना भी रखती है। अधिकांश गलतियां अवधारणा संरचना की गलतफहमी से आती हैं — जिसे सुधारा जा सकता है। कमजोरियों को मिटाने के लिए यूनिट-दर-यूनिट आधार फिर से बनाएं; सबसे नाटकीय वापसी की कहानी इसी सीखने वाले की हो सकती है।',
+      ],
+      'VI': [
+        'Trớ trêu thay, đây cũng chính là vùng điểm có tiềm năng bứt phá ngoạn mục nhất nếu nỗ lực đúng cách ngay từ bây giờ. Hầu hết lỗi sai đến từ việc hiểu sai cấu trúc khái niệm — điều hoàn toàn có thể khắc phục. Hãy xây dựng lại nền tảng từng chương một để xóa bỏ điểm yếu; câu chuyện bứt phá ấn tượng nhất có thể chính là của người học này.',
+      ],
+      'ES': [
+        'Paradójicamente, este también es el rango con mayor potencial de un salto dramático en la puntuación si se aplica el esfuerzo correcto ahora. La mayoría de los errores provienen de una mala comprensión de la estructura conceptual, algo totalmente corregible. Reconstruye las bases unidad por unidad para eliminar las debilidades; el protagonista del giro más espectacular bien podría ser este estudiante.',
+      ],
+      'TH': [
+        'ที่น่าแปลกคือ ช่วงคะแนนนี้กลับมีศักยภาพในการพลิกผันคะแนนได้มากที่สุด หากทุ่มเทอย่างถูกวิธีตั้งแต่ตอนนี้ ข้อผิดพลาดส่วนใหญ่มาจากความเข้าใจผิดในโครงสร้างแนวคิด ซึ่งแก้ไขได้อย่างแน่นอน ควรปรับพื้นฐานใหม่ทีละหน่วยเพื่อลบล้างจุดอ่อน เรื่องราวการพลิกผันที่น่าทึ่งที่สุดอาจเป็นของผู้เรียนคนนี้ก็ได้',
+      ],
+    },
+    'sixty': {
+      'KO': [
+        '불안해하기보다는 학습 습관의 구조적 전환이 시급함을 깨닫는 계기로 삼아야 합니다. 주관적인 인지적 기만(완전히 이해하지 못했음에도 이해했다고 착각하는 상태)을 완전히 걷어내고, 기본 스키마(지식의 구조적 네트워크) 확장에 몰입해야 합니다. 틀린 문항을 단순히 확인하는 것에 그치지 말고 원리를 파고드는 깊이 있는 복습 루틴을 오늘부터 즉시 가속화하십시오. 지금의 경각심을 변화의 발판으로 삼는다면 충분히 반등할 수 있습니다.',
+        '현재의 성적은 노력이 부족했다기보다는 문항을 분석하고 접근하는 과정에서 고질적인 구조적 오인(개념의 뼈대를 잘못 매핑하는 현상)이 반복되고 있음을 방증합니다. 느슨해진 오답 정비 체계를 철저히 다시 채찍질하고, 핵심 원리 중심의 복습 인프라를 전면 재구축하십시오. 지금 태도를 혁신하지 않으면 다음 평가의 반등은 어려워집니다. 마음을 다잡고 오늘부터 집중도를 극대화합시다.',
+      ],
+      'EN': [
+        'Rather than worry, treat this as the signal that study habits need a structural overhaul. Drop the illusion of understanding, and commit fully to rebuilding the core concept structure. Don\'t just check off wrong answers — dig into the underlying principles starting today. Turn this alarm into the springboard for a real turnaround.',
+        'This score likely reflects not a lack of effort but a recurring habit of misreading concept structure. Rebuild the error-review system from the ground up around core principles. Without a real change in approach, the next evaluation won\'t turn around either — so commit fully starting today.',
+      ],
+      'JA': [
+        '不安になるよりも、学習習慣の構造的転換が急務であることに気づく契機とすべきです。主観的な認知的欺瞞（完全に理解していないのに理解したと錯覚する状態）を完全に取り除き、基本スキーマ（知識の構造的ネットワーク）の拡張に没頭してください。間違えた問題を単に確認するだけでなく、原理を掘り下げる深みのある復習ルーティンを今日から即座に加速させてください。今の警戒心を変化の足場とすれば十分に反騰できます。',
+      ],
+      'ZH': [
+        '与其感到不安，不如把这当作意识到学习习惯需要结构性转变的契机。请彻底摆脱“自以为理解了”的认知错觉，全力投入基础知识框架（知识的结构性网络）的扩展。不要只是确认错题，而要从今天起立刻加快深入原理的复习节奏。只要把现在的警觉当作改变的跳板，完全有机会实现反弹。',
+      ],
+      'FR': [
+        'Plutôt que de s\'inquiéter, voyez-y le signal qu\'une refonte des habitudes d\'étude est nécessaire. Abandonnez l\'illusion de compréhension et investissez pleinement dans la reconstruction de la structure conceptuelle de base. Ne vous contentez pas de vérifier les erreurs — creusez les principes sous-jacents dès aujourd\'hui. Transformez cette vigilance en tremplin pour un vrai rebond.',
+      ],
+      'DE': [
+        'Statt sich zu sorgen, sollte dies als Signal für eine strukturelle Überarbeitung der Lerngewohnheiten dienen. Verabschieden Sie sich von der Illusion des Verstehens und investieren Sie voll in den Wiederaufbau der grundlegenden Konzeptstruktur. Prüfen Sie Fehler nicht nur oberflächlich — gehen Sie den zugrunde liegenden Prinzipien ab heute intensiv auf den Grund. Verwandeln Sie diese Wachsamkeit in ein Sprungbrett für einen echten Aufschwung.',
+      ],
+      'RU': [
+        'Вместо беспокойства воспримите это как сигнал к структурной перестройке учебных привычек. Откажитесь от иллюзии понимания и полностью посвятите себя восстановлению базовой концептуальной структуры. Не просто проверяйте ошибки — с сегодняшнего дня углубляйтесь в лежащие в основе принципы. Превратите эту тревогу в трамплин для настоящего подъёма.',
+      ],
+      'AR': [
+        'بدلاً من القلق، اعتبر هذا إشارة إلى ضرورة إعادة هيكلة عادات الدراسة. تخلَّ عن وهم الفهم واستثمر جهدك بالكامل في إعادة بناء البنية المفاهيمية الأساسية. لا تكتفِ بمراجعة الأخطاء سطحيًا — تعمّق في المبادئ الأساسية ابتداءً من اليوم. حوّل هذا التنبيه إلى نقطة انطلاق لتحسن حقيقي.',
+      ],
+      'HI': [
+        'चिंता करने के बजाय, इसे अध्ययन की आदतों में संरचनात्मक बदलाव की आवश्यकता का संकेत मानें। समझने के भ्रम को छोड़ें और मूल अवधारणा संरचना के पुनर्निर्माण में पूरी तरह जुट जाएं। गलतियों की सिर्फ जांच न करें — आज से ही अंतर्निहित सिद्धांतों में गहराई से उतरें। इस सतर्कता को वास्तविक सुधार का आधार बनाएं।',
+      ],
+      'VI': [
+        'Thay vì lo lắng, hãy xem đây là tín hiệu cho thấy cần thay đổi cấu trúc thói quen học tập. Từ bỏ ảo tưởng đã hiểu và toàn tâm đầu tư xây dựng lại cấu trúc khái niệm cơ bản. Đừng chỉ kiểm tra lỗi sai qua loa — hãy đào sâu các nguyên lý nền tảng ngay từ hôm nay. Biến sự cảnh giác này thành bàn đạp cho một sự cải thiện thực sự.',
+      ],
+      'ES': [
+        'En lugar de preocuparte, considera esto una señal de que los hábitos de estudio necesitan una reestructuración. Abandona la ilusión de haber entendido e invierte por completo en reconstruir la estructura conceptual básica. No te limites a revisar los errores superficialmente: profundiza en los principios subyacentes desde hoy. Convierte esta alerta en el trampolín para una mejora real.',
+      ],
+      'TH': [
+        'แทนที่จะกังวล ควรมองว่านี่คือสัญญาณว่าต้องปรับโครงสร้างพฤติกรรมการเรียนใหม่ ละทิ้งภาพลวงตาว่าเข้าใจแล้ว และทุ่มเทสร้างโครงสร้างแนวคิดพื้นฐานขึ้นใหม่อย่างเต็มที่ อย่าแค่ตรวจข้อผิดพลาดผ่านๆ แต่ให้เจาะลึกหลักการพื้นฐานตั้งแต่วันนี้ เปลี่ยนความตื่นตัวนี้ให้เป็นจุดเริ่มต้นของการพลิกฟื้นที่แท้จริง',
+      ],
+    },
+    'low': {
+      'KO': [
+        '기초가 흔들린 상태에서 문제 풀이에만 집착하는 것은 인지적 과부하를 가중시킬 뿐입니다. 조급한 마음을 완전히 가라앉히고, 단원별 교과서 핵심 원리 분석과 기본 어휘 스키마(지식의 구조적 네트워크) 빌딩에 즉각 착수하십시오. 기초부터 차근차근 벽돌을 쌓아 올린다면 성적은 반드시 정직하게 반응합니다. 나태해진 마음을 다잡고 오늘 밤부터 기초 평정 수치를 메우는 복습에 집중해 주십시오.',
+        '현재 발생하는 대부분의 오답은 구조적 오인(개념의 기본 뼈대를 오해하는 현상)을 방치한 채 진도만 나간 부작용입니다. 지금 당장 멈추어 서서 취약 단원의 개념을 완벽히 소화하는 인내의 시간이 절대적으로 요구됩니다. 무기력함에 빠지지 말고, 베이스라인부터 다시 견고하게 다지겠다는 단단한 각오로 오늘부터 학습 속도와 밀도를 점진적으로 끌어올려 주십시오.',
+      ],
+      'EN': [
+        'Pushing straight into more problems while the foundation is shaky only adds cognitive overload. Slow down, and start immediately with unit-by-unit textbook fundamentals and basic concept-building. Scores respond honestly to bricks laid one at a time from the ground up. Refocus tonight on filling the foundational gaps.',
+        'Most of the current mistakes come from pushing through material while misunderstanding core concepts. Stop now and take the time needed to fully digest the weak units. Don\'t fall into discouragement — commit to rebuilding the baseline and gradually raising study pace and depth starting today.',
+      ],
+      'JA': [
+        '基礎が揺らいでいる状態で問題演習にばかり執着するのは、認知的過負荷を加重するだけです。焦る気持ちを完全に落ち着かせ、単元別教科書の核心原理分析と基本語彙スキーマ（知識の構造的ネットワーク）構築に即座に着手してください。基礎からじっくり積み上げれば、成績は必ず正直に反応します。今夜から基礎固めの復習に集中してください。',
+      ],
+      'ZH': [
+        '在基础尚不牢固的情况下一味执着于刷题，只会加重认知负荷。请彻底平复急躁的心态，立即着手逐单元梳理教材核心原理，构建基础词汇框架（知识的结构性网络）。只要从基础一步步扎实积累，成绩必然会诚实地作出回应。请从今晚开始专注于弥补基础的复习。',
+      ],
+      'FR': [
+        'S\'acharner sur les exercices alors que les bases vacillent ne fait qu\'aggraver la surcharge cognitive. Calmez-vous complètement et commencez immédiatement par une analyse des principes fondamentaux, unité par unité. En construisant patiemment depuis la base, les résultats répondront honnêtement. Concentrez-vous dès ce soir sur le renforcement des fondamentaux.',
+      ],
+      'DE': [
+        'Sich bei wackligen Grundlagen nur auf das Üben von Aufgaben zu versteifen, erhöht nur die kognitive Überlastung. Beruhigen Sie sich vollständig und beginnen Sie sofort mit einer einheitenweisen Analyse der Kernprinzipien. Wenn die Grundlagen Stein für Stein aufgebaut werden, reagieren die Noten ehrlich darauf. Konzentrieren Sie sich ab heute Abend auf die Grundlagenwiederholung.',
+      ],
+      'RU': [
+        'Упорное решение задач при шатких основах лишь усиливает когнитивную перегрузку. Полностью успокойтесь и немедленно начните разбор ключевых принципов по разделам. Если выстраивать основы кирпичик за кирпичиком, результаты честно отреагируют. Сегодня же вечером сосредоточьтесь на повторении основ.',
+      ],
+      'AR': [
+        'الإصرار على حل المزيد من المسائل بينما الأساس غير ثابت يزيد فقط من العبء الإدراكي. اهدأ تمامًا وابدأ فورًا بتحليل المبادئ الأساسية وحدة تلو الأخرى. عند بناء الأساس لبنة بلبنة، ستستجيب النتيجة بصدق. ركّز الليلة على مراجعة الأساسيات.',
+      ],
+      'HI': [
+        'जब आधार ही कमजोर है, तो केवल अभ्यास प्रश्नों पर अड़े रहना केवल संज्ञानात्मक बोझ बढ़ाता है। पूरी तरह शांत हों और तुरंत यूनिट-दर-यूनिट मूल सिद्धांतों के विश्लेषण से शुरुआत करें। यदि आधार ईंट-दर-ईंट मजबूत किया जाए, तो स्कोर निश्चित रूप से ईमानदारी से प्रतिक्रिया देगा। आज रात से ही आधार को मजबूत करने वाले पुनरीक्षण पर ध्यान दें।',
+      ],
+      'VI': [
+        'Khi nền tảng còn lung lay mà cứ cố làm thêm bài tập chỉ khiến quá tải nhận thức. Hãy bình tĩnh hoàn toàn và bắt đầu ngay việc phân tích nguyên lý cốt lõi theo từng chương. Khi xây nền tảng từng viên gạch một cách chắc chắn, điểm số chắc chắn sẽ phản ánh trung thực. Hãy tập trung củng cố nền tảng ngay từ tối nay.',
+      ],
+      'ES': [
+        'Insistir en más ejercicios cuando la base aún es inestable solo aumenta la sobrecarga cognitiva. Cálmate por completo y comienza de inmediato con un análisis de los principios básicos unidad por unidad. Si construyes la base ladrillo a ladrillo, la puntuación responderá con honestidad. Concéntrate esta misma noche en repasar los fundamentos.',
+      ],
+      'TH': [
+        'การมุ่งแต่ทำโจทย์ทั้งที่พื้นฐานยังไม่มั่นคงมีแต่จะเพิ่มภาระทางความคิด ควรใจเย็นลงอย่างเต็มที่และเริ่มวิเคราะห์หลักการสำคัญทีละหน่วยทันที หากค่อยๆ สร้างพื้นฐานอย่างมั่นคงทีละก้าว คะแนนจะตอบสนองอย่างซื่อตรงแน่นอน ตั้งแต่คืนนี้ควรตั้งใจทบทวนเพื่อเสริมพื้นฐานให้แข็งแรง',
+      ],
+    },
   };
 
   static const Map<String, String> _diagAdditionalGuidance = {
-    'KO': ' [추가 정밀 권고] 현재 학습 체계의 임계점(성취도가 도약하기 위해 필요한 최소한의 학업 밀도)을 넘어서기 위해서는 절대 주관적인 타협이나 나태함에 빠져서는 안 됩니다. 스스로의 가능성을 신뢰하고 정합성 확인 루틴을 독하게 사수하십시오!',
-    'EN': ' [Additional Guidance] To clear the critical threshold needed for the next jump in achievement, never settle for subjective compromise or complacency. Trust your own potential and hold firmly to the review-and-verify routine!',
-    'JA': ' [追加精密アドバイス] 現在の学習体系の臨界点（成果が飛躍するために必要な最小限の学習密度）を超えるためには、決して主観的な妥協や怠慢に陥ってはいけません。自身の可能性を信じ、整合性確認ルーティンを徹底的に守り抜いてください！',
-    'ZH': ' [额外精细建议] 要突破当前学习体系的临界点（成绩实现飞跃所需的最低学习密度），绝不能陷入主观妥协或懈怠。请相信自己的潜力，坚定地坚持这一巩固流程！',
-    'FR': ' [Conseil supplémentaire] Pour franchir le seuil critique nécessaire à un bond de niveau, ne cédez jamais au compromis ou à la complaisance. Faites confiance à votre potentiel et maintenez fermement cette routine de vérification !',
-    'DE': ' [Zusätzlicher Hinweis] Um die kritische Schwelle für den nächsten Leistungssprung zu überwinden, dürfen Sie sich niemals mit Kompromissen oder Nachlässigkeit zufriedengeben. Vertrauen Sie auf Ihr Potenzial und halten Sie konsequent an dieser Überprüfungsroutine fest!',
-    'RU': ' [Дополнительная рекомендация] Чтобы преодолеть критический порог, необходимый для следующего скачка в успеваемости, никогда не идите на компромисс с собой и не позволяйте себе расслабляться. Верьте в свой потенциал и твёрдо придерживайтесь этой проверочной дисциплины!',
-    'AR': ' [توصية إضافية] لتجاوز العتبة الحرجة اللازمة للقفزة التالية في التحصيل، لا تستسلم أبدًا للتنازل الذاتي أو التراخي. ثق بإمكاناتك والتزم بحزم بروتين المراجعة والتحقق هذا!',
-    'HI': ' [अतिरिक्त सटीक सलाह] अगली उपलब्धि छलांग के लिए आवश्यक महत्वपूर्ण सीमा को पार करने के लिए, कभी भी व्यक्तिपरक समझौते या लापरवाही में न पड़ें। अपनी क्षमता पर भरोसा रखें और इस सत्यापन दिनचर्या को दृढ़ता से बनाए रखें!',
-    'VI': ' [Lời khuyên bổ sung] Để vượt qua ngưỡng quan trọng cần thiết cho bước nhảy vọt tiếp theo về thành tích, đừng bao giờ thỏa hiệp chủ quan hay lơ là. Hãy tin vào tiềm năng của bản thân và kiên định duy trì thói quen xác minh này!',
-    'ES': ' [Recomendación adicional] Para superar el umbral crítico necesario para el próximo salto en el rendimiento, nunca cedas a la complacencia ni al compromiso subjetivo. Confía en tu potencial y mantén con firmeza esta rutina de verificación.',
-    'TH': ' [คำแนะนำเพิ่มเติมอย่างละเอียด] เพื่อก้าวข้ามจุดวิกฤตที่จำเป็นสำหรับการก้าวกระโดดของผลสัมฤทธิ์ครั้งต่อไป ห้ามยอมประนีประนอมหรือเผลอเลินเล่อเด็ดขาด จงเชื่อมั่นในศักยภาพของตนเองและรักษาวินัยการตรวจสอบนี้ไว้อย่างเคร่งครัด!',
+    'KO':
+        ' [추가 정밀 권고] 현재 학습 체계의 임계점(성취도가 도약하기 위해 필요한 최소한의 학업 밀도)을 넘어서기 위해서는 절대 주관적인 타협이나 나태함에 빠져서는 안 됩니다. 스스로의 가능성을 신뢰하고 정합성 확인 루틴을 독하게 사수하십시오!',
+    'EN':
+        ' [Additional Guidance] To clear the critical threshold needed for the next jump in achievement, never settle for subjective compromise or complacency. Trust your own potential and hold firmly to the review-and-verify routine!',
+    'JA':
+        ' [追加精密アドバイス] 現在の学習体系の臨界点（成果が飛躍するために必要な最小限の学習密度）を超えるためには、決して主観的な妥協や怠慢に陥ってはいけません。自身の可能性を信じ、整合性確認ルーティンを徹底的に守り抜いてください！',
+    'ZH':
+        ' [额外精细建议] 要突破当前学习体系的临界点（成绩实现飞跃所需的最低学习密度），绝不能陷入主观妥协或懈怠。请相信自己的潜力，坚定地坚持这一巩固流程！',
+    'FR':
+        ' [Conseil supplémentaire] Pour franchir le seuil critique nécessaire à un bond de niveau, ne cédez jamais au compromis ou à la complaisance. Faites confiance à votre potentiel et maintenez fermement cette routine de vérification !',
+    'DE':
+        ' [Zusätzlicher Hinweis] Um die kritische Schwelle für den nächsten Leistungssprung zu überwinden, dürfen Sie sich niemals mit Kompromissen oder Nachlässigkeit zufriedengeben. Vertrauen Sie auf Ihr Potenzial und halten Sie konsequent an dieser Überprüfungsroutine fest!',
+    'RU':
+        ' [Дополнительная рекомендация] Чтобы преодолеть критический порог, необходимый для следующего скачка в успеваемости, никогда не идите на компромисс с собой и не позволяйте себе расслабляться. Верьте в свой потенциал и твёрдо придерживайтесь этой проверочной дисциплины!',
+    'AR':
+        ' [توصية إضافية] لتجاوز العتبة الحرجة اللازمة للقفزة التالية في التحصيل، لا تستسلم أبدًا للتنازل الذاتي أو التراخي. ثق بإمكاناتك والتزم بحزم بروتين المراجعة والتحقق هذا!',
+    'HI':
+        ' [अतिरिक्त सटीक सलाह] अगली उपलब्धि छलांग के लिए आवश्यक महत्वपूर्ण सीमा को पार करने के लिए, कभी भी व्यक्तिपरक समझौते या लापरवाही में न पड़ें। अपनी क्षमता पर भरोसा रखें और इस सत्यापन दिनचर्या को दृढ़ता से बनाए रखें!',
+    'VI':
+        ' [Lời khuyên bổ sung] Để vượt qua ngưỡng quan trọng cần thiết cho bước nhảy vọt tiếp theo về thành tích, đừng bao giờ thỏa hiệp chủ quan hay lơ là. Hãy tin vào tiềm năng của bản thân và kiên định duy trì thói quen xác minh này!',
+    'ES':
+        ' [Recomendación adicional] Para superar el umbral crítico necesario para el próximo salto en el rendimiento, nunca cedas a la complacencia ni al compromiso subjetivo. Confía en tu potencial y mantén con firmeza esta rutina de verificación.',
+    'TH':
+        ' [คำแนะนำเพิ่มเติมอย่างละเอียด] เพื่อก้าวข้ามจุดวิกฤตที่จำเป็นสำหรับการก้าวกระโดดของผลสัมฤทธิ์ครั้งต่อไป ห้ามยอมประนีประนอมหรือเผลอเลินเล่อเด็ดขาด จงเชื่อมั่นในศักยภาพของตนเองและรักษาวินัยการตรวจสอบนี้ไว้อย่างเคร่งครัด!',
   };
 
   // 🆕 [위험한 오류 수정 2026-09-05] "일일종합"/"일일상세"(오늘 학습 요약) 전용 문구 뱅크.
@@ -877,56 +3101,102 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   // 대한 문구만 사용하도록 완전히 별도의 뱅크로 분리함.
   static const Map<String, Map<String, List<String>>> _dailyDiagOpenings = {
     'good': {
-      'KO': ['오늘 목표 달성률이 90%를 넘어선 것은 계획한 학습량을 흔들림 없이 소화해냈다는 뜻이며, 스스로 세운 기준을 지켜내는 자기주도 학습 습관이 확실히 자리잡고 있음을 보여주는 매우 고무적인 결과입니다. '],
-      'EN': ["Reaching over 90% of today's study goal shows the plan was carried through without wavering, and that a genuinely self-directed study habit is taking firm hold. "],
+      'KO': [
+        '오늘 목표 달성률이 90%를 넘어선 것은 계획한 학습량을 흔들림 없이 소화해냈다는 뜻이며, 스스로 세운 기준을 지켜내는 자기주도 학습 습관이 확실히 자리잡고 있음을 보여주는 매우 고무적인 결과입니다. ',
+      ],
+      'EN': [
+        "Reaching over 90% of today's study goal shows the plan was carried through without wavering, and that a genuinely self-directed study habit is taking firm hold. ",
+      ],
     },
     'mid': {
-      'KO': ['오늘 목표 달성률이 80%대에 도달한 것은 안정적인 학습 리듬을 갖추고 있다는 신호이며, 조금만 더 집중 시간을 늘리면 곧바로 최상위권 달성률에 닿을 수 있는 위치에 있습니다. '],
-      'EN': ["Landing in the 80% range for today's goal signals a stable study rhythm, and just a bit more focused time could carry you to the very top. "],
+      'KO': [
+        '오늘 목표 달성률이 80%대에 도달한 것은 안정적인 학습 리듬을 갖추고 있다는 신호이며, 조금만 더 집중 시간을 늘리면 곧바로 최상위권 달성률에 닿을 수 있는 위치에 있습니다. ',
+      ],
+      'EN': [
+        "Landing in the 80% range for today's goal signals a stable study rhythm, and just a bit more focused time could carry you to the very top. ",
+      ],
     },
     'seventy': {
-      'KO': ['오늘 목표 달성률이 70%대인 것은 학습을 시작은 했으나 계획한 만큼 끝까지 밀도 있게 이어가지 못했음을 나타냅니다. 다만 이 구간은 조금만 습관을 다듬으면 가장 크게 달성률이 뛰어오를 수 있는 구간이기도 합니다. '],
-      'EN': ["A 70%-range goal attainment today means the session started but wasn't carried through with full intensity. This range, though, is exactly where a small habit tweak can produce the biggest jump. "],
+      'KO': [
+        '오늘 목표 달성률이 70%대인 것은 학습을 시작은 했으나 계획한 만큼 끝까지 밀도 있게 이어가지 못했음을 나타냅니다. 다만 이 구간은 조금만 습관을 다듬으면 가장 크게 달성률이 뛰어오를 수 있는 구간이기도 합니다. ',
+      ],
+      'EN': [
+        "A 70%-range goal attainment today means the session started but wasn't carried through with full intensity. This range, though, is exactly where a small habit tweak can produce the biggest jump. ",
+      ],
     },
     'sixty': {
-      'KO': ['오늘 목표 달성률이 60%대에 머문 것은 학습 계획과 실제 실행 사이에 다소 큰 간극이 있었음을 의미합니다. 이 자체를 자책하기보다는, 무엇이 학습 흐름을 방해했는지 되짚어보는 계기로 삼는 것이 더 중요합니다. '],
-      'EN': ['Staying in the 60% range points to a real gap between the plan and what actually got done today. Rather than being hard on yourself, use this as a chance to notice what interrupted the flow. '],
+      'KO': [
+        '오늘 목표 달성률이 60%대에 머문 것은 학습 계획과 실제 실행 사이에 다소 큰 간극이 있었음을 의미합니다. 이 자체를 자책하기보다는, 무엇이 학습 흐름을 방해했는지 되짚어보는 계기로 삼는 것이 더 중요합니다. ',
+      ],
+      'EN': [
+        'Staying in the 60% range points to a real gap between the plan and what actually got done today. Rather than being hard on yourself, use this as a chance to notice what interrupted the flow. ',
+      ],
     },
     'low': {
-      'KO': ['오늘 목표 달성률이 60% 미만으로 나타난 것은 학습 루틴 자체를 처음부터 재정비할 필요가 있다는 신호입니다. 이런 날일수록 스스로를 다그치기보다는, 실현 가능한 아주 작은 목표부터 다시 세우는 것이 현실적인 해법입니다. '],
-      'EN': ['Falling below 60% today is a sign the whole study routine may need a reset from the ground up. On days like this, setting a much smaller, genuinely achievable goal is the more realistic move than pushing harder. '],
+      'KO': [
+        '오늘 목표 달성률이 60% 미만으로 나타난 것은 학습 루틴 자체를 처음부터 재정비할 필요가 있다는 신호입니다. 이런 날일수록 스스로를 다그치기보다는, 실현 가능한 아주 작은 목표부터 다시 세우는 것이 현실적인 해법입니다. ',
+      ],
+      'EN': [
+        'Falling below 60% today is a sign the whole study routine may need a reset from the ground up. On days like this, setting a much smaller, genuinely achievable goal is the more realistic move than pushing harder. ',
+      ],
     },
   };
 
   static const Map<String, Map<String, List<String>>> _dailyDiagClosings = {
     'good': {
-      'KO': ['다만 이 페이스에 안주하지 말고, 내일도 오늘과 같은 밀도로 학습을 이어가려는 의식적인 노력이 필요합니다. 개념강의든 평가든 꾸준히 기록을 남기는 습관 자체가 장기적인 성장의 가장 확실한 토대가 되므로, 지금의 리듬을 그대로 유지해 나가시길 바랍니다.'],
-      'EN': ["Don't get too comfortable with this pace, though — keep making a conscious effort to hit the same density tomorrow. Whether it's a concept lecture or an evaluation, the habit of logging every session is the surest foundation for long-term growth, so keep this rhythm going."],
+      'KO': [
+        '다만 이 페이스에 안주하지 말고, 내일도 오늘과 같은 밀도로 학습을 이어가려는 의식적인 노력이 필요합니다. 개념강의든 평가든 꾸준히 기록을 남기는 습관 자체가 장기적인 성장의 가장 확실한 토대가 되므로, 지금의 리듬을 그대로 유지해 나가시길 바랍니다.',
+      ],
+      'EN': [
+        "Don't get too comfortable with this pace, though — keep making a conscious effort to hit the same density tomorrow. Whether it's a concept lecture or an evaluation, the habit of logging every session is the surest foundation for long-term growth, so keep this rhythm going.",
+      ],
     },
     'mid': {
-      'KO': ['남은 격차를 메우기 위해서는 학습 시작 시점의 집중 진입 속도를 조금 더 끌어올리는 것이 효과적입니다. 개념강의를 들었다면 핵심 내용을 스스로 요약해보고, 평가를 치렀다면 오답을 반드시 복기하는 습관을 더하면 다음 세션에서 100%에 근접한 결과를 기대할 수 있습니다.'],
-      'EN': ['To close the remaining gap, try speeding up how quickly you settle into focus at the start of a session. Summarize the key points after a lecture, and review mistakes carefully after an evaluation — that combination should push the next session close to 100%.'],
+      'KO': [
+        '남은 격차를 메우기 위해서는 학습 시작 시점의 집중 진입 속도를 조금 더 끌어올리는 것이 효과적입니다. 개념강의를 들었다면 핵심 내용을 스스로 요약해보고, 평가를 치렀다면 오답을 반드시 복기하는 습관을 더하면 다음 세션에서 100%에 근접한 결과를 기대할 수 있습니다.',
+      ],
+      'EN': [
+        'To close the remaining gap, try speeding up how quickly you settle into focus at the start of a session. Summarize the key points after a lecture, and review mistakes carefully after an evaluation — that combination should push the next session close to 100%.',
+      ],
     },
     'seventy': {
-      'KO': ['학습 중간에 집중력이 흐트러지는 지점이 어디인지 스스로 점검해보고, 오늘처럼 개념강의나 평가를 기록으로 남기는 습관을 하루도 빠짐없이 이어가는 것이 중요합니다. 작은 꾸준함이 쌓이면 다음 세션부터는 달성률이 눈에 띄게 개선될 것입니다.'],
-      'EN': ['Take a moment to notice where concentration tends to slip mid-session, and keep logging every lecture or evaluation without skipping a day. Small consistency compounds quickly, and the next few sessions should show a noticeable improvement.'],
+      'KO': [
+        '학습 중간에 집중력이 흐트러지는 지점이 어디인지 스스로 점검해보고, 오늘처럼 개념강의나 평가를 기록으로 남기는 습관을 하루도 빠짐없이 이어가는 것이 중요합니다. 작은 꾸준함이 쌓이면 다음 세션부터는 달성률이 눈에 띄게 개선될 것입니다.',
+      ],
+      'EN': [
+        'Take a moment to notice where concentration tends to slip mid-session, and keep logging every lecture or evaluation without skipping a day. Small consistency compounds quickly, and the next few sessions should show a noticeable improvement.',
+      ],
     },
     'sixty': {
-      'KO': ['목표 시간을 다소 낮춰서라도 매일 빠짐없이 기록을 남기는 것이, 무리한 목표를 세우고 중도에 포기하는 것보다 훨씬 효과적입니다. 개념강의를 들었다면 짧게라도 배운 내용을 적어보고, 평가를 봤다면 반드시 오답 원인을 확인하는 루틴부터 다시 세워보시기 바랍니다.'],
-      'EN': ['Logging something every single day, even with a lower target, beats setting an ambitious goal and giving up halfway. Jot down a few lines after a lecture, and make sure to review the cause of any mistakes after an evaluation — rebuilding that basic routine comes first.'],
+      'KO': [
+        '목표 시간을 다소 낮춰서라도 매일 빠짐없이 기록을 남기는 것이, 무리한 목표를 세우고 중도에 포기하는 것보다 훨씬 효과적입니다. 개념강의를 들었다면 짧게라도 배운 내용을 적어보고, 평가를 봤다면 반드시 오답 원인을 확인하는 루틴부터 다시 세워보시기 바랍니다.',
+      ],
+      'EN': [
+        'Logging something every single day, even with a lower target, beats setting an ambitious goal and giving up halfway. Jot down a few lines after a lecture, and make sure to review the cause of any mistakes after an evaluation — rebuilding that basic routine comes first.',
+      ],
     },
     'low': {
-      'KO': ['완벽한 하루를 만들려 하기보다, 하루 10분이라도 개념강의를 듣거나 짧은 평가를 기록하는 최소한의 습관부터 되찾는 것이 우선입니다. 작은 성공 경험이 쌓이면 학습 밀도는 자연스럽게 다시 올라가므로, 지금은 포기하지 않고 이어가는 것 자체에 의미를 두시길 바랍니다.'],
-      'EN': ["Rather than aiming for a perfect day, the priority is recovering the minimum habit — even ten minutes of a concept lecture or logging a short evaluation. Small wins rebuild momentum naturally, so what matters right now is simply not giving up."],
+      'KO': [
+        '완벽한 하루를 만들려 하기보다, 하루 10분이라도 개념강의를 듣거나 짧은 평가를 기록하는 최소한의 습관부터 되찾는 것이 우선입니다. 작은 성공 경험이 쌓이면 학습 밀도는 자연스럽게 다시 올라가므로, 지금은 포기하지 않고 이어가는 것 자체에 의미를 두시길 바랍니다.',
+      ],
+      'EN': [
+        "Rather than aiming for a perfect day, the priority is recovering the minimum habit — even ten minutes of a concept lecture or logging a short evaluation. Small wins rebuild momentum naturally, so what matters right now is simply not giving up.",
+      ],
     },
   };
 
   static const Map<String, String> _dailyDiagAdditionalGuidance = {
-    'KO': ' [참고] 이 요약은 오늘 하루의 학습 세션(강의/평가) 기록을 바탕으로 자동 생성된 것이며, 특정 시험 점수와는 무관합니다. 꾸준한 기록이 쌓일수록 분석의 정확도가 높아집니다.',
-    'EN': " [Note] This summary is generated from today's logged study sessions (lectures/evaluations) and is not tied to any specific exam score. The more consistently you log sessions, the more accurate this analysis becomes.",
+    'KO':
+        ' [참고] 이 요약은 오늘 하루의 학습 세션(강의/평가) 기록을 바탕으로 자동 생성된 것이며, 특정 시험 점수와는 무관합니다. 꾸준한 기록이 쌓일수록 분석의 정확도가 높아집니다.',
+    'EN':
+        " [Note] This summary is generated from today's logged study sessions (lectures/evaluations) and is not tied to any specific exam score. The more consistently you log sessions, the more accurate this analysis becomes.",
   };
 
-  String _buildRuleBasedDiagnosisText({required String type, required double score, required String subject}) {
+  String _buildRuleBasedDiagnosisText({
+    required String type,
+    required double score,
+    required String subject,
+  }) {
     final random = math.Random();
     final String lang = DkeLang.current;
     // 🆕 [위험한 오류 수정 2026-09-05] "일일종합"/"일일상세"는 시험 점수 전제 문구가 아니라
@@ -946,22 +3216,30 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       tier = 'low';
     }
 
-    final Map<String, Map<String, List<String>>> openingsBank = isDailySummary ? _dailyDiagOpenings : _diagOpenings;
-    final Map<String, Map<String, List<String>>> closingsBank = isDailySummary ? _dailyDiagClosings : _diagClosings;
-    final Map<String, String> guidanceBank = isDailySummary ? _dailyDiagAdditionalGuidance : _diagAdditionalGuidance;
+    final Map<String, Map<String, List<String>>> openingsBank = isDailySummary
+        ? _dailyDiagOpenings
+        : _diagOpenings;
+    final Map<String, Map<String, List<String>>> closingsBank = isDailySummary
+        ? _dailyDiagClosings
+        : _diagClosings;
+    final Map<String, String> guidanceBank = isDailySummary
+        ? _dailyDiagAdditionalGuidance
+        : _diagAdditionalGuidance;
 
-    final List<String> openings = openingsBank[tier]![lang] ?? openingsBank[tier]!['EN']!;
-    final List<String> closings = closingsBank[tier]![lang] ?? closingsBank[tier]!['EN']!;
+    final List<String> openings =
+        openingsBank[tier]![lang] ?? openingsBank[tier]!['EN']!;
+    final List<String> closings =
+        closingsBank[tier]![lang] ?? closingsBank[tier]!['EN']!;
 
-    String diagnosisText = openings[random.nextInt(openings.length)] + closings[random.nextInt(closings.length)];
+    String diagnosisText =
+        openings[random.nextInt(openings.length)] +
+        closings[random.nextInt(closings.length)];
 
     if (diagnosisText.length < 350) {
       diagnosisText += guidanceBank[lang] ?? guidanceBank['EN']!;
     }
     return diagnosisText;
   }
-
-
 
   @override
   void dispose() {
@@ -975,7 +3253,12 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     super.dispose();
   }
 
-  void _showReportPopup(BuildContext context, String mainTitle, String content, {bool isTotalReport = false}) {
+  void _showReportPopup(
+    BuildContext context,
+    String mainTitle,
+    String content, {
+    bool isTotalReport = false,
+  }) {
     String finalContent = content;
     final activeExams = _allRecords.where((e) => e.type == "주평가").toList();
     // 🆕 [12개국 대응] 언어별로 제목 문구가 달라지므로 텍스트 매칭 대신 명시적 파라미터로 판별
@@ -995,12 +3278,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: _ThemeColors.premiumCardBg,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3), width: 1.5),
+              border: Border.all(
+                color: _ThemeColors.brandGolden.withOpacity(0.3),
+                width: 1.5,
+              ),
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -1010,7 +3298,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   Theme(
                     data: Theme.of(context).copyWith(
                       scrollbarTheme: ScrollbarThemeData(
-                        thumbColor: MaterialStateProperty.all(_ThemeColors.brandGolden.withOpacity(0.5)),
+                        thumbColor: MaterialStateProperty.all(
+                          _ThemeColors.brandGolden.withOpacity(0.5),
+                        ),
                       ),
                     ),
                     child: Row(
@@ -1018,21 +3308,43 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       children: [
                         Expanded(
                           child: Text(
-                              mainTitle,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              maxLines: 1,
-                              style: DkeLang.current == 'KO'
-                                  ? GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 23)
-                                  : GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 22)
+                            mainTitle,
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                            maxLines: 1,
+                            style: DkeLang.current == 'KO'
+                                ? GoogleFonts.notoSansKr(
+                                    color: _ThemeColors.brandGolden,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 23,
+                                  )
+                                : GoogleFonts.gowunBatang(
+                                    color: _ThemeColors.brandGolden,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22,
+                                  ),
                           ),
                         ),
-                        IconButton(icon: const Icon(Icons.close, color: Colors.white60), onPressed: () => Navigator.pop(context))
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white60),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                       ],
                     ),
                   ),
-                  const Divider(color: Colors.white10, height: 20, thickness: 1.2),
-                  Text(finalContent, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6)),
+                  const Divider(
+                    color: Colors.white10,
+                    height: 20,
+                    thickness: 1.2,
+                  ),
+                  Text(
+                    finalContent,
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 14.5,
+                      height: 1.6,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -1043,7 +3355,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     );
   }
 
-  // 🆕 [선배님 지시 완료]: 당근과 채찍 + 전문적 주석 해설 알고리즘이 내장된 150자 이상 분석 팝업 개설
   // 🆕 [선배님 지시 완료]: 당근과 채찍 + 전문적 주석 해설 알고리즘이 내장된 150자 이상 분석 팝업 개설
   Future<void> _showDetailAnalysisPopup(String type) async {
     final filtered = _getFilteredRecords(type);
@@ -1064,29 +3375,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     _showReportPopup(context, _t('diagReportTitle'), diagnosisText);
   }
 
-  // 🆕 [요청 2026-09-09] 중간고사/기말고사/모의고사 선택 시 - 학교 발표 성적과 헷갈리지 않도록 안내
-  void _showExamRecordGuidancePopup() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _ThemeColors.premiumCardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: _ThemeColors.brandGolden.withOpacity(0.4))),
-        title: Text('성적 기록 안내', style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-        content: Text(
-          '여기 성적 기록은 학교시험 전·후 간단하게 예상하여 기록하는 곳이며, 학교 발표 성적은 "성적 관리"에 가서 기록해 주세요.',
-          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('확인', style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-
   void _showFeedbackRegistrationDialog({
     required String type,
     required String subject,
@@ -1095,9 +3383,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     required int grade,
     required int semester,
   }) {
-    final TextEditingController durationController = TextEditingController(text: "45분");
-    final TextEditingController mockMonthController = TextEditingController(text: "6월");
-    final TextEditingController mockRankController = TextEditingController(text: "1등급");
+    final TextEditingController durationController = TextEditingController(
+      text: "45분",
+    );
+    final TextEditingController mockMonthController = TextEditingController(
+      text: "6월",
+    );
+    final TextEditingController mockRankController = TextEditingController(
+      text: "1등급",
+    );
 
     String difficulty = "보통";
     int rating = 5;
@@ -1105,254 +3399,466 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     String reviewStatus = "필요";
 
     final List<String> diffOptions = ["매우쉬움", "쉬움", "보통", "어려움", "매우어려움"];
-    final List<String> causeOptions = ["개념부족", "계산실수", "시간부족", "문해력 부족", "긴장", "집중력 부족", "기타"];
+    final List<String> causeOptions = [
+      "개념부족",
+      "계산실수",
+      "시간부족",
+      "문해력 부족",
+      "긴장",
+      "집중력 부족",
+      "기타",
+    ];
     final List<String> reviewOptions = ["필요", "예정", "불필요"];
 
     showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext ctx) {
-          return StatefulBuilder(
-              builder: (context, setPopupState) {
-                return Dialog(
-                  backgroundColor: _ThemeColors.premiumCardBg,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Container(
-                    width: MediaQuery.of(context).size.width * 0.85,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.4), width: 1.5),
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (context, setPopupState) {
+            return Dialog(
+              backgroundColor: _ThemeColors.premiumCardBg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.85,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _ThemeColors.brandGolden.withOpacity(0.4),
+                    width: 1.5,
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "Exam Evaluation Settings",
-                                      overflow: TextOverflow.fade,
-                                      softWrap: false,
-                                      maxLines: 1,
-                                      style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12),
-                                    ),
-                                    Text(
-                                      type == "모의고사" ? _t('mockDiagTitle') : _t('examDiagTitle'),
-                                      overflow: TextOverflow.fade,
-                                      softWrap: false,
-                                      maxLines: 1,
-                                      style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 16),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close, color: Colors.white60, size: 20),
-                                onPressed: () => Navigator.pop(ctx),
-                              )
-                            ],
-                          ),
-                          const Divider(color: Colors.white10, height: 16),
-
-                          if (type == "모의고사") ...[
-                            Text(_t('mockMonthLabel'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12)),
-                            const SizedBox(height: 4),
-                            TextField(
-                              controller: mockMonthController,
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                              decoration: InputDecoration(
-                                filled: true, fillColor: Colors.black26,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white12), borderRadius: BorderRadius.circular(6)),
-                                focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _ThemeColors.brandGolden), borderRadius: BorderRadius.circular(6)),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(_t('mockRankLabel'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12)),
-                            const SizedBox(height: 4),
-                            TextField(
-                              controller: mockRankController,
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                              decoration: InputDecoration(
-                                filled: true, fillColor: Colors.black26,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white12), borderRadius: BorderRadius.circular(6)),
-                                focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _ThemeColors.brandGolden), borderRadius: BorderRadius.circular(6)),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-
-                          Text(_t('label1Duration'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          TextField(
-                            controller: durationController,
-                            style: const TextStyle(color: Colors.white, fontSize: 13),
-                            decoration: InputDecoration(
-                              filled: true, fillColor: Colors.black26,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white12), borderRadius: BorderRadius.circular(6)),
-                              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _ThemeColors.brandGolden), borderRadius: BorderRadius.circular(6)),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          Text(_t('label2Difficulty'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 4, runSpacing: 4,
-                            children: diffOptions.map((d) {
-                              bool isSel = difficulty == d;
-                              return ChoiceChip(
-                                label: Text(_difficultyLabel(d), style: TextStyle(color: isSel ? Colors.black : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                selected: isSel,
-                                selectedColor: _ThemeColors.brandGolden,
-                                backgroundColor: Colors.black38,
-                                onSelected: (bool selected) { if (selected) setPopupState(() => difficulty = d); },
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
-
-                          Text(_t('label3Satisfaction'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: List.generate(5, (index) {
-                              int currentStarWeight = index + 1;
-                              bool isActive = currentStarWeight <= rating;
-                              return GestureDetector(
-                                onTap: () => setPopupState(() => rating = currentStarWeight),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: 4.0),
-                                  child: Icon(
-                                    Icons.star_rounded,
-                                    color: isActive ? _ThemeColors.brandGolden : Colors.white24,
-                                    size: 28,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Exam Evaluation Settings",
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  maxLines: 1,
+                                  style: GoogleFonts.gowunBatang(
+                                    color: Colors.white54,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
                                   ),
                                 ),
-                              );
-                            }),
-                          ),
-                          const SizedBox(height: 14),
-
-                          Text(_t('label4ErrorMulti'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
-                            child: Column(
-                              children: causeOptions.map((cause) {
-                                bool isChecked = selectedCauses.contains(cause);
-                                return CheckboxListTile(
-                                  title: Text(_causeLabel(cause), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                                  value: isChecked,
-                                  dense: true,
-                                  activeColor: _ThemeColors.brandGolden,
-                                  checkColor: Colors.black,
-                                  controlAffinity: ListTileControlAffinity.leading,
-                                  contentPadding: EdgeInsets.zero,
-                                  onChanged: (bool? checked) {
-                                    setPopupState(() {
-                                      if (checked == true) {
-                                        if (!selectedCauses.contains(cause)) selectedCauses.add(cause);
-                                      } else {
-                                        selectedCauses.remove(cause);
-                                      }
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          Text(_t('label5ReviewSelect'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: reviewOptions.map((r) {
-                              bool isSel = reviewStatus == r;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6.0),
-                                child: ChoiceChip(
-                                  label: Text(_reviewLabel(r), style: TextStyle(color: isSel ? Colors.black : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  selected: isSel,
-                                  selectedColor: _ThemeColors.brandGolden,
-                                  backgroundColor: Colors.black38,
-                                  onSelected: (bool selected) { if (selected) setPopupState(() => reviewStatus = r); },
+                                Text(
+                                  type == "모의고사"
+                                      ? _t('mockDiagTitle')
+                                      : _t('examDiagTitle'),
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  maxLines: 1,
+                                  style: GoogleFonts.notoSansKr(
+                                    color: _ThemeColors.brandGolden,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 18),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 42,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: _ThemeColors.brandGolden, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                              onPressed: () async {
-                                String finalUnitLabel = unit;
-                                if (type == "모의고사") {
-                                  finalUnitLabel = "${mockMonthController.text} ${_examTypeLabel("모의고사")} (${mockRankController.text})";
-                                }
-
-                                final newRecord = _ExamRecord(
-                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                  type: type,
-                                  grade: grade,
-                                  semester: semester,
-                                  date: DateTime.now(),
-                                  subject: subject,
-                                  unit: finalUnitLabel,
-                                  score: score,
-                                  durationText: durationController.text,
-                                  difficultyLevel: difficulty,
-                                  starSatisfaction: rating,
-                                  errorCauses: List.from(selectedCauses),
-                                  reviewRequired: reviewStatus,
-                                  mockMonth: type == "모의고사" ? mockMonthController.text : "",
-                                  mockRank: type == "모의고사" ? mockRankController.text : "",
-                                );
-
-                                final prefs = await SharedPreferences.getInstance();
-                                await prefs.setString('dke_parent_shared_type', type);
-                                await prefs.setString('dke_parent_shared_subject', subject);
-                                await prefs.setDouble('dke_parent_shared_score', score);
-                                await prefs.setString('dke_parent_shared_duration', durationController.text);
-                                await prefs.setString('dke_parent_shared_difficulty', difficulty);
-
-                                setState(() {
-                                  _allRecords.add(newRecord);
-                                  _lastSavedRecordForDisplay = newRecord;
-                                  _subjectController.clear();
-                                  _unitController.clear();
-                                  _scoreController.clear();
-                                });
-                                await _persistExamRecords(); // 🆕 [데이터 연결] 새로 입력한 성적 기록을 즉시 영구 저장
-                                await FamilyLinkService.pushExamRecord(newRecord.toJson());
-
-                                Navigator.pop(ctx);
-                                FocusScope.of(context).unfocus();
-                              },
-                              child: Text(_t('confirmBtn'), style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 13)),
+                              ],
                             ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white60,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.pop(ctx),
                           ),
                         ],
                       ),
-                    ),
+                      const Divider(color: Colors.white10, height: 16),
+
+                      if (type == "모의고사") ...[
+                        Text(
+                          _t('mockMonthLabel'),
+                          overflow: TextOverflow.fade,
+                          softWrap: false,
+                          maxLines: 1,
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: mockMonthController,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.black26,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: Colors.white12,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: _ThemeColors.brandGolden,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _t('mockRankLabel'),
+                          overflow: TextOverflow.fade,
+                          softWrap: false,
+                          maxLines: 1,
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: mockRankController,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.black26,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: Colors.white12,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(
+                                color: _ThemeColors.brandGolden,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      Text(
+                        _t('label1Duration'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: durationController,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.black26,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Colors.white12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(
+                              color: _ThemeColors.brandGolden,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      Text(
+                        _t('label2Difficulty'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: diffOptions.map((d) {
+                          bool isSel = difficulty == d;
+                          return ChoiceChip(
+                            label: Text(
+                              _difficultyLabel(d),
+                              style: TextStyle(
+                                color: isSel ? Colors.black : Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            selected: isSel,
+                            selectedColor: _ThemeColors.brandGolden,
+                            backgroundColor: Colors.black38,
+                            onSelected: (bool selected) {
+                              if (selected) setPopupState(() => difficulty = d);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 14),
+
+                      Text(
+                        _t('label3Satisfaction'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: List.generate(5, (index) {
+                          int currentStarWeight = index + 1;
+                          bool isActive = currentStarWeight <= rating;
+                          return GestureDetector(
+                            onTap: () =>
+                                setPopupState(() => rating = currentStarWeight),
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 4.0),
+                              child: Icon(
+                                Icons.star_rounded,
+                                color: isActive
+                                    ? _ThemeColors.brandGolden
+                                    : Colors.white24,
+                                size: 28,
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 14),
+
+                      Text(
+                        _t('label4ErrorMulti'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: causeOptions.map((cause) {
+                            bool isChecked = selectedCauses.contains(cause);
+                            return CheckboxListTile(
+                              title: Text(
+                                _causeLabel(cause),
+                                overflow: TextOverflow.fade,
+                                softWrap: false,
+                                maxLines: 1,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              value: isChecked,
+                              dense: true,
+                              activeColor: _ThemeColors.brandGolden,
+                              checkColor: Colors.black,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (bool? checked) {
+                                setPopupState(() {
+                                  if (checked == true) {
+                                    if (!selectedCauses.contains(cause))
+                                      selectedCauses.add(cause);
+                                  } else {
+                                    selectedCauses.remove(cause);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      Text(
+                        _t('label5ReviewSelect'),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: reviewOptions.map((r) {
+                          bool isSel = reviewStatus == r;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: ChoiceChip(
+                              label: Text(
+                                _reviewLabel(r),
+                                style: TextStyle(
+                                  color: isSel ? Colors.black : Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              selected: isSel,
+                              selectedColor: _ThemeColors.brandGolden,
+                              backgroundColor: Colors.black38,
+                              onSelected: (bool selected) {
+                                if (selected)
+                                  setPopupState(() => reviewStatus = r);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 18),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _ThemeColors.brandGolden,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () async {
+                            String finalUnitLabel = unit;
+                            if (type == "모의고사") {
+                              finalUnitLabel =
+                                  "${mockMonthController.text} ${_examTypeLabel("모의고사")} (${mockRankController.text})";
+                            }
+
+                            final newRecord = _ExamRecord(
+                              id: DateTime.now().millisecondsSinceEpoch
+                                  .toString(),
+                              type: type,
+                              grade: grade,
+                              semester: semester,
+                              date: DateTime.now(),
+                              subject: subject,
+                              unit: finalUnitLabel,
+                              score: score,
+                              durationText: durationController.text,
+                              difficultyLevel: difficulty,
+                              starSatisfaction: rating,
+                              errorCauses: List.from(selectedCauses),
+                              reviewRequired: reviewStatus,
+                              mockMonth: type == "모의고사"
+                                  ? mockMonthController.text
+                                  : "",
+                              mockRank: type == "모의고사"
+                                  ? mockRankController.text
+                                  : "",
+                            );
+
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setString(
+                              'dke_parent_shared_type',
+                              type,
+                            );
+                            await prefs.setString(
+                              'dke_parent_shared_subject',
+                              subject,
+                            );
+                            await prefs.setDouble(
+                              'dke_parent_shared_score',
+                              score,
+                            );
+                            await prefs.setString(
+                              'dke_parent_shared_duration',
+                              durationController.text,
+                            );
+                            await prefs.setString(
+                              'dke_parent_shared_difficulty',
+                              difficulty,
+                            );
+
+                            setState(() {
+                              _allRecords.add(newRecord);
+                              _lastSavedRecordForDisplay = newRecord;
+                              _subjectController.clear();
+                              _unitController.clear();
+                              _scoreController.clear();
+                            });
+                            await _persistExamRecords(); // 🆕 [데이터 연결] 새로 입력한 성적 기록을 즉시 영구 저장
+
+                            Navigator.pop(ctx);
+                            FocusScope.of(context).unfocus();
+                          },
+                          child: Text(
+                            _t('confirmBtn'),
+                            style: GoogleFonts.notoSansKr(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }
-          );
-        }
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1369,7 +3875,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       decoration: BoxDecoration(
         color: _ThemeColors.premiumCardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.35), width: 1.2),
+        border: Border.all(
+          color: _ThemeColors.brandGolden.withOpacity(0.35),
+          width: 1.2,
+        ),
         boxShadow: const [
           BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 3)),
         ],
@@ -1382,14 +3891,22 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             overflow: TextOverflow.fade,
             softWrap: false,
             maxLines: 1,
-            style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12),
+            style: GoogleFonts.gowunBatang(
+              color: Colors.white54,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
           ),
           Text(
             "${_t('recentFeedbackPrefix')} ${rec.type} ${_t('achievementFeedbackMetrics')}",
             overflow: TextOverflow.fade,
             softWrap: false,
             maxLines: 1,
-            style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+            style: GoogleFonts.notoSansKr(
+              color: _ThemeColors.brandGolden,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1399,14 +3916,26 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             overflow: TextOverflow.fade,
             softWrap: false,
             maxLines: 1,
-            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+            style: GoogleFonts.notoSansKr(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(height: 12),
           const Divider(color: Colors.white10, height: 1),
           const SizedBox(height: 12),
 
-          _buildMetricDisplayItem(_t('label1DurationShort'), rec.durationText, Icons.timer_outlined),
-          _buildMetricDisplayItem(_t('label2DifficultyShort'), _difficultyLabel(rec.difficultyLevel), Icons.speed_outlined),
+          _buildMetricDisplayItem(
+            _t('label1DurationShort'),
+            rec.durationText,
+            Icons.timer_outlined,
+          ),
+          _buildMetricDisplayItem(
+            _t('label2DifficultyShort'),
+            _difficultyLabel(rec.difficultyLevel),
+            Icons.speed_outlined,
+          ),
 
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 5.0),
@@ -1415,16 +3944,28 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.star_outline_rounded, color: _ThemeColors.brandGolden, size: 14),
+                    const Icon(
+                      Icons.star_outline_rounded,
+                      color: _ThemeColors.brandGolden,
+                      size: 14,
+                    ),
                     const SizedBox(width: 6),
-                    Text(_t('label3SatisfactionShort'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5)),
+                    Text(
+                      _t('label3SatisfactionShort'),
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white70,
+                        fontSize: 12.5,
+                      ),
+                    ),
                   ],
                 ),
                 Row(
                   children: List.generate(5, (i) {
                     return Icon(
                       Icons.star_rounded,
-                      color: (i < rec.starSatisfaction) ? _ThemeColors.brandGolden : Colors.white12,
+                      color: (i < rec.starSatisfaction)
+                          ? _ThemeColors.brandGolden
+                          : Colors.white12,
                       size: 14,
                     );
                   }),
@@ -1433,8 +3974,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             ),
           ),
 
-          _buildMetricDisplayItem(_t('label4ErrorShort'), rec.errorCauses.map(_causeLabel).join(", "), Icons.report_problem_outlined),
-          _buildMetricDisplayItem(_t('label5ReviewShort'), _reviewLabel(rec.reviewRequired), Icons.flaky_outlined),
+          _buildMetricDisplayItem(
+            _t('label4ErrorShort'),
+            rec.errorCauses.map(_causeLabel).join(", "),
+            Icons.report_problem_outlined,
+          ),
+          _buildMetricDisplayItem(
+            _t('label5ReviewShort'),
+            _reviewLabel(rec.reviewRequired),
+            Icons.flaky_outlined,
+          ),
         ],
       ),
     );
@@ -1450,7 +3999,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             children: [
               Icon(icon, color: _ThemeColors.brandGolden, size: 14),
               const SizedBox(width: 6),
-              Text(label, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5)),
+              Text(
+                label,
+                style: GoogleFonts.notoSansKr(
+                  color: Colors.white70,
+                  fontSize: 12.5,
+                ),
+              ),
             ],
           ),
           Flexible(
@@ -1460,12 +4015,678 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               softWrap: false,
               maxLines: 1,
               textAlign: TextAlign.right,
-              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold),
+              style: GoogleFonts.notoSansKr(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ============================================================================
+  // 🆕 [장학금 방 2026-09-17] "실시간 학습 현황" 카드 — 화면 맨 아래, 이미 로드된
+  // 오늘의 데이터(레벨/별/오늘 학습시간)를 컬러풀하고 고급스럽게 다시 보여주는 요약 카드.
+  // 새 데이터를 따로 불러오지 않고 이 화면이 이미 갖고 있는 상태값을 그대로 재사용합니다.
+  // ============================================================================
+  Widget _buildLiveStatusCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF11192E), Color(0xFF0A0F1E)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _ThemeColors.brandGolden.withOpacity(0.35),
+          width: 1.3,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _ThemeColors.brandGolden.withOpacity(0.12),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(
+              () => _isLiveStatusCardExpanded = !_isLiveStatusCardExpanded,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.bolt_rounded,
+                    color: _ThemeColors.brandGolden,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _t('liveStatusCardTitle'),
+                      style: GoogleFonts.notoSansKr(
+                        color: _ThemeColors.brandGolden,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _isLiveStatusCardExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: _ThemeColors.brandGolden,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_isLiveStatusCardExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildLiveStatusMiniStat(
+                      icon: Icons.star_rounded,
+                      iconColor: const Color(0xFFFFD700),
+                      label: _t('cumulative'),
+                      value: "$_totalStars${_t('starsUnitSuffix')}",
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildLiveStatusMiniStat(
+                      icon: Icons.military_tech_rounded,
+                      iconColor: const Color(0xFF60A5FA),
+                      label: _t('levelPrefix'),
+                      value: "Lv.$_currentLevelNumber",
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildLiveStatusMiniStat(
+                      icon: Icons.timer_outlined,
+                      iconColor: const Color(0xFF34C759),
+                      label: _t('daily'),
+                      value:
+                          "$_todayTotalStudyMinutes${_t('minutesUnitSuffix')}",
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveStatusMiniStat({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 18),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: Colors.white54,
+              fontSize: 10.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================================
+  // 🆕 [장학금 방 2026-09-17] "나의 성취별 현황" 카드 — 이번 달 기본별/보너스별을
+  // 항목별로 나열해서 학생이 "무엇을 하면 별이 쌓이는지" 직접 눈으로 확인하고
+  // 성취감·동기부여를 느끼도록 만든 카드. 안내문은 별도 버튼으로 펼쳐볼 수 있게 구성.
+  // ============================================================================
+  Widget _buildAchievementStarsCard() {
+    final int monthlyTotal =
+        _scholarshipMonthlyBaseStars + _scholarshipMonthlyBonusStars;
+    final List<Color> bonusColors = [
+      const Color(0xFFFF9500),
+      const Color(0xFF34C759),
+      const Color(0xFF60A5FA),
+      const Color(0xFFAF52DE),
+      const Color(0xFFFF3B30),
+      const Color(0xFFFFCC00),
+      const Color(0xFF5856D6),
+    ];
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF11192E), Color(0xFF0A0F1E)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _ThemeColors.brandGolden.withOpacity(0.35),
+          width: 1.3,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _ThemeColors.brandGolden.withOpacity(0.12),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(
+              () => _isAchievementStarsCardExpanded =
+                  !_isAchievementStarsCardExpanded,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    color: _ThemeColors.brandGolden,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _t('achievementStarsCardTitle'),
+                  style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+              Icon(_isAchievementStarsCardExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: _ThemeColors.brandGolden),
+                ],
+              ),
+            ),
+          ),
+          if (_isAchievementStarsCardExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: _isScholarshipDataLoading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: _ThemeColors.brandGolden,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 이번 달 총합 요약
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                _ThemeColors.brandGolden.withOpacity(0.18),
+                                Colors.transparent,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _ThemeColors.brandGolden.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_t('monthlyTotalStarsLabel'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "$monthlyTotal개",
+                                    style: GoogleFonts.notoSansKr(
+                                      color: _ThemeColors.brandGolden,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 22,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Icon(
+                                Icons.star_rounded,
+                                color: Color(0xFFFFD700),
+                                size: 30,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 기본별 / 보너스별 구분
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildLiveStatusMiniStat(
+                                icon: Icons.timer_outlined,
+                                iconColor: const Color(0xFF34C759),
+                                label: _t('monthlyBaseStarsLabel'),
+                                value: "$_scholarshipMonthlyBaseStars개",
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildLiveStatusMiniStat(
+                                icon: Icons.auto_awesome_rounded,
+                                iconColor: const Color(0xFFAF52DE),
+                                label: _t('bonusStarsLabel'),
+                                value: "$_scholarshipMonthlyBonusStars개",
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        if (_scholarshipBonusBreakdown.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Text(_t('bonusBreakdownTitle'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          ..._scholarshipBonusBreakdown.entries
+                              .toList()
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                                final int idx = entry.key;
+                                final String typeKey = entry.value.key;
+                                final int count = entry.value.value;
+                                final String label = _bonusLabel(typeKey);
+                                final int perEvent =
+                                    _bonusTypeStarAmount[typeKey] ?? 0;
+                                final Color chipColor =
+                                    bonusColors[idx % bonusColors.length];
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 3.0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: chipColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "$label (+$perEvent × ${count}회)",
+                                          style: GoogleFonts.notoSansKr(
+                                            color: Colors.white,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        "+${perEvent * count}",
+                                        style: GoogleFonts.notoSansKr(
+                                          color: chipColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                        ],
+
+                        // 🆕 [실시간 장학금 금액 2026-09-17] 부모님이 선택한 유형 기준으로
+                        // 계산된 최종 금액만 실시간 표시. 별 단가(원/별)는 학생 화면에 노출하지 않음.
+                        if (_myLinkCode != null) ...[
+                          const SizedBox(height: 14),
+                          _buildLiveScholarshipAmount(),
+                        ],
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: _ThemeColors.brandGolden.withOpacity(
+                                  0.6,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 11),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: _showScholarshipNoticeDialog,
+                            icon: const Icon(
+                              Icons.info_outline_rounded,
+                              color: _ThemeColors.brandGolden,
+                              size: 16,
+                            ),
+                            label: Text(_t('howToEarnStarsBtn'), style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [실시간 장학금 금액 2026-09-17] 부모님이 이번 달 선택한 유형을 Firestore에서 실시간
+  // 구독해서, 그 유형 기준 최종 금액만 계산해 보여줍니다. 별 단가·계산식은 노출하지 않고
+  // 최종 금액 한 줄만 표시합니다.
+  Widget _buildLiveScholarshipAmount() {
+    final String monthKey =
+        '${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}';
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(_myLinkCode!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !(snapshot.data?.exists ?? false)) {
+          return const SizedBox.shrink();
+        }
+        final Map<String, dynamic> data = snapshot.data!.data() ?? {};
+        final Map<String, dynamic> typeSelections = Map<String, dynamic>.from(
+          (data['scholarshipTypeSelections'] as Map?) ?? {},
+        );
+        final String? typeKey = typeSelections[monthKey] as String?;
+        final ScholarshipType? type = ScholarshipService.typeFromKey(typeKey);
+
+        if (type == null) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.black26,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _t('typeNotSelectedYet'),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, height: 1.5),
+            ),
+          );
+        }
+
+        final int monthlyTotal =
+            _scholarshipMonthlyBaseStars + _scholarshipMonthlyBonusStars;
+        final int amount = ScholarshipService.calculateAmountWon(
+          monthlyTotalStars: monthlyTotal,
+          type: type,
+        );
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                _ThemeColors.brandGolden.withOpacity(0.18),
+                Colors.transparent,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _ThemeColors.brandGolden.withOpacity(0.4),
+            ),
+          ),
+          child: Column(
+            children: [
+              Text("${ScholarshipService.typeLabelKo[type]} · ${_t('thisMonthEstimatedScholarship')}", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                "${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}원",
+                style: GoogleFonts.notoSansKr(
+                  color: _ThemeColors.brandGolden,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 24,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 🆕 [장학금 방 2026-09-17] 학생용 안내문 팝업.
+  // 🆕 [장학금 방 2026-09-17] 학생용 안내문 팝업. 별을 왜/어떻게 모으는지 설명해서
+  // 성취감과 동기부여를 만드는 것이 목적. (안내문 문구는 원장님이 작성하신 것을 그대로 반영)
+  void _showScholarshipNoticeDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: _ThemeColors.premiumCardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 560),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _ThemeColors.brandGolden.withOpacity(0.35),
+              width: 1.3,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(_t('scholarshipNoticeTitle'), style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white60),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(color: Colors.white10, height: 18),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(
+                    _scholarshipStudentNoticeText,
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 13,
+                      height: 1.7,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🆕 [다국어 2026-09-18] 언어별 안내문 맵. 'KO'/'EN'은 확정 완료.
+  // 나머지 10개(JA/ZH/FR/DE/RU/AR/HI/VI/ES/TH)는 원장님이 번역해서
+  // 큰따옴표 3개(''') 사이에 그대로 채워 넣으시면 됩니다.
+  static const Map<String, String> _scholarshipStudentNoticeByLang = {
+    'KO': '''
+나의 공부가 기록되고, 나의 성장이 성취가 됩니다.
+
+GKE StudyUp은 누가 시켜서 공부하는 것이 아니라 내가 스스로 계획하고 실천하는 힘을 키우기 위한 학습 플랫폼입니다.
+
+내가 공부한 시간, 학습을 실천한 과정, 학습기록과 평가를 남긴 활동은 별로 기록됩니다. 별은 단순한 점수가 아닙니다.
+
+⭐ 별은 내가 스스로 공부한 흔적입니다.
+
+⭐ 어떻게 별을 받을 수 있을까요?
+
+1. 학습시간
+1분 학습 = 1별
+꾸준히 공부할수록 나의 학습 기록이 쌓입니다.
+
+2. 학습 실천
+타이머 학습을 70% 이상 달성하면 +10별
+학습을 마친 후 학습기록을 작성하면 +10별
+
+3. 학습평가와 기록
+· 주간평가 기록 → +10별
+· 단원평가 기록 → +10별
+· 중간고사 기록 → +50별
+· 기말고사 기록 → +50별
+· 모의고사 기록 → +50별
+
+시험 점수가 높다고 별을 받는 것이 아닙니다. 시험 결과를 기록하고, 내가 무엇을 잘했고 무엇을 보완해야 하는지 돌아보는 과정도 중요한 학습이라고 생각하기 때문입니다.
+
+4. 꾸준함 보너스
+· 하루 50분 이상 타이머가 작동하여 학습하면 → +50별 (일일 출석 보너스)
+· 일주일(일요일~토요일) 동안 빠짐없이 매일 타이머가 작동하여 학습하면 → +300별 (주간 개근 보너스)
+· 한 달 동안 빠짐없이 매일 타이머가 작동하여 학습하면 → +1,000별 (월간 개근 보너스)
+
+꾸준함 보너스는 앱을 그냥 열어본 것이 아니라, 반드시 타이머가 실제로 작동하여 학습한 시간만을 기준으로 합니다. 하루하루 빠짐없이 이어가는 것 자체가 소중한 성취이기 때문입니다.
+
+🌱 성장형 — "나는 공부 습관을 만들어 가고 있어요."
+🔥 도전형 — "조금 더 높은 목표에 도전해 볼래요."
+🏆 성취형 — "내가 세운 목표를 스스로 이루어 가고 있어요."
+
+유형의 핵심은 돈이 아닙니다. 내가 얼마나 스스로 성장하고 있는가가 중요합니다.
+
+🎯 기억하세요!
+공부는 남과 경쟁하기 위한 것이 아닙니다. 어제의 나보다 오늘의 내가 조금 더 성장하고, 오늘의 나보다 내일의 내가 조금 더 발전하는 것입니다.
+
+오늘 10분 더 공부했다면 그것도 성장입니다.
+오늘 학습기록을 남겼다면 그것도 성장입니다.
+시험 결과를 돌아봤다면 그것도 성장입니다.
+
+작은 실천이 모이면 습관이 되고, 습관이 모이면 실력이 되고, 실력이 모이면 성취가 됩니다.
+
+⭐ 나의 공부는 내가 만들어 갑니다.
+계획하고 → 실천하고 → 기록하고 → 돌아보고 → 다시 도전하세요.
+
+GKE StudyUp
+Global Knowledge Education
+''',
+    'EN': '''
+Your effort is recorded, and your growth becomes an achievement.
+
+GKE StudyUp isn't a platform where you study because someone tells you to — it's here to help you build the power to plan and act on your own.
+
+The time you study, the effort you put in, and the records and evaluations you leave behind are all recorded as stars. Stars aren't just points.
+
+⭐ Stars are the trace of your own self-directed study.
+
+⭐ How do I earn stars?
+
+1. Study Time
+1 minute of study = 1 star
+The more consistently you study, the more your record grows.
+
+2. Study Practice
+Complete 70% or more of a timer session → +10 stars
+Write a study record after finishing → +10 stars
+
+3. Assessments and Records
+· Weekly assessment logged → +10 stars
+· Unit test logged → +10 stars
+· Midterm exam logged → +50 stars
+· Final exam logged → +50 stars
+· Mock exam logged → +50 stars
+
+You don't earn stars for a high score. You earn them for the act of recording your results and reflecting on what you did well and what you can improve — because that reflection is meaningful learning too.
+
+4. Consistency Bonuses
+· Study 50+ minutes in a day with the timer actually running → +50 stars (Daily Attendance Bonus)
+· Study every single day for a full week (Sunday–Saturday) with the timer running → +300 stars (Weekly Perfect Attendance Bonus)
+· Study every single day for a full month with the timer running → +1,000 stars (Monthly Perfect Attendance Bonus)
+
+Consistency bonuses are based only on time the timer actually ran — simply opening the app doesn't count. Showing up day after day, without missing one, is an achievement in itself.
+
+🌱 Growth Type — "I'm building a study habit."
+🔥 Challenge Type — "I want to aim a little higher."
+🏆 Achievement Type — "I'm reaching the goals I set for myself."
+
+The type isn't about the money. What matters is how much you're growing on your own.
+
+🎯 Remember this!
+Studying isn't about competing with others. It's about being a little better today than you were yesterday, and a little better tomorrow than you are today.
+
+Studying 10 minutes longer today — that's growth.
+Leaving a study record today — that's growth.
+Reflecting on your exam results — that's growth too.
+
+Small actions become habits. Habits become skill. Skill becomes achievement.
+
+⭐ You are the one building your own study journey.
+Plan → Act → Record → Reflect → Try again.
+
+GKE StudyUp
+Global Knowledge Education
+''',
+    // 🔽 원장님이 채워주실 자리 (10개국어) — 큰따옴표 3개 사이에 번역문을 그대로 붙여넣으시면 됩니다
+    'JA': '', // 일본어
+    'ZH': '', // 중국어
+    'FR': '', // 프랑스어
+    'DE': '', // 독일어
+    'RU': '', // 러시아어
+    'AR': '', // 아랍어
+    'HI': '', // 힌디어
+    'VI': '', // 베트남어
+    'ES': '', // 스페인어
+    'TH': '', // 태국어
+  };
+
+  // 🆕 현재 선택된 언어에 맞는 안내문 반환. 해당 언어가 아직 비어있으면(원장님이 아직
+  // 안 채우신 언어) 영어로, 영어도 없으면 한국어로 자동 대체(fallback)되어 앱이
+  // 절대 빈 화면을 보여주지 않도록 함.
+  String get _scholarshipStudentNoticeText {
+    final String code = DkeLang.current.toUpperCase();
+    final String? text = _scholarshipStudentNoticeByLang[code];
+    if (text != null && text.trim().isNotEmpty) return text;
+    return _scholarshipStudentNoticeByLang['EN']!.trim().isNotEmpty
+        ? _scholarshipStudentNoticeByLang['EN']!
+        : _scholarshipStudentNoticeByLang['KO']!;
   }
 
   @override
@@ -1524,306 +4745,562 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         centerTitle: true,
       ),
       body: _isRecordsLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE5C158)))
-          : SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFE5C158)),
+            )
+          : IndexedStack(
+              index: _currentBottomTab,
+              children: [
+                _buildLiveAchievementTabContent(),
+                _buildAchievementStarsTabContent(),
+              ],
+            ),
+      bottomNavigationBar: _isRecordsLoading
+          ? null
+          : BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _currentBottomTab,
+              backgroundColor: _ThemeColors.premiumCardBg,
+              selectedItemColor: _ThemeColors.brandGolden,
+              unselectedItemColor: Colors.white38,
+              selectedLabelStyle: GoogleFonts.notoSansKr(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+              unselectedLabelStyle: GoogleFonts.notoSansKr(fontSize: 11),
+              onTap: (index) => setState(() => _currentBottomTab = index),
+              items: [
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.bolt_rounded),
+                  label: _t('liveAchievementTab'),
                 ),
-                child: Column(
-                  children: [
-                    Text(
-                      _schoolGradeNameDisplay, // 🆕 [요청 2026-09-04] 실제 "학교 학년 이름"으로 표시
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
-                      maxLines: 1,
-                      style: GoogleFonts.notoSansKr(
-                        color: _ThemeColors.brandGolden,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      DkeLang.currentLearnersMsg,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
-                      maxLines: 1,
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.emoji_events_rounded),
+                  label: _t('liveStarsTab'),
+                ),
+              ],
+            ),
+    );
+  }
+
+  // 🆕 [장학금 방 UI 개편 2026-09-17] 탭1 "실시간 학습성취" — 기존에 이 화면에 있던 모든
+  // 콘텐츠(종합리포트/상세분석 버튼, 레벨·별, 목표달성도, 성적 기록, 평가 차트, 일/주/월/연
+  // 학습시간 그래프, 생활균형 등)를 그대로 담습니다. 내용은 단 하나도 바뀌지 않았고,
+  // 감싸던 SingleChildScrollView/Padding/Column 구조만 별도 메서드로 옮겼습니다.
+  Widget _buildLiveAchievementTabContent() {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _ThemeColors.brandGolden.withOpacity(0.25),
+                  width: 1.2,
                 ),
               ),
-
-              Row(
+              child: Column(
                 children: [
-                  _buildTopButton(_t('totalReport'), 40, _buildTotalReportContent, isTotalReport: true),
-                  const SizedBox(width: 8),
-                  _buildTopButton(_t('detailedAnalytics'), 60, _buildDetailedReportContent),
+                  Text(
+                    _schoolGradeNameDisplay,
+                    // 🆕 [요청 2026-09-04] 실제 "학교 학년 이름"으로 표시
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    maxLines: 1,
+                    style: GoogleFonts.notoSansKr(
+                      color: _ThemeColors.brandGolden,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    DkeLang.currentLearnersMsg,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    maxLines: 1,
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
+            ),
 
-              // 🆕 [⑤⑥⑦번] 오늘 학습한 과목 카드 - 타이머에서 기록한 오늘 세션이 이 화면에 실시간으로 보이도록 추가
-              _buildTodaySessionsCard(),
+            Row(
+              children: [
+                _buildTopButton(
+                  _t('totalReport'),
+                  40,
+                  _buildTotalReportContent,
+                  isTotalReport: true,
+                ),
+                const SizedBox(width: 8),
+                _buildTopButton(
+                  _t('detailedAnalytics'),
+                  60,
+                  _buildDetailedReportContent,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
 
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+            // 🆕 [⑤⑥⑦번] 오늘 학습한 과목 카드 - 타이머에서 기록한 오늘 세션이 이 화면에 실시간으로 보이도록 추가
+            _buildTodaySessionsCard(),
+
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _ThemeColors.brandGolden.withOpacity(0.25),
+                          width: 1.2,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_t('nextLevelRoad'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            Text('${_t('levelPrefix')}$_currentLevelNumber', overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
-                            const SizedBox(height: 6),
-                            Row(
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _t('nextLevelRoad'),
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                            maxLines: 1,
+                            style: GoogleFonts.notoSansKr(
+                              color: Colors.white70,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '${_t('levelPrefix')}$_currentLevelNumber',
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                            maxLines: 1,
+                            style: GoogleFonts.notoSansKr(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              _buildLuxuryGlowingStar(),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  '$_totalStars ${_t('starsUnitSuffix')}',
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  maxLines: 1,
+                                  style: GoogleFonts.gowunBatang(
+                                    color: _ThemeColors.brandGolden,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          RichText(
+                            overflow: TextOverflow.fade,
+                            softWrap: true,
+                            text: TextSpan(
+                              style: GoogleFonts.notoSansKr(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
                               children: [
-                                _buildLuxuryGlowingStar(),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    '$_totalStars ${_t('starsUnitSuffix')}',
-                                    overflow: TextOverflow.fade,
-                                    softWrap: false,
-                                    maxLines: 1,
-                                    style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                                TextSpan(
+                                  text: _t('friendRank'),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                TextSpan(
+                                  text: '$_realFriendRankDisplay\n\n',
+                                  style: const TextStyle(
+                                    color: _ThemeColors.brandGolden,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: _t('globalRank'),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                TextSpan(
+                                  text: _realGlobalRankDisplay,
+                                  style: const TextStyle(
+                                    color: _ThemeColors.brandGolden,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            RichText(
-                              overflow: TextOverflow.fade,
-                              softWrap: true,
-                              text: TextSpan(
-                                style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold),
-                                children: [
-                                  TextSpan(text: _t('friendRank'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: '$_realFriendRankDisplay\n\n', style: const TextStyle(color: _ThemeColors.brandGolden)),
-                                  TextSpan(text: _t('globalRank'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: _realGlobalRankDisplay, style: const TextStyle(color: _ThemeColors.brandGolden)),
-                                ],
-                              ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 8,
+                              horizontal: 10,
                             ),
-                            const SizedBox(height: 12),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                              decoration: BoxDecoration(color: const Color(0x2AFFFFFF), borderRadius: BorderRadius.circular(8)),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(_t('targetUniversity'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  const SizedBox(height: 3),
-                                  // 🆕 [데이터 연결-버그 수정] 마이페이지에서 실제로 저장한 목표 대학을 표시.
-                                  // 아직 저장된 값이 없으면(신규 유저) 안내용 기본값(_t('snu'))을 그대로 보여줌.
-                                  Text(_realTargetUniversity ?? _t('snu'), style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.fade, softWrap: false, maxLines: 1),
-                                ],
-                              ),
+                            decoration: BoxDecoration(
+                              color: const Color(0x2AFFFFFF),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Flexible(child: Text(_t('goalAttainment'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14.5, fontWeight: FontWeight.bold))),
-                                Text("$_realGoalAttainmentPercent%", style: GoogleFonts.notoSansKr(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 13.2)),
+                                Text(
+                                  _t('targetUniversity'),
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  maxLines: 1,
+                                  style: GoogleFonts.notoSansKr(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                // 🆕 [데이터 연결-버그 수정] 마이페이지에서 실제로 저장한 목표 대학을 표시.
+                                // 아직 저장된 값이 없으면(신규 유저) 안내용 기본값(_t('snu'))을 그대로 보여줌.
+                                Text(
+                                  _realTargetUniversity ?? _t('snu'),
+                                  style: GoogleFonts.notoSansKr(
+                                    color: _ThemeColors.brandGolden,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  maxLines: 1,
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            RichText(
-                              overflow: TextOverflow.fade,
-                              softWrap: true,
-                              text: TextSpan(
-                                style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold, height: 1.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _ThemeColors.brandGolden.withOpacity(0.25),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _t('goalAttainment'),
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  maxLines: 1,
+                                  style: GoogleFonts.notoSansKr(
+                                    color: Colors.white70,
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                "$_realGoalAttainmentPercent%",
+                                style: GoogleFonts.notoSansKr(
+                                  color: Colors.greenAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          RichText(
+                            overflow: TextOverflow.fade,
+                            softWrap: true,
+                            text: TextSpan(
+                              style: GoogleFonts.notoSansKr(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                height: 1.5,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: _t('todayVsYesterday'),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                TextSpan(
+                                  text:
+                                      "${_realTodayVsYesterdayPercent >= 0 ? '+' : ''}$_realTodayVsYesterdayPercent%\n\n",
+                                  style: const TextStyle(
+                                    color: _ThemeColors.brandGolden,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: _t('mostImprovedSubject'),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                TextSpan(
+                                  text:
+                                      "${_realMostImprovedSubject != null ? _subjectName(_realMostImprovedSubject!) : _t('dataCollectingMsg')}\n\n",
+                                  style: const TextStyle(
+                                    color: _ThemeColors.brandGolden,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: _t('mostStudiedSubject'),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                TextSpan(
+                                  text: _realMostStudiedSubject != null
+                                      ? _subjectName(_realMostStudiedSubject!)
+                                      : _t('dataCollectingMsg'),
+                                  style: const TextStyle(
+                                    color: _ThemeColors.brandGolden,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0x1F34C759),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.greenAccent.withOpacity(0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  TextSpan(text: _t('todayVsYesterday'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: "${_realTodayVsYesterdayPercent >= 0 ? '+' : ''}$_realTodayVsYesterdayPercent%\n\n", style: const TextStyle(color: _ThemeColors.brandGolden)),
-                                  TextSpan(text: _t('mostImprovedSubject'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: "${_realMostImprovedSubject != null ? _subjectName(_realMostImprovedSubject!) : _t('dataCollectingMsg')}\n\n", style: const TextStyle(color: _ThemeColors.brandGolden)),
-                                  TextSpan(text: _t('mostStudiedSubject'), style: const TextStyle(color: Colors.white)),
-                                  TextSpan(text: _realMostStudiedSubject != null ? _subjectName(_realMostStudiedSubject!) : _t('dataCollectingMsg'), style: const TextStyle(color: _ThemeColors.brandGolden)),
+                                  RichText(
+                                    overflow: TextOverflow.fade,
+                                    softWrap: true,
+                                    text: TextSpan(
+                                      style: GoogleFonts.notoSansKr(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        height: 1.4,
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: _t('totalStudyTimeLabel'),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text:
+                                              '${(_realTotalStudyMinutesAllTime / 60).toStringAsFixed(1)} ${_t('hoursUnitSuffix')}',
+                                          style: const TextStyle(
+                                            color: _ThemeColors.brandGolden,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            Expanded(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x1F34C759),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.greenAccent.withOpacity(0.2), width: 1),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    RichText(
-                                      overflow: TextOverflow.fade,
-                                      softWrap: true,
-                                      text: TextSpan(
-                                        style: GoogleFonts.notoSansKr(fontSize: 13, fontWeight: FontWeight.bold, height: 1.4),
-                                        children: [
-                                          TextSpan(text: _t('totalStudyTimeLabel'), style: const TextStyle(color: Colors.white)),
-                                          TextSpan(text: '${(_realTotalStudyMinutesAllTime / 60).toStringAsFixed(1)} ${_t('hoursUnitSuffix')}', style: const TextStyle(color: _ThemeColors.brandGolden)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 18),
+            ),
+            const SizedBox(height: 18),
 
-              _buildMyExamScoreSection(),
-              const SizedBox(height: 20),
+            _buildMyExamScoreSection(),
+            const SizedBox(height: 20),
 
-              _buildFixedEvaluationChart(_selectedExamType ?? "주평가"),
+            _buildFixedEvaluationChart(_selectedExamType ?? "주평가"),
 
-              _buildBeautifulFeedbackDisplayPanel(),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D1527),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Color(0xFFE5C158), width: 1.2),
+            _buildBeautifulFeedbackDisplayPanel(),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D1527),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(
+                      color: Color(0xFFE5C158),
+                      width: 1.2,
                     ),
                   ),
-                  onPressed: () async {
-                    String currentType = _selectedExamType ?? "주평가";
-                    final filtered = _allRecords.where((r) => r.type == currentType).toList();
-                    String diagnosisText;
+                ),
+                onPressed: () async {
+                  String currentType = _selectedExamType ?? "주평가";
+                  final filtered = _allRecords
+                      .where((r) => r.type == currentType)
+                      .toList();
+                  String diagnosisText;
 
-                    if (filtered.isEmpty) {
-                      diagnosisText = _t('emptyFallbackShort');
-                    } else {
-                      final lastExam = filtered.last;
-                      // 🆕 [5번] 유사 점수대 진단은 캐시 재사용 / [7번] 일반 리포트 = AI Light 배정 예정
-                      diagnosisText = await _generateOrReuseDiagnosis(
-                        type: currentType,
-                        score: lastExam.score,
-                        subject: lastExam.subject,
-                        tier: AiTier.light,
-                      );
-                    }
+                  if (filtered.isEmpty) {
+                    diagnosisText = _t('emptyFallbackShort');
+                  } else {
+                    final lastExam = filtered.last;
+                    // 🆕 [5번] 유사 점수대 진단은 캐시 재사용 / [7번] 일반 리포트 = AI Light 배정 예정
+                    diagnosisText = await _generateOrReuseDiagnosis(
+                      type: currentType,
+                      score: lastExam.score,
+                      subject: lastExam.subject,
+                      tier: AiTier.light,
+                    );
+                  }
 
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString('dke_parent_shared_type', currentType);
-                    await prefs.setString('dke_parent_shared_diagnosis', diagnosisText);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('dke_parent_shared_type', currentType);
+                  await prefs.setString(
+                    'dke_parent_shared_diagnosis',
+                    diagnosisText,
+                  );
 
-                    _showReportPopup(context, _t('diagReportTitle'), diagnosisText);
-                  },
-                  icon: const Icon(Icons.psychology_outlined, color: Color(0xFFE5C158), size: 18),
-                  label: Text(
-                    "[${_examTypeLabel(_selectedExamType ?? '주평가')} ${_t('viewAnalysisReport')}] 🔺",
-                    overflow: TextOverflow.fade,
-                    softWrap: false,
-                    maxLines: 1,
-                    style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontSize: 13, fontWeight: FontWeight.bold),
+                  _showReportPopup(
+                    context,
+                    _t('diagReportTitle'),
+                    diagnosisText,
+                  );
+                },
+                icon: const Icon(
+                  Icons.psychology_outlined,
+                  color: Color(0xFFE5C158),
+                  size: 18,
+                ),
+                label: Text(
+                  "[${_examTypeLabel(_selectedExamType ?? '주평가')} ${_t('viewAnalysisReport')}] 🔺",
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  maxLines: 1,
+                  style: GoogleFonts.notoSansKr(
+                    color: const Color(0xFFE5C158),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              Text(
-                "Learning Duration Summary",
-                overflow: TextOverflow.fade,
-                softWrap: false,
-                maxLines: 1,
-                style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
+            ),
+            Text(
+              "Learning Duration Summary",
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              maxLines: 1,
+              style: GoogleFonts.gowunBatang(
+                color: _ThemeColors.brandGolden,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                letterSpacing: 0.5,
               ),
-              Text(
-                _t('studyTime'),
-                overflow: TextOverflow.fade,
-                softWrap: false,
-                maxLines: 1,
-                style: GoogleFonts.notoSansKr(
-                  color: _ThemeColors.brandGolden,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
-                ),
+            ),
+            Text(
+              _t('studyTime'),
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              maxLines: 1,
+              style: GoogleFonts.notoSansKr(
+                color: _ThemeColors.brandGolden,
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
               ),
-              const SizedBox(height: 10),
+            ),
+            const SizedBox(height: 10),
 
-              Container(
-                width: double.infinity,
-                height: 52,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D1527),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3), width: 1.2),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicatorPadding: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 3),
-                  indicator: const BoxDecoration(color: _ThemeColors.brandGolden, borderRadius: BorderRadius.all(Radius.circular(8))),
-                  labelColor: Colors.black,
-                  unselectedLabelColor: Colors.white,
-                  labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 4.0),
-                  unselectedLabelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 4.0),
-                  tabs: [
-                    Tab(text: _t('daily')),
-                    Tab(text: _t('weekly')),
-                    Tab(text: _t('monthly')),
-                    Tab(text: _t('yearly')),
-                  ],
+            Container(
+              width: double.infinity,
+              height: 52,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1527),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _ThemeColors.brandGolden.withOpacity(0.3),
+                  width: 1.2,
                 ),
               ),
-              const SizedBox(height: 14),
-              _buildAdvancedChartDashboard(_tabController.index),
-            ],
-          ),
+              child: TabBar(
+                controller: _tabController,
+                indicatorPadding: const EdgeInsets.symmetric(
+                  horizontal: 0.5,
+                  vertical: 3,
+                ),
+                indicator: const BoxDecoration(
+                  color: _ThemeColors.brandGolden,
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+                labelColor: Colors.black,
+                unselectedLabelColor: Colors.white,
+                labelStyle: GoogleFonts.notoSansKr(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: 4.0,
+                ),
+                unselectedLabelStyle: GoogleFonts.notoSansKr(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  letterSpacing: 4.0,
+                ),
+                tabs: [
+                  Tab(text: _t('daily')),
+                  Tab(text: _t('weekly')),
+                  Tab(text: _t('monthly')),
+                  Tab(text: _t('yearly')),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildAdvancedChartDashboard(_tabController.index),
+            _buildLiveStatusCard(),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🆕 [장학금 방 UI 개편 2026-09-17] 탭2 "실시간 성취별" — 기본별/보너스별 내역과
+  // 안내문을 담은 "나의 성취별 현황" 카드를 별도 탭으로 분리했습니다.
+  Widget _buildAchievementStarsTabContent() {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [_buildAchievementStarsCard()],
         ),
       ),
     );
@@ -1831,11 +5308,76 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [2, 3번] 시험 유형(주평가/단원평가 등) 한글 키는 데이터 키로 그대로 유지하되, 화면 표시만 영문 병기
   static const Map<String, Map<String, String>> _examTypeMap = {
-    "주평가": {'KO':'주평가','EN':'Weekly','JA':'週次評価','ZH':'周评估','FR':'Éval. hebdo','DE':'Wochentest','RU':'Еженед. оценка','AR':'تقييم أسبوعي','HI':'साप्ताहिक मूल्यांकन','VI':'Đánh giá tuần','ES':'Eval. semanal','TH':'ประเมินรายสัปดาห์'},
-    "단원평가": {'KO':'단원평가','EN':'Unit Test','JA':'単元評価','ZH':'单元测验','FR':"Test d'unité",'DE':'Einheitstest','RU':'Тест по разделу','AR':'اختبار الوحدة','HI':'यूनिट टेस्ट','VI':'Kiểm tra chương','ES':'Prueba de unidad','TH':'ทดสอบบทเรียน'},
-    "중간고사": {'KO':'중간고사','EN':'Midterm','JA':'中間試験','ZH':'期中考试','FR':'Mi-parcours','DE':'Zwischenprüfung','RU':'Промежуточный','AR':'اختبار نصفي','HI':'मिडटर्म','VI':'Giữa kỳ','ES':'Parcial','TH':'กลางภาค'},
-    "기말고사": {'KO':'기말고사','EN':'Final','JA':'期末試験','ZH':'期末考试','FR':'Final','DE':'Abschlussprüfung','RU':'Итоговый','AR':'اختبار نهائي','HI':'फाइनल','VI':'Cuối kỳ','ES':'Final','TH':'ปลายภาค'},
-    "모의고사": {'KO':'모의고사','EN':'Mock Exam','JA':'模試','ZH':'模拟考试','FR':'Examen blanc','DE':'Testexamen','RU':'Пробный экзамен','AR':'اختبار تجريبي','HI':'मॉक परीक्षा','VI':'Thi thử','ES':'Examen simulado','TH':'ข้อสอบจำลอง'},
+    "주평가": {
+      'KO': '주평가',
+      'EN': 'Weekly',
+      'JA': '週次評価',
+      'ZH': '周评估',
+      'FR': 'Éval. hebdo',
+      'DE': 'Wochentest',
+      'RU': 'Еженед. оценка',
+      'AR': 'تقييم أسبوعي',
+      'HI': 'साप्ताहिक मूल्यांकन',
+      'VI': 'Đánh giá tuần',
+      'ES': 'Eval. semanal',
+      'TH': 'ประเมินรายสัปดาห์',
+    },
+    "단원평가": {
+      'KO': '단원평가',
+      'EN': 'Unit Test',
+      'JA': '単元評価',
+      'ZH': '单元测验',
+      'FR': "Test d'unité",
+      'DE': 'Einheitstest',
+      'RU': 'Тест по разделу',
+      'AR': 'اختبار الوحدة',
+      'HI': 'यूनिट टेस्ट',
+      'VI': 'Kiểm tra chương',
+      'ES': 'Prueba de unidad',
+      'TH': 'ทดสอบบทเรียน',
+    },
+    "중간고사": {
+      'KO': '중간고사',
+      'EN': 'Midterm',
+      'JA': '中間試験',
+      'ZH': '期中考试',
+      'FR': 'Mi-parcours',
+      'DE': 'Zwischenprüfung',
+      'RU': 'Промежуточный',
+      'AR': 'اختبار نصفي',
+      'HI': 'मिडटर्म',
+      'VI': 'Giữa kỳ',
+      'ES': 'Parcial',
+      'TH': 'กลางภาค',
+    },
+    "기말고사": {
+      'KO': '기말고사',
+      'EN': 'Final',
+      'JA': '期末試験',
+      'ZH': '期末考试',
+      'FR': 'Final',
+      'DE': 'Abschlussprüfung',
+      'RU': 'Итоговый',
+      'AR': 'اختبار نهائي',
+      'HI': 'फाइनल',
+      'VI': 'Cuối kỳ',
+      'ES': 'Final',
+      'TH': 'ปลายภาค',
+    },
+    "모의고사": {
+      'KO': '모의고사',
+      'EN': 'Mock Exam',
+      'JA': '模試',
+      'ZH': '模拟考试',
+      'FR': 'Examen blanc',
+      'DE': 'Testexamen',
+      'RU': 'Пробный экзамен',
+      'AR': 'اختبار تجريبي',
+      'HI': 'मॉक परीक्षा',
+      'VI': 'Thi thử',
+      'ES': 'Examen simulado',
+      'TH': 'ข้อสอบจำลอง',
+    },
   };
 
   static String _examTypeLabel(String typeKey) {
@@ -1846,12 +5388,78 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [12개국 확장] 난이도 / 실수 원인 / 복습 필요 여부 — 데이터 키(한글)는 그대로 저장, 화면 표시만 다국어 병기
   static const Map<String, Map<String, String>> _difficultyMap = {
-    "매우쉬움": {'KO':'매우쉬움','EN':'Very Easy','JA':'とても簡単','ZH':'非常容易','FR':'Très facile','DE':'Sehr leicht','RU':'Очень легко','AR':'سهل جدًا','HI':'बहुत आसान','VI':'Rất dễ','ES':'Muy fácil','TH':'ง่ายมาก'},
-    "쉬움": {'KO':'쉬움','EN':'Easy','JA':'簡単','ZH':'容易','FR':'Facile','DE':'Leicht','RU':'Легко','AR':'سهل','HI':'आसान','VI':'Dễ','ES':'Fácil','TH':'ง่าย'},
-    "보통": {'KO':'보통','EN':'Normal','JA':'普通','ZH':'普通','FR':'Normal','DE':'Normal','RU':'Средне','AR':'متوسط','HI':'सामान्य','VI':'Trung bình','ES':'Normal','TH':'ปานกลาง'},
-    "어려움": {'KO':'어려움','EN':'Hard','JA':'難しい','ZH':'困难','FR':'Difficile','DE':'Schwer','RU':'Сложно','AR':'صعب','HI':'कठिन','VI':'Khó','ES':'Difícil','TH':'ยาก'},
-    "매우어려움": {'KO':'매우어려움','EN':'Very Hard','JA':'とても難しい','ZH':'非常困难','FR':'Très difficile','DE':'Sehr schwer','RU':'Очень сложно','AR':'صعب جدًا','HI':'बहुत कठिन','VI':'Rất khó','ES':'Muy difícil','TH':'ยากมาก'},
+    "매우쉬움": {
+      'KO': '매우쉬움',
+      'EN': 'Very Easy',
+      'JA': 'とても簡単',
+      'ZH': '非常容易',
+      'FR': 'Très facile',
+      'DE': 'Sehr leicht',
+      'RU': 'Очень легко',
+      'AR': 'سهل جدًا',
+      'HI': 'बहुत आसान',
+      'VI': 'Rất dễ',
+      'ES': 'Muy fácil',
+      'TH': 'ง่ายมาก',
+    },
+    "쉬움": {
+      'KO': '쉬움',
+      'EN': 'Easy',
+      'JA': '簡単',
+      'ZH': '容易',
+      'FR': 'Facile',
+      'DE': 'Leicht',
+      'RU': 'Легко',
+      'AR': 'سهل',
+      'HI': 'आसान',
+      'VI': 'Dễ',
+      'ES': 'Fácil',
+      'TH': 'ง่าย',
+    },
+    "보통": {
+      'KO': '보통',
+      'EN': 'Normal',
+      'JA': '普通',
+      'ZH': '普通',
+      'FR': 'Normal',
+      'DE': 'Normal',
+      'RU': 'Средне',
+      'AR': 'متوسط',
+      'HI': 'सामान्य',
+      'VI': 'Trung bình',
+      'ES': 'Normal',
+      'TH': 'ปานกลาง',
+    },
+    "어려움": {
+      'KO': '어려움',
+      'EN': 'Hard',
+      'JA': '難しい',
+      'ZH': '困难',
+      'FR': 'Difficile',
+      'DE': 'Schwer',
+      'RU': 'Сложно',
+      'AR': 'صعب',
+      'HI': 'कठिन',
+      'VI': 'Khó',
+      'ES': 'Difícil',
+      'TH': 'ยาก',
+    },
+    "매우어려움": {
+      'KO': '매우어려움',
+      'EN': 'Very Hard',
+      'JA': 'とても難しい',
+      'ZH': '非常困难',
+      'FR': 'Très difficile',
+      'DE': 'Sehr schwer',
+      'RU': 'Очень сложно',
+      'AR': 'صعب جدًا',
+      'HI': 'बहुत कठिन',
+      'VI': 'Rất khó',
+      'ES': 'Muy difícil',
+      'TH': 'ยากมาก',
+    },
   };
+
   static String _difficultyLabel(String key) {
     final map = _difficultyMap[key];
     if (map == null) return key;
@@ -1859,14 +5467,106 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   }
 
   static const Map<String, Map<String, String>> _causeMap = {
-    "개념부족": {'KO':'개념부족','EN':'Concept Gap','JA':'概念不足','ZH':'概念不足','FR':'Manque de concept','DE':'Konzeptlücke','RU':'Пробел в понятиях','AR':'ضعف في المفهوم','HI':'अवधारणा की कमी','VI':'Thiếu khái niệm','ES':'Falta de concepto','TH':'ขาดความเข้าใจแนวคิด'},
-    "계산실수": {'KO':'계산실수','EN':'Calc Error','JA':'計算ミス','ZH':'计算错误','FR':'Erreur de calcul','DE':'Rechenfehler','RU':'Ошибка в расчёте','AR':'خطأ حسابي','HI':'गणना त्रुटि','VI':'Lỗi tính toán','ES':'Error de cálculo','TH':'คำนวณผิด'},
-    "시간부족": {'KO':'시간부족','EN':'Time Short','JA':'時間不足','ZH':'时间不足','FR':'Manque de temps','DE':'Zeitmangel','RU':'Не хватило времени','AR':'ضيق الوقت','HI':'समय की कमी','VI':'Thiếu thời gian','ES':'Falta de tiempo','TH':'เวลาไม่พอ'},
-    "문해력 부족": {'KO':'문해력 부족','EN':'Reading Gap','JA':'読解力不足','ZH':'阅读理解不足','FR':'Manque de lecture','DE':'Leseschwäche','RU':'Слабое понимание текста','AR':'ضعف في الفهم القرائي','HI':'पठन कमी','VI':'Thiếu kỹ năng đọc hiểu','ES':'Falta de comprensión lectora','TH':'ขาดทักษะการอ่าน'},
-    "긴장": {'KO':'긴장','EN':'Nervous','JA':'緊張','ZH':'紧张','FR':'Nervosité','DE':'Nervosität','RU':'Нервозность','AR':'التوتر','HI':'घबराहट','VI':'Lo lắng','ES':'Nerviosismo','TH':'ความตื่นเต้น'},
-    "집중력 부족": {'KO':'집중력 부족','EN':'Focus Gap','JA':'集中力不足','ZH':'注意力不足','FR':'Manque de concentration','DE':'Konzentrationsmangel','RU':'Недостаток концентрации','AR':'ضعف التركيز','HI':'ध्यान की कमी','VI':'Thiếu tập trung','ES':'Falta de concentración','TH':'สมาธิไม่พอ'},
-    "기타": {'KO':'기타','EN':'Other','JA':'その他','ZH':'其他','FR':'Autre','DE':'Sonstiges','RU':'Другое','AR':'أخرى','HI':'अन्य','VI':'Khác','ES':'Otro','TH':'อื่นๆ'},
+    "개념부족": {
+      'KO': '개념부족',
+      'EN': 'Concept Gap',
+      'JA': '概念不足',
+      'ZH': '概念不足',
+      'FR': 'Manque de concept',
+      'DE': 'Konzeptlücke',
+      'RU': 'Пробел в понятиях',
+      'AR': 'ضعف في المفهوم',
+      'HI': 'अवधारणा की कमी',
+      'VI': 'Thiếu khái niệm',
+      'ES': 'Falta de concepto',
+      'TH': 'ขาดความเข้าใจแนวคิด',
+    },
+    "계산실수": {
+      'KO': '계산실수',
+      'EN': 'Calc Error',
+      'JA': '計算ミス',
+      'ZH': '计算错误',
+      'FR': 'Erreur de calcul',
+      'DE': 'Rechenfehler',
+      'RU': 'Ошибка в расчёте',
+      'AR': 'خطأ حسابي',
+      'HI': 'गणना त्रुटि',
+      'VI': 'Lỗi tính toán',
+      'ES': 'Error de cálculo',
+      'TH': 'คำนวณผิด',
+    },
+    "시간부족": {
+      'KO': '시간부족',
+      'EN': 'Time Short',
+      'JA': '時間不足',
+      'ZH': '时间不足',
+      'FR': 'Manque de temps',
+      'DE': 'Zeitmangel',
+      'RU': 'Не хватило времени',
+      'AR': 'ضيق الوقت',
+      'HI': 'समय की कमी',
+      'VI': 'Thiếu thời gian',
+      'ES': 'Falta de tiempo',
+      'TH': 'เวลาไม่พอ',
+    },
+    "문해력 부족": {
+      'KO': '문해력 부족',
+      'EN': 'Reading Gap',
+      'JA': '読解力不足',
+      'ZH': '阅读理解不足',
+      'FR': 'Manque de lecture',
+      'DE': 'Leseschwäche',
+      'RU': 'Слабое понимание текста',
+      'AR': 'ضعف في الفهم القرائي',
+      'HI': 'पठन कमी',
+      'VI': 'Thiếu kỹ năng đọc hiểu',
+      'ES': 'Falta de comprensión lectora',
+      'TH': 'ขาดทักษะการอ่าน',
+    },
+    "긴장": {
+      'KO': '긴장',
+      'EN': 'Nervous',
+      'JA': '緊張',
+      'ZH': '紧张',
+      'FR': 'Nervosité',
+      'DE': 'Nervosität',
+      'RU': 'Нервозность',
+      'AR': 'التوتر',
+      'HI': 'घबराहट',
+      'VI': 'Lo lắng',
+      'ES': 'Nerviosismo',
+      'TH': 'ความตื่นเต้น',
+    },
+    "집중력 부족": {
+      'KO': '집중력 부족',
+      'EN': 'Focus Gap',
+      'JA': '集中力不足',
+      'ZH': '注意力不足',
+      'FR': 'Manque de concentration',
+      'DE': 'Konzentrationsmangel',
+      'RU': 'Недостаток концентрации',
+      'AR': 'ضعف التركيز',
+      'HI': 'ध्यान की कमी',
+      'VI': 'Thiếu tập trung',
+      'ES': 'Falta de concentración',
+      'TH': 'สมาธิไม่พอ',
+    },
+    "기타": {
+      'KO': '기타',
+      'EN': 'Other',
+      'JA': 'その他',
+      'ZH': '其他',
+      'FR': 'Autre',
+      'DE': 'Sonstiges',
+      'RU': 'Другое',
+      'AR': 'أخرى',
+      'HI': 'अन्य',
+      'VI': 'Khác',
+      'ES': 'Otro',
+      'TH': 'อื่นๆ',
+    },
   };
+
   static String _causeLabel(String key) {
     final map = _causeMap[key];
     if (map == null) return key;
@@ -1874,10 +5574,50 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   }
 
   static const Map<String, Map<String, String>> _reviewMap = {
-    "필요": {'KO':'필요','EN':'Needed','JA':'必要','ZH':'需要','FR':'Nécessaire','DE':'Nötig','RU':'Нужно','AR':'مطلوب','HI':'आवश्यक','VI':'Cần thiết','ES':'Necesario','TH':'จำเป็น'},
-    "예정": {'KO':'예정','EN':'Planned','JA':'予定','ZH':'计划中','FR':'Prévu','DE':'Geplant','RU':'Запланировано','AR':'مخطط له','HI':'योजनाबद्ध','VI':'Đã lên kế hoạch','ES':'Planeado','TH':'วางแผนไว้'},
-    "불필요": {'KO':'불필요','EN':'Not Needed','JA':'不要','ZH':'不需要','FR':'Non nécessaire','DE':'Nicht nötig','RU':'Не требуется','AR':'غير مطلوب','HI':'आवश्यक नहीं','VI':'Không cần','ES':'No necesario','TH':'ไม่จำเป็น'},
+    "필요": {
+      'KO': '필요',
+      'EN': 'Needed',
+      'JA': '必要',
+      'ZH': '需要',
+      'FR': 'Nécessaire',
+      'DE': 'Nötig',
+      'RU': 'Нужно',
+      'AR': 'مطلوب',
+      'HI': 'आवश्यक',
+      'VI': 'Cần thiết',
+      'ES': 'Necesario',
+      'TH': 'จำเป็น',
+    },
+    "예정": {
+      'KO': '예정',
+      'EN': 'Planned',
+      'JA': '予定',
+      'ZH': '计划中',
+      'FR': 'Prévu',
+      'DE': 'Geplant',
+      'RU': 'Запланировано',
+      'AR': 'مخطط له',
+      'HI': 'योजनाबद्ध',
+      'VI': 'Đã lên kế hoạch',
+      'ES': 'Planeado',
+      'TH': 'วางแผนไว้',
+    },
+    "불필요": {
+      'KO': '불필요',
+      'EN': 'Not Needed',
+      'JA': '不要',
+      'ZH': '不需要',
+      'FR': 'Non nécessaire',
+      'DE': 'Nicht nötig',
+      'RU': 'Не требуется',
+      'AR': 'غير مطلوب',
+      'HI': 'आवश्यक नहीं',
+      'VI': 'Không cần',
+      'ES': 'No necesario',
+      'TH': 'ไม่จำเป็น',
+    },
   };
+
   static String _reviewLabel(String key) {
     final map = _reviewMap[key];
     if (map == null) return key;
@@ -1911,13 +5651,18 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       decoration: BoxDecoration(
         color: _ThemeColors.premiumCardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.2), width: 1.2),
+        border: Border.all(
+          color: _ThemeColors.brandGolden.withOpacity(0.2),
+          width: 1.2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            onTap: () => setState(() => _isScoreSectionExpanded = !_isScoreSectionExpanded),
+            onTap: () => setState(
+              () => _isScoreSectionExpanded = !_isScoreSectionExpanded,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1927,11 +5672,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     overflow: TextOverflow.fade,
                     softWrap: false,
                     maxLines: 1,
-                    style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                    style: GoogleFonts.notoSansKr(
+                      color: _ThemeColors.brandGolden,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 Icon(
-                  _isScoreSectionExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  _isScoreSectionExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
                   color: _ThemeColors.brandGolden,
                   size: 22,
                 ),
@@ -1951,23 +5702,26 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     padding: const EdgeInsets.only(right: 6.0),
                     child: InkWell(
                       onTap: () {
-                        final bool wasSelected = isSelected;
                         setState(() {
                           _selectedExamType = isSelected ? null : type;
                           if (_selectedExamType != null) {
                             _filterExamType = _selectedExamType!;
                           }
                         });
-                        if (!wasSelected && (type == "중간고사" || type == "기말고사" || type == "모의고사")) {
-                          _showExamRecordGuidancePopup();
-                        }
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: isSelected ? _ThemeColors.brandGolden : Colors.black26,
+                          color: isSelected
+                              ? _ThemeColors.brandGolden
+                              : Colors.black26,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.4)),
+                          border: Border.all(
+                            color: _ThemeColors.brandGolden.withOpacity(0.4),
+                          ),
                         ),
                         child: Text(
                           _examTypeLabel(type),
@@ -2003,7 +5757,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                           overflow: TextOverflow.fade,
                           softWrap: false,
                           maxLines: 1,
-                          style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -2012,39 +5770,74 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
                   if (_selectedExamType == "주평가") ...[
                     _buildSubFilterLabel(_t('yearSelect')),
-                    _buildSubScrollRow(years, _inputYear, (v) => setState(() => _inputYear = v!)),
+                    _buildSubScrollRow(
+                      years,
+                      _inputYear,
+                      (v) => setState(() => _inputYear = v!),
+                    ),
                     const SizedBox(height: 8),
                     _buildSubFilterLabel(_t('monthSelect')),
-                    _buildSubScrollRow(months, _inputMonth, (v) => setState(() => _inputMonth = v!), controller: _monthScrollController),
+                    _buildSubScrollRow(
+                      months,
+                      _inputMonth,
+                      (v) => setState(() => _inputMonth = v!),
+                      controller: _monthScrollController,
+                    ),
                     const SizedBox(height: 8),
                     _buildSubFilterLabel(_t('weekSelect')),
-                    _buildSubScrollRow(weeks, _inputWeek, (v) => setState(() => _inputWeek = v!)),
+                    _buildSubScrollRow(
+                      weeks,
+                      _inputWeek,
+                      (v) => setState(() => _inputWeek = v!),
+                    ),
                   ] else if (_selectedExamType == "단원평가") ...[
-                    _buildSubFilterLabel('${_t('bigUnitSelect')} (${DkeLang.current == 'KO' ? '여러 개 선택 가능 - 범위로 입력됨' : 'Multi-select for a range'})'),
-                    _buildUnitMultiSelectRow(bigUnits, _inputBigUnits, (item) => () {
-                      setState(() {
-                        if (_inputBigUnits.contains(item)) {
-                          if (_inputBigUnits.length > 1) _inputBigUnits.remove(item);
-                        } else {
-                          _inputBigUnits.add(item);
-                        }
-                      });
-                    }),
+                    _buildSubFilterLabel(
+                      '${_t('bigUnitSelect')} (${DkeLang.current == 'KO' ? '여러 개 선택 가능 - 범위로 입력됨' : 'Multi-select for a range'})',
+                    ),
+                    _buildUnitMultiSelectRow(
+                      bigUnits,
+                      _inputBigUnits,
+                      (item) => () {
+                        setState(() {
+                          if (_inputBigUnits.contains(item)) {
+                            if (_inputBigUnits.length > 1)
+                              _inputBigUnits.remove(item);
+                          } else {
+                            _inputBigUnits.add(item);
+                          }
+                        });
+                      },
+                    ),
                     const SizedBox(height: 8),
-                    _buildSubFilterLabel('${_t('midUnitSelect')} (${DkeLang.current == 'KO' ? '여러 개 선택 가능 - 범위로 입력됨' : 'Multi-select for a range'})'),
-                    _buildUnitMultiSelectRow(midUnits, _inputMidUnits, (item) => () {
-                      setState(() {
-                        if (_inputMidUnits.contains(item)) {
-                          if (_inputMidUnits.length > 1) _inputMidUnits.remove(item);
-                        } else {
-                          _inputMidUnits.add(item);
-                        }
-                      });
-                    }),
+                    _buildSubFilterLabel(
+                      '${_t('midUnitSelect')} (${DkeLang.current == 'KO' ? '여러 개 선택 가능 - 범위로 입력됨' : 'Multi-select for a range'})',
+                    ),
+                    _buildUnitMultiSelectRow(
+                      midUnits,
+                      _inputMidUnits,
+                      (item) => () {
+                        setState(() {
+                          if (_inputMidUnits.contains(item)) {
+                            if (_inputMidUnits.length > 1)
+                              _inputMidUnits.remove(item);
+                          } else {
+                            _inputMidUnits.add(item);
+                          }
+                        });
+                      },
+                    ),
                   ] else ...[
                     _buildSubFilterLabel(_t('semesterSelect')),
                     Row(
-                      children: semesters.map((sem) => _buildSubMiniBtn(sem, _inputSemesterGroup == sem, () => setState(() => _inputSemesterGroup = sem))).toList(),
+                      children: semesters
+                          .map(
+                            (sem) => _buildSubMiniBtn(
+                              sem,
+                              _inputSemesterGroup == sem,
+                              () => setState(() => _inputSemesterGroup = sem),
+                            ),
+                          )
+                          .toList(),
                     ),
                   ],
 
@@ -2057,7 +5850,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     overflow: TextOverflow.fade,
                     softWrap: false,
                     maxLines: 1,
-                    style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 11.5, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.notoSansKr(
+                      color: _ThemeColors.brandGolden,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Row(
@@ -2065,15 +5862,38 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
+                          decoration: BoxDecoration(
+                            color: Colors.black12,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<int>(
                               value: _filterGrade,
                               dropdownColor: _ThemeColors.premiumCardBg,
-                              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                              icon: const Icon(Icons.arrow_drop_down, color: _ThemeColors.brandGolden, size: 16),
-                              items: [1, 2, 3].map((g) => DropdownMenuItem(value: g, child: Text(_t('gradeLabel') + " $g"))).toList(),
-                              onChanged: (v) { if (v != null) setState(() { _filterGrade = v; }); },
+                              style: GoogleFonts.notoSansKr(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                color: _ThemeColors.brandGolden,
+                                size: 16,
+                              ),
+                              items: [1, 2, 3]
+                                  .map(
+                                    (g) => DropdownMenuItem(
+                                      value: g,
+                                      child: Text(_t('gradeLabel') + " $g"),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v != null)
+                                  setState(() {
+                                    _filterGrade = v;
+                                  });
+                              },
                             ),
                           ),
                         ),
@@ -2082,15 +5902,38 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
+                          decoration: BoxDecoration(
+                            color: Colors.black12,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<int>(
                               value: _filterSemester,
                               dropdownColor: _ThemeColors.premiumCardBg,
-                              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                              icon: const Icon(Icons.arrow_drop_down, color: _ThemeColors.brandGolden, size: 16),
-                              items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text(_t('semesterLabel') + " $s"))).toList(),
-                              onChanged: (v) { if (v != null) setState(() { _filterSemester = v; }); },
+                              style: GoogleFonts.notoSansKr(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                color: _ThemeColors.brandGolden,
+                                size: 16,
+                              ),
+                              items: [1, 2]
+                                  .map(
+                                    (s) => DropdownMenuItem(
+                                      value: s,
+                                      child: Text(_t('semesterLabel') + " $s"),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v != null)
+                                  setState(() {
+                                    _filterSemester = v;
+                                  });
+                              },
                             ),
                           ),
                         ),
@@ -2102,29 +5945,75 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               const SizedBox(height: 14),
 
               // 🆕 [혼동 방지] 위쪽 "그래프 출력 타겟 지정"과 헷갈리지 않도록, 지금 입력하는 새 기록용임을 명시
-              Text(_t('newRecordGradeSemesterLabel'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w500)),
+              Text(
+                _t('newRecordGradeSemesterLabel'),
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                maxLines: 1,
+                style: GoogleFonts.notoSansKr(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int>(
                       value: _inputGrade,
-                      decoration: InputDecoration(labelText: _t('gradeLabel'), labelStyle: const TextStyle(color: Colors.white60, fontSize: 11)),
+                      decoration: InputDecoration(
+                        labelText: _t('gradeLabel'),
+                        labelStyle: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                        ),
+                      ),
                       dropdownColor: _ThemeColors.premiumCardBg,
                       style: const TextStyle(color: Colors.white, fontSize: 12),
-                      items: [1, 2, 3].map((g) => DropdownMenuItem(value: g, child: Text(_t('gradeLabel') + " $g"))).toList(),
-                      onChanged: (v) { if (v != null) setState(() { _inputGrade = v; }); },
+                      items: [1, 2, 3]
+                          .map(
+                            (g) => DropdownMenuItem(
+                              value: g,
+                              child: Text(_t('gradeLabel') + " $g"),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null)
+                          setState(() {
+                            _inputGrade = v;
+                          });
+                      },
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField<int>(
                       value: _inputSemester,
-                      decoration: InputDecoration(labelText: _t('semesterLabel'), labelStyle: const TextStyle(color: Colors.white60, fontSize: 11)),
+                      decoration: InputDecoration(
+                        labelText: _t('semesterLabel'),
+                        labelStyle: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                        ),
+                      ),
                       dropdownColor: _ThemeColors.premiumCardBg,
                       style: const TextStyle(color: Colors.white, fontSize: 12),
-                      items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text(_t('semesterLabel') + " $s"))).toList(),
-                      onChanged: (v) { if (v != null) setState(() { _inputSemester = v; }); },
+                      items: [1, 2]
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s,
+                              child: Text(_t('semesterLabel') + " $s"),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null)
+                          setState(() {
+                            _inputSemester = v;
+                          });
+                      },
                     ),
                   ),
                 ],
@@ -2137,7 +6026,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     child: TextField(
                       controller: _subjectController,
                       style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: InputDecoration(hintText: _t('subjectHint'), hintStyle: const TextStyle(color: Colors.white38, fontSize: 12)),
+                      decoration: InputDecoration(
+                        hintText: _t('subjectHint'),
+                        hintStyle: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2145,7 +6040,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     child: TextField(
                       controller: _unitController,
                       style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: InputDecoration(hintText: _t('unitHint'), hintStyle: const TextStyle(color: Colors.white38, fontSize: 12)),
+                      decoration: InputDecoration(
+                        hintText: _t('unitHint'),
+                        hintStyle: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2154,22 +6055,36 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                       controller: _scoreController,
                       keyboardType: TextInputType.number,
                       style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: InputDecoration(hintText: _t('scoreLabel'), hintStyle: const TextStyle(color: Colors.white38, fontSize: 12)),
+                      decoration: InputDecoration(
+                        hintText: _t('scoreLabel'),
+                        hintStyle: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: _ThemeColors.brandGolden),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _ThemeColors.brandGolden,
+                    ),
                     onPressed: () {
-                      if (_subjectController.text.isEmpty || _scoreController.text.isEmpty) return;
-                      double? parsedScore = double.tryParse(_scoreController.text);
+                      if (_subjectController.text.isEmpty ||
+                          _scoreController.text.isEmpty)
+                        return;
+                      double? parsedScore = double.tryParse(
+                        _scoreController.text,
+                      );
                       if (parsedScore == null) return;
 
                       String generatedUnitLabel = _unitController.text;
                       if (_selectedExamType == "주평가") {
-                        generatedUnitLabel = "$_inputYear $_inputMonth $_inputWeek";
+                        generatedUnitLabel =
+                            "$_inputYear $_inputMonth $_inputWeek";
                       } else if (_selectedExamType == "단원평가") {
-                        generatedUnitLabel = "${_formatUnitRangeLabel(_inputBigUnits, '대단원')} (${_formatUnitRangeLabel(_inputMidUnits, '중단원')})";
+                        generatedUnitLabel =
+                            "${_formatUnitRangeLabel(_inputBigUnits, '대단원')} (${_formatUnitRangeLabel(_inputMidUnits, '중단원')})";
                       } else {
                         generatedUnitLabel = _inputSemesterGroup;
                       }
@@ -2183,7 +6098,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                         semester: _inputSemester,
                       );
                     },
-                    child: Text(_t('saveBtn'), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: Text(
+                      _t('saveBtn'),
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -2199,7 +6121,12 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                     final rec = _getFilteredRecords(_selectedExamType!)[idx];
                     return Container(
                       margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.only(left: 10, right: 4, top: 4, bottom: 4),
+                      padding: const EdgeInsets.only(
+                        left: 10,
+                        right: 4,
+                        top: 4,
+                        bottom: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.06),
                         borderRadius: BorderRadius.circular(6),
@@ -2215,20 +6142,33 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                             overflow: TextOverflow.fade,
                             softWrap: false,
                             maxLines: 1,
-                            style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: GoogleFonts.notoSansKr(
+                              color: _ThemeColors.brandGolden,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(width: 4),
                           GestureDetector(
                             onTap: () {
                               setState(() {
-                                _allRecords.removeWhere((element) => element.id == rec.id);
+                                _allRecords.removeWhere(
+                                  (element) => element.id == rec.id,
+                                );
                                 if (_lastSavedRecordForDisplay?.id == rec.id) {
-                                  _lastSavedRecordForDisplay = _allRecords.isNotEmpty ? _allRecords.last : null;
+                                  _lastSavedRecordForDisplay =
+                                      _allRecords.isNotEmpty
+                                      ? _allRecords.last
+                                      : null;
                                 }
                               });
                               _persistExamRecords(); // 🆕 [데이터 연결] 삭제된 성적 기록도 즉시 영구 저장
                             },
-                            child: const Icon(Icons.close, color: Colors.white60, size: 14),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white60,
+                              size: 14,
+                            ),
                           ),
                         ],
                       ),
@@ -2236,7 +6176,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   },
                 ),
               ),
-            ]
+            ],
           ], // 🆕 if (_isScoreSectionExpanded) 블록 닫기
         ],
       ),
@@ -2245,7 +6185,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [요청] 대단원/중단원 공용 다중선택 행. items 중 tap한 항목을 selectedSet에서 토글함.
   // (최소 1개는 항상 선택된 상태를 유지해서 완전히 빈 선택이 되지 않게 함)
-  Widget _buildUnitMultiSelectRow(List<String> items, Set<String> selectedSet, VoidCallback Function(String) onToggleBuilder) {
+  Widget _buildUnitMultiSelectRow(
+    List<String> items,
+    Set<String> selectedSet,
+    VoidCallback Function(String) onToggleBuilder,
+  ) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -2265,14 +6209,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     final List<int> nums = selected.map((s) {
       final match = RegExp(r'(\d+)').firstMatch(s);
       return match != null ? int.parse(match.group(1)!) : 0;
-    }).toList()
-      ..sort();
+    }).toList()..sort();
 
     if (nums.length == 1) return "$unitWord ${nums.first}";
 
     bool isContiguous = true;
     for (int i = 1; i < nums.length; i++) {
-      if (nums[i] != nums[i - 1] + 1) { isContiguous = false; break; }
+      if (nums[i] != nums[i - 1] + 1) {
+        isContiguous = false;
+        break;
+      }
     }
 
     if (isContiguous) return "$unitWord ${nums.first}~$unitWord ${nums.last}";
@@ -2281,13 +6227,26 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [요청 2026-09-04] 월 선택 등 가로 스크롤 목록에 controller를 선택적으로 지정할 수 있게 변경.
   // (현재 월로 자동 스크롤하는 기능을 위해 필요 - controller가 없으면 기존과 동일하게 동작)
-  Widget _buildSubScrollRow(List<String> items, String selectedValue, ValueChanged<String?> onSelected, {ScrollController? controller}) {
+  Widget _buildSubScrollRow(
+    List<String> items,
+    String selectedValue,
+    ValueChanged<String?> onSelected, {
+    ScrollController? controller,
+  }) {
     return SingleChildScrollView(
       controller: controller,
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       child: Row(
-        children: items.map((item) => _buildSubMiniBtn(item, selectedValue == item, () => onSelected(item))).toList(),
+        children: items
+            .map(
+              (item) => _buildSubMiniBtn(
+                item,
+                selectedValue == item,
+                () => onSelected(item),
+              ),
+            )
+            .toList(),
       ),
     );
   }
@@ -2295,7 +6254,17 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   Widget _buildSubFilterLabel(String label) {
     return Padding(
       padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-      child: Text(label, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w500)),
+      child: Text(
+        label,
+        overflow: TextOverflow.fade,
+        softWrap: false,
+        maxLines: 1,
+        style: GoogleFonts.notoSansKr(
+          color: Colors.white54,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 
@@ -2309,9 +6278,23 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           decoration: BoxDecoration(
             color: isSelected ? _ThemeColors.brandGolden : Colors.black38,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: _ThemeColors.brandGolden.withOpacity(isSelected ? 0.7 : 0.2)),
+            border: Border.all(
+              color: _ThemeColors.brandGolden.withOpacity(
+                isSelected ? 0.7 : 0.2,
+              ),
+            ),
           ),
-          child: Text(text, overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: isSelected ? Colors.black : Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+          child: Text(
+            text,
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            maxLines: 1,
+            style: GoogleFonts.notoSansKr(
+              color: isSelected ? Colors.black : Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ),
     );
@@ -2319,14 +6302,24 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   // 🆕 [⑧번] 시그니처 변경: String contentText -> Future<String> Function() contentBuilder
   // 버튼을 누르는 시점에 실시간으로 실제 데이터 기반 리포트를 생성하도록 변경.
-  Widget _buildTopButton(String title, int flex, Future<String> Function() contentBuilder, {bool isTotalReport = false}) {
+  Widget _buildTopButton(
+    String title,
+    int flex,
+    Future<String> Function() contentBuilder, {
+    bool isTotalReport = false,
+  }) {
     return Expanded(
       flex: flex,
       child: InkWell(
         onTap: () async {
           final String content = await contentBuilder();
           if (!mounted) return;
-          _showReportPopup(context, title, content, isTotalReport: isTotalReport);
+          _showReportPopup(
+            context,
+            title,
+            content,
+            isTotalReport: isTotalReport,
+          );
         },
         borderRadius: BorderRadius.circular(10),
         child: Container(
@@ -2334,7 +6327,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           decoration: BoxDecoration(
             color: _ThemeColors.premiumCardBg,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3)),
+            border: Border.all(
+              color: _ThemeColors.brandGolden.withOpacity(0.3),
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -2345,11 +6340,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   overflow: TextOverflow.fade,
                   softWrap: false,
                   maxLines: 1,
-                  style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13.5),
+                  style: GoogleFonts.notoSansKr(
+                    color: _ThemeColors.brandGolden,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
-              const Icon(Icons.play_arrow_rounded, color: Color(0xFFE5C158), size: 14),
+              const Icon(
+                Icons.play_arrow_rounded,
+                color: Color(0xFFE5C158),
+                size: 14,
+              ),
             ],
           ),
         ),
@@ -2363,12 +6366,18 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(label, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9)),
+        Text(
+          label,
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9),
+        ),
         const SizedBox(width: 4),
         Container(
           width: 4,
           height: 4,
-          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
         ),
       ],
     );
@@ -2381,13 +6390,26 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_t('dailyTotalStudyTime'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
+          Text(
+            _t('dailyTotalStudyTime'),
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            maxLines: 1,
+            style: GoogleFonts.notoSansKr(
+              color: _ThemeColors.brandGolden,
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+            ),
+          ),
           const SizedBox(height: 10),
           Container(
             height: 100,
             width: double.infinity,
             alignment: Alignment.center,
-            child: Text(_t('dataCollectingMsg'), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            child: Text(
+              _t('dataCollectingMsg'),
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
           ),
         ],
       );
@@ -2406,7 +6428,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     final double windowBottomHours = windowTopHours - 3;
     final double windowTopMinutes = windowTopHours * 60;
     final double windowBottomMinutes = windowBottomHours * 60;
-    final double windowRangeMinutes = windowTopMinutes - windowBottomMinutes; // 항상 180분(3시간) 폭 유지
+    final double windowRangeMinutes =
+        windowTopMinutes - windowBottomMinutes; // 항상 180분(3시간) 폭 유지
 
     final List<String> yAxisLabels = [
       "${windowTopHours.toInt()}h",
@@ -2418,14 +6441,27 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_t('dailyTotalStudyTime'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
+        Text(
+          _t('dailyTotalStudyTime'),
+          overflow: TextOverflow.fade,
+          softWrap: false,
+          maxLines: 1,
+          style: GoogleFonts.notoSansKr(
+            color: _ThemeColors.brandGolden,
+            fontWeight: FontWeight.bold,
+            fontSize: 17,
+          ),
+        ),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
             color: _ThemeColors.premiumCardBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.2), width: 1.2),
+            border: Border.all(
+              color: _ThemeColors.brandGolden.withOpacity(0.2),
+              width: 1.2,
+            ),
           ),
           child: Stack(
             children: [
@@ -2442,20 +6478,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           const SizedBox(height: 16),
-                          ...yAxisLabels.take(3).map((label) => Expanded(
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: _buildYAxisDotLabel(label),
-                            ),
-                          )),
+                          ...yAxisLabels
+                              .take(3)
+                              .map(
+                                (label) => Expanded(
+                                  child: Align(
+                                    alignment: Alignment.topRight,
+                                    child: _buildYAxisDotLabel(label),
+                                  ),
+                                ),
+                              ),
                           _buildYAxisDotLabel(yAxisLabels.last),
-                          const SizedBox(height: 20), // 🆕 실제 막대 바닥(날짜 텍스트 위)과 맞춘 하단 간격
+                          const SizedBox(height: 20),
+                          // 🆕 실제 막대 바닥(날짜 텍스트 위)과 맞춘 하단 간격
                         ],
                       ),
                     ),
                     const SizedBox(width: 6),
                     // 🆕 [X축] 세로 기준선 - 하단을 실제 막대 바닥(원점)과 정확히 맞춤
-                    Container(width: 1.5, margin: const EdgeInsets.only(top: 16, bottom: 20), color: _ThemeColors.brandGolden.withOpacity(0.6)),
+                    Container(
+                      width: 1.5,
+                      margin: const EdgeInsets.only(top: 16, bottom: 20),
+                      color: _ThemeColors.brandGolden.withOpacity(0.6),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: SingleChildScrollView(
@@ -2464,34 +6509,49 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                         physics: const BouncingScrollPhysics(),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: _dailyTotalHistory.asMap().entries.map((entry) {
+                          children: _dailyTotalHistory.asMap().entries.map((
+                            entry,
+                          ) {
                             final int idx = entry.key;
                             final Map<String, dynamic> d = entry.value;
                             final DateTime date = d["date"] as DateTime;
                             final int minutes = d["totalMinutes"] as int;
                             final DateTime today = DateTime.now();
-                            final bool isToday = date.year == today.year && date.month == today.month && date.day == today.day;
+                            final bool isToday =
+                                date.year == today.year &&
+                                date.month == today.month &&
+                                date.day == today.day;
                             // 🆕 [요청] 막대 색상을 무지개색 순서로 반복 (기존 _todayColors 팔레트 재사용)
-                            final Color barColor = _todayColors[idx % _todayColors.length];
+                            final Color barColor =
+                                _todayColors[idx % _todayColors.length];
 
                             // 🆕 윈도우 하단(windowBottomMinutes) 밑으로 내려가는 값은 0으로 고정해서 "가위질"된 것처럼 안 보이게 함
-                            double barFraction = (minutes - windowBottomMinutes) / windowRangeMinutes;
+                            double barFraction =
+                                (minutes - windowBottomMinutes) /
+                                windowRangeMinutes;
                             if (barFraction < 0) barFraction = 0;
                             if (barFraction > 1) barFraction = 1;
                             double barHeight = barFraction * barAreaHeight;
-                            if (barFraction > 0 && barHeight < 3) barHeight = 3; // 윈도우 안에 실제 값이 있을 때만 최소 시인성 보장
-                            if (barHeight > barAreaHeight) barHeight = barAreaHeight;
+                            if (barFraction > 0 && barHeight < 3)
+                              barHeight = 3; // 윈도우 안에 실제 값이 있을 때만 최소 시인성 보장
+                            if (barHeight > barAreaHeight)
+                              barHeight = barAreaHeight;
 
                             return Container(
                               width: 48,
-                              margin: const EdgeInsets.symmetric(horizontal: 2), // 🆕 [요청] 날짜 칸 간격 50% 축소(4→2)
+                              margin: const EdgeInsets.symmetric(horizontal: 2),
+                              // 🆕 [요청] 날짜 칸 간격 50% 축소(4→2)
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
                                     "${(minutes / 60).toStringAsFixed(1)}h",
-                                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold),
+                                    style: GoogleFonts.notoSansKr(
+                                      color: Colors.white70,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Container(
@@ -2499,8 +6559,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                     width: 22,
                                     decoration: BoxDecoration(
                                       color: barColor,
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-                                      border: isToday ? Border.all(color: _ThemeColors.brandGolden, width: 1.5) : null,
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(3),
+                                      ),
+                                      border: isToday
+                                          ? Border.all(
+                                              color: _ThemeColors.brandGolden,
+                                              width: 1.5,
+                                            )
+                                          : null,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -2510,7 +6577,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                     softWrap: false,
                                     maxLines: 1,
                                     style: GoogleFonts.notoSansKr(
-                                      color: isToday ? _ThemeColors.brandGolden : Colors.white,
+                                      color: isToday
+                                          ? _ThemeColors.brandGolden
+                                          : Colors.white,
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -2530,7 +6599,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 left: 34 + 6, // Y축 라벨 컬럼(34) + 간격(6) = 세로선이 시작하는 x좌표와 일치
                 right: 0,
                 bottom: 20, // 실제 막대 바닥(날짜 텍스트 위)과 정확히 일치
-                child: Container(height: 1.5, color: _ThemeColors.brandGolden.withOpacity(0.6)),
+                child: Container(
+                  height: 1.5,
+                  color: _ThemeColors.brandGolden.withOpacity(0.6),
+                ),
               ),
             ],
           ),
@@ -2544,11 +6616,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       alignment: Alignment.center,
       children: [
         Container(
-          width: 16, height: 16,
+          width: 16,
+          height: 16,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: _ThemeColors.brandGolden.withOpacity(0.7), blurRadius: 7, spreadRadius: 2.0),
+              BoxShadow(
+                color: _ThemeColors.brandGolden.withOpacity(0.7),
+                blurRadius: 7,
+                spreadRadius: 2.0,
+              ),
             ],
           ),
         ),
@@ -2584,7 +6661,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         : "${_selectedSessionDate.month}/${_selectedSessionDate.day} ${_t('sessionsGenericTitle')}";
   }
 
-  String get _sessionEmptyMessage => _isSelectedDateToday ? _t('noSessionsToday') : _t('noSessionsOnDate');
+  String get _sessionEmptyMessage =>
+      _isSelectedDateToday ? _t('noSessionsToday') : _t('noSessionsOnDate');
 
   // 🆕 [위험한 오류 수정 2026-09-05] 세션 하나가 "강의"인지 "평가"인지, 평가라면 점수까지
   // 한눈에 보이도록 표시하는 라벨. 개념강의를 들었을 때 시험을 본 것처럼 보이는 혼동을 방지함.
@@ -2592,7 +6670,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     final String? recordType = s['recordType'] as String?;
     final num? score = s['score'] as num?;
     if (recordType == '평가') {
-      return score != null ? "[${_t('evaluationLabel')} $score${_t('scoreLabel')}]" : "[${_t('evaluationLabel')}]";
+      return score != null
+          ? "[${_t('evaluationLabel')} $score${_t('scoreLabel')}]"
+          : "[${_t('evaluationLabel')}]";
     } else if (recordType == '강의') {
       return "[${_t('lectureLabel')}]";
     }
@@ -2600,7 +6680,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
   }
 
   void _goToPreviousSessionDay() {
-    final DateTime newDate = _selectedSessionDate.subtract(const Duration(days: 1));
+    final DateTime newDate = _selectedSessionDate.subtract(
+      const Duration(days: 1),
+    );
     setState(() => _selectedSessionDate = newDate);
     _loadSessionsForDate(newDate);
   }
@@ -2618,7 +6700,9 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     try {
       final prefs = await SharedPreferences.getInstance();
       final Set<String> allKeys = prefs.getKeys();
-      final Iterable<String> historyKeys = allKeys.where((k) => k.startsWith('dke_history_'));
+      final Iterable<String> historyKeys = allKeys.where(
+        (k) => k.startsWith('dke_history_'),
+      );
       final DateTime dayStart = DateTime(date.year, date.month, date.day);
       final DateTime dayEnd = dayStart.add(const Duration(days: 1));
 
@@ -2631,9 +6715,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         for (final raw in entries) {
           try {
             final Map<String, dynamic> item = jsonDecode(raw);
-            final DateTime ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+            final DateTime ts =
+                DateTime.tryParse(
+                  item['timestamp']?.toString() ?? '',
+                )?.toLocal() ??
+                DateTime.now();
             if (ts.isBefore(dayStart) || !ts.isBefore(dayEnd)) continue;
-            final int durationSeconds = (item['durationSeconds'] as num?)?.toInt() ?? 0;
+            final int durationSeconds =
+                (item['durationSeconds'] as num?)?.toInt() ?? 0;
             final int minutes = (durationSeconds / 60).round();
             // 🆕 [위험한 오류 수정 2026-09-05] 강의(개념강의/단원정리)인지 평가인지 구분해서 표시하기 위해
             // timer_screen.dart가 저장한 recordType/lectureSubType/score 필드도 함께 읽어옴.
@@ -2642,15 +6731,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               "minutes": minutes,
               "timestamp": ts,
               "recordType": item['recordType'] as String?,
+              // '강의' 또는 '평가'
               "lectureSubType": item['lectureSubType'] as String?,
+              // '개념강의' / '단원정리 및 문제해설'
               "score": item['score'],
-              // 🆕 [요청 2026-09-07] 상세분석기록에서 쓸 세부 항목 추가
-              "details": item['details'] as String?,
-              "understanding": item['understanding'],
-              "difficulty": item['difficulty'] as String?,
-              "concentration": item['concentration'] as String?,
-              "condition": item['condition'] as String?,
-              "incorrectNote": item['incorrectNote'] as String?,
+              // 평가일 때만 int, 강의면 null
             });
           } catch (_) {
             // 손상된 기록 하나는 건너뛰고 나머지는 계속 집계
@@ -2658,7 +6743,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         }
       }
 
-      sessions.sort((a, b) => (a["timestamp"] as DateTime).compareTo(b["timestamp"] as DateTime));
+      sessions.sort(
+        (a, b) =>
+            (a["timestamp"] as DateTime).compareTo(b["timestamp"] as DateTime),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -2679,7 +6767,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       decoration: BoxDecoration(
         color: _ThemeColors.premiumCardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.25), width: 1.2),
+        border: Border.all(
+          color: _ThemeColors.brandGolden.withOpacity(0.25),
+          width: 1.2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2689,7 +6780,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             children: [
               GestureDetector(
                 onTap: _goToPreviousSessionDay,
-                child: const Icon(Icons.arrow_left_rounded, color: _ThemeColors.brandGolden, size: 26),
+                child: const Icon(
+                  Icons.arrow_left_rounded,
+                  color: _ThemeColors.brandGolden,
+                  size: 26,
+                ),
               ),
               Expanded(
                 child: Text(
@@ -2698,14 +6793,20 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   overflow: TextOverflow.fade,
                   softWrap: false,
                   maxLines: 1,
-                  style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                  style: GoogleFonts.notoSansKr(
+                    color: _ThemeColors.brandGolden,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
               ),
               GestureDetector(
                 onTap: _isNextDayDisabled ? null : _goToNextSessionDay,
                 child: Icon(
                   Icons.arrow_right_rounded,
-                  color: _isNextDayDisabled ? Colors.white12 : _ThemeColors.brandGolden,
+                  color: _isNextDayDisabled
+                      ? Colors.white12
+                      : _ThemeColors.brandGolden,
                   size: 26,
                 ),
               ),
@@ -2713,7 +6814,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           ),
           const SizedBox(height: 10),
           if (_selectedDaySessions.isEmpty)
-            Text(_sessionEmptyMessage, style: const TextStyle(color: Colors.white38, fontSize: 12))
+            Text(
+              _sessionEmptyMessage,
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            )
           else
             ..._selectedDaySessions.asMap().entries.map((entry) {
               final int idx = entry.key;
@@ -2721,24 +6825,28 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Text(
-                          "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
-                          maxLines: 1,
-                          softWrap: false,
-                          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                    Flexible(
+                      child: Text(
+                        "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        maxLines: 1,
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
                     Text(
                       "${s["minutes"]}${_t('minutesUnitSuffix')}",
-                      style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.notoSansKr(
+                        color: _ThemeColors.brandGolden,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -2759,16 +6867,23 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
     }
 
     final buffer = StringBuffer();
-    buffer.write(DkeLang.current == 'KO' ? '[종합 리포트]\n\n' : '[Total Report]\n\n');
+    buffer.write(
+      DkeLang.current == 'KO' ? '[종합 리포트]\n\n' : '[Total Report]\n\n',
+    );
 
     for (int i = 0; i < _selectedDaySessions.length; i++) {
       final s = _selectedDaySessions[i];
       final DateTime ts = s["timestamp"] as DateTime;
-      final String timeStr = "${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}";
-      buffer.write(DkeLang.current == 'KO'
-          ? "${i + 1}${_t('sessionOrdinal')}\n"
-          : "${_t('sessionOrdinal')} ${i + 1}\n");
-      buffer.write("• ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n");
+      final String timeStr =
+          "${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}";
+      buffer.write(
+        DkeLang.current == 'KO'
+            ? "${i + 1}${_t('sessionOrdinal')}\n"
+            : "${_t('sessionOrdinal')} ${i + 1}\n",
+      );
+      buffer.write(
+        "• ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n",
+      );
     }
 
     final String topSubject = _selectedDaySessions.first["subject"] as String;
@@ -2778,7 +6893,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       subject: topSubject,
       tier: AiTier.light,
     );
-    buffer.write(DkeLang.current == 'KO' ? '[종합 진단 피드백]\n' : '[Overall Diagnostic Feedback]\n');
+    buffer.write(
+      DkeLang.current == 'KO'
+          ? '[종합 진단 피드백]\n'
+          : '[Overall Diagnostic Feedback]\n',
+    );
     buffer.write(diagnosis);
 
     return buffer.toString();
@@ -2792,39 +6911,22 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       return _sessionEmptyMessage;
     }
 
-    final int totalTodayMin = _selectedDaySessions.fold<int>(0, (sum, s) => sum + (s["minutes"] as int));
+    final int totalTodayMin = _selectedDaySessions.fold<int>(
+      0,
+      (sum, s) => sum + (s["minutes"] as int),
+    );
     final String topSubject = _selectedDaySessions.first["subject"] as String;
 
     final buffer = StringBuffer();
-    buffer.write(DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n');
-
-    // 🆕 [요청 2026-09-07] 교시별 상세 기록(내용/이해도/난이도/집중도/컨디션/오답정리)을
-    // 전부 나열 - "상세"라는 이름에 맞게 종합 리포트보다 훨씬 구체적인 정보를 제공합니다.
-    for (int i = 0; i < _selectedDaySessions.length; i++) {
-      final s = _selectedDaySessions[i];
-      final String recType = (s["recordType"] as String?) ?? '';
-      buffer.write("${i + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}\n");
-      final String? details = s["details"] as String?;
-      if (details != null && details.isNotEmpty) {
-        buffer.write("  상세내용: $details\n");
-      }
-      if (recType == '평가') {
-        final understanding = s["understanding"];
-        final difficulty = s["difficulty"] as String?;
-        final concentration = s["concentration"] as String?;
-        final condition = s["condition"] as String?;
-        final incorrectNote = s["incorrectNote"] as String?;
-        if (understanding != null) buffer.write("  이해도: $understanding%\n");
-        if (difficulty != null && difficulty.isNotEmpty) buffer.write("  난이도: $difficulty\n");
-        if (concentration != null && concentration.isNotEmpty) buffer.write("  집중도: $concentration\n");
-        if (condition != null && condition.isNotEmpty) buffer.write("  학습컨디션: $condition\n");
-        if (incorrectNote != null && incorrectNote.isNotEmpty) buffer.write("  오답정리: $incorrectNote\n");
-      }
-      buffer.write("\n");
-    }
-
-    buffer.write("• ${_t('studyTime')}: $totalTodayMin${_t('minutesUnitSuffix')}\n");
-    buffer.write("• ${_t('mostStudiedSubject').replaceAll('\n', '')}: ${_subjectName(topSubject)}\n\n");
+    buffer.write(
+      DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n',
+    );
+    buffer.write(
+      "• ${_t('studyTime')}: $totalTodayMin${_t('minutesUnitSuffix')}\n",
+    );
+    buffer.write(
+      "• ${_t('mostStudiedSubject').replaceAll('\n', '')}: ${_subjectName(topSubject)}\n\n",
+    );
 
     final String diagnosis = await _generateOrReuseDiagnosis(
       type: "일일상세",
@@ -2875,15 +6977,33 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 const SizedBox(height: _kChartTopPad),
-                ...scoreLabels.take(4).map((label) => Expanded(
-                    child: Align(
-                      alignment: Alignment.topRight,
-                      child: Text(label, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                    )
-                )),
+                ...scoreLabels
+                    .take(4)
+                    .map(
+                      (label) => Expanded(
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: Text(
+                            label,
+                            style: GoogleFonts.notoSansKr(
+                              color: Colors.white,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 Align(
                   alignment: Alignment.topRight,
-                  child: Text(scoreLabels.last, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    scoreLabels.last,
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: _kChartBottomPad),
               ],
@@ -2896,7 +7016,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
             children: [
               Container(
                 width: 2.2,
-                margin: const EdgeInsets.only(top: _kChartTopPad, bottom: _kChartBottomPad),
+                margin: const EdgeInsets.only(
+                  top: _kChartTopPad,
+                  bottom: _kChartBottomPad,
+                ),
                 color: _ThemeColors.brandGolden.withOpacity(0.6),
               ),
               Positioned.fill(
@@ -2904,11 +7027,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 bottom: _kChartBottomPad,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(5, (index) => Container(
-                    width: 6,
-                    height: 1.5,
-                    color: _ThemeColors.brandGolden,
-                  )),
+                  children: List.generate(
+                    5,
+                    (index) => Container(
+                      width: 6,
+                      height: 1.5,
+                      color: _ThemeColors.brandGolden,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -2930,10 +7056,12 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                         const SizedBox(width: 6),
                         ...List.generate(evalRecords.length, (idx) {
                           final rec = evalRecords[idx];
-                          final Color barColor = _evalColors[idx % _evalColors.length];
+                          final Color barColor =
+                              _evalColors[idx % _evalColors.length];
 
                           double scoreVal = rec.score.clamp(scoreMin, scoreMax);
-                          double drawScoreHeight = ((scoreVal - scoreMin) / scoreRange) * hMax;
+                          double drawScoreHeight =
+                              ((scoreVal - scoreMin) / scoreRange) * hMax;
                           if (drawScoreHeight < 2) drawScoreHeight = 2;
                           if (drawScoreHeight > hMax) drawScoreHeight = hMax;
 
@@ -2956,7 +7084,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                           width: 20,
                                           decoration: BoxDecoration(
                                             color: barColor,
-                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(2.0)),
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  top: Radius.circular(2.0),
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -2964,7 +7095,11 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                         bottom: drawScoreHeight + 2,
                                         child: Text(
                                           "${rec.score.toInt()}",
-                                          style: TextStyle(color: barColor, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                            color: barColor,
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -2995,12 +7130,18 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                   ),
                 ),
                 Positioned(
-                  left: 0, right: 0, bottom: _kChartBottomPad,
-                  child: Container(width: double.infinity, height: 2.2, color: _ThemeColors.brandGolden.withOpacity(0.6)),
+                  left: 0,
+                  right: 0,
+                  bottom: _kChartBottomPad,
+                  child: Container(
+                    width: double.infinity,
+                    height: 2.2,
+                    color: _ThemeColors.brandGolden.withOpacity(0.6),
+                  ),
                 ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -3008,7 +7149,6 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
 
   Widget _buildAdvancedChartDashboard(int tabIndex) {
     List<Map<String, dynamic>> rawData = _masterSubjectData;
-    double multiplier = (tabIndex == 0) ? 1.0 : (tabIndex == 1) ? 5.0 : (tabIndex == 2) ? 22.0 : 250.0;
 
     List<Map<String, dynamic>> targetSubjects = [];
     for (var item in rawData) {
@@ -3019,17 +7159,27 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       if (tabIndex == 3 && item["hasStudiedYearly"] == true) isValid = true;
 
       if (isValid) {
-        double totalMins = (item["baseMinutes"] as int).toDouble() * multiplier;
+        // 🆕 [위험한 오류 수정 2026-09-06] "하루 평균 × 가정 일수"로 추정하던 방식을 폐기하고,
+        // 그 기간(이번 주/이번 달/올해) 안에 실제로 쌓인 분(分)을 그대로 사용함.
+        final int realMinutesForTab = tabIndex == 0
+            ? (item["todayRealMinutes"] as int)
+            : tabIndex == 1
+            ? (item["weekRealMinutes"] as int)
+            : tabIndex == 2
+            ? (item["monthRealMinutes"] as int)
+            : (item["yearRealMinutes"] as int);
+        double totalMins = realMinutesForTab.toDouble();
         if (totalMins > 0) {
-          targetSubjects.add({
-            ...item,
-            "calculatedMinutes": totalMins,
-          });
+          targetSubjects.add({...item, "calculatedMinutes": totalMins});
         }
       }
     }
 
-    targetSubjects.sort((a, b) => (b["calculatedMinutes"] as double).compareTo(a["calculatedMinutes"] as double));
+    targetSubjects.sort(
+      (a, b) => (b["calculatedMinutes"] as double).compareTo(
+        a["calculatedMinutes"] as double,
+      ),
+    );
 
     double maxMinutesFound = 0.0;
     for (var item in targetSubjects) {
@@ -3038,35 +7188,30 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
       }
     }
 
-    // 🆕 [Y축 목표 천장값 보정] 일간 200분(≈3시간) / 주간 14시간(하루 2시간×7일) /
-    // 월간 약 50시간 / 연간 약 600시간(수정예정) — 말씀하신 기준값으로 반영.
-    // (기존에는 월간·연간이 똑같이 "5시간"으로 되어있던 버그가 있었어서 함께 수정함)
-    double minCeiling = 200.0;
-    if (tabIndex == 1) minCeiling = 14.0 * 60.0;
-    if (tabIndex == 2) minCeiling = 50.0 * 60.0;
-    if (tabIndex == 3) minCeiling = 600.0 * 60.0;
+    // 🆕 [위험한 오류 수정 2026-09-06] 예전의 "천장값 보정"(minCeiling)은 과장된 추정치를
+    // 전제로 설계된 값이라(예: 연간 600시간) 실제 합산 분 기준으로 바뀐 지금은 오히려 해롭습니다
+    // (실제 데이터가 적을 때 Y축이 불필요하게 커져 막대가 거의 안 보이게 됨). 완전히 제거하고,
+    // 아래 슬라이딩 윈도우가 항상 기본 150분 범위에서 시작해 필요한 만큼만 자연스럽게 커지도록 함.
 
-    if (maxMinutesFound < minCeiling) {
-      maxMinutesFound = minCeiling;
+    // 🆕 [요청] Y축을 0m/50m/100m/150m 고정 눈금으로 통일하고, 150분을 넘어서면
+    // (기존 "일일 전체 학습시간" 그래프의 슬라이딩 윈도우와 동일한 방식으로) Y축 숫자만
+    // 위로 밀려서 항상 4단계(예: 200/150/100/50)만 보이고 그 아래 구간은 잘려서 안 보이게 함.
+    // 일/주/월/연 전부 동일하게 적용.
+    double windowTopMinutes = 150.0;
+    if (maxMinutesFound > windowTopMinutes) {
+      windowTopMinutes = (maxMinutesFound / 50.0).ceil() * 50.0;
     }
+    final double windowBottomMinutes = windowTopMinutes - 150.0;
+    final double yAxisMaxBoundary = windowTopMinutes; // 막대 높이 계산 기준(=창의 맨 위)
+    final double yAxisWindowRange =
+        windowTopMinutes - windowBottomMinutes; // 항상 150분 폭 유지
 
-    double yAxisMaxBoundary = maxMinutesFound / 0.90;
-    if (yAxisMaxBoundary <= 0) yAxisMaxBoundary = 100.0;
-
-    if (tabIndex == 1 && yAxisMaxBoundary > 25.0 * 60.0) yAxisMaxBoundary = 25.0 * 60.0;
-    if (tabIndex == 2 && yAxisMaxBoundary > 120.0 * 60.0) yAxisMaxBoundary = 120.0 * 60.0;
-    if (tabIndex == 3 && yAxisMaxBoundary > 1500.0 * 60.0) yAxisMaxBoundary = 1500.0 * 60.0;
-
-    List<String> dynamicYAxisLabels = [];
-    for (int i = 4; i >= 0; i--) {
-      double currentSliceValue = (yAxisMaxBoundary / 4) * i;
-      if (tabIndex == 0) {
-        dynamicYAxisLabels.add("${currentSliceValue.round()}m");
-      } else {
-        double hoursValue = currentSliceValue / 60.0;
-        dynamicYAxisLabels.add("${hoursValue.toStringAsFixed(1)}h");
-      }
-    }
+    List<String> dynamicYAxisLabels = [
+      "${windowTopMinutes.round()}m",
+      "${(windowTopMinutes - 50).round()}m",
+      "${(windowTopMinutes - 100).round()}m",
+      "${windowBottomMinutes.round()}m",
+    ];
 
     List<Color> colorPalette = (tabIndex == 1) ? _weeklyColors : _todayColors;
 
@@ -3082,25 +7227,61 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
           child: Stack(
             children: [
               Positioned(
-                left: 48, top: 0,
-                child: Row(children: [
-                  Container(width: 10, height: 10, decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2))),
-                  const SizedBox(width: 5),
-                  Text(_t('average'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                ]),
+                left: 48,
+                top: 0,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade600,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _t('average'),
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Positioned.fill(
-                left: 42, right: 0, top: _kChartTopPad, bottom: _kChartBottomPad,
+                left: 42,
+                right: 0,
+                top: _kChartTopPad,
+                bottom: _kChartBottomPad,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(5, (i) => Container(width: double.infinity, height: 0.8, color: Colors.white.withOpacity(0.08))),
+                  children: List.generate(
+                    4,
+                    (i) => Container(
+                      width: double.infinity,
+                      height: 0.8,
+                      color: Colors.white.withOpacity(0.08),
+                    ),
+                  ),
                 ),
               ),
               Positioned(
-                left: 42, top: _kChartTopPad, bottom: _kChartBottomPad,
+                left: 42,
+                top: _kChartTopPad,
+                bottom: _kChartBottomPad,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(9, (i) => Container(width: i % 2 != 0 ? 4.0 : 0.0, height: 1.5, color: _ThemeColors.brandGolden.withOpacity(0.4))),
+                  children: List.generate(
+                    7,
+                    (i) => Container(
+                      width: i % 2 != 0 ? 4.0 : 0.0,
+                      height: 1.5,
+                      color: _ThemeColors.brandGolden.withOpacity(0.4),
+                    ),
+                  ),
                 ),
               ),
               Row(
@@ -3115,14 +7296,39 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                         // 🆕 [4번] 라벨 컬럼 상/하단 여백을 그래프 플롯 영역과 완전히 동일한 상수로 고정
                         // (기존 22 / 48 값이 플롯 영역의 25 / 44 와 달라 화면별로 축과 막대가 미세하게 어긋나던 원인)
                         const SizedBox(height: _kChartTopPad),
-                        ...dynamicYAxisLabels.take(4).map((label) => Expanded(child: Text(label, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5)))),
-                        Text(dynamicYAxisLabels.last, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9.5)),
+                        ...dynamicYAxisLabels
+                            .take(3)
+                            .map(
+                              (label) => Expanded(
+                                child: Text(
+                                  label,
+                                  style: GoogleFonts.notoSansKr(
+                                    color: Colors.white,
+                                    fontSize: 9.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        Text(
+                          dynamicYAxisLabels.last,
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white,
+                            fontSize: 9.5,
+                          ),
+                        ),
                         const SizedBox(height: _kChartBottomPad),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(width: 2.2, margin: const EdgeInsets.only(top: _kChartTopPad, bottom: _kChartBottomPad), color: _ThemeColors.brandGolden.withOpacity(0.6)),
+                  Container(
+                    width: 2.2,
+                    margin: const EdgeInsets.only(
+                      top: _kChartTopPad,
+                      bottom: _kChartBottomPad,
+                    ),
+                    color: _ThemeColors.brandGolden.withOpacity(0.6),
+                  ),
 
                   Expanded(
                     child: Stack(
@@ -3136,54 +7342,121 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                             physics: const BouncingScrollPhysics(),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
-                              children: List.generate(targetSubjects.length, (index) {
+                              children: List.generate(targetSubjects.length, (
+                                index,
+                              ) {
                                 final data = targetSubjects[index];
                                 const double hMaxDashboard = 120.0;
-                                final Color pCol = colorPalette[index % colorPalette.length];
+                                final Color pCol =
+                                    colorPalette[index % colorPalette.length];
 
-                                double currentMins = data["calculatedMinutes"] as double;
-                                double drawScoreHeight = (currentMins / yAxisMaxBoundary) * hMaxDashboard;
-                                double drawAvgHeight = ((data["averageScore"] as double) * (currentMins * 0.8) / yAxisMaxBoundary) * hMaxDashboard;
+                                double currentMins =
+                                    data["calculatedMinutes"] as double;
+                                // 🆕 [요청] 슬라이딩 윈도우 반영: windowBottomMinutes 밑으로 내려가는 값은
+                                // 0으로 고정해서 "잘라낸" 것처럼 보이게 함 (일일 전체 학습시간 그래프와 동일 패턴)
+                                double drawScoreHeight =
+                                    ((currentMins - windowBottomMinutes) /
+                                        yAxisWindowRange) *
+                                    hMaxDashboard;
+                                double drawAvgHeight =
+                                    (((data["averageScore"] as double) *
+                                                (currentMins * 0.8) -
+                                            windowBottomMinutes) /
+                                        yAxisWindowRange) *
+                                    hMaxDashboard;
 
-                                if (drawScoreHeight < 4) drawScoreHeight = 4;
-                                if (drawAvgHeight < 2) drawAvgHeight = 2;
-                                if (drawScoreHeight > hMaxDashboard) drawScoreHeight = hMaxDashboard;
-                                if (drawAvgHeight > hMaxDashboard) drawAvgHeight = hMaxDashboard; // 🆕 [버그 수정] 평균 막대도 상한 제한 - 주간/월간/연간에서 X축 아래로 삐져나오던 오버플로우 해결
+                                if (drawScoreHeight < 0) drawScoreHeight = 0;
+                                if (drawAvgHeight < 0) drawAvgHeight = 0;
+                                if (drawScoreHeight < 4 &&
+                                    currentMins > windowBottomMinutes)
+                                  drawScoreHeight = 4; // 윈도우 안에 있을 때만 최소 시인성 보장
+                                if (drawAvgHeight < 2 &&
+                                    currentMins > windowBottomMinutes)
+                                  drawAvgHeight = 2;
+                                if (drawScoreHeight > hMaxDashboard)
+                                  drawScoreHeight = hMaxDashboard;
+                                if (drawAvgHeight > hMaxDashboard)
+                                  drawAvgHeight =
+                                      hMaxDashboard; // 🆕 [버그 수정] 평균 막대도 상한 제한 - 주간/월간/연간에서 X축 아래로 삐져나오던 오버플로우 해결
 
                                 return Container(
                                   width: 53,
-                                  margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 0.5,
+                                  ),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       SizedBox(
-                                        height: hMaxDashboard + 16, width: 53,
+                                        height: hMaxDashboard + 16,
+                                        width: 53,
                                         child: Stack(
                                           alignment: Alignment.bottomCenter,
                                           children: [
                                             Positioned(
-                                              left: 10, bottom: 0,
+                                              left: 10,
+                                              bottom: 0,
                                               child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.end,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
                                                 children: [
-                                                  Text("${((data["averageScore"] as double) * (currentMins * 0.8)).round()}m", style: const TextStyle(color: Colors.white54, fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                                  Text(
+                                                    "${(data["averageScore"] * 100).toInt()}%",
+                                                    style: const TextStyle(
+                                                      color: Colors.white54,
+                                                      fontSize: 8.5,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
                                                   Container(
-                                                    height: drawAvgHeight, width: 16,
-                                                    decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
+                                                    height: drawAvgHeight,
+                                                    width: 16,
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      borderRadius:
+                                                          const BorderRadius.vertical(
+                                                            top:
+                                                                Radius.circular(
+                                                                  2.5,
+                                                                ),
+                                                          ),
+                                                    ),
                                                   ),
                                                 ],
                                               ),
                                             ),
                                             Positioned(
-                                              left: 27, bottom: 0,
+                                              left: 27,
+                                              bottom: 0,
                                               child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.end,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
                                                 children: [
-                                                  Text("${currentMins.round()}m", style: TextStyle(color: pCol, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                                  Text(
+                                                    "${(data["score"] * 100).toInt()}%",
+                                                    style: TextStyle(
+                                                      color: pCol,
+                                                      fontSize: 9.5,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
                                                   Container(
-                                                    height: drawScoreHeight, width: 16,
-                                                    decoration: BoxDecoration(color: pCol, borderRadius: const BorderRadius.vertical(top: Radius.circular(2.5))),
+                                                    height: drawScoreHeight,
+                                                    width: 16,
+                                                    decoration: BoxDecoration(
+                                                      color: pCol,
+                                                      borderRadius:
+                                                          const BorderRadius.vertical(
+                                                            top:
+                                                                Radius.circular(
+                                                                  2.5,
+                                                                ),
+                                                          ),
+                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -3194,7 +7467,16 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                       const SizedBox(height: 8),
                                       SizedBox(
                                         height: 36,
-                                        child: Text(data["subject"], textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, height: 1.2)),
+                                        child: Text(
+                                          data["subject"],
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.notoSansKr(
+                                            color: Colors.white,
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.bold,
+                                            height: 1.2,
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -3204,8 +7486,14 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                           ),
                         ),
                         Positioned(
-                          left: 0, right: 0, bottom: _kChartBottomPad,
-                          child: Container(width: double.infinity, height: 2.2, color: _ThemeColors.brandGolden.withOpacity(0.6)),
+                          left: 0,
+                          right: 0,
+                          bottom: _kChartBottomPad,
+                          child: Container(
+                            width: double.infinity,
+                            height: 2.2,
+                            color: _ThemeColors.brandGolden.withOpacity(0.6),
+                          ),
                         ),
                       ],
                     ),
@@ -3217,14 +7505,35 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         ),
         const Divider(color: Colors.white10, height: 16),
 
-        _buildDailyTotalStudyTimeGraph(), // 🆕 [배치 변경] 과목 학습시간 바로 아래, 종합 생활 균형 바로 위
+        _buildDailyTotalStudyTimeGraph(),
+        // 🆕 [배치 변경] 과목 학습시간 바로 아래, 종합 생활 균형 바로 위
         const SizedBox(height: 20),
 
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_t('lifeBalance'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-            Text(_t('lifeBalanceSub'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(
+              _t('lifeBalance'),
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              maxLines: 1,
+              style: GoogleFonts.gowunBatang(
+                color: _ThemeColors.brandGolden,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+            Text(
+              _t('lifeBalanceSub'),
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              maxLines: 1,
+              style: GoogleFonts.notoSansKr(
+                color: Colors.white70,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -3235,22 +7544,43 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
               flex: 50,
               child: Center(
                 child: SizedBox(
-                  width: 170, height: 170,
+                  width: 170,
+                  height: 170,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       CustomPaint(
                         size: const Size(170, 170),
-                        painter: _GsuPiePainter(targetSubjects: targetSubjects, colors: colorPalette),
+                        painter: _GsuPiePainter(
+                          targetSubjects: targetSubjects,
+                          colors: colorPalette,
+                        ),
                       ),
                       Container(
-                        width: 82, height: 82,
-                        decoration: const BoxDecoration(color: Color(0xFF0D1527), shape: BoxShape.circle),
+                        width: 82,
+                        height: 82,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0D1527),
+                          shape: BoxShape.circle,
+                        ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('Total', style: GoogleFonts.gowunBatang(color: Colors.white38, fontSize: 10)),
-                            Text("$totalMinutes/m", style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
+                            Text(
+                              'Total',
+                              style: GoogleFonts.gowunBatang(
+                                color: Colors.white38,
+                                fontSize: 10,
+                              ),
+                            ),
+                            Text(
+                              "$totalMinutes/m",
+                              style: GoogleFonts.gowunBatang(
+                                color: _ThemeColors.brandGolden,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -3265,15 +7595,25 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(targetSubjects.length, (idx) {
                   final item = targetSubjects[idx];
-                  final int calculatedMin = (item["calculatedMinutes"] as double).round();
-                  final int percent = totalMinutes > 0 ? ((calculatedMin / totalMinutes) * 100).round() : 0;
+                  final int calculatedMin =
+                      (item["calculatedMinutes"] as double).round();
+                  final int percent = totalMinutes > 0
+                      ? ((calculatedMin / totalMinutes) * 100).round()
+                      : 0;
                   final Color c = colorPalette[idx % colorPalette.length];
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3.0),
                     child: Row(
                       children: [
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: c,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                         const SizedBox(width: 7),
                         Expanded(
                           child: Column(
@@ -3283,15 +7623,29 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
                                 "${item["subject"].toString().replaceAll('\n', ' ')}  $percent%",
                                 overflow: TextOverflow.ellipsis,
                                 softWrap: true,
-                                maxLines: 2, // 🆕 [요청] 과목명이 길면 2줄까지 허용해서 오버플로우 방지
-                                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                maxLines: 2,
+                                // 🆕 [요청] 과목명이 길면 2줄까지 허용해서 오버플로우 방지
+                                style: GoogleFonts.notoSansKr(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               Text(
-                                item["isStarEligible"] ? "✨ +${calculatedMin} Stars" : "🚫 No Stars",
+                                item["isStarEligible"]
+                                    ? "✨ +${calculatedMin} Stars"
+                                    : "🚫 No Stars",
                                 overflow: TextOverflow.fade,
                                 softWrap: false,
                                 maxLines: 1,
-                                style: GoogleFonts.notoSansKr(color: item["isStarEligible"] ? _ThemeColors.brandGolden.withOpacity(0.8) : Colors.white38, fontSize: 10),
+                                style: GoogleFonts.notoSansKr(
+                                  color: item["isStarEligible"]
+                                      ? _ThemeColors.brandGolden.withOpacity(
+                                          0.8,
+                                        )
+                                      : Colors.white38,
+                                  fontSize: 10,
+                                ),
                               ),
                             ],
                           ),
@@ -3309,40 +7663,60 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen> with 
         if (targetSubjects.isEmpty)
           AnimatedBuilder(
             animation: _warningAnimation,
-            builder: (c, child) => Transform.translate(offset: Offset(0, _warningAnimation.value), child: child),
+            builder: (c, child) => Transform.translate(
+              offset: Offset(0, _warningAnimation.value),
+              child: child,
+            ),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: _ThemeColors.brandGolden,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.2),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.6),
+                  width: 1.2,
+                ),
               ),
-              child: Row(children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
                           _t('dbSyncTitle'),
                           overflow: TextOverflow.fade,
                           softWrap: false,
                           maxLines: 1,
-                          style: GoogleFonts.gowunBatang(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)
-                      ),
-                      Text(
+                          style: GoogleFonts.gowunBatang(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
                           _t('dbSyncSub'),
                           overflow: TextOverflow.fade,
                           softWrap: false,
                           maxLines: 1,
-                          style: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.9), fontSize: 11, fontWeight: FontWeight.w600)
-                      ),
-                    ],
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
             ),
           ),
       ],
@@ -3362,17 +7736,29 @@ class _GsuPiePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double total = targetSubjects.fold<double>(0.0, (s, i) => s + (i["calculatedMinutes"] as double));
+    final double total = targetSubjects.fold<double>(
+      0.0,
+      (s, i) => s + (i["calculatedMinutes"] as double),
+    );
     if (total == 0) return;
 
-    final Paint p = Paint()..style = PaintingStyle.fill..isAntiAlias = true;
+    final Paint p = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
     double start = -math.pi / 2;
 
     for (int i = 0; i < targetSubjects.length; i++) {
-      final double calculatedMin = targetSubjects[i]["calculatedMinutes"] as double;
+      final double calculatedMin =
+          targetSubjects[i]["calculatedMinutes"] as double;
       final double sweep = (calculatedMin / total) * 2 * math.pi;
       p.color = colors[i % colors.length];
-      canvas.drawArc(Rect.fromLTWH(0, 0, size.width, size.height), start, sweep, true, p);
+      canvas.drawArc(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        start,
+        sweep,
+        true,
+        p,
+      );
       start += sweep;
     }
   }

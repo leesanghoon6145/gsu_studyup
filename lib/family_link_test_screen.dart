@@ -80,9 +80,14 @@ class _StudentSide extends StatefulWidget {
 class _StudentSideState extends State<_StudentSide> {
   bool _loading = false;
 
+  // 🆕 [코드 남발 방지 2026-09-18] 이 화면이 열릴 때마다(또는 버튼을 여러 번
+  // 누를 때마다) 무조건 새 코드를 만들던 문제 수정. 이제 "이미 내 코드가
+  // 있으면 그걸 재사용하고, 없을 때만 새로 만드는" getOrCreateMyLinkCode()를
+  // 사용함. 아래 "코드 초기화" 버튼(_resetAndRegenerate)은 사용자가 명시적으로
+  // 요청했을 때만 새 코드를 만드는 의도된 기능이라 그대로 둠.
   Future<void> _makeCode() async {
     setState(() => _loading = true);
-    final code = await FamilyLinkService.generateLinkCode();
+    final code = await FamilyLinkService.getOrCreateMyLinkCode();
     widget.onCodeGenerated(code);
     setState(() => _loading = false);
   }

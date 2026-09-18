@@ -33,7 +33,7 @@ android {
     defaultConfig {
         applicationId = "com.kery.gsu_studyup"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["applicationName"] = "android.app.Application"

@@ -1200,12 +1200,20 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(_biStr('achievementGauge'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
-                  Text('${(_monthlyProgressGauge * 100).toStringAsFixed(1)}%', style: GoogleFonts.notoSerif(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
-                ],
+              // 🆕 [요청 2026-09-06] "월간 달성도 게이지" 제목+퍼센트 줄이 화면 폭이 좁은 기기(예: S10)에서
+              // 오버플로우 나던 문제 수정. Row를 가로 스크롤 가능한 컨테이너로 감싸서, 내용이 넘치면
+              // 잘리거나 경고 줄무늬가 뜨는 대신 좌우로 스크롤해서 볼 수 있게 함.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_biStr('achievementGauge'), overflow: TextOverflow.fade, softWrap: false, maxLines: 1, style: GoogleFonts.notoSansKr(fontSize: 12, color: goldColor, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 12),
+                    Text('${(_monthlyProgressGauge * 100).toStringAsFixed(1)}%', style: GoogleFonts.notoSerif(fontSize: 13, color: goldColor, fontWeight: FontWeight.bold)),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               ClipRRect(

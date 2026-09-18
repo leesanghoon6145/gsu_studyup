@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [본인 데이터만 접근] 소유자 확인용
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 🆕 [학부모 가시성 확보] debugPrint / kDebugMode 사용
+import 'user_profile_service.dart'; // 🆕 [자녀 이름 표시 2026-09-18] DkeUserProfile.getRealName() 조회용
+import 'dart:async'; // 🆕 [자녀 이름 표시 2026-09-18] unawaited() 함수 사용을 위함
 
 // 학생↔부모 기기 연결을 담당하는 서비스
 // (다른 서비스들과 동일하게 "단일 게이트웨이" 패턴 — 이 파일만 Firestore와 직접 통신)
@@ -87,6 +89,125 @@ class FamilyLinkService {
     throw StateError('6자리 코드 생성 실패 - $maxAttempts회 시도');
   }
 
+  // ============================================================================
+  // 🆕 [코드 남발 방지 2026-09-18] 학생 화면이 앱을 열 때마다 무작정
+  // generateLinkCode()를 직접 부르면, 그때마다 매번 새 코드가 만들어져서
+  // Firestore에 주인 없는 코드가 계속 쌓이는 문제가 있었음(555792, 555793처럼
+  // 짧은 시간에 여러 개 생성됨). 학생 화면은 이제부터 generateLinkCode()를
+  // 직접 부르지 말고, 반드시 이 함수를 불러야 함 — "이미 내 코드가 있으면
+  // 그걸 그대로 재사용"하고, 정말 하나도 없을 때만 새로 생성함.
+  // ============================================================================
+  static Future<String> getOrCreateMyLinkCode() async {
+    // 1) 이미 코드가 있는지 먼저 확인 (로컬 → 서버 순으로 확인하는 기존 로직 재사용)
+    final String? existing = await getMyLinkCode();
+    if (existing != null && existing.isNotEmpty) {
+      // 🆕 [자녀 이름 표시 2026-09-18] pushStudentName()은 "코드가 이미 있어야만"
+      // 성공하는데, main.dart의 로그인 로직은 정확히 "코드가 아직 없을 때"
+      // 이름을 보내려 시도해서 매번 조용히 실패하고 있었음(원인 확정).
+      // 여기서 코드를 확인/생성할 때마다 이름도 함께 재전송해서, 부모방에
+      // "코드 104367"처럼 번호만 뜨는 문제를 근본적으로 막음.
+      unawaited(_resendMyNameIfAvailable());
+      return existing;
+    }
+    // 2) 정말 하나도 없을 때만 새로 생성
+    final String newCode = await generateLinkCode();
+    // 🆕 새로 코드를 만든 직후에도 이름을 바로 보냄 — 코드 생성 시점엔 이름이
+    // 전혀 저장되지 않았던(ownerUid만 저장) 원래 설계의 빈틈을 여기서 메움.
+    unawaited(_resendMyNameIfAvailable());
+    return newCode;
+  }
+
+  // 🆕 [자녀 이름 표시 2026-09-18] DkeUserProfile에 저장된 실명을 다시 읽어서
+  // pushStudentName()으로 재전송하는 헬퍼. main.dart가 이미 가진 실명 조회
+  // 로직(DkeUserProfile.getRealName())과 동일한 방식을 그대로 재사용함.
+  static Future<void> _resendMyNameIfAvailable() async {
+    try {
+      final String? realName = await DkeUserProfile.getRealName();
+      if (realName != null && realName.isNotEmpty) {
+        await pushStudentName(realName);
+      }
+    } catch (e) {
+      debugPrint('[FamilyLinkService] _resendMyNameIfAvailable 실패(무시): $e');
+    }
+  }
+
+  // ============================================================================
+  // 🆕 [방치 코드 정리 2026-09-18] 학생이 코드를 여러 번 생성하다 예전 코드를
+  // 잊어버리고 방치하는 문제(555792, 555793 등)를 해결하기 위한 기능.
+  //
+  // 절대 원칙: 이 기능은 코드를 자동으로 지우지 않습니다. 오직 "5주 이상 학습
+  // 기록이 하나도 없는, 지금 쓰지 않는 예전 코드"를 찾아서 화면에 보여주기만
+  // 하고, 실제 삭제는 학생이 직접 "삭제" 버튼을 눌러야만 일어납니다. 그래서
+  // 몇 달 뒤 접속해도 본인이 지운 적 없는 코드는 절대 사라지지 않습니다.
+  // ============================================================================
+  static const int _abandonedCodeThresholdDays = 35; // 5주 = 35일
+
+  // 🆕 학생 쪽에서 호출: "내가 예전에 만들었지만 지금 안 쓰고 있고, 학습 기록도
+  // 없이 5주 넘게 방치된 코드"가 있는지 확인. 있으면 그 코드 문자열을 반환하고,
+  // 없으면 null을 반환함. userLinkCodes/{uid}는 uid당 코드 하나만 담는 매핑이라
+  // "예전 코드들"을 전부 찾으려면 links 컬렉션에서 ownerUid로 직접 조회해야 함.
+  static Future<String?> findAbandonedOwnCode() async {
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return null;
+
+    final String? currentCode = await getMyLinkCode();
+
+    try {
+      // 내가(ownerUid) 만든 모든 코드 문서를 조회
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _db
+          .collection(_collection)
+          .where('ownerUid', isEqualTo: myUid)
+          .get();
+
+      final DateTime cutoff =
+      DateTime.now().subtract(const Duration(days: _abandonedCodeThresholdDays));
+
+      for (final doc in snapshot.docs) {
+        final String code = doc.id;
+        if (code == currentCode) continue; // 지금 쓰고 있는 코드는 절대 대상에서 제외
+
+        final Map<String, dynamic> data = doc.data();
+        final Timestamp? createdAt = data['createdAt'] as Timestamp?;
+        final List<dynamic> sessionHistory =
+            (data['sessionHistory'] as List<dynamic>?) ?? [];
+        final Map<String, dynamic>? scholarship =
+        data['scholarship'] as Map<String, dynamic>?;
+
+        // 학습 기록이 조금이라도 있으면 "방치"로 보지 않음 (안전장치)
+        final bool hasAnyActivity =
+            sessionHistory.isNotEmpty || (scholarship != null && scholarship.isNotEmpty);
+        if (hasAnyActivity) continue;
+
+        // 생성된 지 5주(35일) 미만이면 아직 방치라고 보지 않음
+        if (createdAt == null || createdAt.toDate().isAfter(cutoff)) continue;
+
+        return code; // 조건을 만족하는 첫 번째 방치 코드를 반환
+      }
+    } catch (e) {
+      debugPrint('[FamilyLinkService] findAbandonedOwnCode 실패(무시): $e');
+    }
+    return null; // 방치된 코드 없음
+  }
+
+  // 🆕 학생이 팝업에서 "삭제"를 직접 눌렀을 때만 호출되는 함수. 서버 문서와
+  // (혹시 이 기기에 로컬 흔적이 남아있다면) 로컬 코드도 함께 정리함.
+  static Future<void> deleteAbandonedCode(String code) async {
+    try {
+      await _db.collection(_collection).doc(code).delete();
+      final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+      // 혹시 userLinkCodes/{uid}가 이 방치된 코드를 가리키고 있었다면 함께 정리
+      if (myUid != null) {
+        final doc = await _db.collection('userLinkCodes').doc(myUid).get();
+        if (doc.exists && (doc.data()?['code'] as String?) == code) {
+          await _db.collection('userLinkCodes').doc(myUid).delete();
+        }
+      }
+      debugPrint('[FamilyLinkService] 방치 코드 삭제 완료: $code');
+    } catch (e) {
+      debugPrint('[FamilyLinkService] deleteAbandonedCode 실패: $e');
+    }
+  }
+
   // 🆕 [부모] 연결된 자녀 코드 목록 (최대 5명)
   static const String _kMyLinkedCodesKey = 'family_linked_codes';
   static const int maxChildren = 5;
@@ -101,8 +222,15 @@ class FamilyLinkService {
     final prefs = await SharedPreferences.getInstance();
     final String key = _scopedKey(_kMyLinkedCodesKey);
     final list = prefs.getStringList(key) ?? [];
-    if (list.contains(code)) return true; // 이미 등록된 코드면 그냥 성공 처리
-    if (list.length >= maxChildren) return false; // 5명 초과
+    debugPrint('[addLinkedCode] 현재 저장된 코드 목록: $list (개수: ${list.length})');
+    if (list.contains(code)) {
+      debugPrint('[addLinkedCode] 이미 목록에 있음: $code');
+      return true;
+    }
+    if (list.length >= maxChildren) {
+      debugPrint('[addLinkedCode] 정원초과(5명)로 추가 실패!');
+      return false;
+    }
     list.add(code);
     await prefs.setStringList(key, list);
     return true;
@@ -173,7 +301,7 @@ class FamilyLinkService {
 
         // 🆕 [버그 수정 핵심] 이미 내가 연결되어 있는 코드라면, 서버에 다시 쓰지 않고 바로 성공 처리.
         if (existingParentUids.contains(myUid)) {
-          return ConnectResult.success;
+          return ConnectResult.success; // 서버엔 이미 연결되어 있지만, 로컬 목록엔 없을 수 있으므로
         }
 
         // 🆕 [다중 학부모 지원 + 동시성 수정] 트랜잭션 안에서 정원 확인 → 즉시 반영까지 원자적으로 처리
@@ -376,6 +504,61 @@ class FamilyLinkService {
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('[FamilyLinkService] pushGradeManagementSnapshot 실패(로컬 저장은 안전): $e');
+    }
+  }
+
+  // ============================================================================
+  // 🆕 [장학금 방 2026-09-17] 학생 쪽에서 쌓인 월간 기본별/보너스별 요약을
+  // links/{code} 문서에 올립니다. scholarship_service.dart가 보너스별이 새로
+  // 쌓일 때마다 이 함수를 호출합니다. 다른 push* 함수들과 완전히 동일한 패턴
+  // (merge 저장, 실패해도 로컬은 안전, code 없으면 조용히 스킵)입니다.
+  //
+  // 문서 구조: links/{code}.scholarship.{monthKey} = {
+  //   monthlyBaseStars, monthlyBonusStars, bonusBreakdown, updatedAt
+  // }
+  // 월별로 필드를 분리해두어, 지난달 기록이 이번달 갱신으로 지워지지 않고
+  // 부모가 나중에 지난달 내역도 조회할 수 있게 합니다.
+  // ============================================================================
+  static Future<void> pushScholarshipData({
+    required String monthKey,
+    required int monthlyBaseStars,
+    required int monthlyBonusStars,
+    required Map<String, int> bonusBreakdown,
+  }) async {
+    final code = await getMyLinkCode();
+    if (code == null) return; // 아직 부모와 연결 안 됐으면 조용히 넘어감
+
+    try {
+      await _db.collection(_collection).doc(code).set({
+        'scholarship': {
+          monthKey: {
+            'monthlyBaseStars': monthlyBaseStars,
+            'monthlyBonusStars': monthlyBonusStars,
+            'bonusBreakdown': bonusBreakdown,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[FamilyLinkService] pushScholarshipData 실패(로컬 저장은 안전): $e');
+    }
+  }
+
+  // 🆕 [장학금 방 2026-09-17] [부모] 이번 달 지급 유형(성장형/도전형/성취형)을 직접 선택해서
+  // 저장합니다. pushEmojiToChild/pushEncouragementToChild와 동일하게 부모가 코드를 이미
+  // 알고 있는 상태에서 직접 쓰는 패턴을 그대로 따릅니다.
+  // typeKey: 'growth' | 'challenge' | 'achievement' (ScholarshipService.typeToKey() 참고)
+  static Future<void> setScholarshipType(String code, {required String monthKey, required String typeKey}) async {
+    try {
+      await _db.collection(_collection).doc(code).set({
+        'scholarshipTypeSelections': {
+          monthKey: typeKey,
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[FamilyLinkService] setScholarshipType 실패: $e');
     }
   }
 

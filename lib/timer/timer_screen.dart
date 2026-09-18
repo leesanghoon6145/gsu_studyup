@@ -7,11 +7,13 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart'; // 🆕 [요청 2026-09-07] 타이머 작동 중 화면이 자동으로 꺼지지 않도록 방지
 // 👑 파일 트리 구조 분석에 따른 무결점 순정 상대 경로 임포트 고정 완료
 import '../square/my_page_screen.dart';
 import '../planner/widgets/study_timelines.dart'; // 타임라인 연동용 임포트
 import '../star_economy.dart'; // 🆕 [별 경제 시스템] 별 적립 속도/누적저장/레벨계산을 한 곳에서 관리
 import '../services/family_link_service.dart'; // 🆕 [학부모 가시성 확보 2026-09-02] 학습 기록을 Firestore에도 함께 올리기 위함
+import '../services/scholarship_service.dart'; // 🆕 [장학금 방 2026-09-17] 보너스 별 지급 — 기존 로직은 전혀 건드리지 않고 저장 완료 시점에 새 함수 호출만 추가
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -64,10 +66,22 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   int _animationCycleSeconds = 0;
   bool _showVipOverlay = false;
 
+  // 🆕 [요청 2026-09-06] 화면이 꺼지거나 백그라운드로 가도 타이머가 실제 경과된 "벽시계 시간"
+  // 기준으로 정확히 이어지도록 하기 위한 앵커. 매 틱마다 1초씩 더하는 방식(누적 카운팅) 대신,
+  // "시작(또는 재개)한 실제 시각"과 "그 시점까지 이미 쌓여있던 경과초"만 기록해두고,
+  // 화면이 다시 보일 때마다 DateTime.now()와의 차이로 경과시간을 다시 계산합니다.
+  // 이렇게 하면 화면이 꺼져있던 동안에도 실제 흐른 시간이 정확히 반영되고, 기존처럼
+  // 숫자가 툭툭 끊기거나 튀어 보이는 현상도 사라집니다.
+  DateTime? _sessionAnchorTime;
+  int _accumulatedSecondsAtAnchor = 0;
+
   // 🆕 [별 경제 시스템] 실시간 자동 적립 카운터 - DkeStars.starAccrualInterval 마다 별 1개씩 즉시 저장.
   // 30분 단위로 몰아서 저장하지 않고, 적립 주기 그대로 바로 SharedPreferences에 반영해서
   // 앱이 중간에 꺼져도 이미 적립된 별은 안전하게 보존됨.
-  int _secondsSinceLastStarAccrual = 0;
+  // 🆕 [요청 2026-09-06] 매 틱 증가 방식에서 "총 경과시간 기준" 누적 계산 방식으로 전환.
+  // 화면이 꺼져있다가 한 번에 여러 초가 건너뛰어도(예: 3분 뒤 복귀) 그동안 쌓였어야 할
+  // 별을 한꺼번에 정확히 계산해서 놓치지 않도록 함.
+  int _starsAccruedSoFar = 0;
   int _starsEarnedThisSession = 0;
 
   late String _currentUniversity;
@@ -508,7 +522,9 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     tz.initializeTimeZones();
     _timerAudioPlayer = AudioPlayer();
     _timerAudioPlayer.setReleaseMode(ReleaseMode.loop);
+    _timerAudioPlayer.setVolume(1.0); // 🆕 [요청 2026-09-06] 백색소음 볼륨 최대치로 고정
     _cueAudioPlayer = AudioPlayer(); // [추가]
+    _cueAudioPlayer.setVolume(1.0); // 🆕 [요청 2026-09-06] 시작/종료 알림음 볼륨 최대치로 고정
 
     // 🆕 [버그 수정] 시험 일정을 SharedPreferences에 실제로 저장.
     // 기존엔 targetExamDate/needTimelineGen 등이 이 화면의 파라미터로만 존재하고 저장이 안 되어서,
@@ -670,6 +686,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     _timerAudioPlayer.stop();
     _timerAudioPlayer.dispose();
     _cueAudioPlayer.dispose(); // [추가]
+    WakelockPlus.disable(); // 🆕 [요청 2026-09-07] 화면을 나가면 화면 잠금 방지를 반드시 해제
     super.dispose();
   }
 
@@ -681,6 +698,15 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   // 사용자가 직접 "START FOCUS/PAUSE" 버튼을 눌러야만 다시 작동합니다
   // (검색하거나 다른 앱을 쓰면서 몰래 타이머만 흘러가는 것을 방지).
   // ============================================================================
+  // ============================================================================
+  // 🆕 [데이터 보호 2026-09-02 / 요청 2026-09-07 재수정] 다른 앱(유튜브 등)으로 나가거나
+  // 최근 앱 화면으로 이동하면 즉시 타이머를 멈춥니다. 이 방어 로직은 "타이머만 켜놓고
+  // 몰래 딴짓하는 것"을 막기 위한 핵심 기능이라 반드시 유지되어야 합니다.
+  // 🆕 [요청 2026-09-07] 9분 45초 전후로 화면이 자동으로 꺼지면서 이 로직이 함께
+  // 발동해 학습이 자꾸 중단되던 문제는, "화면이 꺼지는 것을 막는" 방식(WakelockPlus)으로
+  // 해결합니다 — 타이머가 작동 중일 때는 화면 자체가 꺼지지 않으므로, 이 방어 로직이
+  // 불필요하게 발동할 일이 없습니다. 방어 로직 자체는 예전처럼 그대로 되돌렸습니다.
+  // ============================================================================
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
@@ -691,8 +717,12 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   Future<void> _autoPauseAndSaveOnLeave() async {
     if (!_isRunning) return; // 이미 멈춰있으면 할 일 없음
     _timer?.cancel();
+    // 🆕 [요청 2026-09-06] 벽시계 기준 계산을 위해 앵커도 함께 초기화 (재개 시 정확히 이어지도록)
+    _accumulatedSecondsAtAnchor = _elapsedSeconds;
+    _sessionAnchorTime = null;
     setState(() => _isRunning = false);
     await _timerAudioPlayer.pause();
+    await WakelockPlus.disable(); // 🆕 타이머가 멈췄으니 화면이 다시 자동으로 꺼질 수 있게 허용
     _animKey.currentState?.pauseEngine();
     await _persistTempProgress(); // 🆕 프로세스가 완전히 종료되는 최악의 경우에도 대비해 즉시 저장
   }
@@ -718,45 +748,44 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
   }
 
   // 👑 🎯 10분 주기 무한 루프 제어 엔진 교차 검증 완료판
+  // 🆕 [요청 2026-09-06] 매 틱 증가(_animationCycleSeconds++) 방식 대신, 항상 "총 경과시간
+  // (_elapsedSeconds) 기준"으로 주기 내 위치를 다시 계산하도록 변경. 기존 방식은 화면이
+  // 꺼져있던 동안 건너뛴 틱이 있으면 정확히 1초/30초 지점을 놓쳐서 오버레이가 제때 뜨거나
+  // 사라지지 않는 문제가 있었는데, 이제는 매번 다시 계산하므로 건너뛰어도 항상 정확합니다.
   void _runVipStarStrictRotationEngine() {
     if (!_currentIsVip) return; // 👈 실시간 영구 연동 변수로 전면 전환 보호막 장착
 
-    _animationCycleSeconds++;
+    _animationCycleSeconds = _elapsedSeconds % 630;
+    final bool shouldShow = _animationCycleSeconds >= 1 && _animationCycleSeconds < 30;
 
-    if (_animationCycleSeconds == 1) {
-      setState(() {
-        _showVipOverlay = true;
-      });
+    if (shouldShow && !_showVipOverlay) {
+      _showVipOverlay = true;
       _animKey.currentState?.resetAndPlay();
-    }
-    else if (_animationCycleSeconds == 30) {
-      setState(() {
-        _showVipOverlay = false;
-      });
-    }
-    else if (_animationCycleSeconds >= 630) {
-      _animationCycleSeconds = 0;
+    } else if (!shouldShow && _showVipOverlay) {
+      _showVipOverlay = false;
     }
   }
 
   // ============================================================================
   // 🆕 [별 경제 시스템] 실시간 자동 별 적립 체크.
-  // Timer.periodic 1초 틱마다 호출되며, DkeStars.starAccrualInterval(지금 1초, 실사용 시 1분)에
-  // 도달할 때마다 별 1개를 즉시 DkeStars에 저장합니다. 30분 몰아서 저장하지 않고 그때그때 저장하므로
-  // 앱이 중간에 꺼져도 이미 적립된 별은 안전합니다.
+  // 🆕 [요청 2026-09-06] "총 경과시간(_elapsedSeconds) ÷ 적립주기"로 지금까지 쌓였어야 할
+  // 총 별 개수를 매번 다시 계산하는 방식으로 전환. 화면이 꺼져있다가 한 번에 여러 초가
+  // 건너뛰어도(예: 3분 뒤 복귀) 그 사이 쌓였어야 할 별을 한꺼번에 정확히 지급합니다.
   // ============================================================================
   void _checkAndAccrueStar() {
-    _secondsSinceLastStarAccrual++;
     final int intervalSeconds = DkeStars.starAccrualInterval.inSeconds;
     if (intervalSeconds <= 0) return;
 
-    if (_secondsSinceLastStarAccrual >= intervalSeconds) {
-      _secondsSinceLastStarAccrual = 0;
-      _starsEarnedThisSession += 1;
+    final int totalStarsShouldHaveByNow = _elapsedSeconds ~/ intervalSeconds;
+    final int newlyEarned = totalStarsShouldHaveByNow - _starsAccruedSoFar;
+    if (newlyEarned > 0) {
+      _starsAccruedSoFar = totalStarsShouldHaveByNow;
+      _starsEarnedThisSession += newlyEarned;
       // 저장 자체는 비동기로 흘려보내되(화면 끊김 없게), 실패해도 다음 틱에서 계속 누적되므로 안전.
-      DkeStars.addStars(1, subject: widget.selectedSubject);
+      DkeStars.addStars(newlyEarned, subject: widget.selectedSubject);
     }
   }
+
 
   // ============================================================================
   // 🆕 [알람 순서 보장] 학습 시작 알림음(start_bell.mp3, 13초)이 실제로 "재생 완료"될 때까지
@@ -854,12 +883,18 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     try {
       if (_isRunning) {
         _timer?.cancel();
+        // 🆕 [요청 2026-09-06] 일시정지 시점의 정확한 경과시간을 고정해서 저장.
+        // 다음에 재개할 때 이 값부터 다시 벽시계 기준으로 이어짐.
+        _accumulatedSecondsAtAnchor = _elapsedSeconds;
+        _sessionAnchorTime = null;
         setState(() => _isRunning = false);
         await _timerAudioPlayer.pause();
+        await WakelockPlus.disable(); // 🆕 [요청 2026-09-07] 일시정지하면 화면이 다시 자동으로 꺼질 수 있게 허용
         _animKey.currentState?.pauseEngine();
         _showPauseChoiceDialog();
       } else {
         setState(() => _isRunning = true);
+        await WakelockPlus.enable(); // 🆕 [요청 2026-09-07] 타이머가 작동하는 동안 화면이 자동으로 꺼지지 않게 방지
         // 🆕 [고급 안내 팝업] 처음 시작할 때만 한 번, 다른 화면으로 이동 시 데이터가
         // 사라질 수 있음을 부드럽게 안내
         if (_elapsedSeconds == 0) {
@@ -873,6 +908,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
           await _timerAudioPlayer.play(AssetSource('sounds/${widget.selectedSoundFile}'));
         }
 
+        debugPrint('[VIP애니메이션] _currentIsVip=$_currentIsVip, elapsedSeconds=$_elapsedSeconds');
         if (_currentIsVip) {
           _animKey.currentState?.resumeEngine();
           if (_elapsedSeconds == 0) {
@@ -880,20 +916,37 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
             setState(() {
               _showVipOverlay = true;
             });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _animKey.currentState?.resetAndPlay();
+          });
           }
         }
 
+        // 🆕 [요청 2026-09-06] 시작/재개하는 이 순간의 실제 시각을 앵커로 기록.
+        // 이후 경과시간은 항상 "지금까지 쌓인 초 + (지금 - 앵커시각)"으로 다시 계산되므로,
+        // 화면이 꺼져있던 동안에도 실제 흐른 시간이 정확히 반영되고 숫자가 끊기지 않습니다.
+        _accumulatedSecondsAtAnchor = _elapsedSeconds;
+        _sessionAnchorTime = DateTime.now();
+
         _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (_sessionAnchorTime == null) return;
+          final int computedElapsed = _accumulatedSecondsAtAnchor +
+              DateTime.now().difference(_sessionAnchorTime!).inSeconds;
+
           setState(() {
-            if (_elapsedSeconds < _totalSeconds) {
-              _elapsedSeconds++;
+            if (computedElapsed < _totalSeconds) {
+              _elapsedSeconds = computedElapsed;
               progressPercent = _elapsedSeconds / _totalSeconds;
               _runVipStarStrictRotationEngine();
               _checkAndAccrueStar(); // 🆕 [별 경제 시스템] 실시간 자동 적립 체크
             } else {
+              _elapsedSeconds = _totalSeconds;
+              progressPercent = 1.0;
               _timer?.cancel();
+              _sessionAnchorTime = null;
               _isRunning = false;
               _timerAudioPlayer.stop();
+              WakelockPlus.disable(); // 🆕 [요청 2026-09-07] 목표 달성으로 종료됐으니 화면 잠금 방지 해제
               // [추가] 학습 종료(목표 달성) 알림음 (트랙 공통 1개) - 백색소음 정지 후 반드시 재생됨
               _cueAudioPlayer.play(AssetSource('sounds/end_bell.mp3'));
               _showCompletionDialog();
@@ -1180,7 +1233,23 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
       list.add(newRecord);
       await prefs.setString('gke_exam_records', jsonEncode(list));
-      await FamilyLinkService.pushExamRecord(newRecord); // 🆕 [버그 수정] 학부모 화면 동기화 누락분 추가
+
+      // 🆕 [버그 수정 2026-09-17] 기존엔 성적 기록이 로컬(gke_exam_records)에만 저장되고
+      // Firestore로 전혀 전송되지 않아서, 학생이 시험 점수를 입력해도 부모방에는 영원히
+      // 안 보이는 구조적 누락이 있었음(sessionHistory는 정상 전송되던 것과 대비됨).
+      // sessionHistory와 동일한 패턴으로 즉시 전송.
+      await FamilyLinkService.pushExamRecord(newRecord);
+
+      // 🆕 [장학금 방 2026-09-17] 시험 유형별 보너스 별 자동 지급
+      // (주평가/단원평가 +10, 중간·기말·모의고사 +50). newRecord['id']가 이미 고유값이라
+      // 별도 식별자를 새로 만들 필요 없이 그대로 중복방지 키로 재사용.
+      // 🆕 [허점 수정 2026-09-18] 주간평가/단원평가는 타이머 30분 이상 작동해야
+      // 보너스가 지급되도록, 이 세션의 실제 경과시간(_elapsedSeconds)을 함께 전달
+      await ScholarshipService.recordExamCategoryBonus(
+        examCategory: category,
+        examRecordId: newRecord['id'] as String,
+        elapsedSeconds: _elapsedSeconds,
+      );
     }
 
     // 다음 표시할 항목의 key로 정확히 스크롤 이동. 고정 offset을 쓰지 않으므로
@@ -1849,6 +1918,15 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       // 같은 기록 요약을 Firestore(학생 코드 문서의 sessionHistory 배열)에도
                       // 함께 올림. 실패해도 로컬 저장은 이미 끝난 상태라 학생 화면엔 영향 없음.
                       await FamilyLinkService.pushSessionRecord(dkeFinalPacket);
+
+                      // 🆕 [장학금 방 2026-09-17] 타이머 70% 이상 완주 보너스(+10) / 학습기록 작성
+                      // 완료 보너스(+10) 지급. dkeFinalPacket['timestamp']가 이미 이 세션 저장의
+                      // 고유값이므로 별도 식별자를 새로 만들지 않고 그대로 중복방지 키로 재사용.
+                      await ScholarshipService.recordSessionCompletion(
+                        sessionEventId: dkeFinalPacket['timestamp'] as String,
+                        elapsedSeconds: _elapsedSeconds,
+                        totalSeconds: _totalSeconds,
+                      );
 
                       // 🆕 [연동 2026-08-10] "평가" 기록이면서 시험 유형(주평가/단원평가/중간고사/기말고사/모의고사)이
                       // 선택된 경우, 같은 점수를 member_achievement_screen.dart의 "나의 성적 기록"(gke_exam_records)에도
