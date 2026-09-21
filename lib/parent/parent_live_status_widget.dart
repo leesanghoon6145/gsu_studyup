@@ -169,6 +169,12 @@ String starsSectionForeignTitle(int count) => starsSectionKorTitle(count);
 
 class ParentLiveStatusWidget extends StatefulWidget {
   final String childName;
+  // 🆕 [실시간 학습 현황 2026-09-19] 진짜 "지금 이 순간" 학습 중인지를 나타냄.
+  final bool isStudyingNow;
+  final String liveSubject;
+  final int liveElapsedSeconds;
+  final int liveTotalSeconds;
+  // 🆕 [실시간 연동] "현재 진행 중"을...  (172번째 줄부터는 원래 있던 내용 그대로 이어짐)
   // 🆕 [실데이터 연동] "현재 진행 중"을 실제로 감지할 방법이 없어(부모 화면은 별도 프로세스이므로),
   // 가장 최근 학습 세션 정보로 대체 표시합니다. 값이 없으면 lastSessionSubject가 null입니다.
   final String? lastSessionSubject;
@@ -191,6 +197,10 @@ class ParentLiveStatusWidget extends StatefulWidget {
 
   const ParentLiveStatusWidget({
     Key? key,
+    this.isStudyingNow = false,
+    this.liveSubject = '',
+    this.liveElapsedSeconds = 0,
+    this.liveTotalSeconds = 0,
     required this.childName,
     required this.lastSessionSubject,
     required this.lastSessionDurationMinutes,
@@ -215,6 +225,200 @@ class ParentLiveStatusWidget extends StatefulWidget {
 class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
   final TextEditingController _customMessageController = TextEditingController();
 
+  // ============================================================================
+  // 🆕 [실시간 학습 현황 2026-09-19] "지금 학습 중" 카드. 학생 타이머 화면의
+  // 막대그래프(6색 구간, 목표시간 기준 자동 분할, 분/% 자동표시)와 100% 동일한
+  // 구조를 부모방에도 재현함. 동그라미는 학습 중=진한 파랑 입체, 쉬는 중=흰색 입체.
+  // ============================================================================
+  Widget _buildLiveStudyingCard() {
+    final bool isStudying = widget.isStudyingNow;
+    final int elapsed = widget.liveElapsedSeconds;
+    final int total = widget.liveTotalSeconds;
+    final double progress = (total > 0) ? (elapsed / total).clamp(0.0, 1.0) : 0.0;
+    final int elapsedMinutes = elapsed ~/ 60;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+      decoration: BoxDecoration(
+        color: widget.premiumCardBg,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: widget.brandGolden.withValues(alpha: 0.3), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "${widget.childName}님 가장 최근 학습 상태",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              // 🆕 학습 중 = 진한 파랑 입체 동그라미 / 쉬는 중(정지·종료 모두) = 흰색 입체 동그라미
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: isStudying
+                        ? [const Color(0xFF5AA7FF), const Color(0xFF0D47C7)]
+                        : [Colors.white, const Color(0xFFB8BCC4)],
+                    center: const Alignment(-0.3, -0.3),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isStudying ? const Color(0xFF1565C0) : Colors.black26).withValues(alpha: 0.6),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 🆕 [요청 2026-09-21] 상태 줄만 영문 한 줄 + 한글 한 줄 2줄 구성으로 변경.
+              // 학습 중이면 파란색 + 과목명, 정지/종료 중이면 흰색(Colors.white70) + "휴식중" 문구로
+              // 이 두 줄만 바뀌고, 그 아래 무지개 바/퍼센트 등 나머지 레이아웃은 그대로 유지됨.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: isStudying
+                      ? [
+                    Text(
+                      "Studying now — ${widget.liveSubject} (${elapsedMinutes}m)",
+                      style: GoogleFonts.notoSansKr(
+                        color: const Color(0xFF5AA7FF),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      "지금 학습 중 — ${widget.liveSubject} (${elapsedMinutes}분째)",
+                      style: GoogleFonts.notoSansKr(
+                        color: const Color(0xFF5AA7FF),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ]
+                      : [
+                    Text(
+                      "Currently resting",
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white70,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      "현재 잠시 휴식중",
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white70,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: 14),
+            // 🆕 학생 타이머 화면과 동일한 6색 구간 막대그래프
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final List<Color> rainbowColors = [
+                  const Color(0xFFFF3B30),
+                  const Color(0xFFFF9500),
+                  const Color(0xFFFFCC00),
+                  const Color(0xFF34C759),
+                  const Color(0xFF007AFF),
+                  const Color(0xFF5856D6),
+                ];
+                return Container(
+                  width: constraints.maxWidth,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D1527),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: widget.brandGolden.withValues(alpha: 0.3), width: 1.0),
+                  ),
+                  child: Row(
+                    children: List.generate(6, (index) {
+                      final double itemWidth = (constraints.maxWidth - 2.0) / 6;
+                      final double startFactor = index / 6.0;
+                      final double endFactor = (index + 1) / 6.0;
+                      double itemProgress;
+                      if (progress >= endFactor) {
+                        itemProgress = 1.0;
+                      } else if (progress <= startFactor) {
+                        itemProgress = 0.0;
+                      } else {
+                        itemProgress = (progress - startFactor) / (endFactor - startFactor);
+                      }
+                      return Container(
+                        width: itemWidth,
+                        height: double.infinity,
+                        decoration: BoxDecoration(
+                          border: index < 5
+                              ? Border(right: BorderSide(color: widget.brandGolden.withValues(alpha: 0.25), width: 1.0))
+                              : null,
+                        ),
+                        child: Stack(
+                          children: [
+                            if (itemProgress > 0)
+                              FractionallySizedBox(
+                                widthFactor: itemProgress,
+                                child: Container(color: rainbowColors[index]),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 6),
+            // 🆕 목표시간 기준 자동 계산되는 분/% 표시 (학생 화면과 동일한 방식)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final double totalMinutes = total / 60.0;
+                final double interval = totalMinutes / 6.0;
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(6, (index) {
+                    final double currentInterval = interval * (index + 1);
+                    final int currentPercentage = ((index + 1) / 6.0 * 100).round();
+                    final double itemWidth = constraints.maxWidth / 6;
+                    return SizedBox(
+                      width: itemWidth,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "${currentInterval.toStringAsFixed(1)}m\n($currentPercentage%)",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, height: 1.2),
+                        ),
+                      ),
+                    );
+                  }),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "목표 시간: ${elapsedMinutes}m / ${(total / 60).round()}m",
+              style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 11.5, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _customMessageController.dispose();
@@ -228,15 +432,21 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-            decoration: BoxDecoration(
-              color: widget.premiumCardBg,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: widget.brandGolden.withValues(alpha: 0.3), width: 1.2),
-            ),
-            child: Column(
-              children: widget.lastSessionSubject != null
+          // 🆕 [실시간 학습 현황 2026-09-19] "지금 이 순간 학습 중"이면 이 카드를
+          // 통째로 실시간 카드로 교체함. 쉬는 중이면 기존 과거 세션 요약 카드를
+          // 그대로 보여줌 (아래 원래 있던 Container는 그대로 유지, 손대지 않음).
+          if (widget.isStudyingNow)
+            _buildLiveStudyingCard()
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+              decoration: BoxDecoration(
+                color: widget.premiumCardBg,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: widget.brandGolden.withValues(alpha: 0.3), width: 1.2),
+              ),
+              child: Column(
+                children: widget.lastSessionSubject != null
                   ? [
                 // 🆕 [요청] 3줄 형식: 1) OO님 가장최근 학습 상태  2) 학습과목명칭: 과목  3) 최근 세션 집중학습 : N분
                 Text(

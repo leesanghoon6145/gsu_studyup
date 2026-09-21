@@ -1358,6 +1358,20 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
       'ES': 'Estrellas base (tiempo)',
       'TH': 'ดาวพื้นฐาน (เวลาเรียน)',
     },
+    'todayBaseStarsLabel': {
+      'KO': '오늘 학습별(학습시간)',
+      'EN': "Today's Stars (Study Time)",
+      'JA': '本日の学習スター（学習時間）',
+      'ZH': '今日学习星（学习时间）',
+      'FR': "Étoiles du jour (temps d'étude)",
+      'DE': 'Heutige Sterne (Lernzeit)',
+      'RU': 'Звёзды за сегодня (время)',
+      'AR': 'نجوم اليوم (وقت الدراسة)',
+      'HI': 'आज के सितारे (समय)',
+      'VI': 'Sao hôm nay (thời gian)',
+      'ES': 'Estrellas de hoy (tiempo)',
+      'TH': 'ดาววันนี้ (เวลาเรียน)',
+    },
     'bonusStarsLabel': {
       'KO': '보너스별',
       'EN': 'Bonus Stars',
@@ -2280,6 +2294,19 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
     if (m == null) return key;
     return m[DkeLang.current] ?? m['EN'] ?? m['KO'] ?? key;
   }
+
+  static const Map<String, Color> _bonusTypeColorMap = {
+    'timer70': Color(0xFFFF9500),
+    'recordwrite': Color(0xFF34C759),
+    'weekly': Color(0xFF60A5FA),
+    'unittest': Color(0xFFAF52DE),
+    'midterm': Color(0xFFFF3B30),
+    'final': Color(0xFFFFCC00),
+    'mock': Color(0xFF5856D6),
+    'dailyattend': Color(0xFF00C7BE),
+    'weeklyattend': Color(0xFFFF2D55),
+    'monthlyattend': Color(0xFFFFD700),
+  };
 
   static const Map<String, int> _bonusTypeStarAmount = {
     'timer70': ScholarshipService.bonusTimer70Completion,
@@ -4305,6 +4332,15 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                           children: [
                             Expanded(
                               child: _buildLiveStatusMiniStat(
+                                icon: Icons.wb_sunny_rounded,
+                                iconColor: const Color(0xFFFFCC00),
+                                label: _t('todayBaseStarsLabel'),
+                                value: "$_todayTotalStudyMinutes개",
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildLiveStatusMiniStat(
                                 icon: Icons.timer_outlined,
                                 iconColor: const Color(0xFF34C759),
                                 label: _t('monthlyBaseStarsLabel'),
@@ -4339,7 +4375,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                                 final int perEvent =
                                     _bonusTypeStarAmount[typeKey] ?? 0;
                                 final Color chipColor =
-                                    bonusColors[idx % bonusColors.length];
+                                    _bonusTypeColorMap[typeKey] ?? _ThemeColors.brandGolden;
                                 return Padding(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 3.0,
@@ -6825,21 +6861,22 @@ Global Knowledge Education
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(
-                      child: Text(
-                        "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
-                        overflow: TextOverflow.fade,
-                        softWrap: false,
-                        maxLines: 1,
-                        style: GoogleFonts.notoSansKr(
-                          color: Colors.white,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          "${idx + 1}${_t('sessionOrdinal')} · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}",
+                          maxLines: 1,
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       "${s["minutes"]}${_t('minutesUnitSuffix')}",
                       style: GoogleFonts.notoSansKr(

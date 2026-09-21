@@ -18,6 +18,7 @@ import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
 import 'services/user_profile_service.dart'; // 🆕 [유형별 라우팅] 가입 시 저장한 회원 유형 조회
 import 'services/family_link_service.dart'; // 🆕 [부모-자녀 응원 시스템] 이모지/응원문구 실시간 수신
 import 'timer/timer_screen.dart';
+import 'parent/parent_consent_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -104,11 +105,11 @@ class ParentEncouragementManager {
 
   static Future<void> _subscribeToMyLinkDoc() async {
     final String? code = await FamilyLinkService.getMyLinkCode();
-    debugPrint('[디버깅] ParentEncouragementManager: 구독 시작 - 내 코드: $code'); // 🆕 [임시 디버깅]
+
     if (code == null) return; // 아직 부모와 연결 안 된 계정(학생이 아니거나 미연결)이면 조용히 넘어감
 
     _linkSub = FamilyLinkService.watch(code).listen((snapshot) {
-      debugPrint('[디버깅] ParentEncouragementManager: 스냅샷 수신 - exists: ${snapshot.exists}'); // 🆕 [임시 디버깅]
+
       if (!snapshot.exists) return;
       final Map<String, dynamic>? data = snapshot.data();
       if (data == null) return;
@@ -117,7 +118,7 @@ class ParentEncouragementManager {
           ? Map<String, dynamic>.from(data['pendingEmoji'] as Map)
           : null;
       if (emojiData != null && !_isEmojiShowing) {
-        debugPrint('[디버깅] ParentEncouragementManager: 이모지 발견! 표시 시도'); // 🆕 [임시 디버깅]
+
         _showEmojiOverlay(emojiData);
         // 🆕 [요청 2026-09-09] 받을 때마다 7일 보관함에도 함께 기록
         FamilyLinkService.saveEncouragementToHistory(
@@ -131,7 +132,7 @@ class ParentEncouragementManager {
           ? Map<String, dynamic>.from(data['pendingMessage'] as Map)
           : null;
       if (messageData != null && !_isMessageShowing) {
-        debugPrint('[디버깅] ParentEncouragementManager: 응원문자 발견! 표시 시도'); // 🆕 [임시 디버깅]
+
         _showEncouragementDialog(messageData['text'] as String? ?? '');
         // 🆕 [요청 2026-09-09] 받을 때마다 7일 보관함에도 함께 기록
         FamilyLinkService.saveEncouragementToHistory(
@@ -140,9 +141,8 @@ class ParentEncouragementManager {
         );
       }
     }, onError: (Object error) {
-      // 🆕 [버그 수정 2026-09-08] 예전엔 에러 처리가 전혀 없어서, 구독 자체가 실패해도
-      // (예: 권한 문제) 화면에도 콘솔에도 아무것도 안 뜨고 완전히 조용히 죽어있었습니다.
-      debugPrint('[디버깅] ParentEncouragementManager: 구독 실패! 원인: $error');
+      // 구독 자체가 실패하면(예: 권한 문제) 콘솔에 남겨서 나중에 추적 가능하게 함.
+      debugPrint('[FamilyLinkService] pendingEmoji/Message 구독 실패: $error');
     });
   }
 
@@ -1034,6 +1034,21 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                   _buildOutlineButton(
                     title: _isLoggingIn ? '로그인 중...' : DkeLang.signInBtn, // 🆕 [12개국 다국어] 원문: 'SIGN IN (로그인)'
                     onPressed: () => _handleSignIn(context),
+                  ),
+                  const SizedBox(height: 16),
+                  // 🆕 [보호자 인증 전용 2026-09-21] 자녀가 회원가입 중 발급받은 코드를
+                  // 부모가 입력해서 확인하는 화면으로 이동. 로그인 여부와 무관하게 접근 가능.
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ParentConsentScreen()),
+                      );
+                    },
+                    child: Text(
+                      '자녀 회원가입 보호자 확인 / Parent Verification',
+                      style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],

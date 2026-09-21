@@ -127,10 +127,6 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _consentConnected = false;
   StreamSubscription? _consentSub;
 
-  // 🆕 [학생-부모 기기 연결] 학생용 코드 생성 상태
-  String? _generatedLinkCode;
-  bool _generatingCode = false;
-
   // 🆕 [학생-부모 기기 연결] 학부모용 코드 입력/연결 상태
   bool _connectingCode = false;
   bool _linkSuccess = false;
@@ -194,17 +190,6 @@ class _SignupScreenState extends State<SignupScreen> {
       return '비밀번호와 비밀번호 확인이 일치하지 않습니다.';
     }
     return null; // 문제 없음
-  }
-
-  // 🆕 [학생-부모 기기 연결] 학생용: 부모님께 알려줄 6자리 코드 생성
-  Future<void> _generateMyLinkCode() async {
-    setState(() => _generatingCode = true);
-    final code = await FamilyLinkService.generateLinkCode();
-    if (!mounted) return;
-    setState(() {
-      _generatedLinkCode = code;
-      _generatingCode = false;
-    });
   }
 
   // 🆕 [학생-부모 기기 연결] 학부모용: 자녀 코드 입력해서 연결 시도 (최대 5명)
@@ -274,15 +259,16 @@ class _SignupScreenState extends State<SignupScreen> {
     return '$y-$m-$d';
   }
 
-  // 🆕 [보호자 인증 재설계] 보호자에게 알려줄 연결 코드 발급 + 실시간으로 연결 여부 감지
+  // 🆕 [보호자 인증 재설계 2026-09-21] 학생 코드 시스템(generateLinkCode)이 아니라
+  // 계정 생성 전에도 안전하게 동작하는 전용 함수(generateConsentCode)를 사용.
   Future<void> _generateConsentCode() async {
-    final code = await FamilyLinkService.generateLinkCode();
+    final code = await FamilyLinkService.generateConsentCode();
     if (!mounted) return;
     setState(() => _consentLinkCode = code);
     _consentSub?.cancel();
-    _consentSub = FamilyLinkService.watch(code).listen((snap) {
-      final status = snap.data()?['status'];
-      if (status == 'connected' && mounted) {
+    _consentSub = FamilyLinkService.watchConsentCode(code).listen((snap) {
+      final bool connected = (snap.data()?['connected'] as bool?) ?? false;
+      if (connected && mounted) {
         setState(() => _consentConnected = true);
       }
     });
@@ -479,48 +465,6 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ],
               ),
-
-              // 🆕 [학생-부모 기기 연결] 부모님께 알려줄 연결 코드 발급 UI
-              const SizedBox(height: 10),
-              if (_generatedLinkCode == null) ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: _generatingCode ? null : _generateMyLinkCode,
-                    icon: const Icon(Icons.family_restroom, color: brandGolden),
-                    label: Text(
-                      _generatingCode ? '생성 중...' : '부모님 연결 코드 발급받기',
-                      style: const TextStyle(color: brandGolden, fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: brandGolden),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ] else ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: brandGolden.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: brandGolden.withValues(alpha: 0.4)),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text('이 번호를 부모님께 알려주세요', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                      const SizedBox(height: 8),
-                      Text(
-                        _generatedLinkCode!,
-                        style: const TextStyle(color: brandGolden, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 6),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 10),
             ],
 
             // 학부모 전용 필드

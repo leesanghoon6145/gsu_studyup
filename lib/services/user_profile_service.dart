@@ -20,6 +20,15 @@ class DkeUserProfile {
 
   // 로컬 캐시 키 (오프라인 등 즉시 응답이 필요할 때 마지막으로 불러온 값을 잠깐 보여주는 용도)
   static const String _kCachedUserTypeKey = 'dke_user_type_cache';
+  // 🆕 [버그 수정 2026-09-19] 이 캐시 키가 계정 구분 없이 폰 하나에 값 하나만
+// 저장되고 있어서, 계정을 바꿔 로그인했을 때 Firestore 조회가 실패하면
+// "이전 계정의 이름"이 새 계정 이름인 것처럼 잘못 반환되는 심각한 버그가
+// 있었음(예: 이태동 계정인데 "이상훈"이 뜸). family_link_service.dart의
+// _scopedKey()와 동일한 패턴으로 uid를 포함시켜 완전히 분리함.
+  static String _scopedCacheKey(String base) {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null ? base : '${base}_$uid';
+  }
   static const String _kCachedNameKey = 'dke_user_real_name_cache';
   // 🆕 [요청 2026-09-04] 학교/학년 캐시 키 추가 (성취도 화면 "OO학교 O학년 이름" 표시용)
   static const String _kCachedSchoolKey = 'dke_user_school_cache';

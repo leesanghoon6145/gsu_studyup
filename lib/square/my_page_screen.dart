@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 실제로 연결
 import '../services/user_profile_service.dart'; // 🆕 [요청 2026-09-04] 학교/학년 불러오기·저장용
+import '../services/family_link_service.dart'; // 🆕 [연결 코드 발급 2026-09-21]
 
 class MyPageScreen extends StatefulWidget {
   final bool isVipMember;
@@ -415,6 +416,12 @@ class _MyPageScreenState extends State<MyPageScreen> {
   // 🆕 [요청 2026-09-05] 이름이 "학습자" 고정 표시로 나오는 계정(가입 시 저장 누락 등)을 위해
   // 이름도 여기서 직접 입력·수정할 수 있게 추가.
   final TextEditingController _nameController = TextEditingController();
+  // 🆕 [연결 코드 발급 2026-09-21] 로그인 확정 후에만 접근 가능한 마이페이지에서
+  // 코드를 발급하도록 이동 — 회원가입 화면(로그인 미확정 상태)에서 발급하던
+  // 기존 방식은 FirebaseAuth.currentUser가 아직 확정되지 않아 다른 계정의
+  // uid로 코드가 잘못 생성될 위험이 있어 제거함.
+  String? _myLinkCode;
+  bool _loadingLinkCode = false;
 
   Map<String, String> get _lang => _languages[_currentLangIndex];
   bool get _isRtl => _lang['code'] == 'AR';
@@ -425,6 +432,41 @@ class _MyPageScreenState extends State<MyPageScreen> {
     _isVip = widget.isVipMember;
     _loadSavedSettings();
     _loadSchoolGrade(); // 🆕 [요청 2026-09-04] 저장된 학교/학년 불러오기
+    _loadMyLinkCode(); // 🆕 [연결 코드 발급 2026-09-21]
+  }
+
+  // 🆕 [연결 코드 발급 2026-09-21] 마이페이지 진입 시 이미 발급된 코드가 있으면
+  // 자동으로 불러와서 보여줌 (신규 발급은 하지 않음 - 버튼을 눌러야만 발급됨)
+  Future<void> _loadMyLinkCode() async {
+    try {
+      final code = await FamilyLinkService.getMyLinkCode();
+      if (!mounted) return;
+      setState(() => _myLinkCode = code);
+    } catch (e) {
+      debugPrint('[MyPageScreen] 연결 코드 불러오기 실패: $e');
+    }
+  }
+
+  // 🆕 [연결 코드 발급 2026-09-21] 버튼을 눌렀을 때만 실제 발급/조회 실행.
+  // 이 시점엔 반드시 로그인이 확정된 상태이므로 FamilyLinkService.getOrCreateMyLinkCode()가
+  // 항상 정확한 uid를 기준으로 동작함 (회원가입 화면에서 발급하던 예전 방식의 위험 제거).
+  Future<void> _generateOrShowLinkCode() async {
+    setState(() => _loadingLinkCode = true);
+    try {
+      final code = await FamilyLinkService.getOrCreateMyLinkCode();
+      if (!mounted) return;
+      setState(() {
+        _myLinkCode = code;
+        _loadingLinkCode = false;
+      });
+    } catch (e) {
+      debugPrint('[MyPageScreen] 연결 코드 발급 실패: $e');
+      if (!mounted) return;
+      setState(() => _loadingLinkCode = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('코드 발급에 실패했습니다. 다시 시도해 주세요.\n($e)')),
+      );
+    }
   }
 
   // 🕒 기기 저장소에서 영구 가입된 VIP 상태와 목표 데이터를 실시간 로드 및 복원
@@ -845,6 +887,56 @@ class _MyPageScreenState extends State<MyPageScreen> {
                           _lang['saveSchoolGrade'] ?? '학교/학년 저장',
                           style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // 🆕 [연결 코드 발급 2026-09-21] 학부모 연동용 코드 확인/발급 섹션
+              _buildSectionTitle(DkeLang.current == 'KO' ? '부모님 연결 코드' : 'Parent Link Code'),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _containerBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _brandGolden.withOpacity(0.4), width: 1),
+                ),
+                child: _myLinkCode == null
+                    ? SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: _loadingLinkCode ? null : _generateOrShowLinkCode,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: _brandGolden, width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: Text(
+                      _loadingLinkCode
+                          ? (DkeLang.current == 'KO' ? '발급 중...' : 'Generating...')
+                          : (DkeLang.current == 'KO' ? '연결 코드 발급받기' : 'Get Link Code'),
+                      style: const TextStyle(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ),
+                )
+                    : Column(
+                  children: [
+                    Text(
+                      DkeLang.current == 'KO' ? '이 번호를 부모님께 알려주세요' : 'Share this number with your parent',
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _myLinkCode!,
+                      style: const TextStyle(
+                        color: _brandGolden,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 6,
                       ),
                     ),
                   ],

@@ -724,6 +724,8 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
     await _timerAudioPlayer.pause();
     await WakelockPlus.disable(); // 🆕 타이머가 멈췄으니 화면이 다시 자동으로 꺼질 수 있게 허용
     _animKey.currentState?.pauseEngine();
+    // 🆕 [실시간 학습 현황 2026-09-19] 다른 앱으로 전환하거나 화면을 벗어나도 부모방에 "쉬는 중"으로 반영
+    unawaited(FamilyLinkService.clearLiveStudyStatus());
     await _persistTempProgress(); // 🆕 프로세스가 완전히 종료되는 최악의 경우에도 대비해 즉시 저장
   }
 
@@ -891,7 +893,10 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         await _timerAudioPlayer.pause();
         await WakelockPlus.disable(); // 🆕 [요청 2026-09-07] 일시정지하면 화면이 다시 자동으로 꺼질 수 있게 허용
         _animKey.currentState?.pauseEngine();
+        // 🆕 [실시간 학습 현황 2026-09-19] 일시정지하면 부모방에도 즉시 "쉬는 중"으로 반영
+        unawaited(FamilyLinkService.clearLiveStudyStatus());
         _showPauseChoiceDialog();
+
       } else {
         setState(() => _isRunning = true);
         await WakelockPlus.enable(); // 🆕 [요청 2026-09-07] 타이머가 작동하는 동안 화면이 자동으로 꺼지지 않게 방지
@@ -939,6 +944,16 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               progressPercent = _elapsedSeconds / _totalSeconds;
               _runVipStarStrictRotationEngine();
               _checkAndAccrueStar(); // 🆕 [별 경제 시스템] 실시간 자동 적립 체크
+              // 🆕 [실시간 학습 현황 2026-09-19] 부모방에서 "지금 학습 중"을 볼 수
+              // 있도록 매초 호출하지만, 함수 내부에서 15초/90초 간격으로 알아서
+              // 걸러서 전송하므로 여기서는 그냥 자주 불러도 비용 문제 없음.
+              unawaited(FamilyLinkService.pushLiveStudyStatus(
+                isStudying: true,
+                subject: widget.selectedSubject,
+                elapsedSeconds: _elapsedSeconds,
+                totalSeconds: _totalSeconds,
+              ));
+
             } else {
               _elapsedSeconds = _totalSeconds;
               progressPercent = 1.0;
@@ -947,6 +962,9 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
               _isRunning = false;
               _timerAudioPlayer.stop();
               WakelockPlus.disable(); // 🆕 [요청 2026-09-07] 목표 달성으로 종료됐으니 화면 잠금 방지 해제
+              // 🆕 [실시간 학습 현황 2026-09-19] 목표 달성으로 종료되어도 부모방에 "쉬는 중"으로 반영
+              unawaited(FamilyLinkService.clearLiveStudyStatus());
+
               // [추가] 학습 종료(목표 달성) 알림음 (트랙 공통 1개) - 백색소음 정지 후 반드시 재생됨
               _cueAudioPlayer.play(AssetSource('sounds/end_bell.mp3'));
               _showCompletionDialog();

@@ -669,6 +669,30 @@ const Map<String, String> kScholarshipBonusTypeLabelMap = {
   'weeklyattend': '주간 개근 보너스',
   'monthlyattend': '월간 개근 보너스',
 };
+const Map<String, int> kBonusTypeStarAmountMap = {
+  'timer70': ScholarshipService.bonusTimer70Completion,
+  'recordwrite': ScholarshipService.bonusRecordWrite,
+  'weekly': ScholarshipService.bonusWeeklyAssessment,
+  'unittest': ScholarshipService.bonusUnitTest,
+  'midterm': ScholarshipService.bonusMidterm,
+  'final': ScholarshipService.bonusFinalExam,
+  'mock': ScholarshipService.bonusMockExam,
+  'dailyattend': ScholarshipService.bonusDailyAttendance,
+  'weeklyattend': ScholarshipService.bonusWeeklyAttendance,
+  'monthlyattend': ScholarshipService.bonusMonthlyAttendance,
+};
+const Map<String, Color> kBonusTypeColorMap = {
+  'timer70': Color(0xFFFF9500),
+  'recordwrite': Color(0xFF34C759),
+  'weekly': Color(0xFF60A5FA),
+  'unittest': Color(0xFFAF52DE),
+  'midterm': Color(0xFFFF3B30),
+  'final': Color(0xFFFFCC00),
+  'mock': Color(0xFF5856D6),
+  'dailyattend': Color(0xFF00C7BE),
+  'weeklyattend': Color(0xFFFF2D55),
+  'monthlyattend': Color(0xFFFFD700),
+};
 
 // 🆕 [장학금 방 2026-09-17 최종] 학부모용 안내문 원문 (출석 보너스 3종 반영 최종본)
 // 🆕 [다국어 2026-09-18] 언어별 학부모 안내문 맵. 'KO'/'EN'은 확정 완료.
@@ -2679,7 +2703,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                 ),
               ),
 
-              // 보너스별 상세 내역 (유형과 무관하게 공통, 항목명 그대로 표시)
+              // 보너스별 상세 내역 (학생 화면과 100% 동일한 색상/구성)
               if (bonusBreakdownRaw.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text(_t(kScholarshipBonusDetailTitleMap), style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold)),
@@ -2696,25 +2720,27 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                       final String typeKey = entry.key;
                       final int count = (entry.value as num?)?.toInt() ?? 0;
                       final String label = kBonusLabelForType(typeKey);
+                      final int perEvent = kBonusTypeStarAmountMap[typeKey] ?? 0;
+                      final Color chipColor = kBonusTypeColorMap[typeKey] ?? brandGolden;
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 3.0),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              "· $label",
-                              style: GoogleFonts.notoSansKr(
-                                color: Colors.white,
-                                fontSize: 12.5,
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(color: chipColor, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "$label (+$perEvent × ${count}회)",
+                                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5),
                               ),
                             ),
                             Text(
-                              "${count}회",
-                              style: GoogleFonts.notoSansKr(
-                                color: brandGolden,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              "+${perEvent * count}",
+                              style: GoogleFonts.notoSansKr(color: chipColor, fontWeight: FontWeight.bold, fontSize: 12.5),
                             ),
                           ],
                         ),
@@ -2951,6 +2977,15 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // Firestore 문서(links/{code})를 실시간 구독해서 이름/최근세션/별을 보여주고,
   // 연결된 자녀가 없으면(기존 단일기기 사용자) 원래대로 이 기기의 로컬 데이터를 보여줍니다.
   Widget _buildLiveStatusTabContent() {
+    // 🆕 [실시간 학습 현황 - 비용 절감 2026-09-19] IndexedStack은 화면 전환 시
+    // 위젯을 없애지 않고 계속 메모리에 살려두는 방식이라, 부모가 다른 탭(예:
+    // 장학금 탭)을 보고 있어도 이 함수의 Firestore 실시간 구독(watch)이 계속
+    // 유지되어 불필요한 읽기 비용이 발생하고 있었음. 지금 실제로 이 탭(인덱스 0)이
+    // 화면에 보이고 있을 때만 구독을 만들고, 다른 탭을 보는 중이면 아예 빈 화면만
+    // 반환해서 구독 자체가 생기지 않도록 함.
+    if (_currentIndex != 0) {
+      return const SizedBox.shrink();
+    }
     if (_selectedChildCode == null) {
       return ParentLiveStatusWidget(
         childName: _realChildName,
@@ -2983,8 +3018,25 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           );
         }
         final Map<String, dynamic> data = snapshot.data!.data() ?? {};
+        // 🆕 [실시간 학습 현황 2026-09-19] 학생 쪽에서 pushLiveStudyStatus()로
+        // 올린 현재 학습 상태를 꺼냄. 필드가 아직 없으면(한 번도 타이머를
+        // 안 돌렸으면) 전부 기본값(쉬는 중)으로 처리.
+        final Map<String, dynamic> liveStatus =
+            (data['liveStatus'] as Map<String, dynamic>?) ?? {};
+        final bool isStudyingNow = liveStatus['isStudying'] as bool? ?? false;
+        final String liveSubject = (liveStatus['subject'] as String?) ?? '';
+        final int liveElapsedSeconds = (liveStatus['elapsedSeconds'] as num?)?.toInt() ?? 0;
+        final int liveTotalSeconds = (liveStatus['totalSeconds'] as num?)?.toInt() ?? 0;
+        // 🆕 오래된 값 방치 방지: 업데이트가 5분 넘게 안 됐으면 "쉬는 중"으로 간주
+        // (학생이 인터넷 끊긴 채로 앱만 켜놓고 나갔을 때, 화면에 "학습 중"이
+        // 영원히 박제되는 것을 막기 위한 안전장치)
+        final Timestamp? liveUpdatedAt = liveStatus['updatedAt'] as Timestamp?;
+        final bool isLiveStatusFresh = liveUpdatedAt != null &&
+            DateTime.now().difference(liveUpdatedAt.toDate()).inMinutes < 5;
+        final bool showAsStudying = isStudyingNow && isLiveStatusFresh;
+
         final String childName =
-            (data['studentName'] as String?)?.trim().isNotEmpty == true
+        (data['studentName'] as String?)?.trim().isNotEmpty == true
             ? (data['studentName'] as String)
             : '학습자';
         final int totalStars = (data['todayStars'] as num?)?.toInt() ?? 0;
@@ -3012,6 +3064,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
         return ParentLiveStatusWidget(
           childName: childName,
+          isStudyingNow: showAsStudying,
+          liveSubject: liveSubject,
+          liveElapsedSeconds: liveElapsedSeconds,
+          liveTotalSeconds: liveTotalSeconds,
           lastSessionSubject: lastSubject,
           lastSessionDurationMinutes: lastDurationMinutes,
           totalCollectedStars: totalStars,

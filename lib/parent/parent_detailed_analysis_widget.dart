@@ -367,9 +367,13 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  "[$period $subject] $duration",
-                  style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 15, fontWeight: FontWeight.bold),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Text(
+                    "[$period $subject] $duration",
+                    maxLines: 1,
+                    style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
               Container(
@@ -390,9 +394,13 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            _tf('detailContentFormat', {'content': content}),
-            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.4),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Text(
+              _tf('detailContentFormat', {'content': content}),
+              maxLines: 1,
+              style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.4),
+            ),
           ),
           if (metrics.isNotEmpty) ...[
             const SizedBox(height: 14),
