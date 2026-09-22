@@ -95,21 +95,30 @@ const Map<String, String> kMidUnitWordMap = {'KO': '중단원', 'EN': 'Sub-unit'
 const List<String> kEnMonthAbbrev = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 String yearChipLabel(int year) {
-  final w = t(kYearWordMap);
-  return isNumberFirstLang ? "$year$w" : "$year $w";
+  if (DkeLang.isForeignSelected) {
+    final w = t(kYearWordMap);
+    return isNumberFirstLang ? "$year$w" : "$year $w";
+  }
+  return "$year${kYearWordMap['KO']}/${kYearWordMap['EN']}";
 }
 
 String monthChipLabel(int month) {
-  if (['KO', 'JA', 'ZH'].contains(DkeLang.current)) {
-    return "$month${t(kMonthWordMap)}";
+  if (DkeLang.isForeignSelected) {
+    if (['JA', 'ZH'].contains(DkeLang.current)) {
+      return "$month${t(kMonthWordMap)}";
+    }
+    final String mm = month.toString().padLeft(2, '0');
+    return "$mm ${kEnMonthAbbrev[month - 1]}";
   }
-  final String mm = month.toString().padLeft(2, '0');
-  return "$mm ${kEnMonthAbbrev[month - 1]}";
+  return "$month월/${kEnMonthAbbrev[month - 1]}";
 }
 
 String weekChipLabel(int week) {
-  final w = t(kWeekWordMap);
-  return isNumberFirstLang ? "$week$w" : "$w $week";
+  if (DkeLang.isForeignSelected) {
+    final w = t(kWeekWordMap);
+    return isNumberFirstLang ? "$week$w" : "$w $week";
+  }
+  return "$week${kWeekWordMap['KO']}/${kWeekWordMap['EN']} $week";
 }
 
 String bigUnitChipLabel(int n) {
@@ -328,7 +337,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
               labelColor: Colors.black, unselectedLabelColor: Colors.white,
               labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w900, fontSize: 12),
               unselectedLabelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.bold, fontSize: 12),
-              tabs: [Tab(text: t(kDailyTabMap)), Tab(text: t(kWeeklyTabMap)), Tab(text: t(kMonthlyTabMap)), Tab(text: t(kYearlyTabMap))],
+              tabs: [Tab(text: bi(kDailyTabMap)), Tab(text: bi(kWeeklyTabMap)), Tab(text: bi(kMonthlyTabMap)), Tab(text: bi(kYearlyTabMap))],
             ),
           ),
           const SizedBox(height: 14),

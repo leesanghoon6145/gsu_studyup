@@ -195,8 +195,8 @@ class ParentEncouragementManager {
                 Expanded(
                   child: Text(
                     message,
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, height: 1.3),
-                    maxLines: 2,
+                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, height: 1.3),
+                    maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -272,13 +272,22 @@ class ParentEncouragementManager {
                 ],
               ),
               padding: const EdgeInsets.fromLTRB(26, 30, 26, 22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.favorite_rounded, color: brandGolden, size: 32),
-                  const SizedBox(height: 14),
-                  Text('부모님의 응원 / Encouragement from Parents', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 14),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(overlayContext).size.height * 0.7),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.favorite_rounded, color: brandGolden, size: 32),
+                      const SizedBox(height: 14),
+                      Text('부모님의 응원 / Encouragement from Parents', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 14),
+                      Text(
+                        _pendingMessageText,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 24),
                   Text(
                     _pendingMessageText,
                     textAlign: TextAlign.center,
@@ -299,11 +308,13 @@ class ParentEncouragementManager {
                   ),
                   const SizedBox(height: 8),
                   // 🆕 [요청 2026-09-09] 지난 7일간 받은 이모지/응원문자를 모아볼 수 있는 버튼
-                  TextButton(
-                    onPressed: () => _showEncouragementHistoryDialog(overlayContext),
-                    child: Text('지난 응원 보기 / View Past Messages', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                      TextButton(
+                        onPressed: () => _showEncouragementHistoryDialog(overlayContext),
+                        child: Text('지난 응원 보기 / View Past Messages', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

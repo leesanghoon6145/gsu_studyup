@@ -104,24 +104,32 @@ const Map<String, Map<String, String>> kEmojiLabelMap = {
 String emojiLabel(String koLabel) => _bi(kEmojiLabelMap[koLabel] ?? {'KO': koLabel, 'EN': koLabel});
 
 const Map<String, Map<String, String>> kEmojiMessageMap = {
-  "집중도 최고야!": {'KO': '집중도 최고야!', 'EN': 'Your focus is amazing!', 'JA': '集中力最高だよ！', 'ZH': '专注度满分！', 'FR': 'Ta concentration est incroyable !', 'DE': 'Deine Konzentration ist super!', 'RU': 'Твоя концентрация на высоте!', 'AR': 'تركيزك رائع جدًا!', 'HI': 'तुम्हारा फोकस कमाल का है!', 'VI': 'Sự tập trung của con tuyệt vời!', 'ES': '¡Tu concentración es increíble!', 'TH': 'สมาธิของลูกยอดเยี่ยมมาก!'},
-  "포기하지 마라!": {'KO': '포기하지 마라!', 'EN': "Don't give up!", 'JA': '諦めないで！', 'ZH': '不要放弃！', 'FR': "N'abandonne pas !", 'DE': 'Gib nicht auf!', 'RU': 'Не сдавайся!', 'AR': 'لا تستسلم!', 'HI': 'हार मत मानो!', 'VI': 'Đừng bỏ cuộc nhé!', 'ES': '¡No te rindas!', 'TH': 'อย่ายอมแพ้นะ!'},
-  "너의 노력을 응원해": {'KO': '너의 노력을 응원해', 'EN': "I'm cheering for your effort", 'JA': 'あなたの努力を応援するよ', 'ZH': '为你的努力加油', 'FR': "J'encourage tes efforts", 'DE': 'Ich unterstütze deine Mühe', 'RU': 'Я поддерживаю твои старания', 'AR': 'أنا أشجع مجهودك', 'HI': 'मैं तुम्हारी मेहनत का हौसला बढ़ाता/ती हूं', 'VI': 'Bố/mẹ cổ vũ cho nỗ lực của con', 'ES': 'Apoyo tu esfuerzo', 'TH': 'เป็นกำลังใจให้ความพยายามของลูก'},
-  "최고의 집중력이야": {'KO': '최고의 집중력이야', 'EN': "That's the best focus ever", 'JA': '最高の集中力だよ', 'ZH': '这是最棒的专注力', 'FR': "C'est la meilleure concentration", 'DE': 'Das ist beste Konzentration', 'RU': 'Это лучшая концентрация', 'AR': 'هذا أفضل تركيز على الإطلاق', 'HI': 'यह सबसे बेहतरीन फोकस है', 'VI': 'Đây là sự tập trung tuyệt vời nhất', 'ES': 'Es la mejor concentración', 'TH': 'นี่คือสมาธิที่ดีที่สุด'},
+  "집중도 최고야!": {'KO': '🙂 우리 아이, 잘하고 있어. 화이팅!', 'EN': "🙂 You're doing great! Fighting!"},
+  "포기하지 마라!": {'KO': '👍 힘내! 엄마 아빠가 응원할게! 사랑해~^^', 'EN': '👍 Keep going! Mom and Dad are cheering for you! Love you~^^'},
+  "너의 노력을 응원해": {'KO': '🔥 열심히 하는 모습이 정말 자랑스럽고 대견하다. 고마워~^^', 'EN': "🔥 We're so proud of how hard you're working. Thank you~^^"},
+  "최고의 집중력이야": {'KO': '👑 네 꿈을 향한 걸음, 함께 응원할게! 화이팅~^^', 'EN': "👑 We're cheering every step toward your dream! Fighting~^^"},
 };
-String emojiMessage(String koMsg) => kEmojiMessageMap[koMsg]?[DkeLang.current] ?? kEmojiMessageMap[koMsg]?['EN'] ?? koMsg;
+// 🆕 [요청 2026-09-22] 한글 한 줄 + 영문 한 줄로 학생 화면에 표시하기 위해,
+// 단일 문자열 대신 두 줄을 개행(\n)으로 합쳐서 반환. main.dart의 이모지 오버레이가
+// 이 문자열을 그대로 Text(maxLines: 2)로 표시하므로 별도 위젯 변경 없이 반영됨.
+String emojiMessage(String koMsg) {
+  final map = kEmojiMessageMap[koMsg];
+  if (map == null) return koMsg;
+  if (DkeLang.isForeignSelected) return map['EN'] ?? koMsg;
+  return "${map['KO']}\n${map['EN']}";
+}
 
 const Map<String, String> kSectionEncourageEngMap = {'KO': '자기주도 학습 응원하기', 'EN': 'Encourage Self-Directed Learning', 'JA': '自己主導学習を応援する', 'ZH': '为自主学习加油', 'FR': "Encourager l'apprentissage autonome", 'DE': 'Selbstgesteuertes Lernen fördern', 'RU': 'Поддержка самостоятельного обучения', 'AR': 'تشجيع التعلم الذاتي', 'HI': 'स्व-निर्देशित सीखने को प्रोत्साहित करें', 'VI': 'Cổ vũ học tập tự định hướng', 'ES': 'Fomentar el aprendizaje autodirigido', 'TH': 'ให้กำลังใจการเรียนรู้ด้วยตนเอง'};
 
 const Map<String, String> kQuickPhrasesHintMap = {'KO': '자주 쓰는 응원 문구 (터치 시 자동 입력)', 'EN': 'Frequently used phrases (tap to auto-fill)', 'JA': 'よく使う応援フレーズ（タップで自動入力）', 'ZH': '常用鼓励语（点击自动输入）', 'FR': "Phrases fréquentes (touchez pour remplir automatiquement)", 'DE': 'Häufig genutzte Sätze (antippen zum Ausfüllen)', 'RU': 'Часто используемые фразы (нажмите для автозаполнения)', 'AR': 'العبارات الشائعة (اضغط للتعبئة التلقائية)', 'HI': 'अक्सर इस्तेमाल वाक्यांश (टैप कर स्वतः भरें)', 'VI': 'Câu nói thường dùng (chạm để tự động điền)', 'ES': 'Frases frecuentes (toca para autocompletar)', 'TH': 'ข้อความให้กำลังใจที่ใช้บ่อย (แตะเพื่อกรอกอัตโนมัติ)'};
 
 const List<Map<String, String>> kQuickMessages = [
-  {'KO': '우리 아이 정말 대단해! 자랑스럽고 고맙다.', 'EN': "You're truly amazing! I'm proud of you and grateful.", 'JA': 'うちの子、本当にすごい！誇らしくて感謝してるよ。', 'ZH': '我们的孩子真的很棒！为你骄傲，也很感激。', 'FR': "Tu es vraiment formidable ! Je suis fier(ère) et reconnaissant(e).", 'DE': 'Du bist wirklich toll! Ich bin stolz auf dich und dankbar.', 'RU': 'Ты правда молодец! Горжусь тобой и благодарен(на).', 'AR': 'أنت رائع حقًا! أنا فخور بك وممتن.', 'HI': 'तुम सच में कमाल हो! मुझे तुम पर गर्व है और आभार भी।', 'VI': 'Con thật tuyệt vời! Bố/mẹ tự hào và biết ơn con.', 'ES': '¡Eres increíble! Estoy orgulloso/a y agradecido/a.', 'TH': 'ลูกของเรานี่สุดยอดจริงๆ! ภูมิใจและขอบคุณนะ'},
-  {'KO': '조금만 더 힘내! 네 노력은 절대 헛되지 않아.', 'EN': "Just a bit more! Your effort will never be wasted.", 'JA': 'あと少し頑張って！あなたの努力は決して無駄にならないよ。', 'ZH': '再加把劲！你的努力绝不会白费。', 'FR': "Encore un petit effort ! Tes efforts ne seront jamais vains.", 'DE': 'Noch ein bisschen! Deine Mühe ist nie vergebens.', 'RU': 'Ещё немного! Твои усилия никогда не пропадут зря.', 'AR': 'القليل بعد! جهدك لن يذهب سدى أبدًا.', 'HI': 'थोड़ा और हिम्मत रखो! तुम्हारी मेहनत कभी बेकार नहीं जाएगी।', 'VI': 'Cố lên thêm chút nữa! Nỗ lực của con không bao giờ vô ích.', 'ES': '¡Un poco más de esfuerzo! Tu esfuerzo nunca será en vano.', 'TH': 'อีกนิดเดียวเท่านั้น! ความพยายามของลูกไม่มีวันสูญเปล่า'},
-  {'KO': '노력하는 모습 볼 때마다 가슴이 따뜻해져.', 'EN': "My heart warms every time I see you trying so hard.", 'JA': '頑張る姿を見るたびに心が温かくなるよ。', 'ZH': '每次看到你努力的样子，心里都很温暖。', 'FR': "Mon cœur se réchauffe à chaque fois que je te vois faire des efforts.", 'DE': 'Mein Herz wird warm, wenn ich sehe, wie sehr du dich bemühst.', 'RU': 'Сердце теплеет каждый раз, когда вижу твои старания.', 'AR': 'يدفأ قلبي كلما رأيت اجتهادك.', 'HI': 'तुम्हारी मेहनत देखकर हर बार दिल गर्मजोशी से भर जाता है।', 'VI': 'Mỗi lần thấy con cố gắng, lòng bố/mẹ lại ấm áp.', 'ES': 'Mi corazón se enternece cada vez que veo tu esfuerzo.', 'TH': 'ทุกครั้งที่เห็นลูกพยายาม หัวใจก็อบอุ่นขึ้นมา'},
-  {'KO': '최선을 다하는 너, 이미 충분히 멋져!', 'EN': "Doing your best already makes you amazing!", 'JA': '最善を尽くすあなた、もう十分素敵だよ！', 'ZH': '尽力而为的你，已经很了不起了！', 'FR': "Toi qui fais de ton mieux, tu es déjà formidable !", 'DE': 'Du gibst dein Bestes – das macht dich schon großartig!', 'RU': 'Ты уже прекрасен(на), стараясь изо всех сил!', 'AR': 'أنت رائع بالفعل وأنت تبذل قصارى جهدك!', 'HI': 'अपना सर्वश्रेष्ठ देने वाले तुम पहले से ही शानदार हो!', 'VI': 'Con đã cố hết sức, thế là quá tuyệt rồi!', 'ES': '¡Dar lo mejor de ti ya te hace increíble!', 'TH': 'ลูกที่พยายามอย่างเต็มที่ ก็เจ๋งพอแล้ว!'},
-  {'KO': '힘들 때마다 네가 떠올라. 네가 제일 좋아.', 'EN': "I think of you whenever things get tough. I love you the most.", 'JA': 'つらい時はいつもあなたを思うよ。あなたが一番大好き。', 'ZH': '每当辛苦时我都会想起你。你是我的最爱。', 'FR': "Je pense à toi chaque fois que c'est difficile. Je t'aime le plus.", 'DE': 'Wenn es schwer wird, denke ich immer an dich. Ich hab dich am liebsten.', 'RU': 'Каждый раз, когда трудно, я думаю о тебе. Ты для меня самый(ая) дорогой(ая).', 'AR': 'أفكر فيك كلما صعبت الأمور. أنت أغلى ما لدي.', 'HI': 'जब भी मुश्किल होती है, तुम याद आते हो। मुझे तुमसे सबसे ज़्यादा प्यार है।', 'VI': 'Mỗi khi khó khăn, bố/mẹ lại nghĩ đến con. Con là người bố/mẹ yêu nhất.', 'ES': 'Pienso en ti cada vez que las cosas se ponen difíciles. Te quiero más que a nada.', 'TH': 'ทุกครั้งที่เหนื่อย ก็นึกถึงลูก ลูกคือคนที่รักที่สุด'},
-  {'KO': '작은 노력이 큰 꿈을 만들어. 항상 응원해!', 'EN': "Small efforts build big dreams. Always cheering for you!", 'JA': '小さな努力が大きな夢を作るよ。いつも応援してる！', 'ZH': '微小的努力铸就伟大的梦想。永远支持你！', 'FR': "Les petits efforts construisent de grands rêves. Toujours à tes côtés !", 'DE': 'Kleine Bemühungen erschaffen große Träume. Ich stehe immer hinter dir!', 'RU': 'Маленькие усилия создают большие мечты. Всегда болею за тебя!', 'AR': 'الجهود الصغيرة تبني أحلامًا كبيرة. أنا أدعمك دائمًا!', 'HI': 'छोटी मेहनत बड़े सपने बनाती है। हमेशा तुम्हारे साथ हूं!', 'VI': 'Những nỗ lực nhỏ tạo nên ước mơ lớn. Luôn cổ vũ con!', 'ES': 'Los pequeños esfuerzos construyen grandes sueños. ¡Siempre apoyándote!', 'TH': 'ความพยายามเล็กๆ สร้างความฝันที่ยิ่งใหญ่ เป็นกำลังใจให้เสมอนะ!'},
+  {'KO': '① 지금 흘리는 땀과 노력은 반드시 너의 꿈을 이루는 소중한 힘이 될 거야.', 'EN': '① The sweat and effort you put in now will surely become the strength that fulfills your dream.'},
+  {'KO': '② 힘들고 지칠 때도 있겠지만, 엄마 아빠는 언제나 너를 믿고 응원하고 있어.', 'EN': '② There may be tough and tiring days, but Mom and Dad always believe in you and cheer for you.'},
+  {'KO': '③ 잘해야 한다는 부담은 내려놓아도 괜찮아. 오늘 최선을 다하는 너를 우리는 사랑해.', 'EN': "③ It's okay to let go of the pressure to be perfect. We love you for doing your best today."},
+  {'KO': '④ 한 걸음이 느려도 괜찮아. 포기하지 않고 나아가는 네 모습이 정말 자랑스러워.', 'EN': "④ It's okay if a step is slow. We're truly proud of you for moving forward without giving up."},
+  {'KO': '⑤ 오늘의 작은 노력이 훗날 큰 꿈을 이루는 순간, 가장 빛나는 기억이 될 거야.', 'EN': "⑤ Today's small effort will become the brightest memory when your big dream comes true."},
+  {'KO': '⑥ 공부하는 지금의 시간이 너의 미래를 만들어가고 있어. 우리 아이, 조금만 더 힘내자.', 'EN': '⑥ This time you spend studying now is shaping your future. Our child, just a little more, keep going.'},
 ];
 
 const Map<String, String> kCharCountSuffixMap = {'KO': '자', 'EN': '', 'JA': '文字', 'ZH': '字', 'FR': '', 'DE': '', 'RU': '', 'AR': '', 'HI': '', 'VI': ' ký tự', 'ES': '', 'TH': ' ตัวอักษร'};
@@ -248,6 +256,12 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            "${widget.childName}'s Most Recent Study Status",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 2),
+          Text(
             "${widget.childName}님 가장 최근 학습 상태",
             textAlign: TextAlign.center,
             style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
@@ -286,7 +300,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                   children: isStudying
                       ? [
                     Text(
-                      "Studying now — ${widget.liveSubject} (${elapsedMinutes}m)",
+                      "지금 학습중(Studying now)",
                       style: GoogleFonts.notoSansKr(
                         color: const Color(0xFF5AA7FF),
                         fontSize: 13.5,
@@ -294,25 +308,17 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                       ),
                     ),
                     Text(
-                      "지금 학습 중 — ${widget.liveSubject} (${elapsedMinutes}분째)",
+                      "- ${widget.liveSubject} (${elapsedMinutes}분째)",
                       style: GoogleFonts.notoSansKr(
                         color: const Color(0xFF5AA7FF),
-                        fontSize: 13.5,
+                        fontSize: 13,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ]
                       : [
                     Text(
-                      "Currently resting",
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white70,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      "현재 잠시 휴식중",
+                      "현재 잠시 휴식중(Currently resting)",
                       style: GoogleFonts.notoSansKr(
                         color: Colors.white70,
                         fontSize: 13.5,
@@ -435,7 +441,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
           // 🆕 [실시간 학습 현황 2026-09-19] "지금 이 순간 학습 중"이면 이 카드를
           // 통째로 실시간 카드로 교체함. 쉬는 중이면 기존 과거 세션 요약 카드를
           // 그대로 보여줌 (아래 원래 있던 Container는 그대로 유지, 손대지 않음).
-          if (widget.isStudyingNow)
+          if (widget.liveTotalSeconds > 0)
             _buildLiveStudyingCard()
           else
             Container(
@@ -532,6 +538,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                     itemBuilder: (context, index) {
                       final String displayText = _t(kQuickMessages[index]);
                       final String koText = kQuickMessages[index]['KO']!;
+                      final String enText = kQuickMessages[index]['EN']!;
                       return Padding(
                         padding: const EdgeInsets.only(right: 6.0),
                         child: ActionChip(
@@ -543,8 +550,9 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                           ),
                           onPressed: () {
                             setState(() {
-                              // 🆕 [다국어] 실제로 자녀에게 전송되는 문구는 현재 선택된 언어로 채워 넣습니다.
-                              _customMessageController.text = DkeLang.isForeignSelected ? displayText : koText;
+                              // 🆕 [요청 2026-09-22] 기본모드(KO/EN)에서는 한글+영문 2줄을 합쳐서
+                              // 입력창에 채워, 학생 화면에도 두 언어가 함께 전달되도록 함.
+                              _customMessageController.text = DkeLang.isForeignSelected ? displayText : "$koText\n$enText";
                             });
                           },
                         ),
@@ -556,7 +564,8 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
 
                 TextField(
                   controller: _customMessageController,
-                  maxLength: 50,
+                  maxLength: 200,
+                  maxLines: 3,
                   style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
                   buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
                     return Text(

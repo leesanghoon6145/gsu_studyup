@@ -96,6 +96,32 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
     'detailContentFormat': {'KO': '"상세내용 - {content}"', 'EN': '"Details - {content}"', 'JA': '「詳細内容 - {content}」', 'ZH': '"详细内容 - {content}"', 'FR': '« Détails - {content} »', 'DE': '„Details - {content}"', 'RU': '«Подробности - {content}»', 'AR': '"التفاصيل - {content}"', 'HI': '"विवरण - {content}"', 'VI': '"Chi tiết - {content}"', 'ES': '"Detalles - {content}"', 'TH': '"รายละเอียด - {content}"'},
   };
 
+  // 🆕 [영문 표기 보강 2026-09-21] 기본모드(KO/EN)에서 이 위젯 문구들이 한글만
+  // 나오던 문제 수정. 영문 한 줄 + 한글 한 줄로 표시하는 위젯을 반환.
+  static Widget _biUiWidget(String key, {Map<String, String>? values, required TextStyle koStyle, TextStyle? enStyle}) {
+    final map = _uiText[key];
+    if (map == null) return Text(key, style: koStyle);
+    if (DkeLang.isForeignSelected) {
+      String result = map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? '';
+      values?.forEach((k, v) => result = result.replaceAll('{$k}', v));
+      return Text(result, style: koStyle);
+    }
+    String ko = map['KO'] ?? '';
+    String en = map['EN'] ?? '';
+    values?.forEach((k, v) {
+      ko = ko.replaceAll('{$k}', v);
+      en = en.replaceAll('{$k}', v);
+    });
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(en, style: enStyle ?? koStyle),
+        Text(ko, style: koStyle),
+      ],
+    );
+  }
+
   static String _t(String key) {
     final map = _uiText[key];
     if (map == null) return key;
@@ -158,10 +184,13 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
           Container(
             constraints: const BoxConstraints(minWidth: 100),
             alignment: Alignment.center,
-            child: Text(
-              _dayLabel,
-              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-            ),
+            child: _isToday
+                ? _biUiWidget(
+              'todayWord',
+              koStyle: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              enStyle: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 10.5, fontWeight: FontWeight.bold),
+            )
+                : Text(_dayLabel, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           ),
           InkWell(
             onTap: isViewingToday ? null : onNextDay,
@@ -244,14 +273,14 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
           ),
           child: Column(
             children: [
-              _buildAlignedVariationRow(
-                _tf('todayStudyTimeLabel', {'day': _dayLabel}),
+              _buildAlignedVariationRowW(
+                _biUiWidget('todayStudyTimeLabel', values: {'day': _dayLabelKo}, koStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold), enStyle: GoogleFonts.notoSansKr(color: brandGolden.withValues(alpha: 0.7), fontSize: 10.5, fontWeight: FontWeight.bold)),
                 _tf('vsYesterdayFormat', {'pct': '${_todayVsYesterdayPercent >= 0 ? '+' : ''}$_todayVsYesterdayPercent', 'arrow': _todayVsYesterdayPercent >= 0 ? '🔺' : '🔻'}),
                 _tf('vsWeeklyAvgFormat', {'pct': '${_todayVsWeeklyAvgPercent >= 0 ? '+' : ''}$_todayVsWeeklyAvgPercent', 'arrow': _todayVsWeeklyAvgPercent >= 0 ? '🔺' : '🔻'}),
               ),
               const Divider(color: Colors.white10, height: 20),
-              _buildAlignedVariationRow(
-                _tf('todaySessionCountLabel', {'day': _dayLabel}),
+              _buildAlignedVariationRowW(
+                _biUiWidget('todaySessionCountLabel', values: {'day': _dayLabelKo}, koStyle: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold), enStyle: GoogleFonts.notoSansKr(color: brandGolden.withValues(alpha: 0.7), fontSize: 10.5, fontWeight: FontWeight.bold)),
                 _tf('sessionsRecordedFormat', {'count': '${sessionsForDate.length}'}),
                 todayTotalMinutes > 0 ? _tf('totalFocusFormat', {'min': '$todayTotalMinutes'}) : _t('noRecordYet'),
               ),
@@ -270,12 +299,12 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildTextFeatureRow(_t('strongSubjectLabel'), strongestSubject ?? _t('dataCollectingMsg')),
+              _buildTextFeatureRow('${_t('strongSubjectLabel')} (Strong Subject)', strongestSubject ?? _t('dataCollectingMsg')),
               const Divider(color: Colors.white10, height: 18),
-              _buildTextFeatureRow(_t('weakSubjectLabel'), weakestSubject ?? _t('dataCollectingMsg')),
+              _buildTextFeatureRow('${_t('weakSubjectLabel')} (Weak Subject)', weakestSubject ?? _t('dataCollectingMsg')),
               const Divider(color: Colors.white10, height: 18),
               _buildTextFeatureRow(
-                _t('homeSupportLabel'),
+                '${_t('homeSupportLabel')} (Home Support)',
                 weakestSubject != null ? _tf('weakSubjectAdviceFormat', {'subject': weakestSubject!}) : _t('waitForEvalMsg'),
               ),
             ],
@@ -303,7 +332,7 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
                 onPressed: onShowReportPopup,
                 icon: Icon(Icons.analytics_rounded, color: brandGolden, size: 16),
                 label: Text(
-                  _t('viewSummaryBtn'),
+                  'View Summary / ${_t('viewSummaryBtn')}',
                   style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -320,7 +349,7 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
                 onPressed: onShowDetailedAnalysisPopup,
                 icon: Icon(Icons.manage_search_rounded, color: brandGolden, size: 16),
                 label: Text(
-                  _t('viewDetailBtn'),
+                  'View Details / ${_t('viewDetailBtn')}',
                   style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -428,6 +457,25 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
           Text(val, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
         ],
       ),
+    );
+  }
+
+  Widget _buildAlignedVariationRowW(Widget titleWidget, String yesterday, String weekly) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 110, child: titleWidget),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(yesterday, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12)),
+              Text(weekly, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

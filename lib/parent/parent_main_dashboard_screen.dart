@@ -1009,6 +1009,9 @@ class ParentMainDashboardScreen extends StatefulWidget {
 class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     with TickerProviderStateMixin {
   int _currentIndex = 0;
+  // 🆕 [영문 표기 보강 2026-09-21] ScholarshipType.values 순서(성장형/도전형/성취형)와
+  // 1:1로 대응하는 영문 라벨. 실제 enum 멤버 이름을 몰라도 index로 안전하게 매칭.
+  static const List<String> _scholarshipTypeEnLabels = ['Growth', 'Challenge', 'Achievement'];
   bool _isVipMember = false;
   bool _isLoading = true;
 
@@ -2733,9 +2736,18 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                "$label (+$perEvent × ${count}회)",
-                                style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "${kScholarshipBonusTypeLabelByLang[typeKey]?['EN'] ?? label} (+$perEvent × $count times)",
+                                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 10.5),
+                                  ),
+                                  Text(
+                                    "$label (+$perEvent × ${count}회)",
+                                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 12.5),
+                                  ),
+                                ],
                               ),
                             ),
                             Text(
@@ -2822,11 +2834,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                               Row(
                                 children: [
                                   Text(
-                                    ScholarshipService.typeLabelKo[type]!,
+                                    "${_scholarshipTypeEnLabels[type.index]} / ${ScholarshipService.typeLabelKo[type]!}",
                                     style: GoogleFonts.notoSansKr(
                                       color: isSel ? brandGolden : Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 15,
+                                      fontSize: 13,
                                     ),
                                   ),
                                   if (isSel) ...[
