@@ -976,6 +976,15 @@ String getScholarshipParentNoticeText(String languageCode) {
       : kScholarshipParentNoticeByLang['KO']!;
 }
 
+// 🆕 [2026-09-23] 상단 버튼 + 장학금 탭 단위 다국어 사전
+const Map<String, String> kLogoutLabelMap = {'KO': '로그아웃', 'EN': 'Log out', 'JA': 'ログアウト', 'ZH': '退出登录', 'FR': 'Déconnexion', 'DE': 'Abmelden', 'RU': 'Выйти', 'AR': 'تسجيل الخروج', 'HI': 'लॉग आउट', 'VI': 'Đăng xuất', 'ES': 'Cerrar sesión', 'TH': 'ออกจากระบบ'};
+const Map<String, String> kNoticeCounselMap = {'KO': '공지 및 교육상담', 'EN': 'Notice & Counseling', 'JA': 'お知らせ・教育相談', 'ZH': '公告与教育咨询', 'FR': 'Avis & Conseil', 'DE': 'Hinweise & Beratung', 'RU': 'Объявления и консультации', 'AR': 'الإعلانات والاستشارات', 'HI': 'सूचना और परामर्श', 'VI': 'Thông báo & Tư vấn', 'ES': 'Avisos y Asesoría', 'TH': 'ประกาศและให้คำปรึกษา'};
+const Map<String, String> kComingSoonMap = {'KO': '공지 및 교육상담은 곧 열립니다. 조금만 기다려 주세요!', 'EN': 'Notice & Counseling is coming soon. Please stay tuned!', 'JA': 'お知らせ・教育相談は近日公開予定です。もう少しお待ちください！', 'ZH': '公告与教育咨询即将开放，敬请期待！', 'FR': 'Avis & Conseil arrive bientôt. Merci de patienter !', 'DE': 'Hinweise & Beratung kommen bald. Bitte noch etwas Geduld!', 'RU': 'Раздел объявлений и консультаций скоро откроется. Пожалуйста, подождите!', 'AR': 'قسم الإعلانات والاستشارات قادم قريبًا. يرجى الانتظار!', 'HI': 'सूचना और परामर्श जल्द आ रहा है। कृपया थोड़ा इंतज़ार करें!', 'VI': 'Thông báo & Tư vấn sắp ra mắt. Vui lòng chờ thêm chút nhé!', 'ES': 'Avisos y Asesoría llegará pronto. ¡Gracias por esperar!', 'TH': 'ประกาศและให้คำปรึกษาจะเปิดเร็ว ๆ นี้ กรุณารอสักครู่!'};
+const Map<String, String> kStarCountUnitMap = {'KO': '개', 'EN': 'stars', 'JA': '個', 'ZH': '颗', 'FR': 'étoiles', 'DE': 'Sterne', 'RU': 'звёзд', 'AR': 'نجمة', 'HI': 'सितारे', 'VI': 'sao', 'ES': 'estrellas', 'TH': 'ดวง'};
+const Map<String, String> kWonUnitMap = {'KO': '원', 'EN': 'won', 'JA': 'ウォン', 'ZH': '韩元', 'FR': 'won', 'DE': 'Won', 'RU': 'вон', 'AR': 'وون', 'HI': 'वॉन', 'VI': 'won', 'ES': 'won', 'TH': 'วอน'};
+const Map<String, String> kBaseWordMap = {'KO': '기본', 'EN': 'Base', 'JA': '基本', 'ZH': '基本', 'FR': 'Base', 'DE': 'Basis', 'RU': 'Базовые', 'AR': 'أساسي', 'HI': 'मूल', 'VI': 'Cơ bản', 'ES': 'Base', 'TH': 'พื้นฐาน'};
+const Map<String, String> kBonusWordMap = {'KO': '보너스', 'EN': 'Bonus', 'JA': 'ボーナス', 'ZH': '奖励', 'FR': 'Bonus', 'DE': 'Bonus', 'RU': 'Бонус', 'AR': 'مكافأة', 'HI': 'बोनस', 'VI': 'Thưởng', 'ES': 'Bono', 'TH': 'โบนัส'};
+
 const Map<String, String> kAvgWordMap = {
   'KO': '평균',
   'EN': 'Avg',
@@ -1604,6 +1613,69 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     );
   }
 
+  // 🆕 [2026-09-23] 상단 버튼 4개(로그아웃/회원연동/공지및교육상담/언어)의 공용 모양.
+  static const double _kTopButtonHeight = 30;
+  static const double _kTopSectionGap = 10; // 🆕 상단 큰 항목 사이 간격 (이 숫자 하나로 조정)
+
+  Widget _buildTopPillButton({
+    IconData? icon,
+    required String label,
+    required VoidCallback onTap,
+    bool filled = false,
+  }) {
+    final Color fg = filled ? Colors.black : brandGolden;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: _kTopButtonHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: filled ? brandGolden : Colors.white10,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: fg, size: 14),
+              const SizedBox(width: 5),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSansKr(
+                  color: fg,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🆕 [2026-09-23] 공지 및 교육상담 화면이 완성되기 전까지 임시 안내
+  void _showNoticeComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: premiumCardBg,
+        content: Text(
+          _biLong(kComingSoonMap),
+          style: GoogleFonts.notoSansKr(
+            color: brandGolden,
+            fontWeight: FontWeight.bold,
+            height: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmLogout() async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -2139,12 +2211,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // 동일한 집계 로직을 Firestore에서 받아온 세션 리스트에 대해 그대로 적용
   // (로컬 SharedPreferences 대신 이미 메모리에 있는 리스트를 입력으로 받는 순수 함수 버전)
   List<Map<String, dynamic>> _computeSubjectAggregatesFrom(
-    List<ParentSessionRecord> all,
-  ) {
+      List<ParentSessionRecord> all,
+      ) {
     final DateTime now = DateTime.now();
     final DateTime todayStart = DateTime(now.year, now.month, now.day);
+    // 🆕 [2026-09-24] 주의 시작을 일요일로 통일 (일~토, 장학금 주간 개근과 같은 기준)
     final DateTime weekStart = todayStart.subtract(
-      Duration(days: now.weekday - 1),
+      Duration(days: now.weekday % 7),
     );
     final DateTime monthStart = DateTime(now.year, now.month, 1);
     final DateTime yearStart = DateTime(now.year, 1, 1);
@@ -2156,37 +2229,38 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
     final List<Map<String, dynamic>> aggregated = [];
     bySubject.forEach((subject, sessions) {
-      bool studiedToday = false,
-          studiedWeekly = false,
-          studiedMonthly = false,
-          studiedYearly = false;
+      // 🆕 [2026-09-24] 기간별 "실제" 학습 합계(분) - 예상치가 아닌 진짜 합산
+      int todayMinutes = 0, weekMinutes = 0, monthMinutes = 0, yearMinutes = 0;
       int totalMinutesAllTime = 0;
       final Set<String> activeDayKeys = {};
 
       for (final s in sessions) {
         final DateTime ts = s.timestamp;
-        if (!ts.isBefore(yearStart)) studiedYearly = true;
-        if (!ts.isBefore(monthStart)) studiedMonthly = true;
-        if (!ts.isBefore(weekStart)) studiedWeekly = true;
-        if (!ts.isBefore(todayStart)) studiedToday = true;
-        totalMinutesAllTime += s.durationMinutes;
+        final int m = s.durationMinutes;
+        if (!ts.isBefore(yearStart)) yearMinutes += m;
+        if (!ts.isBefore(monthStart)) monthMinutes += m;
+        if (!ts.isBefore(weekStart)) weekMinutes += m;
+        if (!ts.isBefore(todayStart)) todayMinutes += m;
+        totalMinutesAllTime += m;
         activeDayKeys.add("${ts.year}-${ts.month}-${ts.day}");
       }
 
-      if (!(studiedToday || studiedWeekly || studiedMonthly || studiedYearly))
-        return;
+      if (todayMinutes + weekMinutes + monthMinutes + yearMinutes == 0) return;
 
       final int activeDays = activeDayKeys.isEmpty ? 1 : activeDayKeys.length;
-      final int avgMinutesPerActiveDay = (totalMinutesAllTime / activeDays)
-          .round();
+      final int avgMinutesPerActiveDay = (totalMinutesAllTime / activeDays).round();
 
       aggregated.add({
         "subject": subject,
-        "hasStudiedToday": studiedToday,
-        "hasStudiedWeekly": studiedWeekly,
-        "hasStudiedMonthly": studiedMonthly,
-        "hasStudiedYearly": studiedYearly,
-        "baseMinutes": avgMinutesPerActiveDay,
+        "hasStudiedToday": todayMinutes > 0,
+        "hasStudiedWeekly": weekMinutes > 0,
+        "hasStudiedMonthly": monthMinutes > 0,
+        "hasStudiedYearly": yearMinutes > 0,
+        "baseMinutes": avgMinutesPerActiveDay, // 기존 호환용으로 유지
+        "todayMinutes": todayMinutes,
+        "weekMinutes": weekMinutes,
+        "monthMinutes": monthMinutes,
+        "yearMinutes": yearMinutes,
       });
     });
     return aggregated;
@@ -2335,7 +2409,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
         selectedWeek: _selectedWeek,
         timeTabController: _timeTabController,
         mirroredExamRecords: _examRecords,
-        parentMasterTimeData: _subjectAggregates,
+        parentMasterTimeData: _computeSubjectAggregatesFrom(_allSessions),
         premiumCardBg: premiumCardBg,
         brandGolden: brandGolden,
         luxuryDarkBg: luxuryDarkBg,
@@ -2679,17 +2753,15 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Text(
-                          "$totalStars개",
-                          style: GoogleFonts.notoSansKr(
-                            color: brandGolden,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 26,
-                          ),
+                        _buildNumberWithUnit(
+                          '$totalStars',
+                          kStarCountUnitMap,
+                          fontSize: 26,
+                          color: brandGolden,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "(기본 $baseStars + 보너스 $bonusStars)",
+                          _baseBonusText(baseStars, bonusStars),
                           style: GoogleFonts.notoSansKr(
                             color: Colors.white38,
                             fontSize: 11,
@@ -2865,13 +2937,12 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                               style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10.5),
                             ),
                           const SizedBox(height: 8),
-                          Text(
-                            "${_formatWon(amount)}원",
-                            style: GoogleFonts.notoSansKr(
-                              color: isSel ? brandGolden : Colors.white70,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 22,
-                            ),
+                          _buildNumberWithUnit(
+                            _formatWon(amount),
+                            kWonUnitMap,
+                            fontSize: 22,
+                            color: isSel ? brandGolden : Colors.white70,
+                            weight: FontWeight.w900,
                           ),
                         ],
                       ),
@@ -2980,10 +3051,62 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   }
 
   // 🆕 [장학금 방 상세화 2026-09-17] 천 단위 콤마 포맷 헬퍼
+
+  // 🆕 [장학금 방 상세화 2026-09-17] 천 단위 콤마 포맷 헬퍼
   static String _formatWon(int n) => n.toString().replaceAllMapped(
     RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-    (m) => '${m[1]},',
+        (m) => '${m[1]},',
   );
+
+  // 🆕 [2026-09-23] 숫자 + 단위 표시 (장학금 탭 "개"/"원" 영문 병기)
+  Widget _buildNumberWithUnit(
+      String number,
+      Map<String, String> unitMap, {
+        required double fontSize,
+        required Color color,
+        FontWeight weight = FontWeight.bold,
+      }) {
+    if (DkeLang.isForeignSelected) {
+      return Text(
+        "$number ${_t(unitMap)}",
+        style: GoogleFonts.notoSansKr(
+          color: color,
+          fontWeight: weight,
+          fontSize: fontSize,
+        ),
+      );
+    }
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: "$number${unitMap['KO']}",
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontWeight: weight,
+              fontSize: fontSize,
+            ),
+          ),
+          TextSpan(
+            text: " / ${unitMap['EN']}",
+            style: GoogleFonts.gowunBatang(
+              color: color.withValues(alpha: 0.7),
+              fontWeight: FontWeight.bold,
+              fontSize: fontSize * 0.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [2026-09-23] "(기본 N + 보너스 N)" 영문 병기
+  String _baseBonusText(int base, int bonus) {
+    if (DkeLang.isForeignSelected) {
+      return "(${_t(kBaseWordMap)} $base + ${_t(kBonusWordMap)} $bonus)";
+    }
+    return "(기본 $base + 보너스 $bonus)\n(Base $base + Bonus $bonus)";
+  }
 
   // 🆕 [자녀 선택 UI + Firestore 연동] 실시간현황 탭 - 자녀가 선택되어 있으면 해당 자녀의
   // Firestore 문서(links/{code})를 실시간 구독해서 이름/최근세션/별을 보여주고,
@@ -3208,158 +3331,92 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        toolbarHeight: 90,
+        toolbarHeight: 78,
         automaticallyImplyLeading: false,
-        title: Stack(
-          children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 14.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/images/gsu_logo.png',
-                      width: 180,
-                      height: 24,
-                      fit: BoxFit.fill,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const SizedBox(height: 24),
-                    ),
-                    const SizedBox(height: 1.0),
-                    Text(
-                      'PARENT GKE STUDYUP',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.gowunBatang(
-                        color: brandGolden,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
+        title: Padding(
+          padding: const EdgeInsets.only(top: 14.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/gsu_logo.png',
+                width: 180,
+                height: 24,
+                fit: BoxFit.fill,
+                errorBuilder: (context, error, stackTrace) =>
+                const SizedBox(height: 24),
+              ),
+              const SizedBox(height: 1.0),
+              Text(
+                'PARENT GKE STUDYUP',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.gowunBatang(
+                  color: brandGolden,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  letterSpacing: 1.0,
                 ),
               ),
-            ),
-            // 🆕 [요청 2026-09-08] 부모 화면에 로그아웃 버튼이 전혀 없던 문제 - 왼쪽 위에 추가
-            Positioned(
-              top: 0,
-              left: 0,
-              child: GestureDetector(
-                onTap: _confirmLogout,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: brandGolden.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.logout_rounded, color: brandGolden, size: 13),
-                      const SizedBox(width: 4),
-                      Text(
-                        '로그아웃/Log out',
-                        style: GoogleFonts.notoSansKr(
-                          color: brandGolden,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isVipMember = true;
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _isVipMember ? brandGolden : Colors.white10,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: brandGolden.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: Text(
-                    _isVipMember ? _t(kVipBadgeMap) : _bi(kVipLinkMap),
-                    style: GoogleFonts.notoSansKr(
-                      color: _isVipMember ? Colors.black : brandGolden,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         centerTitle: true,
       ),
 
       body: Column(
         children: [
-          _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 상단에 항상 표시되는 연결된 자녀 명단 + 추가 버튼
-          // 🆕 [요청 2026-09-09] 언어 선택 버튼을 앱바에서 이 위치(자녀 코드 목록 바로 아래,
-          // 콘텐츠 시작 전 오른쪽)로 이동
+          // 🆕 [2026-09-23] 로그아웃(왼쪽) / 회원 연동(오른쪽) - 제목 아래로 이동 (로고 겹침 해소)
           Padding(
-            padding: const EdgeInsets.only(right: 16, top: 4, bottom: 2),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: _showLanguagePicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: brandGolden.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.language_rounded,
-                        color: brandGolden,
-                        size: 13,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _languageDisplayName(DkeLang.current),
-                        style: GoogleFonts.notoSansKr(
-                          color: brandGolden,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: _buildTopPillButton(
+                    icon: Icons.logout_rounded,
+                    label: _bi(kLogoutLabelMap),
+                    onTap: _confirmLogout,
                   ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: _buildTopPillButton(
+                    icon: _isVipMember ? null : Icons.link_rounded,
+                    label: _isVipMember ? _t(kVipBadgeMap) : _bi(kVipLinkMap),
+                    filled: _isVipMember,
+                    onTap: () => setState(() => _isVipMember = true),
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: _kTopSectionGap),
+          _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 상단에 항상 표시되는 연결된 자녀 명단 + 추가 버튼
+          const SizedBox(height: _kTopSectionGap),
+          // 🆕 [2026-09-23] 공지 및 교육상담(왼쪽) / 언어 선택(오른쪽)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: _buildTopPillButton(
+                    icon: Icons.campaign_rounded,
+                    label: _bi(kNoticeCounselMap),
+                    onTap: _showNoticeComingSoon,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildTopPillButton(
+                  icon: Icons.language_rounded,
+                  label: _languageDisplayName(DkeLang.current),
+                  onTap: _showLanguagePicker,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: _kTopSectionGap),
+
           const Divider(color: Colors.white10, height: 1),
           Expanded(
             child: IndexedStack(

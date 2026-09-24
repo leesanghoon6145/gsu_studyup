@@ -6903,37 +6903,31 @@ Global Knowledge Education
       return _sessionEmptyMessage;
     }
 
+    final int totalMin = _selectedDaySessions.fold<int>(
+      0,
+          (sum, s) => sum + (s["minutes"] as int),
+    );
+    final int evalCount = _selectedDaySessions.where((s) => s['recordType'] == '평가').length;
+    final int lectureCount = _selectedDaySessions.length - evalCount;
+
     final buffer = StringBuffer();
     buffer.write(
       DkeLang.current == 'KO' ? '[종합 리포트]\n\n' : '[Total Report]\n\n',
     );
+    buffer.write(
+      DkeLang.current == 'KO'
+          ? '오늘 총 학습시간: $totalMin분\n강의 $lectureCount건 · 평가 $evalCount건\n\n'
+          : 'Total study time today: $totalMin min\nLectures $lectureCount · Evaluations $evalCount\n\n',
+    );
 
-    for (int i = 0; i < _selectedDaySessions.length; i++) {
-      final s = _selectedDaySessions[i];
-      final DateTime ts = s["timestamp"] as DateTime;
-      final String timeStr =
-          "${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}";
-      buffer.write(
-        DkeLang.current == 'KO'
-            ? "${i + 1}${_t('sessionOrdinal')}\n"
-            : "${_t('sessionOrdinal')} ${i + 1}\n",
-      );
-      buffer.write(
-        "• ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}: ${s["minutes"]}${_t('minutesUnitSuffix')} ($timeStr)\n\n",
-      );
-    }
-
+    // 🆕 [요청 2026-09-22] 세션 나열 대신, 오늘 전체(평가+강의)를 묶어서
+    // 학습 방법과 응원 중심의 코칭 멘트만 제공 (상세분석과 톤을 명확히 구분)
     final String topSubject = _selectedDaySessions.first["subject"] as String;
     final String diagnosis = await _generateOrReuseDiagnosis(
       type: "일일종합",
       score: _realGoalAttainmentPercent.toDouble(),
       subject: topSubject,
       tier: AiTier.light,
-    );
-    buffer.write(
-      DkeLang.current == 'KO'
-          ? '[종합 진단 피드백]\n'
-          : '[Overall Diagnostic Feedback]\n',
     );
     buffer.write(diagnosis);
 
@@ -6948,26 +6942,31 @@ Global Knowledge Education
       return _sessionEmptyMessage;
     }
 
-    final int totalTodayMin = _selectedDaySessions.fold<int>(
-      0,
-      (sum, s) => sum + (s["minutes"] as int),
-    );
-    final String topSubject = _selectedDaySessions.first["subject"] as String;
-
     final buffer = StringBuffer();
     buffer.write(
       DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n',
     );
-    buffer.write(
-      "• ${_t('studyTime')}: $totalTodayMin${_t('minutesUnitSuffix')}\n",
-    );
-    buffer.write(
-      "• ${_t('mostStudiedSubject').replaceAll('\n', '')}: ${_subjectName(topSubject)}\n\n",
-    );
 
+    for (int i = 0; i < _selectedDaySessions.length; i++) {
+      final s = _selectedDaySessions[i];
+      final String period = DkeLang.current == 'KO' ? '제${i + 1}${_t('sessionOrdinal')}' : '${_t('sessionOrdinal')} ${i + 1}';
+      buffer.write("■ $period · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}\n");
+      buffer.write("  ${s["minutes"]}${_t('minutesUnitSuffix')}\n\n");
+    }
+
+    final List<double> evalScores = _selectedDaySessions
+        .where((s) => s['recordType'] == '평가' && s['score'] != null)
+        .map((s) => (s['score'] as num).toDouble())
+        .toList();
+    final double diagScore = evalScores.isNotEmpty
+        ? evalScores.reduce((a, b) => a < b ? a : b)
+        : _realGoalAttainmentPercent.toDouble();
+    final String topSubject = _selectedDaySessions.first["subject"] as String;
+
+    buffer.write(DkeLang.current == 'KO' ? '[오늘의 방향 제안]\n' : "[Today's Direction]\n");
     final String diagnosis = await _generateOrReuseDiagnosis(
       type: "일일상세",
-      score: _realGoalAttainmentPercent.toDouble(),
+      score: diagScore,
       subject: topSubject,
       tier: AiTier.pro,
     );

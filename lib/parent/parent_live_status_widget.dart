@@ -175,6 +175,25 @@ String starsSectionKorTitle(int count) {
 }
 String starsSectionForeignTitle(int count) => starsSectionKorTitle(count);
 
+// 🆕 [2026-09-23] 큰 항목 사이 간격 - 이 숫자 하나로 실시간 현황 탭 전체 간격 조정
+const double _kSectionGap = 24;
+
+// 🆕 [2026-09-23] 실시간 학습 카드(학습중/휴식중) 문구 12개국어
+const Map<String, String> kStudyingNowMap = {'KO': '지금 학습중', 'EN': 'Studying now', 'JA': '只今学習中', 'ZH': '正在学习', 'FR': "En train d'étudier", 'DE': 'Lernt gerade', 'RU': 'Сейчас учится', 'AR': 'يدرس الآن', 'HI': 'अभी पढ़ाई कर रहा है', 'VI': 'Đang học', 'ES': 'Estudiando ahora', 'TH': 'กำลังเรียนอยู่'};
+const Map<String, String> kRestingNowMap = {'KO': '현재 잠시 휴식중', 'EN': 'Currently resting', 'JA': '現在休憩中', 'ZH': '目前正在休息', 'FR': 'En pause actuellement', 'DE': 'Macht gerade Pause', 'RU': 'Сейчас отдыхает', 'AR': 'في استراحة حاليًا', 'HI': 'अभी आराम कर रहा है', 'VI': 'Đang nghỉ ngơi', 'ES': 'Descansando ahora', 'TH': 'กำลังพักอยู่'};
+const Map<String, String> kGoalTimeLabelMap = {'KO': '목표 시간', 'EN': 'Goal time', 'JA': '目標時間', 'ZH': '目标时间', 'FR': 'Temps objectif', 'DE': 'Zielzeit', 'RU': 'Целевое время', 'AR': 'الوقت المستهدف', 'HI': 'लक्ष्य समय', 'VI': 'Thời gian mục tiêu', 'ES': 'Tiempo objetivo', 'TH': 'เวลาเป้าหมาย'};
+String minutesInText(int m) {
+  final Map<String, String> map = {
+    'KO': '$m분째', 'EN': '$m min in',
+    'JA': '$m分目', 'ZH': '第$m分钟',
+    'FR': '$m min écoulées', 'DE': 'seit $m Min.',
+    'RU': '$m-я минута', 'AR': 'منذ $m دقيقة',
+    'HI': '$m मिनट से', 'VI': 'phút thứ $m',
+    'ES': '$m min en curso', 'TH': 'นาทีที่ $m',
+  };
+  return _bi(map);
+}
+
 class ParentLiveStatusWidget extends StatefulWidget {
   final String childName;
   // 🆕 [실시간 학습 현황 2026-09-19] 진짜 "지금 이 순간" 학습 중인지를 나타냄.
@@ -233,6 +252,19 @@ class ParentLiveStatusWidget extends StatefulWidget {
 class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
   final TextEditingController _customMessageController = TextEditingController();
 
+  // 🆕 [2026-09-23] 상태 줄: 기본모드는 영문(명조체) 위 + 한글(노토산스) 아래, 10개국어는 해당 언어 1줄
+  List<Widget> _statusLines(Map<String, String> map, Color color) {
+    if (DkeLang.isForeignSelected) {
+      return [
+        Text(_t(map), style: GoogleFonts.notoSansKr(color: color, fontSize: 13.5, fontWeight: FontWeight.bold)),
+      ];
+    }
+    return [
+      Text(map['EN']!, style: GoogleFonts.gowunBatang(color: color, fontSize: 13.5, fontWeight: FontWeight.bold)),
+      Text(map['KO']!, style: GoogleFonts.notoSansKr(color: color, fontSize: 13.5, fontWeight: FontWeight.bold)),
+    ];
+  }
+
   // ============================================================================
   // 🆕 [실시간 학습 현황 2026-09-19] "지금 학습 중" 카드. 학생 타이머 화면의
   // 막대그래프(6색 구간, 목표시간 기준 자동 분할, 분/% 자동표시)와 100% 동일한
@@ -255,17 +287,23 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "${widget.childName}'s Most Recent Study Status",
-            textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            "${widget.childName}님 가장 최근 학습 상태",
-            textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
-          ),
+          // 🆕 [2026-09-23] 기본모드: 영문(명조체) + 한글(노토산스) 2줄 / 10개국어: 해당 언어 1줄
+          if (DkeLang.isForeignSelected)
+            Text(
+              recentStatusTitle(widget.childName),
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
+            )
+          else ...[
+            Text(
+              "${widget.childName}'s Most Recent Study Status",
+              style: GoogleFonts.gowunBatang(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              "${widget.childName}님 가장 최근 학습 상태",
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
+            ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [
@@ -292,23 +330,15 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               ),
               const SizedBox(width: 8),
               // 🆕 [요청 2026-09-21] 상태 줄만 영문 한 줄 + 한글 한 줄 2줄 구성으로 변경.
-              // 학습 중이면 파란색 + 과목명, 정지/종료 중이면 흰색(Colors.white70) + "휴식중" 문구로
-              // 이 두 줄만 바뀌고, 그 아래 무지개 바/퍼센트 등 나머지 레이아웃은 그대로 유지됨.
+              // 🆕 [2026-09-23] 10개국어 선택 시 해당 언어 1줄로 자동 변환 (영문=명조체, 한글=노토산스)
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: isStudying
                       ? [
+                    ..._statusLines(kStudyingNowMap, const Color(0xFF5AA7FF)),
                     Text(
-                      "지금 학습중(Studying now)",
-                      style: GoogleFonts.notoSansKr(
-                        color: const Color(0xFF5AA7FF),
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      "- ${widget.liveSubject} (${elapsedMinutes}분째)",
+                      "- ${widget.liveSubject} (${minutesInText(elapsedMinutes)})",
                       style: GoogleFonts.notoSansKr(
                         color: const Color(0xFF5AA7FF),
                         fontSize: 13,
@@ -316,16 +346,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
                       ),
                     ),
                   ]
-                      : [
-                    Text(
-                      "현재 잠시 휴식중(Currently resting)",
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white70,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                      : _statusLines(kRestingNowMap, Colors.white70),
                 ),
               ),
             ],
@@ -416,7 +437,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
             ),
             const SizedBox(height: 8),
             Text(
-              "목표 시간: ${elapsedMinutes}m / ${(total / 60).round()}m",
+              "${_bi(kGoalTimeLabelMap)}: ${elapsedMinutes}m / ${(total / 60).round()}m",
               style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 11.5, fontWeight: FontWeight.bold),
             ),
           ],
@@ -453,36 +474,36 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               ),
               child: Column(
                 children: widget.lastSessionSubject != null
-                  ? [
-                // 🆕 [요청] 3줄 형식: 1) OO님 가장최근 학습 상태  2) 학습과목명칭: 과목  3) 최근 세션 집중학습 : N분
-                Text(
-                  recentStatusTitle(widget.childName),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  subjectNameLine(widget.lastSessionSubject!),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13.0, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  recentFocusLine(widget.lastSessionDurationMinutes),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 14.5, fontWeight: FontWeight.bold),
-                ),
-              ]
-                  : [
-                Text(
-                  noSessionYetText(widget.childName),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.w500),
-                ),
-              ],
+                    ? [
+                  // 🆕 [요청] 3줄 형식: 1) OO님 가장최근 학습 상태  2) 학습과목명칭: 과목  3) 최근 세션 집중학습 : N분
+                  Text(
+                    recentStatusTitle(widget.childName),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subjectNameLine(widget.lastSessionSubject!),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13.0, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    recentFocusLine(widget.lastSessionDurationMinutes),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 14.5, fontWeight: FontWeight.bold),
+                  ),
+                ]
+                    : [
+                  Text(
+                    noSessionYetText(widget.childName),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: _kSectionGap), // 🆕 [2026-09-23] 16 → 공통 간격
 
           Container(
             padding: const EdgeInsets.all(16),
@@ -512,6 +533,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
             ),
           ),
 
+          const SizedBox(height: _kSectionGap), // 🆕 [2026-09-23] 격려 상자와 제목 사이 간격 (기존 0)
           widget.buildCustomSectionTitle("Encourage Self-Directed Learning", "자기주도 학습 응원하기", fontSize: 14.0, foreignTitle: _t(kSectionEncourageEngMap)),
           const SizedBox(height: 12),
           Container(
@@ -633,7 +655,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: _kSectionGap), // 🆕 [2026-09-23] 24 → 공통 간격
 
           widget.buildCustomSectionTitle("Today's Accumulated Stars", "오늘의 별 수집 현황 : ${widget.totalCollectedStars}개", fontSize: 14.0, foreignTitle: starsSectionForeignTitle(widget.totalCollectedStars)),
           const SizedBox(height: 10),

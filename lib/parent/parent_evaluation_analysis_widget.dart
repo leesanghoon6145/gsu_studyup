@@ -574,16 +574,23 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
   }
 
   Widget _buildParentTimeChartDashboard(int tabIndex) {
+    // 🆕 [2026-09-24] 예상치(하루평균 × 5/22/250) 대신 기간별 "실제 합계"를 사용
+    // 일간=오늘, 주간=이번 주(일~토), 월간=이번 달, 연간=올해
     final List<String> flagKeys = ["hasStudiedToday", "hasStudiedWeekly", "hasStudiedMonthly", "hasStudiedYearly"];
+    final List<String> periodKeys = ["todayMinutes", "weekMinutes", "monthMinutes", "yearMinutes"];
     final String flagKey = flagKeys[tabIndex];
+    final String periodKey = periodKeys[tabIndex];
     final String unitLabel = tabIndex == 0 ? "" : "h";
-    double multiplier = (tabIndex == 0) ? 1.0 : (tabIndex == 1) ? 5.0 : (tabIndex == 2) ? 22.0 : 250.0;
+    // 🆕 계산은 모두 "분"으로, 화면 표시만 일간=분 / 주간·월간·연간=시간(h)으로 자동 변환
+    final bool inHours = tabIndex != 0;
+    String fmtTime(double minutes, int decimals) =>
+        (inHours ? minutes / 60.0 : minutes).toStringAsFixed(decimals);
 
     List<Map<String, dynamic>> subjectData = parentMasterTimeData
         .where((e) => e[flagKey] == true)
         .map((e) => {
       "subject": e["subject"] as String,
-      "value": (e["baseMinutes"] as int) * multiplier,
+      "value": ((e[periodKey] as num?) ?? 0).toDouble(),
     })
         .where((e) => (e["value"] as double) > 0)
         .toList();
@@ -608,10 +615,11 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
     double allMax = subjectData.map((e) => (e["value"] as double) > (e["avg"] as double) ? (e["value"] as double) : (e["avg"] as double)).reduce((a, b) => a > b ? a : b);
     double allMin = subjectData.map((e) => (e["value"] as double) < (e["avg"] as double) ? (e["value"] as double) : (e["avg"] as double)).reduce((a, b) => a < b ? a : b);
 
-    double yMax = tabIndex == 0 ? allMax + 20.0 : allMax + 1.0;
-    double yMin = tabIndex == 0 ? (allMin - 20.0).clamp(0.0, double.infinity) : (allMin - 1.0).clamp(0.0, double.infinity);
+    // 🆕 위아래 여유: 일간 20분, 주간·월간·연간 60분(=1시간)
+    double yMax = tabIndex == 0 ? allMax + 20.0 : allMax + 60.0;
+    double yMin = tabIndex == 0 ? (allMin - 20.0).clamp(0.0, double.infinity) : (allMin - 60.0).clamp(0.0, double.infinity);
     double step = (yMax - yMin) / 3;
-    List<String> yTicks = List.generate(4, (i) => "${(yMax - step * i).toStringAsFixed(tabIndex == 0 ? 0 : 1)}$unitLabel").toList();
+    List<String> yTicks = List.generate(4, (i) => "${fmtTime(yMax - step * i, tabIndex == 0 ? 0 : 1)}$unitLabel").toList();
 
     const double barW = 17.0;
     const double pairGap = 0.7;
@@ -743,7 +751,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                                           Column(
                                             mainAxisAlignment: MainAxisAlignment.end,
                                             children: [
-                                              Text("${(item["avg"] as double).toStringAsFixed(1)}$unitLabel", style: GoogleFonts.rajdhani(color: Colors.grey, fontSize: 8, fontWeight: FontWeight.bold)),
+                                              Text("${fmtTime(item["avg"] as double, 1)}$unitLabel", style: GoogleFonts.rajdhani(color: Colors.grey, fontSize: 8, fontWeight: FontWeight.bold)),
                                               const SizedBox(height: 2),
                                               Container(width: barW, height: avgH, decoration: const BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.vertical(top: Radius.circular(3)))),
                                             ],
@@ -752,7 +760,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                                           Column(
                                             mainAxisAlignment: MainAxisAlignment.end,
                                             children: [
-                                              Text("${(item["value"] as double).toStringAsFixed(1)}$unitLabel", style: GoogleFonts.rajdhani(color: col, fontSize: 8, fontWeight: FontWeight.bold)),
+                                              Text("${fmtTime(item["value"] as double, 1)}$unitLabel", style: GoogleFonts.rajdhani(color: col, fontSize: 8, fontWeight: FontWeight.bold)),
                                               const SizedBox(height: 2),
                                               Container(width: barW, height: valH, decoration: BoxDecoration(color: col, borderRadius: const BorderRadius.vertical(top: Radius.circular(3)))),
                                             ],
