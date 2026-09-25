@@ -214,8 +214,8 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              // 🆕 [요청] 평가결과에서 중간고사/기말고사/모의고사 삭제 - 주평가/단원평가만 남김
-              children: ["주평가", "단원평가"].map((type) {
+              // 🆕 [복원 2026-09-25] 시험준비 기간 평가 반영을 위해 중간고사/기말고사 복원
+              children: ["주평가", "단원평가", "중간고사", "기말고사"].map((type) {
                 bool isSelected = selectedEvaluationType == type;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6.0),
@@ -287,7 +287,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
                       }).toList(),
                     ),
                   ),
-                ] else ...[
+                ] else if (selectedEvaluationType == "단원평가") ...[
                   // 🆕 [다중선택] 대단원/중단원 모두 selectedBigUnits.contains(v) / selectedMidUnits.contains(v)로
                   // 비교하도록 변경 - 탭할 때마다 onBigUnitChanged/onMidUnitChanged가 토글(선택↔해제)합니다.
                   Text(bi(kBigUnitSelectLabelMap), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),

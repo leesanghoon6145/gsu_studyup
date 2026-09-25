@@ -89,6 +89,18 @@ class DkeStars {
     return newAllTimeTotal;
   }
 
+  // 🆕 [재설치 복원 2026-09-25] 휴대폰의 누적 별이 0일 때만 서버 값으로 복원.
+  // 적립 속도·레벨 공식 등 계산 로직은 전혀 건드리지 않음.
+  static Future<void> restoreFromCloudIfEmpty({required int totalStars, required int todayStars}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String allTimeKey = _scopedKey(_kAllTimeTotalKey);
+    if ((prefs.getInt(allTimeKey) ?? 0) > 0) return; // 이미 기록이 있으면 절대 덮어쓰지 않음
+    if (totalStars > 0) await prefs.setInt(allTimeKey, totalStars);
+    final String todayKey = _todayKey();
+    if (todayStars > 0 && (prefs.getInt(todayKey) ?? 0) == 0) {
+      await prefs.setInt(todayKey, todayStars);
+    }
+  }
   // 🆕 전체 누적 별 개수 조회
   static Future<int> getTotalStars() async {
     final prefs = await SharedPreferences.getInstance();

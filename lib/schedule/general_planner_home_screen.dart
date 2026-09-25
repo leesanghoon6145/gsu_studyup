@@ -50,6 +50,9 @@ import 'yearly_report_screen.dart';
 import 'statistics_screen.dart';
 import 'exercise_type_screen.dart'; // 🆕 [2026-09-04 추가] 운동 종목 리스트 화면
 import 'exercise_analysis_screen.dart'; // 🆕 [2026-09-05 추가] 운동 분석 화면 (홈에서 바로 진입)
+import '../community/notice_counsel_screen.dart'; // 🆕 [2026-09-24] 공지 및 의견
+import '../services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2026-09-25]
+import '../services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
 
 class GeneralPlannerHomeScreen extends StatefulWidget {
   const GeneralPlannerHomeScreen({super.key});
@@ -62,6 +65,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
   static const Color _brandGolden = Color(0xFFE5C158);
   static const Color _pageBg = Color(0xFF030712);
   static const Color _containerBg = Color(0xFF0D1527);
+  bool _noticeDot = false; // 🆕 [빨간 점] 공지·의견함에 새 소식이 있는지
 
   @override
   void initState() {
@@ -80,6 +84,8 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     // ✅ [2026-09-05 추가] 이전에 "매일 자동 기록"을 켜둔 적이 있으면, 사용자가
     // [운동 > 걷기] 화면에 안 들어가도 홈 화면 진입 시점부터 자동으로 재개됨.
     DailyStepWatcherService.instance.resumeIfEnabled();
+    CloudBackupService.instance.start(); // 🆕 [재설치 복원 2단계] 개인 백업 보관함 자동 복원·백업
+    _refreshNoticeDot(); // 🆕 [빨간 점] 새 소식 확인
   }
 
   @override
@@ -116,8 +122,14 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildSectionTitle('SCHEDULE', '일정'),
-                _buildLanguageSelector(context), // 🆕 [2026-09-06 추가] 언어 선택 버튼
-              ],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildNoticeButton(context), // 🆕 [2026-09-24] 공지 및 의견
+                    const SizedBox(width: 8),
+                    _buildLanguageSelector(context), // 🆕 [2026-09-06 추가] 언어 선택 버튼
+                  ],
+                ),              ],
             ),
             const SizedBox(height: 12),
             _buildMenuGrid(context, [
@@ -227,6 +239,55 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     );
   }
 
+  // 🆕 [빨간 점 2026-09-25] 새 공지·새 답변이 있으면 공지 버튼에 빨간 점
+  Future<void> _refreshNoticeDot() async {
+    final Map<String, bool> r = await NoticeCounselService.checkUnread(viewer: 'general');
+    if (mounted) setState(() => _noticeDot = r.values.any((v) => v));
+  }
+
+  // 🆕 [2026-09-24] 공지 및 의견 버튼 - 언어 선택 버튼과 같은 모양
+  static const Map<String, String> _noticeLabel = {'JA': 'お知らせ', 'ZH': '公告', 'FR': 'Avis', 'DE': 'Hinweise', 'RU': 'Объявления', 'AR': 'الإعلانات', 'HI': 'सूचना', 'VI': 'Thông báo', 'ES': 'Avisos', 'TH': 'ประกาศ'};
+
+  Widget _buildNoticeButton(BuildContext context) {
+    return ListenableBuilder(
+      listenable: appLanguage,
+      builder: (context, _) {
+        final String label = appLanguage.isDefault
+            ? '공지/Notice'
+            : (_noticeLabel[appLanguage.current] ?? 'Notice');
+        return InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticeCounselScreen(isParent: false, isGeneral: true)));
+            _refreshNoticeDot(); // 🆕 [빨간 점] 돌아오면 다시 확인
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: _brandGolden.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _brandGolden.withOpacity(0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.campaign_rounded, color: _brandGolden, size: 15),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: const TextStyle(color: _brandGolden, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                if (_noticeDot) ...[
+                  const SizedBox(width: 5),
+                  Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   // 🆕 [2026-09-06 추가] 언어 선택 버튼. appLanguage가 ChangeNotifier라서
   // ListenableBuilder로 감싸두면, 어디서 언어를 바꾸든(이 화면이든 마이페이지든)
   // 이 버튼의 표시가 자동으로 즉시 갱신됨.

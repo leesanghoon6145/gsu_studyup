@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 🆕 [학부모 가시성 확보] debugPrint / kDebugMode 사용
 import 'user_profile_service.dart'; // 🆕 [자녀 이름 표시 2026-09-18] DkeUserProfile.getRealName() 조회용
 import 'dart:async'; // 🆕 [자녀 이름 표시 2026-09-18] unawaited() 함수 사용을 위함
+import '../star_economy.dart'; // 🆕 [재설치 복원 2026-09-25] 별 복원용
 
 // 학생↔부모 기기 연결을 담당하는 서비스
 // (다른 서비스들과 동일하게 "단일 게이트웨이" 패턴 — 이 파일만 Firestore와 직접 통신)
@@ -50,6 +51,7 @@ class FamilyLinkService {
 
         if (created) {
           await saveMyLinkCode(code);
+          await _writeLinkCodeIndex(code); // 🆕 [보안 2026-09-25] 부모 연결 확인용 작은 문서
           if (myUid != null) {
             try {
               await _db.collection('userLinkCodes').doc(myUid).set({'code': code});
@@ -145,13 +147,158 @@ class FamilyLinkService {
       debugPrint('[FamilyLinkService] deleteAbandonedCode 실패: $e');
     }
   }
+  // ============================================================================
+  // 🆕 [보안 2026-09-25] 연결 확인용 작은 문서 linkCodes/{code}
+  // 학습 기록은 전혀 없고 "이 코드가 있다"는 것만 알려주는 문서.
+  // 부모는 이 작은 문서만 읽고 연결하므로, 연결 전(대기 중)에는 학습 기록(links/{code})을
+  // 주인 학생 말고는 아무도 읽을 수 없게 잠글 수 있음.
+  // ============================================================================
+  static const String _indexCollection = 'linkCodes';
+  static const String _kIndexDonePrefix = 'family_link_index_done_';
+
+  static Future<void> _writeLinkCodeIndex(String code) async {
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
+    try {
+      await _db.collection(_indexCollection).doc(code).set({
+        'ownerUid': myUid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_scopedKey('$_kIndexDonePrefix$code'), true);
+    } catch (e) {
+      debugPrint('[FamilyLinkService] linkCodes 작성 실패(다음 실행 때 다시 시도): $e');
+    }
+  }
+
+  // 이번 수정 전에 만든 코드도, 학생 앱이 한 번 열리면 자동으로 확인용 문서가 생김
+  static Future<void> _ensureLinkCodeIndex(String code) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_scopedKey('$_kIndexDonePrefix$code')) == true) return;
+    await _writeLinkCodeIndex(code);
+  }
+
+  // ============================================================================
+  // 🆕 [재설치 복원 2026-09-25] 부모가 연결한 자녀 코드 목록을 서버(parentLinks/{uid})에도 보관.
+  // 부모가 앱을 새로 깔아도 자녀 목록이 사라지지 않음.
+  // ============================================================================
+  static const String _parentLinksCollection = 'parentLinks';
+  static const String _kLinkedCodesSyncedKey = 'family_linked_codes_synced';
+
+  static Future<void> _syncLinkedCodesToCloud(List<String> list) async {
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
+    try {
+      await _db.collection(_parentLinksCollection).doc(myUid).set({
+        'codes': list,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_scopedKey(_kLinkedCodesSyncedKey), true);
+    } catch (e) {
+      debugPrint('[FamilyLinkService] parentLinks 저장 실패(다음에 다시 시도): $e');
+    }
+  }
+
+  // ============================================================================
+  // 🆕 [재설치 복원 2026-09-25] 학생이 앱을 새로 깔고 로그인했을 때, 휴대폰 기록이 비어 있으면
+  // 서버(links/{내 코드})에 올라가 있던 기록을 다시 받아옴. 계정마다 딱 1번만 실행.
+  // 휴대폰에 이미 기록이 있으면 절대 덮어쓰지 않음(중복·손실 방지).
+  // ============================================================================
+  static const String _kRestoreDoneKey = 'family_cloud_restore_done';
+
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  // 서버 시간값(Timestamp)이 섞여 있어도 글자로 바꿔서 저장할 수 있게
+  static Object? _toEncodable(Object? o) {
+    if (o is Timestamp) return o.toDate().toIso8601String();
+    return o.toString();
+  }
+
+  static Future<void> restoreFromCloudIfNeeded() async {
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final String doneKey = _scopedKey(_kRestoreDoneKey);
+    if (prefs.getBool(doneKey) == true) return;
+
+    final String? code = await getMyLinkCode();
+    if (code == null) return; // 코드가 없으면 복원할 것도 없음
+
+    try {
+      final doc = await _db.collection(_collection).doc(code).get();
+      final Map<String, dynamic>? data = doc.data();
+      if (data == null || data['ownerUid'] != myUid) return;
+
+      // ① 별 - 휴대폰 누적 별이 0일 때만 서버 값으로
+      final int cloudTotal = (data['totalStars'] as num?)?.toInt() ?? 0;
+      final Timestamp? updatedAt = data['updatedAt'] as Timestamp?;
+      final bool updatedToday = updatedAt != null && _sameDay(updatedAt.toDate(), DateTime.now());
+      final int cloudToday = updatedToday ? ((data['todayStars'] as num?)?.toInt() ?? 0) : 0;
+      await DkeStars.restoreFromCloudIfEmpty(totalStars: cloudTotal, todayStars: cloudToday);
+
+      // ② 학습 세션 기록 - 휴대폰에 dke_history_ 기록이 하나도 없을 때만
+      final bool hasLocalHistory = prefs.getKeys().any((k) => k.startsWith('dke_history_'));
+      final List<dynamic> sessions = (data['sessionHistory'] as List<dynamic>?) ?? [];
+      if (!hasLocalHistory && sessions.isNotEmpty) {
+        final Map<String, List<String>> bySubject = {};
+        for (final s in sessions) {
+          if (s is! Map) continue;
+          final Map<String, dynamic> m = Map<String, dynamic>.from(s);
+          final String subject = (m['subject'] as String?) ?? '';
+          if (subject.isEmpty) continue;
+          bySubject.putIfAbsent(subject, () => []).add(jsonEncode(m, toEncodable: _toEncodable));
+        }
+        for (final entry in bySubject.entries) {
+          await prefs.setStringList('dke_history_${entry.key}', entry.value);
+        }
+      }
+
+      // ③ 평가 기록 - 휴대폰 gke_exam_records가 비어 있을 때만
+      final String? localExams = prefs.getString('gke_exam_records');
+      final List<dynamic> exams = (data['examRecords'] as List<dynamic>?) ?? [];
+      final bool localExamsEmpty = localExams == null || localExams.isEmpty || localExams == '[]';
+      if (localExamsEmpty && exams.isNotEmpty) {
+        await prefs.setString('gke_exam_records', jsonEncode(exams, toEncodable: _toEncodable));
+      }
+
+      await prefs.setBool(doneKey, true);
+      debugPrint('[FamilyLinkService] 재설치 복원 완료: 별=$cloudTotal, 세션=${sessions.length}, 평가=${exams.length}');
+    } catch (e) {
+      debugPrint('[FamilyLinkService] 재설치 복원 실패(다음 실행 때 다시 시도): $e');
+    }
+  }
 
   static const String _kMyLinkedCodesKey = 'family_linked_codes';
   static const int maxChildren = 5;
-
   static Future<List<String>> getLinkedCodes() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_scopedKey(_kMyLinkedCodesKey)) ?? [];
+    final List<String> local = prefs.getStringList(_scopedKey(_kMyLinkedCodesKey)) ?? [];
+    if (local.isNotEmpty) {
+      // 🆕 [재설치 복원] 예전에 연결한 목록도 서버에 한 번 올려둠 (계정마다 1번)
+      if (prefs.getBool(_scopedKey(_kLinkedCodesSyncedKey)) != true) {
+        unawaited(_syncLinkedCodesToCloud(local));
+      }
+      return local;
+    }
+    // 🆕 [재설치 복원] 휴대폰 목록이 비어 있으면 서버에 보관된 목록을 받아옴
+    final String? myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return [];
+    try {
+      final doc = await _db.collection(_parentLinksCollection).doc(myUid).get();
+      final List<String> cloud =
+      ((doc.data()?['codes'] as List<dynamic>?) ?? []).map((e) => e.toString()).toList();
+      if (cloud.isNotEmpty) {
+        await prefs.setStringList(_scopedKey(_kMyLinkedCodesKey), cloud);
+        await prefs.setBool(_scopedKey(_kLinkedCodesSyncedKey), true);
+        debugPrint('[FamilyLinkService] 자녀 목록 서버에서 복원: $cloud');
+      }
+      return cloud;
+    } catch (e) {
+      debugPrint('[FamilyLinkService] 자녀 목록 복원 실패: $e');
+      return [];
+    }
   }
 
   static Future<bool> addLinkedCode(String code) async {
@@ -169,6 +316,7 @@ class FamilyLinkService {
     }
     list.add(code);
     await prefs.setStringList(key, list);
+    unawaited(_syncLinkedCodesToCloud(list)); // 🆕 [재설치 복원] 서버에도 보관
     return true;
   }
 
@@ -178,6 +326,7 @@ class FamilyLinkService {
     final list = prefs.getStringList(key) ?? [];
     list.remove(code);
     await prefs.setStringList(key, list);
+    unawaited(_syncLinkedCodesToCloud(list)); // 🆕 [재설치 복원] 서버에도 반영
 
     final String? myUid = FirebaseAuth.instance.currentUser?.uid;
     if (myUid == null) return;
@@ -189,7 +338,6 @@ class FamilyLinkService {
       debugPrint('[FamilyLinkService] removeLinkedCode 서버 반영 실패: $e');
     }
   }
-
   static const int maxParentsPerChild = 3;
 
   static Future<bool> connectWithCode(String code) async {
@@ -201,41 +349,34 @@ class FamilyLinkService {
     final String? myUid = FirebaseAuth.instance.currentUser?.uid;
     if (myUid == null) return ConnectResult.notLoggedIn;
 
-    final docRef = _db.collection(_collection).doc(code);
-
+    // 🆕 [보안 2026-09-25] 학습 기록 문서(links)는 읽지 않고, 확인용 작은 문서(linkCodes)만 확인
     try {
-      final ConnectResult result = await _db.runTransaction<ConnectResult>((transaction) async {
-        final snapshot = await transaction.get(docRef);
-        if (!snapshot.exists) {
-          return ConnectResult.codeNotFound;
-        }
+      final idx = await _db.collection(_indexCollection).doc(code).get();
+      if (!idx.exists) return ConnectResult.codeNotFound;
+    } catch (e) {
+      debugPrint('[FamilyLinkService] linkCodes 조회 실패: $e');
+      return ConnectResult.unknownError;
+    }
 
-        final List<dynamic> existingParentUids =
-            (snapshot.data()?['parentUids'] as List<dynamic>?) ?? [];
-
-        if (existingParentUids.contains(myUid)) {
-          return ConnectResult.success;
-        }
-
-        if (existingParentUids.length >= maxParentsPerChild) {
-          return ConnectResult.capacityFull;
-        }
-
-        transaction.update(docRef, {
-          'status': 'connected',
-          'connectedAt': FieldValue.serverTimestamp(),
-          'parentUids': FieldValue.arrayUnion([myUid]),
-        });
-        return ConnectResult.success;
+    // 🆕 정원(3명) 검사는 서버 보안 규칙이 대신 함 - 꽉 찼으면 서버가 거부함.
+    // 이미 연결된 부모가 재설치 후 다시 입력하는 경우도 규칙 (2)번으로 그대로 허용됨.
+    try {
+      await _db.collection(_collection).doc(code).update({
+        'status': 'connected',
+        'connectedAt': FieldValue.serverTimestamp(),
+        'parentUids': FieldValue.arrayUnion([myUid]),
       });
-
-      if (result == ConnectResult.success) {
-        await addLinkedCode(code);
-      }
-      return result;
+    } on FirebaseException catch (e) {
+      debugPrint('[FamilyLinkService] 연결 거부: ${e.code}');
+      if (e.code == 'not-found') return ConnectResult.codeNotFound;
+      if (e.code == 'permission-denied') return ConnectResult.capacityFull;
+      return ConnectResult.unknownError;
     } catch (e) {
       return ConnectResult.unknownError;
     }
+
+    await addLinkedCode(code);
+    return ConnectResult.success;
   }
 
   static Future<void> clearMyLinkCode() async {
@@ -253,6 +394,7 @@ class FamilyLinkService {
     final String? localCode = prefs.getString(_scopedKey(_kMyLinkCodeKey));
     if (localCode != null && localCode.isNotEmpty) {
       unawaited(_ensureOwnerUid(localCode));
+      unawaited(_ensureLinkCodeIndex(localCode)); // 🆕 [보안 2026-09-25]
       return localCode;
     }
 
@@ -264,6 +406,7 @@ class FamilyLinkService {
       final String? recoveredCode = doc.exists ? (doc.data()?['code'] as String?) : null;
       if (recoveredCode != null && recoveredCode.isNotEmpty) {
         await saveMyLinkCode(recoveredCode);
+        unawaited(_ensureLinkCodeIndex(recoveredCode)); // 🆕 [보안 2026-09-25]
         debugPrint('[FamilyLinkService] getMyLinkCode: 서버에서 코드 복구함 - $recoveredCode');
         return recoveredCode;
       }

@@ -15,6 +15,9 @@ import '../services/auth_service.dart'; // 🆕 [로그아웃 기능] 실제 로
 import '../main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 import '../global_lang.dart';
 import '../services/scholarship_service.dart'; // 🆕 [장학금 방 2026-09-17] 유형별 금액 계산
+import '../community/notice_counsel_screen.dart'; // 🆕 [2026-09-24] 공지 및 교육상담
+import '../services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2026-09-25]
+import '../services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
 
 // ---------------------------------------------------------------------------
 // 🆕 [다국어] DkeLang 연동: 기본모드(KO/EN)는 한글+영문 동시 표시,
@@ -1022,6 +1025,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // 1:1로 대응하는 영문 라벨. 실제 enum 멤버 이름을 몰라도 index로 안전하게 매칭.
   static const List<String> _scholarshipTypeEnLabels = ['Growth', 'Challenge', 'Achievement'];
   bool _isVipMember = false;
+  bool _noticeDot = false; // 🆕 [빨간 점] 공지·의견함·상담에 새 소식이 있는지
   bool _isLoading = true;
 
   static const Color luxuryDarkBg = Color(0xFF030712);
@@ -1074,11 +1078,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   List<ParentSessionRecord> _todaySessions = [];
   List<ParentSessionRecord> _allSessions = [];
   List<ParentExamRecord> _examRecords = [];
-  List<Map<String, dynamic>> _subjectAggregates = [];
 
   int _todayTotalMinutes = 0;
-  int _yesterdayTotalMinutes = 0;
-  int _weeklyAvgMinutesPerDay = 0;
+
   String? _strongestSubject;
   String? _weakestSubject;
 
@@ -1154,6 +1156,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     });
     _loadRealData();
     _loadLinkedChildren(); // 🆕 [자녀 추가] 연결된 자녀 코드 목록 불러오기
+    CloudBackupService.instance.start(); // 🆕 [재설치 복원 2단계] 개인 백업 보관함 자동 복원·백업
+    _refreshNoticeDot(); // 🆕 [빨간 점] 새 소식 확인
+  }
+  // 🆕 [빨간 점 2026-09-25] 새 소식이 있으면 "공지 및 교육상담" 버튼에 빨간 점
+  Future<void> _refreshNoticeDot() async {
+    final Map<String, bool> r = await NoticeCounselService.checkUnread(viewer: 'parent');
+    if (mounted) setState(() => _noticeDot = r.values.any((v) => v));
   }
 
   // 🆕 [자녀 추가] 이 계정에 연결된 자녀 코드 목록을 불러옴
@@ -1659,23 +1668,6 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     );
   }
 
-  // 🆕 [2026-09-23] 공지 및 교육상담 화면이 완성되기 전까지 임시 안내
-  void _showNoticeComingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: premiumCardBg,
-        content: Text(
-          _biLong(kComingSoonMap),
-          style: GoogleFonts.notoSansKr(
-            color: brandGolden,
-            fontWeight: FontWeight.bold,
-            height: 1.4,
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _confirmLogout() async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -1846,34 +1838,17 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           await ParentDataService.loadAllSessions();
       final List<ParentExamRecord> exams =
           await ParentDataService.loadExamRecords();
-      final List<Map<String, dynamic>> aggregates =
-          await ParentDataService.loadSubjectAggregates();
+
       final int todayStars = await ParentDataService.getTodayStars();
 
       final DateTime now = DateTime.now();
       final DateTime todayStart = DateTime(now.year, now.month, now.day);
-      final DateTime yesterdayStart = todayStart.subtract(
-        const Duration(days: 1),
-      );
-
       final int todayMinutes = ParentDataService.totalMinutesForDay(
         all,
         todayStart,
       );
-      final int yesterdayMinutes = ParentDataService.totalMinutesForDay(
-        all,
-        yesterdayStart,
-      );
 
       // 최근 7일(오늘 제외) 총 학습분 / 7 = 일 평균
-      int weeklyTotal = 0;
-      for (int i = 1; i <= 7; i++) {
-        weeklyTotal += ParentDataService.totalMinutesForDay(
-          all,
-          todayStart.subtract(Duration(days: i)),
-        );
-      }
-      final int weeklyAvg = (weeklyTotal / 7).round();
 
       final Map<String, double> subjectAvgScores =
           ParentDataService.computeSubjectAverageScores(exams);
@@ -1894,11 +1869,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
         _todaySessions = today;
         _allSessions = all;
         _examRecords = exams;
-        _subjectAggregates = aggregates;
         _totalCollectedStars = todayStars;
         _todayTotalMinutes = todayMinutes;
-        _yesterdayTotalMinutes = yesterdayMinutes;
-        _weeklyAvgMinutesPerDay = weeklyAvg;
         _strongestSubject = strongest;
         _weakestSubject = weakest;
         _isLoading = false;
@@ -2965,93 +2937,6 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     );
   }
 
-  // 🆕 [장학금 방 상세화 2026-09-17] 시뮬레이션 표 한 줄. showMoney가 true인 경우(월간 기준)에만
-  // 3개 유형의 예상 금액까지 함께 보여줌.
-  Widget _buildScholarshipSimulationRow({
-    required String label,
-    required String detail,
-    required int stars,
-    required bool showMoney,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: premiumCardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.notoSansKr(
-                  color: Colors.white,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                "$stars개",
-                style: GoogleFonts.notoSansKr(
-                  color: brandGolden,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            detail,
-            style: GoogleFonts.notoSansKr(
-              color: Colors.white38,
-              fontSize: 10.5,
-            ),
-          ),
-          if (showMoney) ...[
-            const Divider(color: Colors.white10, height: 16),
-            ...ScholarshipType.values.map((type) {
-              final int amount = ScholarshipService.calculateAmountWon(
-                monthlyTotalStars: stars,
-                type: type,
-              );
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      ScholarshipService.typeLabelKo[type]!,
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white70,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                    Text(
-                      "${_formatWon(amount)}원",
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // 🆕 [장학금 방 상세화 2026-09-17] 천 단위 콤마 포맷 헬퍼
-
   // 🆕 [장학금 방 상세화 2026-09-17] 천 단위 콤마 포맷 헬퍼
   static String _formatWon(int n) => n.toString().replaceAllMapped(
     RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
@@ -3400,10 +3285,35 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Flexible(
-                  child: _buildTopPillButton(
-                    icon: Icons.campaign_rounded,
-                    label: _bi(kNoticeCounselMap),
-                    onTap: _showNoticeComingSoon,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      _buildTopPillButton(
+                        icon: Icons.campaign_rounded,
+                        label: _bi(kNoticeCounselMap),
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const NoticeCounselScreen(isParent: true)),
+                          );
+                          _refreshNoticeDot(); // 🆕 [빨간 점] 돌아오면 다시 확인
+                        },
+                      ),
+                      // 🆕 [빨간 점 2026-09-25] 새 소식이 있으면 오른쪽 위에 빨간 점
+                      if (_noticeDot)
+                        Positioned(
+                          top: -3,
+                          right: -3,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: luxuryDarkBg, width: 2),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 10),

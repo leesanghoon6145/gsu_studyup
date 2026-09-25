@@ -7,7 +7,7 @@ import 'dart:convert'; // 🆕 [저장 연동] jsonEncode/jsonDecode용
 import 'package:gsu_studyup/timer/timer_screen.dart';
 import 'square/friend_study_room_screen.dart';
 import 'package:gsu_studyup/square/live_active_users_screen.dart';
-import 'package:gsu_studyup/square/educational_consultation/educational_consultation_screen.dart';
+import 'package:gsu_studyup/community/notice_counsel_screen.dart'; // 🆕 [2026-09-25] 공지사항·게시판·교육상담
 import 'package:gsu_studyup/square/my_page_screen.dart';
 import 'planner/main_self_learning_planner_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +16,9 @@ import 'planner/widgets/study_timelines.dart'; // 🆕 [D-day 팝업 연동] 시
 import 'package:gsu_studyup/square/my_growth_path_screen.dart'; // 나의 성장로 화면 연동 (메뉴에서는 제외, 파일은 보존)
 import 'package:gsu_studyup/square/grade_management_screen.dart'; // 🆕 [성적 관리] 신규 화면 연동
 import 'services/auth_service.dart'; // 🆕 [로그아웃 기능]
+import 'services/family_link_service.dart'; // 🆕 [재설치 복원 2026-09-25]
+import 'services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2026-09-25]
+import 'services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
 import 'main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
@@ -41,6 +44,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
   String previewingSound = '';
 
   bool _isVipMember = false;
+  bool _noticeDot = false; // 🆕 [빨간 점] 공지·게시판·상담에 새 소식이 있는지
   String _targetUniversity = "Seoul National University (서울대학교)";
 
   // 🆕 [저장 연동] 사용자가 추가/삭제한 과목·시험종류를 앱 재시작 후에도 유지
@@ -74,11 +78,19 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
 
     _loadSavedSubjectsAndExamTypes(); // 🆕 [저장 연동] 과목/시험종류 저장값 복원
+    FamilyLinkService.restoreFromCloudIfNeeded(); // 🆕 [재설치 복원 2026-09-25] 새로 깔았으면 서버 기록 복원
+    CloudBackupService.instance.start(); // 🆕 [재설치 복원 2단계] 개인 백업 보관함 자동 복원·백업
+    _refreshNoticeDot(); // 🆕 [빨간 점] 새 소식 확인
 
     // 🆕 [D-day 팝업 연동] 첫 화면 진입 시(아침 6~10시 사이) 시험 D-day 응원 팝업 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndShowExamDayPopup();
     });
+  }
+  // 🆕 [빨간 점 2026-09-25] 공지·게시판·상담에 새 소식이 있으면 메뉴 버튼에 빨간 점
+  Future<void> _refreshNoticeDot() async {
+    final Map<String, bool> r = await NoticeCounselService.checkUnread(viewer: 'student');
+    if (mounted) setState(() => _noticeDot = r.values.any((v) => v));
   }
 
   // 🆕 [저장 연동] 과목/시험종류 저장값 복원
@@ -865,8 +877,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                         // 🆕 [원장님 확정] "나의 성장로" 메뉴는 [성적 관리]로 대체되어 그리드에서 제거.
                         // my_growth_path_screen.dart 파일 자체와 import는 추후 전체 정리 시점에 일괄 처리 예정이라 지금은 보존.
                         _buildMenuButton(
-                          icon: Icons.support_agent_rounded, label: "교육상담", subLabel: "Education Counseling",
-                          onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const EducationalConsultationScreen())); },
+                          icon: Icons.support_agent_rounded, label: "공지 및 교육상담", subLabel: "Notice & Counseling",
+                          onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const NoticeCounselScreen(isParent: false))); },
                         ),
                         _buildMenuButton(
                           icon: Icons.account_circle_rounded, label: "👑 마이페이지", subLabel: "마이페이지",
