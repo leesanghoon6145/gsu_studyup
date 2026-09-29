@@ -1020,6 +1020,24 @@ class LearningScreenState extends State<LearningScreen>
     );
   }
 
+  // 🆕 [2026-09-30] 팝업 아래 버튼 글자: 기본 모드 = 영문 위·한글 아래 두 줄 (잘림 방지), 외국어 = 그 언어 한 줄
+  static Widget _biButtonText(String key, {required Color color, double fontSize = 12.5}) {
+    final map = _uiText[key] ?? {'EN': key, 'KO': key};
+    if (_isForeignSelected) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(map[DkeLang.current] ?? map['EN'] ?? key, maxLines: 1, style: GoogleFonts.notoSansKr(color: color, fontSize: fontSize, fontWeight: FontWeight.bold)),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(map['EN'] ?? '', maxLines: 1, style: GoogleFonts.gowunBatang(color: color, fontSize: fontSize - 1.5, fontWeight: FontWeight.bold)),
+        Text(map['KO'] ?? '', maxLines: 1, style: GoogleFonts.notoSansKr(color: color, fontSize: fontSize, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
   static const Map<String, List<String>> _weekdaySunFirst = {
     'KO': ['일', '월', '화', '수', '목', '금', '토'],
     'EN': ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -1991,14 +2009,7 @@ class LearningScreenState extends State<LearningScreen>
                               Navigator.of(dialogContext).pop();
                             }
                           },
-                          child: Text(_biStr('btnDelete'),
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              maxLines: 1,
-                              style: GoogleFonts.notoSansKr(
-                                  color: examColor,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold)),
+                          child: _biButtonText('btnDelete', color: examColor, fontSize: 13),
                         ),
                       )
                     else
@@ -2007,14 +2018,7 @@ class LearningScreenState extends State<LearningScreen>
                       children: [
                         TextButton(
                           onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: Text(_biStr('btnClose'),
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              maxLines: 1,
-                              style: GoogleFonts.notoSansKr(
-                                  color: slate400,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold)),
+                          child: _biButtonText('btnClose', color: slate400, fontSize: 13),
                         ),
                         const SizedBox(width: 4),
                         ElevatedButton(
@@ -2095,14 +2099,7 @@ class LearningScreenState extends State<LearningScreen>
                               await PlannerAlarmService.cancelAllFor(scheduleId);
                             }
                           },
-                          child: Text(_biStr('btnSave'),
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              maxLines: 1,
-                              style: GoogleFonts.notoSansKr(
-                                  fontSize: 12,
-                                  color: const Color(0xFF020617),
-                                  fontWeight: FontWeight.bold)),
+                          child: _biButtonText('btnSave', color: const Color(0xFF020617), fontSize: 12),
                         ),
                       ],
                     ),

@@ -289,6 +289,22 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
 
   // 🆕 [12개국 UI 문구 카탈로그] + 조회 헬퍼 _t()
   static const Map<String, Map<String, String>> _uiText = {
+    // 🆕 [2026-09-30] "실시간 학습 현황" 카드 누적 별 이름 (이름이 없어 cumulative가 그대로 보이던 문제)
+    'cumulative': {
+      'KO': '누적 별',
+      'EN': 'Total Stars',
+      'JA': '累積スター',
+      'ZH': '累计星',
+      'FR': 'Étoiles cumulées',
+      'DE': 'Gesamtsterne',
+      'RU': 'Всего звёзд',
+      'AR': 'إجمالي النجوم',
+      'HI': 'कुल सितारे',
+      'VI': 'Tổng sao',
+      'ES': 'Estrellas totales',
+      'TH': 'ดาวสะสม',
+    },
+
     'lv26': {
       'KO': '학습레벨 26',
       'EN': 'Lv.26',
@@ -1787,7 +1803,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
         const Duration(days: 1),
       );
       final DateTime weekStart = todayStart.subtract(
-        Duration(days: now.weekday - 1),
+        Duration(days: now.weekday % 7), // 🆕 [2026-09-30] 앱 원칙: 일~토
       );
       final DateTime monthStart = DateTime(now.year, now.month, 1);
       final DateTime yearStart = DateTime(now.year, 1, 1);
@@ -4609,7 +4625,7 @@ GKE StudyUp은 누가 시켜서 공부하는 것이 아니라 내가 스스로 �
 -타이머 학습을 70% 이상 달성하면 +10별 
 -학습을 마친 후 학습기록을 작성하면 +10별 
 - 일일 50분이상 학습시 50별 
-- 1주 일요일 부터 토요일까지 빠짐없는 학습 300병 
+- 1주 일요일 부터 토요일까지 빠짐없는 학습 300별 
 - 1달 빠짐없이 학습시 1000별
 
 3. 학습평가와 기록
@@ -4766,7 +4782,7 @@ Global Knowledge Education
   * **学習を終えた後に学習記録を残す → ＋10個の星⭐**
   * **1日に50分以上学習 → ＋50個の星⭐**
   * **1週間（日曜日から土曜日まで）毎日欠かさず学習 → ＋300個の星⭐**
-  * **1か月間、毎日欠かさず学習 → ＋500個の星⭐**
+  * **1か月間、毎日欠かさず学習 → ＋1,000個の星⭐**
 
   一日続けることは、小さな一歩。
 
@@ -5071,7 +5087,7 @@ GKE StudyUp 不是一个让别人督促你学习的平台。
 * **完成学习后填写学习记录 → +10颗星⭐**
 * **每天学习50分钟以上 → +50颗星⭐**
 * **一周从星期日到星期六，每天坚持学习、不间断 → +300颗星⭐**
-* **一个月每天坚持学习、不间断 → +500颗星⭐**
+* **一个月每天坚持学习、不间断 → +1,000颗星⭐**
 
 坚持一天，是一次行动。
 
@@ -5338,7 +5354,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **Rédiger une trace de son apprentissage après une session → +10 étoiles ⭐**
   * **Étudier au moins 50 minutes dans une journée → +50 étoiles ⭐**
   * **Étudier chaque jour pendant une semaine complète, du dimanche au samedi, sans interruption → +300 étoiles ⭐**
-  * **Étudier chaque jour pendant un mois complet, sans interruption → +500 étoiles ⭐**
+  * **Étudier chaque jour pendant un mois complet, sans interruption →+1 000 étoiles  ⭐**
 
   Un jour de persévérance est un petit pas.
 
@@ -5642,7 +5658,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **Nach dem Lernen eine Lernaufzeichnung erstellen → +10 Sterne ⭐**
   * **Mindestens 50 Minuten an einem Tag lernen → +50 Sterne ⭐**
   * **Eine ganze Woche lang von Sonntag bis Samstag jeden Tag lernen → +300 Sterne ⭐**
-  * **Einen ganzen Monat lang jeden Tag ohne Unterbrechung lernen → +500 Sterne ⭐**
+  * **Einen ganzen Monat lang jeden Tag ohne Unterbrechung lernen → +1.000 Sterne ⭐**
 
   Ein Tag des Lernens ist ein kleiner Schritt.
 
@@ -5945,7 +5961,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **После занятия сделать запись о своей учёбе → +10 звёзд ⭐**
   * **Учиться не менее 50 минут в день → +50 звёзд ⭐**
   * **Учиться каждый день в течение полной недели — с воскресенья по субботу, без пропусков → +300 звёзд ⭐**
-  * **Учиться каждый день в течение целого месяца, без пропусков → +500 звёзд ⭐**
+  * **Учиться каждый день в течение целого месяца, без пропусков → +1 000 звёзд ⭐**
 
   Один день постоянства — это маленький шаг.
 
@@ -6256,7 +6272,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **كتابة سجل للتعلم بعد انتهاء الدراسة → +10 نجوم ⭐**
   * **الدراسة لمدة 50 دقيقة أو أكثر في اليوم → +50 نجمة ⭐**
   * **الدراسة كل يوم لمدة أسبوع كامل، من الأحد إلى السبت، دون انقطاع → +300 نجمة ⭐**
-  * **الدراسة كل يوم لمدة شهر كامل دون انقطاع → +500 نجمة ⭐**
+  * **الدراسة كل يوم لمدة شهر كامل دون انقطاع → +1000 نجمة ⭐**
 
   يوم واحد من الاستمرار هو خطوة صغيرة.
 
@@ -6569,7 +6585,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **पढ़ाई पूरी करने के बाद Learning Record लिखना → +10 ⭐**
   * **एक दिन में 50 मिनट या उससे अधिक पढ़ाई करना → +50 ⭐**
   * **रविवार से शनिवार तक पूरे सप्ताह हर दिन बिना एक भी दिन छोड़े पढ़ाई करना → +300 ⭐**
-  * **पूरे एक महीने तक हर दिन बिना एक भी दिन छोड़े पढ़ाई करना → +500 ⭐**
+  * **पूरे एक महीने तक हर दिन बिना एक भी दिन छोड़े पढ़ाई करना → +1,000 ⭐**
 
   एक दिन लगातार पढ़ना एक छोटा कदम है।
 
@@ -6898,7 +6914,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **Viết nhật ký học tập sau khi hoàn thành buổi học → +10 ⭐**
   * **Học từ 50 phút trở lên trong một ngày → +50 ⭐**
   * **Học mỗi ngày từ Chủ nhật đến Thứ bảy trong trọn một tuần, không bỏ ngày nào → +300 ⭐**
-  * **Học mỗi ngày trong trọn một tháng, không bỏ ngày nào → +500 ⭐**
+  * **Học mỗi ngày trong trọn một tháng, không bỏ ngày nào → +1,000 ⭐**
 
   Một ngày kiên trì là một bước nhỏ.
 
@@ -7225,7 +7241,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **Escribir un registro de aprendizaje después de terminar de estudiar → +10 ⭐**
   * **Estudiar 50 minutos o más en un día → +50 ⭐**
   * **Estudiar todos los días de domingo a sábado durante una semana completa, sin faltar ningún día → +300 ⭐**
-  * **Estudiar todos los días durante un mes completo, sin faltar ningún día → +500 ⭐**
+  * **Estudiar todos los días durante un mes completo, sin faltar ningún día → +1,000 ⭐**
 
   Un día de constancia es un pequeño paso.
 
@@ -7552,7 +7568,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   * **เขียนบันทึกการเรียนหลังจากเรียนเสร็จ → +10 ⭐**
   * **เรียนวันละ 50 นาทีขึ้นไป → +50 ⭐**
   * **เรียนทุกวันตั้งแต่วันอาทิตย์ถึงวันเสาร์ครบหนึ่งสัปดาห์ โดยไม่ขาดแม้แต่วันเดียว → +300 ⭐**
-  * **เรียนทุกวันตลอดหนึ่งเดือน โดยไม่ขาดแม้แต่วันเดียว → +500 ⭐**
+  * **เรียนทุกวันตลอดหนึ่งเดือน โดยไม่ขาดแม้แต่วันเดียว → +1,000 ⭐**
 
   การพยายามอย่างต่อเนื่องหนึ่งวัน คือก้าวเล็ก ๆ
 
