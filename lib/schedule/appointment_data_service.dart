@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart'; // 🆕 [실제 알림 연동] 약속 시간에 실제 알림이 울리도록 연결
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30]
 
 class AppointmentItem {
   final String id;
@@ -56,7 +57,7 @@ class AppointmentItem {
 }
 
 class AppointmentDataService {
-  static const String _kKey = 'gke_general_planner_appointments_v1';
+  static String get _kKey => plannerScopedKey('gke_general_planner_appointments_v1'); // 🆕 [계정별 분리]
 
   static Future<List<AppointmentItem>> loadAll() async {
     try {

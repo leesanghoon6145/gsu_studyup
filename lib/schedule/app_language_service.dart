@@ -1,16 +1,19 @@
 // ============================================================================
 // [일반 플래너 - 10개국어 확장] AppLanguageService
 //
-// ⚠️ [중요 수정] 학생/학부모 앱의 실제 global_lang.dart(DkeLang)를 직접
-// 확인한 뒤, 그 구조에 정확히 맞춰 다시 작성했습니다.
-// - 저장 키를 'user_country'로 통일 → 앱 전체(일반/학생/학부모)가 언어
-//   설정을 공유합니다. 어디서 바꾸든 전체에 반영됩니다.
-// - 기본값은 가상의 'DEFAULT' 값이 아니라, DkeLang과 동일하게 실제 'KO'를
-//   사용합니다. "영+한 병기 모드"는 current가 KO 또는 EN일 때로 판단합니다
-//   (DkeLang의 isForeignSelected와 동일한 방식).
+// ⚠️ 학생/학부모 앱의 global_lang.dart(DkeLang)와 저장 키('user_country')를
+// 공유합니다. 어디서 바꾸든 전체에 반영됩니다.
+//
+// 🆕 [2026-09-29 변경] 언어 선택의 뜻을 바꿨습니다 (일반 플래너 쪽 화면 기준).
+//   - KO (한국어, 기본) : 한글 위주. 큰 제목·중간 제목만 영문+한글, 입력칸 이름 등은 한글만
+//   - EN (English)      : 영어만
+//   - 10개 외국어        : 그 언어만 (지금과 같음)
+// 예전에는 "기본" 버튼이 EN으로 저장되어 KO와 EN이 둘 다 "영+한 병기"였습니다.
+// 그래서 예전에 EN이 저장된 기기는 업데이트 후 첫 실행 때 딱 한 번 KO로 옮겨서,
+// 갑자기 영어만 나오는 일이 없게 했습니다.
 // ============================================================================
 
-import 'dart:async'; // 🆕 [연결 버그 수정] Timer 사용을 위해 추가
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,17 +22,18 @@ class AppLanguageService extends ChangeNotifier {
   factory AppLanguageService() => _instance;
   AppLanguageService._internal();
 
-  // 🆕 [DkeLang과 동일] 12개국 지원 목록 - 앱 전체 기준
+  // 12개국 지원 목록 - 앱 전체 기준
   static const List<String> supportedLanguages = [
     'KO', 'EN', 'JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH',
   ];
 
-  // 🆕 [DkeLang과 동일] 10개 외국어 코드 (KO/EN 제외 나머지)
+  // 10개 외국어 코드 (KO/EN 제외 나머지)
   static const List<String> foreignLanguageCodes = ['JA', 'ZH', 'FR', 'DE', 'RU', 'AR', 'HI', 'VI', 'ES', 'TH'];
 
-  // 🆕 [10개국어 확장] 언어 선택 화면에 보여줄 이름
+  // 언어 선택 화면에 보여줄 이름
   static const Map<String, String> languageDisplayNames = {
-    'EN': 'English + 한글 (기본)',
+    'KO': '한국어 (기본)', // 🆕 [2026-09-29]
+    'EN': 'English (영어만)', // 🆕 [2026-09-29] 예전: 'English + 한글 (기본)'
     'JA': '日本語 (일본어)',
     'ZH': '中文 (중국어)',
     'FR': 'Français (프랑스어)',
@@ -42,25 +46,26 @@ class AppLanguageService extends ChangeNotifier {
     'TH': 'ไทย (태국어)',
   };
 
-  // 🆕 [DkeLang과 동일] 저장 키 - 학생/학부모 앱과 완전히 동일한 키를 써서
-  // 앱 전체가 언어 설정을 하나로 공유하도록 함
   static const String _kPrefsKey = 'user_country';
+  // 🆕 [2026-09-29] 예전 "기본(EN)" 저장값을 KO로 한 번만 옮겼는지 표시
+  static const String _kKoDefaultMigratedKey = 'lang_ko_default_migrated_v1';
 
-  // 🆕 [DkeLang과 동일] 기본값은 'KO' (가상의 DEFAULT 값 사용 안 함)
   String current = 'KO';
 
-  // 🆕 [DkeLang의 isForeignSelected와 동일한 개념] KO 또는 EN이면 영+한 병기 모드
-  bool get isDefault => current == 'KO' || current == 'EN';
+  // 🆕 [2026-09-29] 한국어(기본) 모드 = KO만. (예전엔 KO 또는 EN)
+  // 이 값이 true면 제목은 영문+한글 2줄, BiInline 등은 예전과 같이 병기
+  bool get isDefault => current == 'KO';
+
+  // 🆕 [2026-09-29] 영어만 보여주는 모드
+  bool get isEnglishOnly => current == 'EN';
+
   bool get isForeignSelected => foreignLanguageCodes.contains(current);
 
-  // 🆕 [연결 버그 수정] DkeLang(마이페이지)은 리스너 알림 기능이 없는 평범한
-  // 클래스라서, 마이페이지에서 언어를 바꿔도 이 서비스가 그 순간 자동으로
-  // 알아채지 못합니다. 그래서 짧은 주기로 저장된 값을 다시 확인해서, 바뀌었으면
-  // 즉시 반영 + 화면에 알림(notifyListeners)을 보내는 방식으로 해결합니다.
+  // 마이페이지(DkeLang) 등 다른 화면에서 바꾼 언어를 2초마다 확인해서 반영
   Timer? _syncTimer;
 
   void _startAutoSync() {
-    if (_syncTimer != null) return; // 이미 돌고 있으면 중복 실행 방지
+    if (_syncTimer != null) return;
     _syncTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -68,14 +73,13 @@ class AppLanguageService extends ChangeNotifier {
         if (saved == null || saved.isEmpty) return;
         final String normalized = saved.toUpperCase();
         if (supportedLanguages.contains(normalized) && normalized != current) {
-          current = normalized; // 🆕 마이페이지 등 다른 화면에서 바꾼 값을 감지해서 반영
+          current = normalized;
           notifyListeners();
         }
       } catch (e) {}
     });
   }
 
-  // 🆕 [DkeLang과 동일한 함수명] initialize() - 앱 시작 시 저장된 언어 불러옴
   Future<void> initialize() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -84,27 +88,37 @@ class AppLanguageService extends ChangeNotifier {
         final String normalized = saved.toUpperCase();
         current = supportedLanguages.contains(normalized) ? normalized : 'KO';
       }
+
+      // 🆕 [2026-09-29] 예전 "기본" 버튼은 EN으로 저장됐으므로, 업데이트 후 첫 실행 때
+      // 딱 한 번만 EN → KO로 옮김 (이후 사용자가 English를 고르면 그대로 존중)
+      final bool migrated = prefs.getBool(_kKoDefaultMigratedKey) ?? false;
+      if (!migrated) {
+        if (current == 'EN') {
+          current = 'KO';
+          await prefs.setString(_kPrefsKey, 'KO');
+        }
+        await prefs.setBool(_kKoDefaultMigratedKey, true);
+      }
     } catch (e) {
       current = 'KO';
     }
-    _startAutoSync(); // 🆕 최초 초기화 시 자동 동기화 시작
+    _startAutoSync();
   }
 
-  // 🆕 [하위호환] 기존에 load()로 호출해둔 곳이 있어도 계속 작동하도록 별칭 유지
+  // 하위호환: 예전에 load()로 부르던 곳도 그대로 작동
   Future<void> load() => initialize();
 
-  // 🆕 [DkeLang과 동일] 언어 변경 - 저장하고, 구독 중인 모든 화면에 즉시 알림
   Future<void> setLanguage(String langCode) async {
     final String normalized = langCode.toUpperCase();
-    current = supportedLanguages.contains(normalized) ? normalized : 'EN';
-    notifyListeners(); // 🆕 이 알림 덕분에 화면을 새로고침하지 않아도 즉시 언어가 바뀜
+    current = supportedLanguages.contains(normalized) ? normalized : 'KO'; // 🆕 모르는 값이면 한국어로
+    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kPrefsKey, current);
   }
 
-  // 🆕 [DkeLang과 동일] 아랍어 RTL(오른쪽에서 왼쪽) 판단
+  // 아랍어 RTL(오른쪽에서 왼쪽) 판단
   bool get isRtl => current == 'AR';
 }
 
-// 🆕 앱 전체에서 공유하는 단일 인스턴스
+// 앱 전체에서 공유하는 단일 인스턴스
 final appLanguage = AppLanguageService();

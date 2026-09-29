@@ -105,7 +105,7 @@ class _TodayTimelineScreenState extends State<TodayTimelineScreen> {
 
   // 🆕 [운동 연동] 오늘의 운동 기록 조회 (TimelineBlock과는 별개 데이터 소스)
   Future<List<ExerciseRecord>> _loadTodayExerciseRecords() async {
-    final all = await ExerciseDataService.instance.getAllRecords();
+    final all = await ExerciseDataService.instance.getSessionRecords();
     final now = DateTime.now();
     return all.where((r) => r.date.year == now.year && r.date.month == now.month && r.date.day == now.day).toList();
   }

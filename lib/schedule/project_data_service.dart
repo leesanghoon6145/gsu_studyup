@@ -7,6 +7,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30]
 
 class ProjectItem {
   final String id;
@@ -88,8 +89,8 @@ class ProjectTask {
 }
 
 class ProjectDataService {
-  static const String _kProjectKey = 'gke_general_planner_projects_v1';
-  static const String _kTaskKey = 'gke_general_planner_project_tasks_v1';
+  static String get _kProjectKey => plannerScopedKey('gke_general_planner_projects_v1'); // 🆕 [계정별 분리]
+  static String get _kTaskKey => plannerScopedKey('gke_general_planner_project_tasks_v1'); // 🆕 [계정별 분리]
 
   static Future<List<ProjectItem>> loadAll() async {
     try {

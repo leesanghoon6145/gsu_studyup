@@ -53,9 +53,16 @@ import 'exercise_analysis_screen.dart'; // 🆕 [2026-09-05 추가] 운동 분�
 import '../community/notice_counsel_screen.dart'; // 🆕 [2026-09-24] 공지 및 의견
 import '../services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2026-09-25]
 import '../services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
-
+import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [부모 운동 응원별 2026-09-29]
+import '../parent/parent_main_dashboard_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 학부모방 연결
+import 'cheer_stars_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 운동 타이머·별 통장
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30] 옛 데이터를 이 계정으로 옮기기
 class GeneralPlannerHomeScreen extends StatefulWidget {
-  const GeneralPlannerHomeScreen({super.key});
+
+  // 🆕 [부모 운동 응원별 2026-09-29] 학부모방에서 들어왔으면 true —
+  // 이때 "학부모방" 버튼은 새로 열지 않고 뒤로 돌아가서 화면이 겹겹이 쌓이지 않게 함
+  final bool openedFromParentRoom;
+  const GeneralPlannerHomeScreen({super.key, this.openedFromParentRoom = false});
 
   @override
   State<GeneralPlannerHomeScreen> createState() => _GeneralPlannerHomeScreenState();
@@ -70,6 +77,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
   @override
   void initState() {
     super.initState();
+    migrateUnscopedPlannerData(); // 🆕 [계정별 분리 2026-09-30] 업데이트 전 일정·알림을 이 계정으로 한 번 옮김
     // 🆕 [10개국어 확장] 홈 화면 진입 시 저장된 언어 설정을 불러옴
     appLanguage.initialize().then((_) {
       if (mounted) setState(() {});
@@ -118,6 +126,8 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildTopDoorButtons(context), // 🆕 [부모 운동 응원별 2026-09-29] 맨 위 반반 버튼 두 개
+            const SizedBox(height: 22),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -228,6 +238,125 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     'YEARLY REPORT': {'JA': '年次レポート', 'ZH': '年报', 'FR': 'Rapport annuel', 'DE': 'Jahresbericht', 'RU': 'Годовой отчёт', 'AR': 'التقرير السنوي', 'HI': 'वार्षिक रिपोर्ट', 'VI': 'Báo cáo hàng năm', 'ES': 'Informe anual', 'TH': 'รายงานรายปี'},
     'STATISTICS': {'JA': '統計', 'ZH': '统计', 'FR': 'Statistiques', 'DE': 'Statistik', 'RU': 'Статистика', 'AR': 'الإحصائيات', 'HI': 'सांख्यिकी', 'VI': 'Thống kê', 'ES': 'Estadísticas', 'TH': 'สถิติ'},
   };
+
+  // ===========================================================================
+  // 🆕 [부모 운동 응원별 2026-09-29] 맨 위 반반 버튼 두 개 (영문 한 줄 + 한글 한 줄)
+  // ===========================================================================
+  static const Map<String, String> _cheerStarsLabel = {'JA': '運動応援スター', 'ZH': '运动加油星', 'FR': 'Étoiles d\'encouragement', 'DE': 'Anfeuerungssterne', 'RU': 'Звёзды поддержки', 'AR': 'نجوم التشجيع', 'HI': 'प्रोत्साहन सितारे', 'VI': 'Sao cổ vũ', 'ES': 'Estrellas de ánimo', 'TH': 'ดาวให้กำลังใจ'};
+  static const Map<String, String> _parentRoomLabel = {'JA': '保護者ルーム・子ども連携', 'ZH': '家长室・连接孩子', 'FR': 'Espace parents · Lier', 'DE': 'Elternbereich · Kind verbinden', 'RU': 'Для родителей · Связать', 'AR': 'غرفة الوالدين · ربط الطفل', 'HI': 'अभिभावक कक्ष · बच्चा जोड़ें', 'VI': 'Phòng phụ huynh · Liên kết con', 'ES': 'Sala de padres · Vincular', 'TH': 'ห้องผู้ปกครอง · เชื่อมบุตร'};
+
+  Widget _buildTopDoorButtons(BuildContext context) {
+    return ListenableBuilder(
+      listenable: appLanguage,
+      builder: (context, _) {
+        return Row(
+          children: [
+            Expanded(
+              child: _buildDoorButton(
+                icon: Icons.directions_run_rounded,
+                en: 'CHEER STARS',
+                ko: '부모 응원별', // 🆕 [2026-09-30] 운동 + 가족 활동으로 넓혀 이름 변경
+                foreign: _cheerStarsLabel,
+                onTap: () => _openCheerStars(context),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildDoorButton(
+                icon: Icons.family_restroom_rounded,
+                en: 'PARENT ROOM',
+                ko: '학부모방 · 자녀연결',
+                foreign: _parentRoomLabel,
+                onTap: () => _openParentRoom(context),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDoorButton({
+    required IconData icon,
+    required String en,
+    required String ko,
+    required Map<String, String> foreign,
+    required VoidCallback onTap,
+  }) {
+    final bool isDefault = appLanguage.isDefault;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [_brandGolden.withOpacity(0.16), _brandGolden.withOpacity(0.04)],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _brandGolden.withOpacity(0.55), width: 1.2),
+          boxShadow: [
+            BoxShadow(color: _brandGolden.withOpacity(0.10), blurRadius: 12, spreadRadius: 0.5),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: _brandGolden, size: 15),
+                  const SizedBox(width: 5),
+                  Text(
+                    isDefault ? en : (foreign[appLanguage.current] ?? en),
+                    style: isDefault
+                        ? GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.8)
+                        : GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            if (isDefault) ...[
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  ko,
+                  style: GoogleFonts.notoSansKr(color: const Color(0xFFFFF6D6), fontWeight: FontWeight.bold, fontSize: 12.5),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🆕 [부모 운동 응원별 2026-09-29] 운동 타이머 · 별 통장 화면으로 이동
+  void _openCheerStars(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const CheerStarsScreen()));
+  }
+
+  // 🆕 일반인 계정도 같은 계정 그대로 학부모방에 들어가 자녀를 연결할 수 있음
+  void _openParentRoom(BuildContext context) {
+    if (widget.openedFromParentRoom) {
+      Navigator.pop(context); // 학부모방에서 왔으면 새로 열지 않고 돌아감
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ParentMainDashboardScreen(
+          parentEmail: FirebaseAuth.instance.currentUser?.email ?? '',
+          childName: '',
+        ),
+      ),
+    );
+  }
 
   void _navigate(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -346,12 +475,18 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
                 Text('LANGUAGE', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
                 Text('언어 선택', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 16),
-                // 🆕 [기본 모드] EN+한글 병기 - languageDisplayNames의 'EN' 항목을 라벨로 사용
+                // 🆕 [2026-09-29] 한국어(기본) = 한글 / English = 영어만
+                _buildLanguageOption(
+                  sheetContext,
+                  code: 'KO',
+                  label: AppLanguageService.languageDisplayNames['KO'] ?? '한국어 (기본)',
+                  isSelected: appLanguage.current == 'KO',
+                ),
                 _buildLanguageOption(
                   sheetContext,
                   code: 'EN',
-                  label: AppLanguageService.languageDisplayNames['EN'] ?? 'English + 한글 (기본)',
-                  isSelected: appLanguage.isDefault,
+                  label: AppLanguageService.languageDisplayNames['EN'] ?? 'English (영어만)',
+                  isSelected: appLanguage.current == 'EN',
                 ),
                 const Divider(color: Colors.white12, height: 20),
                 // 🆕 [10개 외국어]

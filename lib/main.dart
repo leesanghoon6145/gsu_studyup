@@ -288,14 +288,8 @@ class ParentEncouragementManager {
                         style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 24),
-                  Text(
-                    _pendingMessageText,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
+                      SizedBox(
+                        width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: brandGolden,

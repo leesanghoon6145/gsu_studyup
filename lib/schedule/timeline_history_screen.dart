@@ -49,7 +49,7 @@ class _TimelineHistoryScreenState extends State<TimelineHistoryScreen> {
     final timelineDates = await TimelineDataService.loadDatesWithTimeline();
 
     // 🆕 [운동 연동] 운동 기록만 있고 타임라인 기록은 없는 날짜도 목록에 포함
-    final allExercises = await ExerciseDataService.instance.getAllRecords();
+    final allExercises = await ExerciseDataService.instance.getSessionRecords();
     final exerciseDates = allExercises.map((r) => _exerciseDateKey(r.date)).toSet();
     final timelineDateSet = timelineDates.toSet();
     final exerciseOnlyDates = exerciseDates.difference(timelineDateSet);
@@ -160,7 +160,7 @@ class _DateTimelineDetailScreenState extends State<_DateTimelineDetailScreen> {
     // 🆕 [운동 연동] 이 날짜의 운동 기록 + 종목(아이콘/이름 조회용) 로드
     final types = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
     final typesById = {for (final t in types) t.id: t};
-    final allExercises = await ExerciseDataService.instance.getAllRecords();
+    final allExercises = await ExerciseDataService.instance.getSessionRecords();
     final dateExercises = allExercises.where((r) => _exerciseDateKey(r.date) == widget.dateKey).toList();
 
     if (!mounted) return;

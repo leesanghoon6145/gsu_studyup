@@ -10,6 +10,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30]
 
 class TimelineBlock {
   final String id;
@@ -169,8 +170,8 @@ class RoutineTemplate {
 }
 
 class TimelineDataService {
-  static const String _kTimelineKey = 'gke_general_planner_timeline_v1';
-  static const String _kRoutineKey = 'gke_general_planner_routines_v1';
+  static String get _kTimelineKey => plannerScopedKey('gke_general_planner_timeline_v1'); // 🆕 [계정별 분리]
+  static String get _kRoutineKey => plannerScopedKey('gke_general_planner_routines_v1'); // 🆕 [계정별 분리]
 
   // ------------------------- 타임라인 블록 -------------------------
 

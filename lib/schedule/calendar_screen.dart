@@ -99,7 +99,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     // 🆕 [운동 연동] 운동 기록이 있는 날짜 집합 + 종목 정보(아이콘/이름 조회용) 로드
     final allExerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
     final typesById = {for (final t in allExerciseTypes) t.id: t};
-    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final allExerciseRecords = await ExerciseDataService.instance.getSessionRecords();
     final Set<String> exerciseDates = allExerciseRecords.map((r) => _dateKey(r.date)).toSet();
     final selectedExercises =
     allExerciseRecords.where((r) => _dateKey(r.date) == _dateKey(_selectedDate)).toList();
@@ -126,7 +126,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final allAppointments = await AppointmentDataService.loadAll();
     final selectedAppointments = allAppointments.where((a) => a.date == _dateKey(date)).toList();
     // 🆕 [운동 연동] 탭한 날짜의 운동 기록도 함께 조회
-    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final allExerciseRecords = await ExerciseDataService.instance.getSessionRecords();
     final selectedExercises = allExerciseRecords.where((r) => _dateKey(r.date) == _dateKey(date)).toList();
     if (!mounted) return;
     setState(() {

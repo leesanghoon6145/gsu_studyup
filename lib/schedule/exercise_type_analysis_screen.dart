@@ -56,11 +56,12 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
   // ✅ 필드 라벨을 appLanguage 상태에 맞게 병기(영문(한글) 또는 10개국어)
   String _bilabel(ExerciseField field) {
     if (field.enLabel == null || field.enLabel!.isEmpty) return field.label;
+    if (appLanguage.isEnglishOnly) return field.enLabel!; // 🆕 English = 영어만
     if (appLanguage.isForeignSelected) {
       final String? translated = kExerciseTermTranslations[field.enLabel]?[appLanguage.current];
       return translated ?? field.enLabel!;
     }
-    return '${field.enLabel} (${field.label})';
+    return field.label; // 🆕 [2026-09-30] 한국어 = 쉬운 한글만
   }
 
   num? _valueOn(DateTime date, String fieldKey) {

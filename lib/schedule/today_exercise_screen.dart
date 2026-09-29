@@ -20,6 +20,7 @@ import 'app_language_service.dart'; // ✅ [2026-09-06 추가] appLanguage 접�
 import 'exercise_step_service.dart'; // 🆕 [만보기 연동 1단계+매일 자동기록] StepTrackingSession, DailyStepWatcherService
 import 'exercise_profile_service.dart'; // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 반영
 import 'exercise_i18n.dart'; // ✅ [2026-09-06 추가] 필드/옵션/RPE 10개국어 번역 사전
+import 'exercise_field_help.dart'; // 🆕 [2026-09-29] 입력칸 한 줄 설명
 import 'exercise_type_analysis_screen.dart'; // ✅ [2026-09-13 추가] 하단 "운동분석" 탭 진입용
 
 class TodayExerciseScreen extends StatefulWidget {
@@ -292,11 +293,18 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   String _bilabel(ExerciseField field) {
     if (field.enLabel == null || field.enLabel!.isEmpty) return field.label;
+    if (appLanguage.isEnglishOnly) return field.enLabel!; // 🆕 English = 영어만
     if (appLanguage.isForeignSelected) {
       final String? translated = kExerciseTermTranslations[field.enLabel]?[appLanguage.current];
       return translated ?? field.enLabel!;
     }
-    return '${field.enLabel} (${field.label})';
+    return field.label; // 🆕 [2026-09-29] 한국어(기본) = 쉬운 한글만
+  }
+
+  // 🆕 [2026-09-29] 입력칸 아래 회색 한 줄 설명 (한국어일 때만)
+  String? _helpFor(ExerciseField field) {
+    if (!appLanguage.isDefault) return null;
+    return exerciseFieldHelp(widget.exerciseType.id, field.key);
   }
 
   // ✅ [2026-09-06 추가] select/multiSelect 옵션 값(한글, 실제 저장값) 하나를 화면에
@@ -307,15 +315,19 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     if (idx < 0 || idx >= field.optionEnLabels!.length) return value;
     final String en = field.optionEnLabels![idx];
     if (en.isEmpty) return value;
+    if (appLanguage.isEnglishOnly) return en; // 🆕 English = 영어만
     if (appLanguage.isForeignSelected) {
       final String? translated = kExerciseTermTranslations[en]?[appLanguage.current];
       return translated ?? en;
     }
-    return '$en ($value)';
+    return value; // 🆕 [2026-09-29] 한국어(기본) = 한글만
   }
 
-  InputDecoration _decoration(String label, {String? unit}) => InputDecoration(
+  InputDecoration _decoration(String label, {String? unit, String? helper}) => InputDecoration(
     labelText: label.isEmpty ? null : label,
+    helperText: helper, // 🆕 [2026-09-29] 입력칸 아래 회색 한 줄 설명
+    helperMaxLines: 2,
+    helperStyle: const TextStyle(color: Colors.white38, fontSize: 11),
     suffixText: unit,
     labelStyle: ExerciseTheme.bodyStyle(size: 13),
     suffixStyle: ExerciseTheme.bodyStyle(size: 12),
@@ -1356,7 +1368,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             controller: _textControllers[field.key],
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(color: Colors.white),
-            decoration: _decoration(_bilabel(field), unit: field.unit),
+            decoration: _decoration(_bilabel(field), unit: field.unit, helper: _helpFor(field)),
           ),
         );
       case ExerciseFieldType.text:
@@ -1365,7 +1377,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           child: TextField(
             controller: _textControllers[field.key],
             style: const TextStyle(color: Colors.white),
-            decoration: _decoration(_bilabel(field)),
+            decoration: _decoration(_bilabel(field), helper: _helpFor(field)),
           ),
         );
       case ExerciseFieldType.select:
@@ -1390,6 +1402,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(_bilabel(field), style: TextStyle(color: Colors.white54, fontSize: 12)),
+              if (_helpFor(field) != null) ...[
+                const SizedBox(height: 2),
+                Text(_helpFor(field)!, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              ],
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -1439,6 +1455,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (_helpFor(field) != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(_helpFor(field)!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
+                  ),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1692,7 +1713,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'RPE (Perceived Exertion)',
+                      appLanguage.isDefault ? '몸이 느낀 힘든 정도 (1 아주 쉬움 ~ 10 최대)' : 'RPE (Perceived Exertion)',
                       style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                     const SizedBox(height: 4),
@@ -1700,7 +1721,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       // ✅ [2026-09-06 개편] 10개국어 선택 시 사전에서 해당 언어로 표시
                       appLanguage.isForeignSelected
                           ? '자각 운동강도 (RPE $_rpe · ${kExerciseTermTranslations[kRpeLabelsEn[_rpe]]?[appLanguage.current] ?? kRpeLabelsEn[_rpe] ?? ''})'
-                          : '자각 운동강도 (RPE $_rpe · ${kRpeLabelsEn[_rpe] ?? ''} / ${kRpeLabels[_rpe] ?? ''})',
+                          : appLanguage.isEnglishOnly
+                          ? 'RPE $_rpe · ${kRpeLabelsEn[_rpe] ?? ''}'
+                          : '힘든 정도 $_rpe · ${kRpeLabels[_rpe] ?? ''}',
                       style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ],
@@ -1734,7 +1757,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   keyboardType: TextInputType.number,
                   style: const TextStyle(color: Colors.white),
                   decoration: _decoration('', unit: 'bpm')
-                      .copyWith(hintText: biHint('Average', '평균')),
+                      .copyWith(hintText: appLanguage.isDefault ? '평균' : biHint('Average', '평균')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1744,7 +1767,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   keyboardType: TextInputType.number,
                   style: const TextStyle(color: Colors.white),
                   decoration: _decoration('', unit: 'bpm')
-                      .copyWith(hintText: biHint('Max', '최고')),
+                      .copyWith(hintText: appLanguage.isDefault ? '최고' : biHint('Max', '최고')),
                 ),
               ),
             ],

@@ -22,6 +22,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30]
 
 class GoalItem {
   final String id;
@@ -113,9 +114,9 @@ class AchievementRecord {
 }
 
 class GoalDataService {
-  static const String _kGoalKey = 'gke_general_planner_goals_v2'; // 🆕 구조 변경으로 키 버전 올림(v1과 분리)
-  static const String _kTodoKey = 'gke_general_planner_todos_v1';
-  static const String _kAchievementKey = 'gke_general_planner_achievements_v1';
+  static String get _kGoalKey => plannerScopedKey('gke_general_planner_goals_v2'); // 🆕 [계정별 분리] (v2 구조)
+  static String get _kTodoKey => plannerScopedKey('gke_general_planner_todos_v1'); // 🆕 [계정별 분리]
+  static String get _kAchievementKey => plannerScopedKey('gke_general_planner_achievements_v1'); // 🆕 [계정별 분리]
 
   // ------------------------- 목표(Goal) -------------------------
 

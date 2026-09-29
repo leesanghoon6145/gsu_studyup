@@ -54,7 +54,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
 
   // 🆕 [운동 목표] 주어진 기간 안의 실제 운동 기록 개수를 센다.
   Future<int> _countExerciseSessions(DateTime start, DateTime end) async {
-    final all = await ExerciseDataService.instance.getAllRecords();
+    final all = await ExerciseDataService.instance.getSessionRecords();
     final s = DateTime(start.year, start.month, start.day);
     final e = DateTime(end.year, end.month, end.day);
     return all.where((r) {
@@ -101,7 +101,7 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
         final d = todayZero.add(Duration(days: offset));
         return (d, d);
       case 'weekly':
-        final thisWeekStart = todayZero.subtract(Duration(days: now.weekday - 1));
+        final thisWeekStart = todayZero.subtract(Duration(days: now.weekday % 7)); // 🆕 [2026-09-30] 앱 원칙: 일~토
         final start = thisWeekStart.add(Duration(days: 7 * offset));
         final end = start.add(const Duration(days: 6));
         return (start, end);

@@ -16,6 +16,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [계정별 분리 2026-09-29]
 import 'exercise_models.dart';
 import 'exercise_type_data.dart';
 
@@ -23,8 +24,17 @@ class ExerciseDataService {
   ExerciseDataService._internal();
   static final ExerciseDataService instance = ExerciseDataService._internal();
 
-  static const _kTypesKey = 'exercise_types_v1';
-  static const _kRecordsKey = 'exercise_records_v1';
+  // 🆕 [계정별 분리 2026-09-29] 저장 이름 끝에 로그인한 계정 번호(uid)를 붙여서,
+  // 같은 휴대폰에서 부모/일반인 계정을 바꿔 써도 운동 기록이 절대 섞이지 않게 함
+  // (family_link_service.dart의 _scopedKey()와 같은 방식)
+  static const _kTypesKeyBase = 'exercise_types_v1';
+  static const _kRecordsKeyBase = 'exercise_records_v1';
+  static String _scoped(String base) {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid == null ? base : '${base}_$uid';
+  }
+  static String get _kTypesKey => _scoped(_kTypesKeyBase);
+  static String get _kRecordsKey => _scoped(_kRecordsKeyBase);
 
   // ✅ [2026-09-06 추가 - 종목 정의 자동 최신화] 예전엔 종목 정의(필드/영문라벨/
   // 중복선택 여부 등)를 최초 1회만 seed하고, 그 뒤로는 폰에 저장된 옛날 값을
@@ -33,11 +43,44 @@ class ExerciseDataService {
   // 이 버전 번호를 올릴 때마다, 저장된 기본종목 정의를 최신 exercise_type_data.dart
   // 내용으로 자동 병합(마이그레이션)한다. 기록된 운동 데이터나 사용자가 만든
   // 커스텀 종목, 숨김 처리 등은 전혀 건드리지 않는다.
-  static const int _kTypesSchemaVersion = 8; // 🆕 [헬스 장비 옵션 추가] 버전
-  static const String _kTypesSchemaVersionKey = 'exercise_types_schema_version';
+  static const int _kTypesSchemaVersion = 9; // 🆕 [2026-09-29] 입력칸 이름 쉬운 한글로
+  static const String _kTypesSchemaVersionKeyBase = 'exercise_types_schema_version';
+  static String get _kTypesSchemaVersionKey => _scoped(_kTypesSchemaVersionKeyBase); // 🆕 [계정별 분리]
 
-  List<ExerciseType>? _typesCache;
-  List<ExerciseRecord>? _recordsCache;
+  // 🆕 [계정별 분리 2026-09-29] 로그아웃 후 다른 계정으로 들어오면, 앞 계정의
+  // 기록이 화면에 남지 않도록 기억해 둔 목록을 자동으로 비움
+  List<ExerciseType>? _typesCacheRaw;
+  List<ExerciseRecord>? _recordsCacheRaw;
+  String? _cacheOwnerUid;
+
+  void _checkAccount() {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != _cacheOwnerUid) {
+      _typesCacheRaw = null;
+      _recordsCacheRaw = null;
+      _cacheOwnerUid = uid;
+    }
+  }
+
+  List<ExerciseType>? get _typesCache {
+    _checkAccount();
+    return _typesCacheRaw;
+  }
+
+  set _typesCache(List<ExerciseType>? value) {
+    _checkAccount();
+    _typesCacheRaw = value;
+  }
+
+  List<ExerciseRecord>? get _recordsCache {
+    _checkAccount();
+    return _recordsCacheRaw;
+  }
+
+  set _recordsCache(List<ExerciseRecord>? value) {
+    _checkAccount();
+    _recordsCacheRaw = value;
+  }
 
   // -------------------------------------------------------------------------
   // 종목(ExerciseType) CRUD
@@ -242,6 +285,16 @@ class ExerciseDataService {
     if (_recordsCache == null) await _loadRecords();
     _recordsCache!.removeWhere((r) => r.recordId == recordId);
     await _saveRecords();
+  }
+
+  /// 🆕 [2026-09-30] 매일 자동 걸음 기록(0분)인지 확인 - 운동 "횟수"를 셀 때는 빼야 함
+  static bool isAutoStepRecord(ExerciseRecord r) => r.recordId.startsWith('auto_daily_walk_');
+
+  /// 🆕 [2026-09-30] 실제로 운동한 기록만 (자동 걸음 기록 제외).
+  /// 리포트·목표·캘린더·일정·타임라인에서 운동 횟수와 완료를 셀 때 이것을 씀.
+  Future<List<ExerciseRecord>> getSessionRecords() async {
+    final all = await getAllRecords();
+    return all.where((r) => !isAutoStepRecord(r)).toList();
   }
 
   /// 특정 종목의 모든 기록 (종목별 분석/필드 삭제 가능 여부 판단에 사용).

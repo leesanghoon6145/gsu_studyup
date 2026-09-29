@@ -45,7 +45,7 @@ class _TimelineAnalysisScreenState extends State<TimelineAnalysisScreen> {
     final completed = all.where((b) => b.status == 'completed').toList();
 
     // 🆕 [운동 연동] 전체 기간 누적 운동 기록
-    final allExercises = await ExerciseDataService.instance.getAllRecords();
+    final allExercises = await ExerciseDataService.instance.getSessionRecords();
     final exerciseMinutes = allExercises.fold<int>(0, (sum, r) => sum + r.durationMin);
     final rpeValues = allExercises.where((r) => r.rpe != null).map((r) => r.rpe!).toList();
     final avgRpe = rpeValues.isEmpty ? null : rpeValues.reduce((a, b) => a + b) / rpeValues.length;

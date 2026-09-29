@@ -71,7 +71,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
 
   Future<void> _load() async {
     final types = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
-    final records = await ExerciseDataService.instance.getAllRecords();
+    final records = await ExerciseDataService.instance.getSessionRecords();
     if (!mounted) return;
     setState(() {
       _typesById = {for (final t in types) t.id: t};

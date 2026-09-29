@@ -15,9 +15,13 @@ import '../services/auth_service.dart'; // 🆕 [로그아웃 기능] 실제 로
 import '../main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 import '../global_lang.dart';
 import '../services/scholarship_service.dart'; // 🆕 [장학금 방 2026-09-17] 유형별 금액 계산
+import '../services/scholarship_currency.dart'; // 🆕 [2026-09-27] 장학금 화폐 자동 전환
 import '../community/notice_counsel_screen.dart'; // 🆕 [2026-09-24] 공지 및 교육상담
 import '../services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2026-09-25]
 import '../services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
+import '../services/exercise_star_service.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 별 통장 표시
+import '../schedule/general_planner_home_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] "운동하기" → 일반 플래너
+import '../schedule/cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 카드 글자 12개 언어
 
 // ---------------------------------------------------------------------------
 // 🆕 [다국어] DkeLang 연동: 기본모드(KO/EN)는 한글+영문 동시 표시,
@@ -2613,18 +2617,22 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   String _koOnlyManwon() => DkeLang.current == 'KO' ? '만원' : 'k KRW';
   Widget _buildScholarshipTabContent() {
     if (_selectedChildCode == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            _biLong(kScholarshipNoChildMap),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansKr(
-              color: Colors.white54,
-              fontSize: 13,
-              height: 1.7,
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            _buildCheerStarsCard(), // 🆕 [부모 운동 응원별 2026-09-29]
+            const SizedBox(height: 40),
+            Text(
+              _biLong(kScholarshipNoChildMap),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSansKr(
+                color: Colors.white54,
+                fontSize: 13,
+                height: 1.7,
+              ),
             ),
-          ),
+          ],
         ),
       );
     }
@@ -2675,6 +2683,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildCheerStarsCard(), // 🆕 [부모 운동 응원별 2026-09-29] 이번 달 장학금 바로 위
+              const SizedBox(height: 22),
               Row(
                 children: [
                   Expanded(
@@ -2895,26 +2905,27 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                                   ],
                                 ],
                               ),
-                              Text("${_t(kScholarshipMonthlyCapPrefixMap)} ${(cap / 10000).toStringAsFixed(0)}${_koOnlyManwon()}", style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10.5)),
+                              Text("${_t(kScholarshipMonthlyCapPrefixMap)} ${ScholarshipCurrency.capText(type.index)}", style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10.5)),
                             ],
                           ),
                           const SizedBox(height: 10),
                       Text(
-                        _t(kScholarshipStarsTimesRateMap).replaceFirst('%s', '$totalStars').replaceFirst('%s', '$rate'),
+                        '⭐ $totalStars × ${ScholarshipCurrency.rateText(type.index)}', // 🆕 [2026-09-27] 언어별 화폐
                         style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 11.5),
                       ),
-                          if (isCapped)
+                          if (ScholarshipCurrency.isCapped(totalStars, type.index))
                             Text(
-                              _t(kScholarshipCapAppliedMap).replaceFirst('%s', _formatWon(rawTotal)),
+                              '= ${ScholarshipCurrency.rawText(totalStars, type.index)} → ${_t(kScholarshipMonthlyCapPrefixMap)}', // 🆕 [2026-09-27] 언어별 화폐
                               style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10.5),
                             ),
                           const SizedBox(height: 8),
-                          _buildNumberWithUnit(
-                            _formatWon(amount),
-                            kWonUnitMap,
-                            fontSize: 22,
-                            color: isSel ? brandGolden : Colors.white70,
-                            weight: FontWeight.w900,
+                          Text(
+                            ScholarshipCurrency.amountText(totalStars, type.index), // 🆕 [2026-09-27] 언어별 화폐 자동 전환
+                            style: GoogleFonts.notoSansKr(
+                              color: isSel ? brandGolden : Colors.white70,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                            ),
                           ),
                         ],
                       ),
@@ -2934,6 +2945,82 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           ),
         );
       },
+    );
+  }
+
+  // ============================================================================
+  // 🆕 [부모 운동 응원별 2026-09-29] 장학금 탭 맨 위 카드.
+  // "운동하기"를 누르면 같은 계정 그대로 일반 플래너로 들어가고, 맨 위
+  // "부모 운동 응원별"에서 운동·별 통장·보내기를 모두 할 수 있음.
+  // ============================================================================
+  Widget _buildCheerStarsCard() {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: ExerciseStarService.watchMyBank(),
+      builder: (context, snapshot) {
+        final int balance = (snapshot.data?.data()?['balance'] as num?)?.toInt() ?? 0;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [brandGolden.withValues(alpha: 0.18), brandGolden.withValues(alpha: 0.04)],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: brandGolden.withValues(alpha: 0.55), width: 1.2),
+            boxShadow: [
+              BoxShadow(color: brandGolden.withValues(alpha: 0.10), blurRadius: 14, spreadRadius: 0.5),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.directions_run_rounded, color: brandGolden, size: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DkeLang.current == 'KO' ? csEn('appTitle') : cs('appTitle', lang: DkeLang.current),
+                      style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13.5, letterSpacing: 0.8),
+                    ),
+                    Text(
+                      DkeLang.current == 'KO' ? csKo('appTitle') : '',
+                      style: GoogleFonts.notoSansKr(color: const Color(0xFFFFF6D6), fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      cs('parentCardSaved', lang: DkeLang.current, args: {'n': balance}),
+                      style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _openCheerStarsFromParent,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: brandGolden,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(
+                  cs('btnExercise', lang: DkeLang.current),
+                  style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold, fontSize: 12.5),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 학부모방에서 들어간 것을 알려 줘서, 일반 플래너의 "학부모방" 버튼이 새로 열지 않고 돌아오게 함
+  void _openCheerStarsFromParent() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const GeneralPlannerHomeScreen(openedFromParentRoom: true)),
     );
   }
 
@@ -3149,6 +3236,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
         _selectedChildCode!,
         message: customText,
       );
+      ExerciseStarService.creditCheerMessage(); // 🆕 [가족 활동 체크 2026-09-30] 응원 문자 → 별 2개 자동 (하루 2회)
     }
 
     ScaffoldMessenger.of(context).showSnackBar(

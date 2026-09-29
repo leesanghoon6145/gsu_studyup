@@ -17,6 +17,8 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart'; // 🆕 [실제 알림 연동]
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30]
+
 
 class ReminderItem {
   final String id;
@@ -67,7 +69,7 @@ class ReminderItem {
 }
 
 class ReminderDataService {
-  static const String _kKey = 'gke_general_planner_reminders_v1';
+  static String get _kKey => plannerScopedKey('gke_general_planner_reminders_v1'); // 🆕 [계정별 분리]
 
   static Future<List<ReminderItem>> loadAll() async {
     try {

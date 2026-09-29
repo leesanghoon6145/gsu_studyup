@@ -53,7 +53,7 @@ class _ScheduleAnalysisScreenState extends State<ScheduleAnalysisScreen> {
     setState(() => _isLoading = true);
     final all = await ScheduleDataService.loadAll();
     final allAppointments = await AppointmentDataService.loadAll(); // 🆕 [약속 연동]
-    final allExercises = await ExerciseDataService.instance.getAllRecords(); // 🆕 [운동 연동]
+    final allExercises = await ExerciseDataService.instance.getSessionRecords(); // 🆕 [운동 연동]
     if (!mounted) return;
     setState(() {
       _all = all;

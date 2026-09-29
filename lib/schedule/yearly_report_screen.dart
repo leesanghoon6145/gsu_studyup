@@ -66,7 +66,7 @@ class _YearlyReportScreenState extends State<YearlyReportScreen> {
     // 🆕 [운동 연동] 올해 운동 기록 + 종목(아이콘/이름 조회용) 로드
     final exerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
     final typesById = {for (final t in exerciseTypes) t.id: t};
-    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final allExerciseRecords = await ExerciseDataService.instance.getSessionRecords();
     final yearExercises = allExerciseRecords.where((r) => _inRange(r.date)).toList();
 
     if (!mounted) return;

@@ -8,8 +8,10 @@ import '../services/user_profile_service.dart'; // 🆕 [실사용 전환] 실�
 import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [반복 방지] 사람 구분(uid)용
 import '../star_economy.dart'; // 🆕 [버그 수정] DkeStars 클래스 사용을 위한 import 누락 수정 (Undefined name 'DkeStars' 에러의 원인)
 import '../services/scholarship_service.dart'; // 🆕 [장학금 방 2026-09-17] "나의 성취별 현황" 카드용 데이터 조회
+import '../services/scholarship_currency.dart'; // 🆕 [2026-09-27] 장학금 화폐 자동 전환
 import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [실시간 장학금 금액] 부모님이 선택한 유형을 실시간 구독하기 위함
 import '../services/family_link_service.dart'; // 🆕 [실시간 장학금 금액] getMyLinkCode()/watch() 사용을 위함
+import '../schedule/cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 받은 응원별 카드 12개 언어
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -4258,7 +4260,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                   const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  _t('achievementStarsCardTitle'),
+                  _biT('achievementStarsCardTitle'),
                   style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
                 ),
               ),
@@ -4305,10 +4307,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(_t('monthlyTotalStarsLabel'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5)),
+                                  Text(_biT('monthlyTotalStarsLabel'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5)),
                                   const SizedBox(height: 4),
                                   Text(
-                                    "$monthlyTotal개",
+                                    _starsText(monthlyTotal),
                                     style: GoogleFonts.notoSansKr(
                                       color: _ThemeColors.brandGolden,
                                       fontWeight: FontWeight.bold,
@@ -4334,8 +4336,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                               child: _buildLiveStatusMiniStat(
                                 icon: Icons.wb_sunny_rounded,
                                 iconColor: const Color(0xFFFFCC00),
-                                label: _t('todayBaseStarsLabel'),
-                                value: "$_todayTotalStudyMinutes개",
+                                label: _biT('todayBaseStarsLabel'),
+                                value: _starsText(_todayTotalStudyMinutes),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -4343,8 +4345,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                               child: _buildLiveStatusMiniStat(
                                 icon: Icons.timer_outlined,
                                 iconColor: const Color(0xFF34C759),
-                                label: _t('monthlyBaseStarsLabel'),
-                                value: "$_scholarshipMonthlyBaseStars개",
+                                label: _biT('monthlyBaseStarsLabel'),
+                                value: _starsText(_scholarshipMonthlyBaseStars),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -4352,8 +4354,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                               child: _buildLiveStatusMiniStat(
                                 icon: Icons.auto_awesome_rounded,
                                 iconColor: const Color(0xFFAF52DE),
-                                label: _t('bonusStarsLabel'),
-                                value: "$_scholarshipMonthlyBonusStars개",
+                                label: _biT('bonusStarsLabel'),
+                                value: _starsText(_scholarshipMonthlyBonusStars),
                               ),
                             ),
                           ],
@@ -4361,7 +4363,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
 
                         if (_scholarshipBonusBreakdown.isNotEmpty) ...[
                           const SizedBox(height: 14),
-                          Text(_t('bonusBreakdownTitle'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                          Text(_biT('bonusBreakdownTitle'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           ..._scholarshipBonusBreakdown.entries
                               .toList()
@@ -4393,7 +4395,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          "$label (+$perEvent × ${count}회)",
+                                          "$label (+$perEvent × ${_timesText(count)})",
                                           style: GoogleFonts.notoSansKr(
                                             color: Colors.white,
                                             fontSize: 12.5,
@@ -4441,7 +4443,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                               color: _ThemeColors.brandGolden,
                               size: 16,
                             ),
-                            label: Text(_t('howToEarnStarsBtn'), style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                            label: Text(_biT('howToEarnStarsBtn'), style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontSize: 12.5, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -4480,7 +4482,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              _t('typeNotSelectedYet'),
+              _biT('typeNotSelectedYet'),
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, height: 1.5),
             ),
@@ -4511,10 +4513,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
           ),
           child: Column(
             children: [
-              Text("${ScholarshipService.typeLabelKo[type]} · ${_t('thisMonthEstimatedScholarship')}", style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text(_typeTitleLine(type.index), textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, height: 1.4)),
               const SizedBox(height: 8),
               Text(
-                "${amount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}원",
+                ScholarshipCurrency.amountText(monthlyTotal, type.index), // 🆕 [2026-09-27] 언어별 화폐 자동 전환
                 style: GoogleFonts.notoSansKr(
                   color: _ThemeColors.brandGolden,
                   fontWeight: FontWeight.w900,
@@ -4604,8 +4606,11 @@ GKE StudyUp은 누가 시켜서 공부하는 것이 아니라 내가 스스로 �
 꾸준히 공부할수록 나의 학습 기록이 쌓입니다.
 
 2. 학습 실천
-타이머 학습을 70% 이상 달성하면 +10별
-학습을 마친 후 학습기록을 작성하면 +10별
+-타이머 학습을 70% 이상 달성하면 +10별 
+-학습을 마친 후 학습기록을 작성하면 +10별 
+- 일일 50분이상 학습시 50별 
+- 1주 일요일 부터 토요일까지 빠짐없는 학습 300병 
+- 1달 빠짐없이 학습시 1000별
 
 3. 학습평가와 기록
 · 주간평가 기록 → +10별
@@ -4624,13 +4629,28 @@ GKE StudyUp은 누가 시켜서 공부하는 것이 아니라 내가 스스로 �
 꾸준함 보너스는 앱을 그냥 열어본 것이 아니라, 반드시 타이머가 실제로 작동하여 학습한 시간만을 기준으로 합니다. 하루하루 빠짐없이 이어가는 것 자체가 소중한 성취이기 때문입니다.
 
 🌱 성장형 — "나는 공부 습관을 만들어 가고 있어요."
+처음부터 많은 것을 할 필요는 없습니다. 
+매일 조금씩이라도 스스로 공부하고, 
+학습을 기록하고, 
+꾸준히 실천하는 것이 중요합니다. 
+성장형은 공부를 시작하고 좋은 학습습관을 만들어 가는 단계입니다.
+
 🔥 도전형 — "조금 더 높은 목표에 도전해 볼래요."
+학습습관이 만들어졌다면 이제 한 단계 더 도전해 보세요. 
+학습목표를 세우고 실천하면서 나의 학습량과 자기관리 능력을 높여갑니다. 
+도전형은 스스로 목표를 세우고 적극적으로 실천하는 단계입니다.
+
 🏆 성취형 — "내가 세운 목표를 스스로 이루어 가고 있어요."
+꾸준한 학습뿐만 아니라 학습계획 → 실천 → 기록 → 평가 → 보완 의 
+과정을 스스로 관리해 보세요. 
+성취형은 자기주도 학습을 꾸준히 실천하고 자신의 학습을 관리하는 단계입니다.
 
 유형의 핵심은 돈이 아닙니다. 내가 얼마나 스스로 성장하고 있는가가 중요합니다.
 
 🎯 기억하세요!
-공부는 남과 경쟁하기 위한 것이 아닙니다. 어제의 나보다 오늘의 내가 조금 더 성장하고, 오늘의 나보다 내일의 내가 조금 더 발전하는 것입니다.
+공부는 남과 경쟁하기 위한 것이 아닙니다. 
+어제의 나보다 오늘의 내가 조금 더 성장하고, 
+오늘의 나보다 내일의 내가 조금 더 발전하는 것입니다.
 
 오늘 10분 더 공부했다면 그것도 성장입니다.
 오늘 학습기록을 남겼다면 그것도 성장입니다.
@@ -4701,16 +4721,3114 @@ GKE StudyUp
 Global Knowledge Education
 ''',
     // 🔽 원장님이 채워주실 자리 (10개국어) — 큰따옴표 3개 사이에 번역문을 그대로 붙여넣으시면 됩니다
-    'JA': '', // 일본어
-    'ZH': '', // 중국어
-    'FR': '', // 프랑스어
-    'DE': '', // 독일어
-    'RU': '', // 러시아어
-    'AR': '', // 아랍어
-    'HI': '', // 힌디어
-    'VI': '', // 베트남어
-    'ES': '', // 스페인어
-    'TH': '', // 태국어
+    'JA': '''# 
+  ⭐ GKE StudyUp 生徒向け奨学金のご案内
+
+    ## **私の学びを記録し、私の成長を「できた」という成果へ。**
+
+  GKE StudyUpは、誰かに言われたから勉強するためのものではありません。
+
+  **自分で学習計画を立て、自分で実行し、自分自身の学びを育てていく力。**
+
+  GKE StudyUpは、そんな**「自ら学ぶ力」**を身につけるための学習プラットフォームです。
+
+  自分が勉強した時間、学習に取り組んだ過程、学習記録や振り返りを残した活動は、⭐星として記録されます。
+
+  星は、単なる点数ではありません。
+
+  ⭐ **星は、あなたが自分から学んだ証であり、努力してきた足跡です。**
+
+  今日、もう一歩だけ勉強した。
+
+  学習記録を残した。
+
+  テストの結果を振り返った。
+
+  次の学習について考え、計画を立てた。
+
+  その一つひとつの行動が、あなたの学習成果として少しずつ積み重なっていきます。
+
+  ---
+
+  # ⭐ どうすれば星を獲得できるのでしょうか？
+
+  ## 1. 学習時間
+
+  ### **1分の学習 = 1つの星⭐**
+
+  コツコツと学習を続けるほど、あなたの学習記録が積み重なっていきます。
+
+  ---
+
+  # 2. 学習への取り組み
+
+  * **タイマー学習を70％以上達成 → ＋10個の星⭐**
+  * **学習を終えた後に学習記録を残す → ＋10個の星⭐**
+  * **1日に50分以上学習 → ＋50個の星⭐**
+  * **1週間（日曜日から土曜日まで）毎日欠かさず学習 → ＋300個の星⭐**
+  * **1か月間、毎日欠かさず学習 → ＋500個の星⭐**
+
+  一日続けることは、小さな一歩。
+
+  一週間続けることは、習慣への一歩。
+
+  一か月続けることは、自分自身への大きな挑戦です。
+
+  **一つひとつの「続けた」という経験が、あなたの成長につながっていきます。**
+
+  ---
+
+  # 3. 学習評価と記録
+
+  * **週間評価の記録 → ＋10個の星⭐**
+  * **単元テストの記録 → ＋10個の星⭐**
+  * **中間テストの記録 → ＋50個の星⭐**
+  * **期末テストの記録 → ＋50個の星⭐**
+  * **模擬試験の記録 → ＋50個の星⭐**
+
+  ## **テストの点数が高いから、星をもらえるわけではありません。**
+
+  テストの結果を記録し、
+
+  「自分は何ができたのか」
+
+  「何をもっと頑張る必要があるのか」
+
+  を振り返り、
+
+  「次はどうすれば、もっと成長できるだろう？」
+
+  と考える。
+
+  その過程も、**大切な学びの一つ**だと私たちは考えています。
+
+  勉強とは、ただ良い点数を取ることだけではありません。
+
+  **自分自身を知り、昨日の自分より一歩前へ進むこと。**
+
+  それもまた、学びなのです。
+
+  ---
+
+  # 🌱 成長型
+
+  ## **「私は、少しずつ学習習慣を身につけています。」**
+
+  最初から、たくさん勉強する必要はありません。
+
+  毎日少しずつでも、自分から勉強する。
+
+  学習したことを記録する。
+
+  決めたことを、少しずつ続けてみる。
+
+  その小さな積み重ねが、やがて大きな力になります。
+
+  **成長型**は、学習を始め、良い学習習慣を少しずつ身につけていく段階です。
+
+  ---
+
+  # 🔥 挑戦型
+
+  ## **「もう一つ上の目標に、挑戦してみよう。」**
+
+  学習習慣が少しずつ身についてきたら、
+
+  次は、もう一歩前へ進んでみましょう。
+
+  自分で学習目標を決め、
+
+  その目標に向かって一つずつ実行していく。
+
+  その中で、学習量を高め、自分自身を管理する力を育てていきます。
+
+  **挑戦型**は、自分で目標を設定し、積極的に行動していく段階です。
+
+  ---
+
+  # 🏆 達成型
+
+  ## **「自分で決めた目標を、自分の力で一つずつ実現しています。」**
+
+  ただ勉強を続けるだけではありません。
+
+  自分の学びを、自分自身で管理してみましょう。
+
+  ### **学習計画 → 実行 → 記録 → 振り返り → 改善**
+
+  計画を立てる。
+
+  実行する。
+
+  記録する。
+
+  結果を振り返る。
+
+  そして、次の学習をより良くしていく。
+
+  **達成型**は、自主的な学習を継続し、自分自身の学びを自分で管理していく段階です。
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **私の学びは、こうして成長していきます。**
+
+  ### 🌱 成長型
+
+  ↓
+  **学習を続ける習慣をつくる**
+
+  ### 🔥 挑戦型
+
+  ↓
+  **より高い目標に挑戦する**
+
+  ### 🏆 達成型
+
+  ↓
+  **自分で目標を決め、自分の力で達成していく**
+
+  ---
+
+  # **大切なのは、お金ではありません。**
+
+  成長型、挑戦型、達成型。
+
+  そのどの段階にいるかよりも、
+
+  ## **「私は、どれだけ自分自身で成長しているだろう？」**
+
+  ということが大切です。
+
+  昨日より少し前へ。
+
+  今日より明日へ。
+
+  **一歩ずつ成長していくこと。**
+
+  それがGKE StudyUpが大切にしている学びです。
+
+  ---
+
+  # 💰 では、星はどうなるのでしょうか？
+
+  現在、GKE StudyUpでは、
+
+  ### **⭐ 1つの星 = 2ウォン・3ウォン・4ウォン**
+
+  として奨学金を計算します。
+
+  ただし、星の一番大切な意味は、お金ではありません。
+
+  ## **星は、あなたが学び、努力し、成長してきた記録です。**
+
+  あなたが積み重ねてきた学習成果を保護者の方が確認し、
+
+  その努力を応援する気持ちとして、奨学金を支給することができます。
+
+  **奨学金の金額は、それぞれのご家庭の状況に応じて、保護者の方が決めます。**
+
+  つまり、
+
+  **星は、あなたの努力を記録するもの。**
+
+  **奨学金は、その努力を応援するためのもの。**
+
+  GKE StudyUpでは、この二つを大切に考えています。
+
+  ---
+
+  # 🎯 覚えておいてください。
+
+  ## **勉強は、誰かと競争するためのものではありません。**
+
+  昨日の自分より、
+
+  今日の自分が少し成長すること。
+
+  そして、
+
+  今日の自分より、
+
+  明日の自分がまた少し前へ進むこと。
+
+  それが大切です。
+
+  今日、10分長く勉強した。
+
+  **それも成長です。**
+
+  今日、学習記録を残した。
+
+  **それも成長です。**
+
+  テストの結果を振り返った。
+
+  **それも成長です。**
+
+  思うようにいかなかった学習を、もう一度計画し直した。
+
+  **それも成長です。**
+
+  ---
+
+  ## **小さな行動が積み重なると、習慣になります。**
+
+  ## **習慣が積み重なると、力になります。**
+
+  ## **力が積み重なると、やがて成果になります。**
+
+  ---
+
+  # ⭐ 私の学びは、私自身がつくっていく。
+
+  ### **計画する → 実行する → 記録する → 振り返る → もう一度挑戦する**
+
+  誰かに言われるのを待つのではなく、
+
+  自分で考え、
+
+  自分で決め、
+
+  自分で行動し、
+
+  自分の成長を、自分で確かめていく。
+
+  **あなたの学びは、あなた自身の手でつくっていくことができます。**
+
+  ---
+
+  GKE StudyUpは、皆さんが**自ら学ぶ力**を身につけ、
+
+  自分自身の目標に向かって、
+
+  一歩ずつ成長していけるように応援します。
+
+  今日の小さな努力も、
+
+  今日踏み出した小さな一歩も、
+
+  決して無駄ではありません。
+
+  その一つひとつが積み重なって、
+
+  いつか振り返ったとき、
+
+  **「あのとき、頑張ってよかった」**
+
+  と思える自分につながっていきます。
+
+  ---
+
+  # 🌱 成長型 → 🔥 挑戦型 → 🏆 達成型
+
+  ## **今日の小さな一歩が、明日の自分をつくります。**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 일본어
+    'ZH': '''
+# ⭐ GKE StudyUp 学生奖学金说明
+
+## **让我的学习被记录，让我的成长成为成就。**
+
+GKE StudyUp 不是一个让别人督促你学习的平台。
+
+它希望帮助你培养一种更重要的能力：
+
+**自己制定学习计划，自己付诸行动，并为自己的学习负责。**
+
+你学习的时间、学习实践的过程，以及留下学习记录和学习评价的活动，都会被记录为⭐星星。
+
+**星星，不只是一个数字，也不仅仅是一项分数。**
+
+⭐ **星星，是你主动学习、努力成长的足迹。**
+
+今天多学习了一点，
+留下了一次学习记录，
+认真回顾一次考试结果，
+为下一阶段的学习制定计划……
+
+每一次小小的行动，都会让你的学习成就一点一点累积起来。
+
+---
+
+# ⭐ 怎样才能获得星星？
+
+## 1. 学习时间
+
+### **学习1分钟 = 1颗星⭐**
+
+坚持学习的时间越长，你的学习记录就会不断累积。
+
+---
+
+## 2. 学习实践
+
+* **计时学习完成70%以上 → +10颗星⭐**
+* **完成学习后填写学习记录 → +10颗星⭐**
+* **每天学习50分钟以上 → +50颗星⭐**
+* **一周从星期日到星期六，每天坚持学习、不间断 → +300颗星⭐**
+* **一个月每天坚持学习、不间断 → +500颗星⭐**
+
+坚持一天，是一次行动。
+
+坚持一周，是一种习惯。
+
+坚持一个月，是一次真正的自我挑战。
+
+**每一次坚持，都是你成长的证明。**
+
+---
+
+# 3. 学习评价与记录
+
+* **每周学习评价记录 → +10颗星⭐**
+* **单元测评记录 → +10颗星⭐**
+* **期中考试记录 → +50颗星⭐**
+* **期末考试记录 → +50颗星⭐**
+* **模拟考试记录 → +50颗星⭐**
+
+### **考试分数高，并不是获得星星的唯一理由。**
+
+因为我们认为：
+
+记录考试结果，
+回顾自己做得好的地方，
+发现需要改进的地方，
+思考下一步应该怎样学习，
+
+这些过程本身，也是非常重要的学习。
+
+**学习不仅仅是得到一个分数，更重要的是从每一次学习中认识自己，并不断进步。**
+
+---
+
+# 🌱 成长型
+
+### **“我正在一步一步养成学习习惯。”**
+
+一开始，不需要做很多。
+
+每天哪怕只学习一点点，
+自己主动学习，
+认真留下学习记录，
+坚持把计划付诸行动，
+
+这些看似微小的事情，都会成为成长的开始。
+
+**成长型**是开始学习，并逐渐建立良好学习习惯的阶段。
+
+---
+
+# 🔥 挑战型
+
+### **“我要不要向更高的目标挑战一下？”**
+
+当学习习惯逐渐形成之后，
+
+现在，就向前再迈出一步吧。
+
+制定自己的学习目标，
+并一步一步付诸实践。
+
+在这个过程中，不断提高自己的学习能力、学习量以及自我管理能力。
+
+**挑战型**是主动设定目标，并积极付诸行动的阶段。
+
+---
+
+# 🏆 成就型
+
+### **“我正在一步一步实现自己设定的目标。”**
+
+不仅仅是坚持学习，
+
+还要学会管理自己的整个学习过程：
+
+### **学习计划 → 实践 → 记录 → 评价 → 改进**
+
+自己制定计划，
+自己付诸行动，
+自己记录过程，
+自己回顾结果，
+再根据结果调整下一步的学习。
+
+**成就型**是持续进行自主学习，并逐渐掌握自我学习管理能力的阶段。
+
+---
+
+# 🌱 → 🔥 → 🏆
+
+## **我的学习，就是这样一步一步成长起来的。**
+
+### 🌱 成长型
+
+↓
+**养成坚持学习的习惯**
+
+### 🔥 挑战型
+
+↓
+**向更高的目标发起挑战**
+
+### 🏆 成就型
+
+↓
+**自己设定目标，并一步一步实现目标**
+
+---
+
+# **类型的核心，不是钱。**
+
+真正重要的是：
+
+## **我正在成长多少？**
+
+## **我是否比昨天的自己更进一步？**
+
+每一个阶段，都代表着你正在成长。
+
+---
+
+# 💰 那么，星星有什么用呢？
+
+目前，GKE StudyUp 的奖学金计算方式为：
+
+### **⭐ 1颗星 = 2韩元、3韩元或4韩元**
+
+但是，星星最重要的意义，**并不是金钱。**
+
+**星星，是你学习、努力和成长的记录。**
+
+你所积累的学习成果，可以由父母进行确认，并作为对你努力学习的鼓励，以奖学金的方式给予支持。
+
+**奖学金的具体金额，由父母根据家庭实际情况自行决定。**
+
+因此，
+
+**星星记录的是你的努力，
+奖学金体现的是父母对你的鼓励。**
+
+---
+
+# 🎯 请记住！
+
+## **学习，不是为了与别人竞争。**
+
+真正重要的是：
+
+**今天的自己，比昨天的自己多成长一点；**
+
+**明天的自己，又比今天的自己多进步一点。**
+
+今天多学习了10分钟，
+
+**这也是成长。**
+
+今天认真留下了一次学习记录，
+
+**这也是成长。**
+
+认真回顾了一次考试结果，
+
+**这也是成长。**
+
+即使这一次学习没有达到预期，
+重新制定计划，再一次开始，
+
+**这同样是一种成长。**
+
+---
+
+## **小小的行动积累起来，会成为习惯。**
+
+## **习惯积累起来，会成为能力。**
+
+## **能力不断积累，最终会成为成就。**
+
+---
+
+# ⭐ 我的学习，由我自己创造。
+
+### **制定计划 → 付诸实践 → 记录 → 回顾 → 再次挑战**
+
+不要等待别人告诉你什么时候学习。
+
+学会自己决定，
+自己行动，
+自己记录，
+自己反思，
+然后再次向目标出发。
+
+**你的学习道路，由你自己一步一步走出来。**
+
+---
+
+GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
+
+让你能够朝着自己的目标，
+
+**一步一步成长，
+一天一天进步，
+最终实现属于自己的成就。**
+
+无论今天只是多学习了10分钟，
+还是坚持完成了一整天的学习，
+
+每一个小小的坚持，都值得被记录。
+
+因为，
+
+**今天的努力，也许只是一个小小的开始，
+但它正在成为更好的自己的起点。**
+
+---
+
+# 🌱 成长型 → 🔥 挑战型 → 🏆 成就型
+
+## **今天的小小行动，正在创造属于你的明天。**
+
+**GKE StudyUp**
+**Global Knowledge Education**
+''', // 중국어
+    'FR': '''# ⭐ GKE StudyUp – Présentation de la bourse d’études pour les élèves
+
+    ## **Mes apprentissages sont enregistrés, et mes progrès deviennent des réussites.**
+
+  GKE StudyUp n’est pas une plateforme où l’on étudie simplement parce que quelqu’un nous demande de le faire.
+
+  C’est une plateforme d’apprentissage qui aide chaque élève à développer une capacité essentielle :
+
+  **savoir se fixer ses propres objectifs, établir son propre plan d’apprentissage, passer à l’action et devenir acteur de son propre parcours.**
+
+  Le temps que tu consacres à tes études, tes efforts, ton parcours d’apprentissage, ainsi que tes activités de suivi et d’évaluation sont enregistrés sous forme d’étoiles ⭐.
+
+  Mais une étoile n’est pas simplement un nombre ou une note.
+
+  ⭐ **Une étoile est la trace de tes efforts, de ton apprentissage et de ta volonté de progresser par toi-même.**
+
+  Aujourd’hui, tu as étudié un peu plus.
+
+  Tu as pris le temps d’enregistrer ton apprentissage.
+
+  Tu as regardé tes résultats à un examen pour comprendre ce que tu pouvais améliorer.
+
+  Tu as réfléchi à la suite et préparé ton prochain objectif.
+
+  **Chacun de ces petits gestes fait grandir, petit à petit, ton parcours et tes réussites.**
+
+  ---
+
+  # ⭐ Comment gagner des étoiles ?
+
+  ## 1. Temps d’apprentissage
+
+  ### **1 minute d’apprentissage = 1 étoile ⭐**
+
+  Plus tu apprends régulièrement, plus ton parcours d’apprentissage s’enrichit.
+
+  ---
+
+  # 2. Engagement dans les apprentissages
+
+  * **Atteindre au moins 70 % d’une session d’apprentissage avec le minuteur → +10 étoiles ⭐**
+  * **Rédiger une trace de son apprentissage après une session → +10 étoiles ⭐**
+  * **Étudier au moins 50 minutes dans une journée → +50 étoiles ⭐**
+  * **Étudier chaque jour pendant une semaine complète, du dimanche au samedi, sans interruption → +300 étoiles ⭐**
+  * **Étudier chaque jour pendant un mois complet, sans interruption → +500 étoiles ⭐**
+
+  Un jour de persévérance est un petit pas.
+
+  Une semaine de persévérance devient une habitude.
+
+  Un mois de persévérance devient un véritable défi relevé par soi-même.
+
+  **Chaque fois que tu continues malgré les difficultés, tu accumules bien plus que des étoiles : tu construis ta propre force.**
+
+  ---
+
+  # 3. Évaluation et suivi des apprentissages
+
+  * **Évaluation hebdomadaire → +10 étoiles ⭐**
+  * **Évaluation d’un chapitre ou d’une unité → +10 étoiles ⭐**
+  * **Évaluation de mi-semestre → +50 étoiles ⭐**
+  * **Évaluation de fin de semestre → +50 étoiles ⭐**
+  * **Examen blanc / examen d’entraînement → +50 étoiles ⭐**
+
+  ## **Les étoiles ne sont pas attribuées parce que tu as obtenu une bonne note.**
+
+  Parce que nous pensons qu’il est tout aussi important de :
+
+  consigner ses résultats,
+
+  regarder ce que l’on a bien réussi,
+
+  identifier ce qui doit encore être amélioré,
+
+  et réfléchir à la manière de mieux apprendre la prochaine fois.
+
+  **Ce processus de réflexion fait lui aussi partie de l’apprentissage.**
+
+  Apprendre, ce n’est pas seulement obtenir une bonne note.
+
+  **C’est aussi apprendre à mieux se connaître, comprendre ses erreurs et avancer un peu plus loin qu’hier.**
+
+  ---
+
+  # 🌱 Niveau Croissance
+
+  ## **« Je suis en train de construire mes habitudes d’apprentissage. »**
+
+  Tu n’as pas besoin de tout réussir dès le début.
+
+  Tu n’as pas besoin d’étudier énormément dès le premier jour.
+
+  Commence simplement par un petit pas.
+
+  Étudier un peu chaque jour.
+
+  Apprendre par toi-même.
+
+  Garder une trace de tes apprentissages.
+
+  Continuer, même lorsque les progrès semblent petits.
+
+  **Le niveau Croissance** correspond à la période où tu commences à apprendre et où tu construis progressivement de bonnes habitudes de travail.
+
+  ---
+
+  # 🔥 Niveau Défi
+
+  ## **« Et si je me fixais un objectif un peu plus ambitieux ? »**
+
+  Lorsque tes habitudes d’apprentissage commencent à s’installer, il est temps d’aller un peu plus loin.
+
+  Fixe-toi ton propre objectif.
+
+  Travaille progressivement pour l’atteindre.
+
+  En avançant, tu développes tes capacités d’apprentissage, ta régularité et ta capacité à gérer ton propre travail.
+
+  **Le niveau Défi** correspond à l’étape où tu commences à te fixer tes propres objectifs et à agir activement pour les atteindre.
+
+  ---
+
+  # 🏆 Niveau Accomplissement
+
+  ## **« Je réalise progressivement les objectifs que je me suis fixés. »**
+
+  Il ne s’agit plus seulement d’étudier régulièrement.
+
+  Il s’agit aussi d’apprendre à gérer ton propre parcours :
+
+  ### **Planifier → Agir → Enregistrer → Évaluer → Améliorer**
+
+  Je planifie.
+
+  Je passe à l’action.
+
+  Je garde une trace de mon travail.
+
+  Je regarde ce que j’ai accompli.
+
+  J’améliore ensuite ma façon d’apprendre.
+
+  **Le niveau Accomplissement** représente une étape où l’on développe durablement son autonomie et où l’on apprend à gérer soi-même son parcours d’apprentissage.
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **Mon apprentissage grandit ainsi, étape après étape.**
+
+  ### 🌱 Niveau Croissance
+
+  ↓
+  **Construire des habitudes d’apprentissage régulières**
+
+  ### 🔥 Niveau Défi
+
+  ↓
+  **Se fixer des objectifs plus ambitieux**
+
+  ### 🏆 Niveau Accomplissement
+
+  ↓
+  **Se fixer ses propres objectifs et les réaliser**
+
+  ---
+
+  # **L’essentiel n’est pas l’argent.**
+
+  Que tu sois au niveau Croissance, Défi ou Accomplissement, l’important n’est pas la somme que tu peux recevoir.
+
+  La vraie question est :
+
+  ## **« Est-ce que je grandis par moi-même ? »**
+
+  Suis-je un peu plus avancé qu’hier ?
+
+  Est-ce que j’ai fait aujourd’hui un pas que je n’avais pas encore fait hier ?
+
+  **C’est cela qui donne du sens à ton apprentissage.**
+
+  ---
+
+  # 💰 Et que deviennent les étoiles ?
+
+  Actuellement, chez GKE StudyUp, la bourse est calculée selon le principe suivant :
+
+  ### **⭐ 1 étoile = 2, 3 ou 4 wons**
+
+  Mais la signification la plus importante d’une étoile n’est pas l’argent.
+
+  ## **Une étoile est la trace de tes efforts, de ton apprentissage et de ta progression.**
+
+  Les résultats d’apprentissage que tu as accumulés peuvent être consultés par tes parents.
+
+  En signe de reconnaissance et d’encouragement, tes parents peuvent alors décider de t’accorder une bourse en fonction de tes efforts et de tes progrès.
+
+  **Le montant de la bourse est décidé par les parents, en fonction de la situation de chaque famille.**
+
+  Ainsi, les étoiles et la bourse ont deux significations différentes :
+
+  **Les étoiles enregistrent tes efforts et ta progression.**
+
+  **La bourse représente l’encouragement et le soutien de tes parents.**
+
+  ---
+
+  # 🎯 N’oublie jamais !
+
+  ## **Étudier, ce n’est pas une compétition avec les autres.**
+
+  Ce qui compte, ce n’est pas d’être meilleur que quelqu’un d’autre.
+
+  Ce qui compte, c’est que :
+
+  **le toi d’aujourd’hui soit un peu plus avancé que le toi d’hier,**
+
+  et que :
+
+  **le toi de demain puisse aller encore un peu plus loin que celui d’aujourd’hui.**
+
+  Tu as étudié 10 minutes de plus aujourd’hui.
+
+  **C’est déjà un progrès.**
+
+  Tu as pris le temps d’écrire ton apprentissage.
+
+  **C’est aussi un progrès.**
+
+  Tu as regardé honnêtement le résultat d’un examen.
+
+  **C’est encore un progrès.**
+
+  Tu n’as pas obtenu le résultat espéré et tu as recommencé à réfléchir à ton plan.
+
+  **C’est aussi une forme de progrès.**
+
+  ---
+
+  ## **Les petits efforts deviennent des habitudes.**
+
+  ## **Les habitudes deviennent des compétences.**
+
+  ## **Les compétences deviennent des réussites.**
+
+  ---
+
+  # ⭐ **Mon apprentissage, c’est moi qui le construis.**
+
+  ### **Planifier → Agir → Enregistrer → Réfléchir → Relever un nouveau défi**
+
+  N’attends pas que quelqu’un te dise quand apprendre.
+
+  Apprends à :
+
+  penser par toi-même,
+
+  faire tes propres choix,
+
+      passer à l’action,
+
+  observer tes progrès,
+
+  et continuer à avancer.
+
+  ## **Ton parcours d’apprentissage t’appartient.**
+
+  Tu peux le construire toi-même, un pas après l’autre.
+
+  ---
+
+  GKE StudyUp souhaite aider chaque élève à développer **la force d’apprendre par lui-même**,
+
+  à avancer vers ses propres objectifs,
+
+  et à grandir progressivement, un pas après l’autre.
+
+  Peut-être qu’aujourd’hui, ton effort ne représente qu’un petit pas.
+
+  Peut-être que tu n’as étudié que dix minutes de plus.
+
+  Peut-être que tu as simplement écrit ton prochain plan d’apprentissage.
+
+  Peut-être que, malgré une difficulté, tu as décidé de recommencer.
+
+  **Chacun de ces pas a de la valeur.**
+
+  Car les petits pas que l’on continue de faire finissent par nous conduire beaucoup plus loin que l’on ne l’imaginait.
+
+  Et un jour, en regardant le chemin parcouru, tu pourras peut-être te dire :
+
+  ## **« Je suis heureux de ne pas avoir abandonné à ce moment-là. »**
+
+  ---
+
+  # 🌱 Niveau Croissance → 🔥 Niveau Défi → 🏆 Niveau Accomplissement
+
+  ## **Le petit pas que tu fais aujourd’hui construit le toi de demain.**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 프랑스어
+
+    'DE': '''# ⭐ GKE StudyUp – Informationen zum Schülerstipendium
+
+    ## **Meine Lernzeit wird festgehalten. Mein Wachstum wird zu meinem Erfolg.**
+
+  GKE StudyUp ist keine Plattform, auf der man lernt, weil jemand anderes es verlangt.
+
+  GKE StudyUp möchte dir dabei helfen, eine wichtige Fähigkeit zu entwickeln:
+
+  **selbst Lernziele zu setzen, einen eigenen Lernplan zu erstellen, ihn umzusetzen und Verantwortung für den eigenen Lernweg zu übernehmen.**
+
+  Deine Lernzeit, dein Lernprozess sowie deine Lernaufzeichnungen und Reflexionen werden als ⭐ Sterne festgehalten.
+
+  Ein Stern ist jedoch nicht einfach nur eine Zahl oder eine Punktzahl.
+
+  ⭐ **Ein Stern ist ein Zeichen dafür, dass du selbst gelernt hast. Er ist ein Teil deiner persönlichen Lern- und Wachstumsgeschichte.**
+
+  Heute ein bisschen mehr gelernt.
+
+  Einen Lernfortschritt festgehalten.
+
+  Ein Prüfungsergebnis in Ruhe betrachtet.
+
+  Überlegt, wie es beim nächsten Mal weitergehen soll.
+
+  Jeder dieser kleinen Schritte wird zu einem Teil deines persönlichen Lernerfolgs.
+
+  ---
+
+  # ⭐ Wie kann ich Sterne sammeln?
+
+  ## 1. Lernzeit
+
+  ### **1 Minute Lernen = 1 Stern ⭐**
+
+  Je regelmäßiger du lernst, desto mehr wächst deine persönliche Lernaufzeichnung.
+
+  ---
+
+  # 2. Lernaktivitäten
+
+  * **Mindestens 70 % einer Timer-Lerneinheit geschafft → +10 Sterne ⭐**
+  * **Nach dem Lernen eine Lernaufzeichnung erstellen → +10 Sterne ⭐**
+  * **Mindestens 50 Minuten an einem Tag lernen → +50 Sterne ⭐**
+  * **Eine ganze Woche lang von Sonntag bis Samstag jeden Tag lernen → +300 Sterne ⭐**
+  * **Einen ganzen Monat lang jeden Tag ohne Unterbrechung lernen → +500 Sterne ⭐**
+
+  Ein Tag des Lernens ist ein kleiner Schritt.
+
+  Eine Woche des Durchhaltens wird zu einer Gewohnheit.
+
+  Ein ganzer Monat ist eine echte Herausforderung an dich selbst.
+
+  **Jedes Mal, wenn du weitermachst, sammelst du nicht nur Sterne – du sammelst Erfahrungen, die dich wachsen lassen.**
+
+  ---
+
+  # 3. Lernbewertung und Aufzeichnungen
+
+  * **Wöchentliche Lernbewertung → +10 Sterne ⭐**
+  * **Dokumentation eines Unitests → +10 Sterne ⭐**
+  * **Dokumentation einer Zwischenprüfung → +50 Sterne ⭐**
+  * **Dokumentation einer Abschlussprüfung → +50 Sterne ⭐**
+  * **Dokumentation einer Probeprüfung → +50 Sterne ⭐**
+
+  ## **Du bekommst Sterne nicht einfach deshalb, weil du eine hohe Punktzahl erreichst.**
+
+  Denn wir glauben:
+
+  Es ist wichtig, ein Prüfungsergebnis festzuhalten.
+
+  Zu überlegen, was gut gelungen ist.
+
+  Zu erkennen, was noch verbessert werden kann.
+
+  Und sich zu fragen:
+
+  **„Was kann ich beim nächsten Mal anders oder besser machen?“**
+
+  Auch dieser Prozess ist ein wichtiger Teil des Lernens.
+
+  Lernen bedeutet nicht nur, eine gute Punktzahl zu erreichen.
+
+  **Lernen bedeutet auch, sich selbst besser kennenzulernen und Schritt für Schritt weiterzukommen.**
+
+  ---
+
+  # 🌱 Wachstumsstufe
+
+  ## **„Ich baue mir Schritt für Schritt gute Lerngewohnheiten auf.“**
+
+  Du musst nicht von Anfang an besonders viel lernen.
+
+  Schon ein wenig Lernen jeden Tag kann ein guter Anfang sein.
+
+  Selbstständig lernen.
+
+  Den eigenen Lernweg festhalten.
+
+  Dranbleiben.
+
+  Diese kleinen Schritte können mit der Zeit zu einer großen Stärke werden.
+
+  **Die Wachstumsstufe** ist die Phase, in der du mit dem Lernen beginnst und nach und nach gute Lerngewohnheiten entwickelst.
+
+  ---
+
+  # 🔥 Herausforderungsstufe
+
+  ## **„Ich möchte mich an einem etwas höheren Ziel versuchen.“**
+
+  Wenn sich deine Lerngewohnheiten entwickelt haben, kannst du den nächsten Schritt wagen.
+
+  Setze dir ein eigenes Lernziel.
+
+  Arbeite Schritt für Schritt darauf hin.
+
+  Dabei kannst du deine Lernmenge steigern und gleichzeitig lernen, dich selbst besser zu organisieren und zu führen.
+
+  **Die Herausforderungsstufe** steht für den Schritt, bei dem du deine eigenen Ziele setzt und sie aktiv verfolgst.
+
+  ---
+
+  # 🏆 Erfolgsstufe
+
+  ## **„Ich verwirkliche Schritt für Schritt die Ziele, die ich mir selbst gesetzt habe.“**
+
+  Es geht nicht nur darum, regelmäßig zu lernen.
+
+  Lerne, deinen eigenen Lernprozess selbst zu gestalten:
+
+  ### **Lernplan → Umsetzung → Aufzeichnung → Bewertung → Verbesserung**
+
+  Einen Plan erstellen.
+
+  Ihn umsetzen.
+
+  Den eigenen Weg festhalten.
+
+  Das Ergebnis betrachten.
+
+  Und daraus den nächsten Schritt entwickeln.
+
+  **Die Erfolgsstufe** steht für kontinuierliches selbstständiges Lernen und die Fähigkeit, den eigenen Lernprozess immer mehr selbst zu steuern.
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **So wächst mein Lernen Schritt für Schritt.**
+
+  ### 🌱 Wachstumsstufe
+
+  ↓
+  **Gute und regelmäßige Lerngewohnheiten entwickeln**
+
+  ### 🔥 Herausforderungsstufe
+
+  ↓
+  **Sich an höheren Zielen versuchen**
+
+  ### 🏆 Erfolgsstufe
+
+  ↓
+  **Eigene Ziele setzen und sie selbst erreichen**
+
+  ---
+
+  # **Im Mittelpunkt steht nicht das Geld.**
+
+  Ganz gleich, auf welcher Stufe du dich gerade befindest:
+
+  Wichtig ist nicht, wie viel Geld du bekommen kannst.
+
+  Wichtig ist die Frage:
+
+  ## **„Wie sehr wachse ich aus eigener Kraft?“**
+
+  Gestern ein wenig besser als gestern.
+
+  Heute ein kleiner Schritt nach vorne.
+
+  Morgen wieder ein Schritt weiter.
+
+  **Genau darin liegt der Wert deines Lernens.**
+
+  ---
+
+  # 💰 Was passiert mit den Sternen?
+
+  Bei GKE StudyUp wird das Stipendium derzeit nach folgendem Wert berechnet:
+
+  ### **⭐ 1 Stern = 2, 3 oder 4 KRW**
+
+  Doch die wichtigste Bedeutung eines Sterns ist nicht das Geld.
+
+  ## **Ein Stern ist die Aufzeichnung deiner Anstrengung, deines Lernens und deiner Entwicklung.**
+
+  Die von dir gesammelten Lernerfolge können von deinen Eltern eingesehen werden.
+
+  Als Zeichen der Anerkennung und Ermutigung können Eltern auf Grundlage dieser Leistungen ein Stipendium vergeben.
+
+  **Wie hoch das Stipendium ausfällt, entscheiden die Eltern entsprechend der persönlichen und familiären Situation.**
+
+  Damit haben Sterne und Stipendium unterschiedliche Bedeutungen:
+
+  **Die Sterne halten deine Anstrengungen und deine Entwicklung fest.**
+
+  **Das Stipendium ist die Unterstützung und Ermutigung deiner Eltern für diesen Weg.**
+
+  ---
+
+  # 🎯 Denk daran!
+
+  ## **Lernen bedeutet nicht, sich mit anderen zu vergleichen.**
+
+  Wichtig ist nicht, ob du besser bist als jemand anderes.
+
+  Wichtig ist,
+
+  **dass dein heutiges Ich ein wenig weiter ist als dein gestriges Ich.**
+
+  Und dass dein morgiges Ich wieder ein wenig weiterkommt als dein heutiges Ich.
+
+  Du hast heute 10 Minuten länger gelernt.
+
+  **Auch das ist Wachstum.**
+
+  Du hast heute eine Lernaufzeichnung erstellt.
+
+  **Auch das ist Wachstum.**
+
+  Du hast dein Prüfungsergebnis ehrlich betrachtet.
+
+  **Auch das ist Wachstum.**
+
+  Etwas hat beim Lernen nicht funktioniert, und du hast deinen Plan neu gemacht.
+
+  **Auch das ist Wachstum.**
+
+  ---
+
+  ## **Kleine Schritte werden zu Gewohnheiten.**
+
+  ## **Gewohnheiten werden zu Fähigkeiten.**
+
+  ## **Fähigkeiten werden zu Erfolgen.**
+
+  ---
+
+  # ⭐ **Mein Lernen gestalte ich selbst.**
+
+  ### **Planen → Umsetzen → Aufzeichnen → Reflektieren → Erneut herausfordern**
+
+  Warte nicht darauf, dass jemand dir sagt, wann du lernen sollst.
+
+  Lerne,
+
+  selbst zu denken,
+
+  selbst zu entscheiden,
+
+  selbst zu handeln
+
+  und deinen eigenen Lernweg bewusst weiterzuentwickeln.
+
+  ## **Dein Lernweg gehört dir.**
+
+  Du kannst ihn Schritt für Schritt selbst gestalten.
+
+  ---
+
+  GKE StudyUp möchte dich dabei unterstützen, **die Kraft zum selbstständigen Lernen** zu entwickeln.
+
+  Wir möchten dich dabei begleiten, deine eigenen Ziele zu verfolgen und Schritt für Schritt über dich hinauszuwachsen.
+
+  Vielleicht war die heutige Anstrengung nur ein kleiner Schritt.
+
+  Vielleicht waren es nur zehn zusätzliche Minuten.
+
+  Vielleicht hast du heute einfach nur einen Lernplan geschrieben.
+
+  Vielleicht hast du nach einem Rückschlag noch einmal neu angefangen.
+
+  **Jeder dieser Schritte ist wertvoll.**
+
+  Denn kleine Schritte, die immer wieder gegangen werden, können eines Tages zu etwas Großem werden.
+
+  Und vielleicht wirst du eines Tages zurückblicken und sagen:
+
+  ## **„Gut, dass ich damals nicht aufgegeben habe.“**
+
+  ---
+
+  # 🌱 Wachstumsstufe → 🔥 Herausforderungsstufe → 🏆 Erfolgsstufe
+
+  ## **Der kleine Schritt, den du heute machst, gestaltet dein Morgen.**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 독일어
+
+    'RU': '''# 
+  ⭐ GKE StudyUp — Информация о стипендии для учащихся
+
+    ## **Моя учёба сохраняется в истории, а мой рост превращается в достижения.**
+
+  GKE StudyUp — это не платформа, где нужно учиться только потому, что кто-то заставляет тебя это делать.
+
+  Это образовательная платформа, которая помогает развивать гораздо более важную способность:
+
+  **самостоятельно ставить цели, планировать свою учёбу, действовать и постепенно брать ответственность за собственный путь обучения.**
+
+  Время, которое ты посвящаешь учёбе, твои усилия, процесс обучения, учебные записи и результаты самооценки фиксируются в виде ⭐ звёзд.
+
+  Но звезда — это не просто число и не обычная оценка.
+
+  ⭐ **Звезда — это след твоих собственных усилий, доказательство того, что ты учишься сам и постепенно растёшь.**
+
+  Сегодня ты позанимался немного дольше.
+
+  Оставил запись о своей учёбе.
+
+  Посмотрел на результат контрольной или экзамена и подумал, что можно улучшить.
+
+  Запланировал следующий шаг.
+
+  **Каждое такое небольшое действие постепенно становится частью твоего учебного пути и твоих достижений.**
+
+  ---
+
+  # ⭐ Как получить звёзды?
+
+  ## 1. Время обучения
+
+  ### **1 минута обучения = 1 звезда ⭐**
+
+  Чем регулярнее ты учишься, тем больше становится твоя история обучения.
+
+  ---
+
+  # 2. Учебная практика
+
+  * **Выполнить не менее 70% занятия по таймеру → +10 звёзд ⭐**
+  * **После занятия сделать запись о своей учёбе → +10 звёзд ⭐**
+  * **Учиться не менее 50 минут в день → +50 звёзд ⭐**
+  * **Учиться каждый день в течение полной недели — с воскресенья по субботу, без пропусков → +300 звёзд ⭐**
+  * **Учиться каждый день в течение целого месяца, без пропусков → +500 звёзд ⭐**
+
+  Один день постоянства — это маленький шаг.
+
+  Неделя постоянства постепенно становится привычкой.
+
+  Месяц постоянства — это уже настоящий вызов самому себе.
+
+  **Каждый раз, когда ты продолжаешь идти вперёд, ты собираешь не только звёзды — ты создаёшь собственную силу и уверенность в себе.**
+
+  ---
+
+  # 3. Оценка и записи об обучении
+
+  * **Еженедельная оценка обучения → +10 звёзд ⭐**
+  * **Запись о проверке знаний по разделу → +10 звёзд ⭐**
+  * **Запись о промежуточном экзамене → +50 звёзд ⭐**
+  * **Запись об итоговом экзамене → +50 звёзд ⭐**
+  * **Запись о пробном экзамене → +50 звёзд ⭐**
+
+  ## **Звёзды выдаются не за высокие оценки на экзаменах.**
+
+  Потому что мы считаем важным не только сам результат.
+
+  Важно:
+
+  записать результат,
+
+  посмотреть, что получилось хорошо,
+
+  понять, что ещё нужно улучшить,
+
+  и подумать:
+
+  **«Что я могу сделать по-другому в следующий раз?»**
+
+  Сам процесс размышления над своей учёбой — тоже важная часть обучения.
+
+  Учёба — это не только хорошие оценки.
+
+  **Учёба — это возможность лучше узнать себя, понять свои ошибки и сделать следующий шаг вперёд.**
+
+  ---
+
+  # 🌱 Уровень роста
+
+  ## **«Я постепенно формирую свои учебные привычки».**
+
+  Не нужно с самого начала делать всё идеально.
+
+  Не нужно сразу заниматься много часов.
+
+  Начни с маленького шага.
+
+  Учись понемногу каждый день.
+
+  Учись самостоятельно.
+
+  Записывай то, что сделал.
+
+  Старайся продолжать, даже когда результат пока кажется небольшим.
+
+  **Уровень роста** — это этап, на котором ты начинаешь учиться и постепенно формируешь хорошие учебные привычки.
+
+  ---
+
+  # 🔥 Уровень вызова
+
+  ## **«А смогу ли я поставить перед собой цель немного выше?»**
+
+  Когда хорошая учебная привычка уже начинает формироваться, попробуй сделать следующий шаг.
+
+  Поставь собственную цель.
+
+  И постепенно двигайся к ней.
+
+  В процессе ты будешь развивать свои учебные способности, увеличивать объём занятий и учиться лучше управлять своим временем и своими действиями.
+
+  **Уровень вызова** — это этап, на котором ты самостоятельно ставишь цели и активно работаешь над их достижением.
+
+  ---
+
+  # 🏆 Уровень достижения
+
+  ## **«Я постепенно достигаю целей, которые поставил перед собой».**
+
+  Важно не только регулярно заниматься.
+
+  Важно научиться самостоятельно управлять всем своим учебным процессом:
+
+  ### **Планирование → Действие → Запись → Оценка → Улучшение**
+
+  Сначала составить план.
+
+  Затем действовать.
+
+  Записать, что было сделано.
+
+  Посмотреть на результат.
+
+  И использовать этот опыт, чтобы сделать следующий этап обучения ещё лучше.
+
+  **Уровень достижения** — это этап, на котором ты продолжаешь самостоятельно учиться и постепенно учишься управлять собственным учебным процессом.
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **Так шаг за шагом растёт мой путь обучения.**
+
+  ### 🌱 Уровень роста
+
+  ↓
+  **Формировать привычку регулярно учиться**
+
+  ### 🔥 Уровень вызова
+
+  ↓
+  **Ставить перед собой более высокие цели**
+
+  ### 🏆 Уровень достижения
+
+  ↓
+  **Самостоятельно ставить цели и достигать их**
+
+  ---
+
+  # **Главное — не деньги.**
+
+  Неважно, на каком этапе ты сейчас находишься.
+
+  Самое важное — не то, сколько денег можно получить.
+
+  Главный вопрос:
+
+  ## **«Насколько я сам становлюсь лучше?»**
+
+  Стал ли я сегодня немного сильнее, чем вчера?
+
+  Сделал ли я сегодня хотя бы один шаг вперёд?
+
+  **Именно в этом заключается настоящая ценность обучения.**
+
+  ---
+
+  # 💰 А что происходит со звёздами?
+
+  В настоящее время в GKE StudyUp стипендия рассчитывается следующим образом:
+
+  ### **⭐ 1 звезда = 2, 3 или 4 корейских вона**
+
+  Но самое важное значение звезды — не деньги.
+
+  ## **Звезда — это запись твоих усилий, твоей учёбы и твоего роста.**
+
+  Твои накопленные учебные достижения могут быть доступны для просмотра твоим родителям.
+
+  Родители могут увидеть твои усилия и результаты и, в знак поддержки и признания твоего труда, принять решение о выплате стипендии.
+
+  **Размер стипендии родители определяют самостоятельно, учитывая возможности и обстоятельства своей семьи.**
+
+  Поэтому звезда и стипендия имеют разный смысл:
+
+  **Звезда показывает и сохраняет твой путь, твои усилия и твой рост.**
+
+  **Стипендия — это поддержка и поощрение родителей на этом пути.**
+
+  ---
+
+  # 🎯 Помни!
+
+  ## **Учёба — это не соревнование с другими.**
+
+  Важно не то, лучше ли ты кого-то другого.
+
+  Важно то, что:
+
+  **сегодняшний ты стал немного лучше вчерашнего себя,**
+
+  а
+
+  **завтрашний ты сможет сделать ещё один шаг вперёд по сравнению с сегодняшним собой.**
+
+  Сегодня ты учился на 10 минут дольше.
+
+  **Это тоже рост.**
+
+  Сегодня ты оставил запись о своей учёбе.
+
+  **Это тоже рост.**
+
+  Ты посмотрел на результат экзамена и честно его проанализировал.
+
+  **Это тоже рост.**
+
+  Тебе не удалось достичь желаемого результата, но ты заново составил план и решил попробовать ещё раз.
+
+  **Это тоже рост.**
+
+  ---
+
+  ## **Маленькие действия, повторяемые снова и снова, становятся привычками.**
+
+  ## **Привычки превращаются в навыки.**
+
+  ## **Навыки постепенно превращаются в достижения.**
+
+  ---
+
+  # ⭐ **Мою учёбу создаю я сам.**
+
+  ### **Планировать → Действовать → Записывать → Анализировать → Снова бросать себе вызов**
+
+  Не жди, пока кто-то скажет тебе, когда нужно учиться.
+
+  Учись:
+
+  думать самостоятельно,
+
+  принимать собственные решения,
+
+  действовать,
+
+  видеть свой прогресс
+
+  и продолжать двигаться вперёд.
+
+  ## **Твой путь обучения принадлежит тебе.**
+
+  Ты можешь создавать его сам — **один шаг за другим.**
+
+  ---
+
+  GKE StudyUp хочет помочь каждому учащемуся развить **силу самостоятельного обучения**,
+
+  двигаться к собственным целям
+
+  и постепенно становиться лучше — шаг за шагом, день за днём.
+
+  Возможно, сегодняшнее усилие было совсем небольшим.
+
+  Возможно, ты просто учился на десять минут дольше.
+
+  Возможно, ты всего лишь записал свой план на следующий день.
+
+  А может быть, после неудачи ты решил начать ещё раз.
+
+  **Каждый такой шаг имеет значение.**
+
+  Потому что маленькие шаги, которые мы продолжаем делать, однажды приводят нас намного дальше, чем мы могли представить.
+
+  И однажды, оглянувшись назад, ты сможешь сказать себе:
+
+  ## **«Хорошо, что тогда я не сдался».**
+
+  ---
+
+  # 🌱 Уровень роста → 🔥 Уровень вызова → 🏆 Уровень достижения
+
+  ## **Маленький шаг, который ты делаешь сегодня, создаёт тебя завтрашнего.**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 러시아어
+
+    'AR': '''# 
+  ⭐ GKE StudyUp – دليل المنح الدراسية للطلاب
+
+    ## **تعلمِي يُسجَّل، ونموي يتحول إلى إنجاز.**
+
+  GKE StudyUp ليست منصة للدراسة لأن شخصًا آخر يطلب منك ذلك أو يجبرك عليه.
+
+  إنها منصة تعليمية تساعدك على اكتساب قدرة أهم:
+
+  **أن تضع أهدافك بنفسك، وتخطط لتعلمك، وتحوّل خطتك إلى عمل، وتتحمل مسؤولية طريقك في التعلم.**
+
+  يتم تسجيل الوقت الذي تقضيه في الدراسة، وجهودك، وطريقة ممارستك للتعلم، وسجلات التعلم والتقييمات التي تقوم بها على شكل ⭐ نجوم.
+
+  لكن النجمة ليست مجرد رقم أو درجة.
+
+  ⭐ **النجمة هي أثر تعلمك بجهدك أنت، وعلامة على كل خطوة تخطوها في طريق نموك.**
+
+  درست اليوم قليلًا أكثر.
+
+  سجلت ما تعلمته.
+
+  راجعت نتيجة اختبارك.
+
+  فكرت في دراستك القادمة ووضعت خطة جديدة.
+
+  **كل واحدة من هذه الخطوات الصغيرة تتراكم لتصبح جزءًا من إنجازك وتطورك.**
+
+  ---
+
+  # ⭐ كيف يمكنني الحصول على النجوم؟
+
+  ## 1. وقت الدراسة
+
+  ### **دقيقة واحدة من الدراسة = نجمة واحدة ⭐**
+
+  كلما واصلت الدراسة بانتظام، تراكم سجل تعلمك ونما معك.
+
+  ---
+
+  # 2. الممارسة والالتزام بالتعلم
+
+  * **إنجاز 70% أو أكثر من جلسة الدراسة باستخدام المؤقت → +10 نجوم ⭐**
+  * **كتابة سجل للتعلم بعد انتهاء الدراسة → +10 نجوم ⭐**
+  * **الدراسة لمدة 50 دقيقة أو أكثر في اليوم → +50 نجمة ⭐**
+  * **الدراسة كل يوم لمدة أسبوع كامل، من الأحد إلى السبت، دون انقطاع → +300 نجمة ⭐**
+  * **الدراسة كل يوم لمدة شهر كامل دون انقطاع → +500 نجمة ⭐**
+
+  يوم واحد من الاستمرار هو خطوة صغيرة.
+
+  أسبوع من الاستمرار يمكن أن يصبح عادة.
+
+  وشهر من الاستمرار يصبح تحديًا حقيقيًا للنفس.
+
+  **وفي كل مرة تستمر فيها، فأنت لا تجمع النجوم فقط، بل تبني قوة وثقة في نفسك.**
+
+  ---
+
+  # 3. تقييم التعلم وتسجيله
+
+  * **تسجيل التقييم الأسبوعي → +10 نجوم ⭐**
+  * **تسجيل تقييم الوحدة الدراسية → +10 نجوم ⭐**
+  * **تسجيل اختبار منتصف الفصل → +50 نجمة ⭐**
+  * **تسجيل الاختبار النهائي → +50 نجمة ⭐**
+  * **تسجيل الاختبار التجريبي → +50 نجمة ⭐**
+
+  ## **لا تحصل على النجوم لمجرد أنك حصلت على درجة عالية في الاختبار.**
+
+  لأننا نؤمن بأن المهم ليس النتيجة وحدها.
+
+  من المهم أن تسجل نتيجة الاختبار،
+
+  وأن تنظر إلى ما أحسنت القيام به،
+
+  وأن تعرف ما الذي تحتاج إلى تحسينه،
+
+  وأن تسأل نفسك:
+
+  **«ماذا يمكنني أن أفعل بشكل أفضل في المرة القادمة؟»**
+
+  إن عملية التفكير في تعلمك ومراجعة تجربتك هي أيضًا جزء مهم من التعلم.
+
+  فالتعلم ليس مجرد الحصول على درجات عالية.
+
+  **التعلم هو أن تعرف نفسك بشكل أفضل، وتتعلم من أخطائك، وتتقدم خطوة أخرى إلى الأمام.**
+
+  ---
+
+  # 🌱 مرحلة النمو
+
+  ## **«أنا أبني عاداتي الدراسية خطوةً بعد خطوة.»**
+
+  لا تحتاج إلى القيام بكل شيء منذ البداية.
+
+  ولا تحتاج إلى الدراسة لساعات طويلة منذ اليوم الأول.
+
+  ابدأ بخطوة صغيرة.
+
+  ادرس قليلًا كل يوم.
+
+  تعلم بإرادتك.
+
+  سجّل ما تعلمته.
+
+  وحاول الاستمرار حتى عندما تبدو خطواتك صغيرة.
+
+  **مرحلة النمو** هي المرحلة التي تبدأ فيها الدراسة وتبني تدريجيًا عادات تعلم جيدة.
+
+  ---
+
+  # 🔥 مرحلة التحدي
+
+  ## **«هل أستطيع أن أتحدى نفسي بهدف أعلى قليلًا؟»**
+
+  عندما تبدأ عاداتك الدراسية في الاستقرار، حان الوقت لتتقدم خطوة أخرى.
+
+  ضع هدفك بنفسك.
+
+  وتقدم نحوه خطوةً بعد خطوة.
+
+  ومع الاستمرار، ستطور قدراتك الدراسية، وتزيد من قدرتك على التعلم، وتتعلم كيف تدير وقتك وجهدك بنفسك.
+
+  **مرحلة التحدي** هي المرحلة التي تبدأ فيها بوضع أهدافك بنفسك والعمل بجد لتحقيقها.
+
+  ---
+
+  # 🏆 مرحلة الإنجاز
+
+  ## **«أنا أحقق تدريجيًا الأهداف التي وضعتها لنفسي.»**
+
+  الأمر لا يتعلق فقط بالاستمرار في الدراسة.
+
+  بل يتعلق أيضًا بأن تتعلم كيف تدير رحلة تعلمك بنفسك:
+
+  ### **التخطيط للتعلم → التنفيذ → التسجيل → التقييم → التحسين**
+
+  أضع خطة.
+
+  أنفذها.
+
+  أسجل ما قمت به.
+
+  أراجع النتيجة.
+
+  ثم أستخدم ما تعلمته لأجعل خطوتي التالية أفضل.
+
+  **مرحلة الإنجاز** هي المرحلة التي تستمر فيها في التعلم الذاتي، وتصبح أكثر قدرة على إدارة تعلمك بنفسك.
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **هكذا ينمو تعلّمي خطوةً بعد خطوة.**
+
+  ### 🌱 مرحلة النمو
+
+  ↓
+  **بناء عادة الاستمرار في الدراسة**
+
+  ### 🔥 مرحلة التحدي
+
+  ↓
+  **التحدي من أجل الوصول إلى أهداف أعلى**
+
+  ### 🏆 مرحلة الإنجاز
+
+  ↓
+  **وضع أهدافي بنفسي وتحقيقها بجهدي**
+
+  ---
+
+  # **الأهم ليس المال.**
+
+  سواء كنت في مرحلة النمو، أو التحدي، أو الإنجاز،
+
+  فالقيمة الحقيقية ليست في مقدار المال الذي يمكنك الحصول عليه.
+
+  السؤال الأهم هو:
+
+  ## **«كم أتقدم وأتطور بجهدي أنا؟»**
+
+  هل أصبحت اليوم أفضل قليلًا من الأمس؟
+
+  هل خطوت اليوم خطوة إلى الأمام؟
+
+  **هذا هو المعنى الحقيقي لتعلمك.**
+
+  ---
+
+  # 💰 وماذا يحدث للنجوم؟
+
+  في الوقت الحالي، يتم حساب المنحة الدراسية في GKE StudyUp وفق النظام التالي:
+
+  ### **⭐ نجمة واحدة = 2 أو 3 أو 4 وون كوري**
+
+  لكن أهم معنى للنجمة ليس المال.
+
+  ## **النجمة هي سجل لجهدك وتعلمك وتطورك.**
+
+  يمكن لوالديك الاطلاع على الإنجازات التعليمية التي جمعتها خلال رحلة تعلمك.
+
+  وبناءً على هذه الإنجازات والجهود، يمكن للوالدين تقديم منحة دراسية لك باعتبارها **تعبيرًا عن التشجيع والدعم والتقدير لجهودك.**
+
+  **ويحدد الوالدان قيمة المنحة وفقًا لظروف وإمكانات كل أسرة.**
+
+  ولهذا فإن للنجوم والمنحة معنيين مختلفين:
+
+  **النجوم تسجل جهودك وتطورك.**
+
+  **والمنحة تمثل دعم والديك وتشجيعهما لك في طريقك.**
+
+  ---
+
+  # 🎯 تذكّر!
+
+  ## **الدراسة ليست منافسة مع الآخرين.**
+
+  المهم ليس أن تكون أفضل من شخص آخر.
+
+  المهم هو أن:
+
+  **يكون أنت اليوم أفضل قليلًا من أنت بالأمس،**
+
+  وأن:
+
+  **يكون أنت غدًا قد تقدمت خطوة أخرى مقارنةً بنفسك اليوم.**
+
+  درست اليوم 10 دقائق إضافية.
+
+  **هذا أيضًا نمو.**
+
+  كتبت اليوم سجلًا لما تعلمته.
+
+  **هذا أيضًا نمو.**
+
+  راجعت نتيجة اختبارك بصدق.
+
+  **هذا أيضًا نمو.**
+
+  لم تحقق النتيجة التي كنت تتوقعها، لكنك أعدت وضع خطة وقررت أن تحاول مرة أخرى.
+
+  **هذا أيضًا نمو.**
+
+  ---
+
+  ## **الخطوات الصغيرة عندما تتكرر تصبح عادات.**
+
+  ## **والعادات تصبح قدرات.**
+
+  ## **والقدرات المتراكمة تصبح إنجازات.**
+
+  ---
+
+  # ⭐ **أنا من يصنع رحلة تعلمي.**
+
+  ### **خطط → نفّذ → سجّل → راجع → تحدَّ نفسك من جديد**
+
+  لا تنتظر أن يخبرك شخص آخر متى يجب أن تدرس.
+
+  تعلم أن:
+
+  تفكر بنفسك،
+
+  وتتخذ قراراتك بنفسك،
+
+  وتتحرك بنفسك،
+
+  وترى تقدمك بنفسك،
+
+  وتواصل السير إلى الأمام.
+
+  ## **طريق تعلمك ملك لك.**
+
+  وأنت تستطيع أن تصنعه بنفسك، **خطوةً بعد خطوة.**
+
+  ---
+
+  تريد GKE StudyUp أن تساعد كل طالب على اكتساب **قوة التعلم الذاتي**،
+
+  وأن تساعده على التقدم نحو أهدافه الخاصة،
+
+  والنمو تدريجيًا، خطوةً بعد خطوة، ويومًا بعد يوم.
+
+  قد يكون جهدك اليوم صغيرًا جدًا.
+
+  ربما درست عشر دقائق إضافية فقط.
+
+  وربما كتبت خطة دراستك القادمة.
+
+  وربما واجهت صعوبة، ثم قررت أن تبدأ من جديد.
+
+  **كل خطوة من هذه الخطوات لها قيمة.**
+
+  لأن الخطوات الصغيرة التي نستمر في القيام بها يمكن أن تقودنا يومًا ما إلى أبعد بكثير مما كنا نتخيل.
+
+  وفي يوم من الأيام، عندما تنظر إلى الطريق الذي قطعته، قد تقول لنفسك:
+
+  ## **«أنا سعيد لأنني لم أستسلم في ذلك الوقت.»**
+
+  ---
+
+  # 🌱 مرحلة النمو → 🔥 مرحلة التحدي → 🏆 مرحلة الإنجاز
+
+  ## **خطوتك الصغيرة اليوم هي التي تصنع نفسك في الغد.**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 아랍어
+
+    'HI': '''# 
+  ⭐ GKE StudyUp – विद्यार्थियों के लिए छात्रवृत्ति मार्गदर्शिका
+
+    ## **मेरी पढ़ाई दर्ज होती है, और मेरी प्रगति मेरी उपलब्धि बनती है।**
+
+  GKE StudyUp केवल ऐसी जगह नहीं है जहाँ आपको किसी के कहने या दबाव डालने पर पढ़ना हो।
+
+  यह एक ऐसा learning platform है जो आपको एक बहुत महत्वपूर्ण शक्ति विकसित करने में मदद करता है—
+
+  **अपने लक्ष्य स्वयं तय करना, अपनी पढ़ाई की योजना बनाना, उस योजना को अमल में लाना और अपनी सीखने की यात्रा की जिम्मेदारी स्वयं लेना।**
+
+  आपने कितना समय पढ़ाई में लगाया, किस तरह सीखने का अभ्यास किया, क्या सीखा, और अपनी पढ़ाई का मूल्यांकन कैसे किया—इन सबका रिकॉर्ड ⭐ सितारों के रूप में जमा होता है।
+
+  लेकिन—
+
+  ## **⭐ सितारा केवल कोई अंक नहीं है।**
+
+  **यह इस बात का निशान है कि आपने स्वयं पढ़ाई की है।**
+
+  यह आपकी मेहनत का एक छोटा-सा प्रमाण है।
+
+  आज आपने कुछ मिनट अधिक पढ़ा।
+
+  आपने अपनी पढ़ाई का रिकॉर्ड लिखा।
+
+  आपने परीक्षा के परिणाम को ध्यान से देखा।
+
+  आपने अपनी अगली पढ़ाई के लिए नई योजना बनाई।
+
+  **इनमें से हर छोटा कदम आपकी सीखने की यात्रा और आपकी प्रगति का हिस्सा बनता जाता है।**
+
+  ---
+
+  # ⭐ सितारे कैसे प्राप्त करें?
+
+  ## 1. पढ़ाई का समय
+
+  ### **1 मिनट की पढ़ाई = 1 ⭐ सितारा**
+
+  जब आप नियमित रूप से पढ़ते रहते हैं, तो आपका learning record भी आपके साथ बढ़ता जाता है।
+
+  ---
+
+  # 2. सीखने का अभ्यास और निरंतरता
+
+  * **Timer से पढ़ाई का 70% या उससे अधिक पूरा करना → +10 ⭐**
+  * **पढ़ाई पूरी करने के बाद Learning Record लिखना → +10 ⭐**
+  * **एक दिन में 50 मिनट या उससे अधिक पढ़ाई करना → +50 ⭐**
+  * **रविवार से शनिवार तक पूरे सप्ताह हर दिन बिना एक भी दिन छोड़े पढ़ाई करना → +300 ⭐**
+  * **पूरे एक महीने तक हर दिन बिना एक भी दिन छोड़े पढ़ाई करना → +500 ⭐**
+
+  एक दिन लगातार पढ़ना एक छोटा कदम है।
+
+  एक सप्ताह लगातार पढ़ना एक आदत बन सकता है।
+
+  और एक महीने तक लगातार प्रयास करना आपके अपने संकल्प की एक बड़ी चुनौती बन सकता है।
+
+  **हर बार जब आप अपने प्रयास को जारी रखते हैं, तो आप केवल सितारे जमा नहीं कर रहे होते—आप अपने भीतर अनुशासन, आत्मविश्वास और आगे बढ़ने की शक्ति भी बना रहे होते हैं।**
+
+  ---
+
+  # 3. सीखने का मूल्यांकन और रिकॉर्ड
+
+  * **साप्ताहिक Learning Evaluation Record → +10 ⭐**
+  * **Unit Evaluation Record → +10 ⭐**
+  * **Midterm Exam Record → +50 ⭐**
+  * **Final Exam Record → +50 ⭐**
+  * **Mock Exam Record → +50 ⭐**
+
+  ## **केवल परीक्षा में अच्छे अंक प्राप्त करने से सितारे नहीं मिलते।**
+
+  क्योंकि हमारे लिए केवल परिणाम ही महत्वपूर्ण नहीं है।
+
+  यह भी महत्वपूर्ण है कि आप अपनी परीक्षा का परिणाम दर्ज करें,
+
+  सोचें कि आपने क्या अच्छा किया,
+
+  समझें कि कहाँ सुधार की आवश्यकता है,
+
+  और स्वयं से पूछें—
+
+  ### **“अगली बार मैं क्या बेहतर कर सकता हूँ?”**
+
+  अपनी पढ़ाई पर पीछे मुड़कर देखना और अपनी सीख से अगला कदम बेहतर बनाना भी सीखने का एक महत्वपूर्ण हिस्सा है।
+
+  **पढ़ाई केवल अच्छे अंक प्राप्त करने का नाम नहीं है।**
+
+  **सीखना अपने आप को बेहतर समझना, अपनी गलतियों से सीखना और हर बार एक कदम आगे बढ़ना है।**
+
+  ---
+
+  # 🌱 विकास चरण
+
+  ## **“मैं धीरे-धीरे अपनी पढ़ाई की अच्छी आदत बना रहा हूँ।”**
+
+  आपको शुरुआत से ही सब कुछ पूरी तरह करने की आवश्यकता नहीं है।
+
+  आपको पहले दिन से घंटों पढ़ने की भी आवश्यकता नहीं है।
+
+  एक छोटे कदम से शुरुआत करें।
+
+  हर दिन थोड़ा पढ़ें।
+
+  अपनी इच्छा से सीखें।
+
+  जो सीखा उसे दर्ज करें।
+
+  और छोटे कदम होने पर भी लगातार आगे बढ़ने का प्रयास करें।
+
+  **विकास चरण** वह समय है जब आप पढ़ाई की शुरुआत करते हैं और धीरे-धीरे अच्छी अध्ययन आदतें बनाते हैं।
+
+  ---
+
+  # 🔥 चुनौती चरण
+
+  ## **“क्या मैं अपने लिए थोड़ा बड़ा लक्ष्य तय करके उसे चुनौती दे सकता हूँ?”**
+
+  जब आपकी पढ़ाई की आदत बनने लगे, तो अब एक कदम और आगे बढ़ने का समय है।
+
+  अपना लक्ष्य स्वयं तय करें।
+
+  फिर उसे पाने के लिए एक-एक कदम आगे बढ़ें।
+
+  लगातार अभ्यास के साथ आप अपनी पढ़ाई की क्षमता बढ़ा सकते हैं, अधिक प्रभावी ढंग से सीखना सीख सकते हैं और अपने समय तथा प्रयास को स्वयं व्यवस्थित करना सीख सकते हैं।
+
+  **चुनौती चरण** वह समय है जब आप अपने लक्ष्य स्वयं तय करते हैं और उन्हें पूरा करने के लिए सक्रिय रूप से प्रयास करते हैं।
+
+  ---
+
+  # 🏆 उपलब्धि चरण
+
+  ## **“मैं अपने द्वारा तय किए गए लक्ष्यों को स्वयं पूरा कर रहा हूँ।”**
+
+  यह केवल लगातार पढ़ते रहने की बात नहीं है।
+
+  यह अपनी सीखने की पूरी प्रक्रिया को स्वयं संभालना सीखने की बात है:
+
+  ### **Learning Plan → Practice → Record → Evaluation → Improvement**
+
+  मैं योजना बनाता हूँ।
+
+  मैं उसे पूरा करने का प्रयास करता हूँ।
+
+  मैं अपने किए हुए काम को दर्ज करता हूँ।
+
+  मैं परिणाम को देखता और समझता हूँ।
+
+  फिर जो सीखा है, उसके आधार पर अपनी अगली योजना को बेहतर बनाता हूँ।
+
+  **उपलब्धि चरण** वह समय है जब आप लगातार आत्मनिर्भर होकर सीखते हैं और अपनी पढ़ाई को स्वयं व्यवस्थित करने की क्षमता विकसित करते हैं।
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **मेरी सीखने की यात्रा एक कदम से दूसरे कदम तक आगे बढ़ती है।**
+
+  ### 🌱 विकास चरण
+
+  ↓
+  **नियमित पढ़ाई की आदत बनाना**
+
+  ### 🔥 चुनौती चरण
+
+  ↓
+  **ऊँचे लक्ष्यों के लिए स्वयं को चुनौती देना**
+
+  ### 🏆 उपलब्धि चरण
+
+  ↓
+  **अपने लक्ष्य स्वयं तय करना और अपने प्रयास से उन्हें पूरा करना**
+
+  ---
+
+  # **सबसे महत्वपूर्ण बात पैसा नहीं है।**
+
+  चाहे आप विकास चरण में हों, चुनौती चरण में हों या उपलब्धि चरण में—
+
+  आपकी वास्तविक प्रगति इस बात से तय नहीं होती कि आपको कितनी धनराशि मिलती है।
+
+  सबसे महत्वपूर्ण प्रश्न है:
+
+  ## **“मैं अपने प्रयास से कितना सीख रहा हूँ और कितना आगे बढ़ रहा हूँ?”**
+
+  क्या मैं आज कल से थोड़ा बेहतर हूँ?
+
+  क्या मैंने आज एक कदम आगे बढ़ाया?
+
+  **यही आपकी सीखने की वास्तविक प्रगति है।**
+
+  ---
+
+  # 💰 सितारों का छात्रवृत्ति से क्या संबंध है?
+
+  वर्तमान में GKE StudyUp में छात्रवृत्ति की गणना इस प्रकार की जाती है:
+
+  ### **⭐ 1 सितारा = 2, 3 या 4 कोरियाई वॉन (KRW)**
+
+  लेकिन सितारे का सबसे महत्वपूर्ण अर्थ पैसा नहीं है।
+
+  ## **⭐ सितारा आपकी पढ़ाई, मेहनत और प्रगति का रिकॉर्ड है।**
+
+  आपके माता-पिता आपकी सीखने की यात्रा के दौरान जमा हुए learning achievements को देख सकते हैं।
+
+  इन उपलब्धियों और आपके निरंतर प्रयास के आधार पर, माता-पिता आपको छात्रवृत्ति दे सकते हैं—
+
+  **आपकी मेहनत को प्रोत्साहित करने, आपके प्रयास को सराहने और आपकी आगे की यात्रा में आपका साथ देने के लिए।**
+
+  छात्रवृत्ति की राशि प्रत्येक परिवार की परिस्थितियों और आर्थिक क्षमता के अनुसार माता-पिता स्वयं तय करते हैं।
+
+  इसलिए सितारे और छात्रवृत्ति का अर्थ एक जैसा नहीं है।
+
+  ### **सितारे आपकी मेहनत और आपकी प्रगति को दर्ज करते हैं।**
+
+  ### **छात्रवृत्ति आपके माता-पिता के प्रोत्साहन और समर्थन को व्यक्त करती है।**
+
+  इसका उद्देश्य आपके अध्ययन को केवल पैसे के मूल्य में मापना नहीं है।
+
+  **पैसा एक प्रोत्साहन हो सकता है, लेकिन आपकी मेहनत, आपकी आदत, आपका आत्मविश्वास और आपका विकास कहीं अधिक महत्वपूर्ण हैं।**
+
+  ---
+
+  # 🎯 इसे हमेशा याद रखें!
+
+  ## **पढ़ाई दूसरों के साथ प्रतियोगिता नहीं है।**
+
+  महत्वपूर्ण यह नहीं है कि आप किसी दूसरे विद्यार्थी से बेहतर हैं या नहीं।
+
+  महत्वपूर्ण यह है कि—
+
+  **आज का आप कल के अपने आप से थोड़ा बेहतर हो,**
+
+  और
+
+  **कल का आप आज के अपने आप से एक कदम आगे हो।**
+
+  आज आपने 10 मिनट अधिक पढ़ा।
+
+  **यह भी विकास है।**
+
+  आज आपने अपनी पढ़ाई का रिकॉर्ड लिखा।
+
+  **यह भी विकास है।**
+
+  आपने अपनी परीक्षा के परिणाम को ईमानदारी से देखा।
+
+  **यह भी विकास है।**
+
+  पढ़ाई आपकी योजना के अनुसार नहीं हुई, फिर भी आपने दोबारा योजना बनाई और फिर से प्रयास करने का निर्णय लिया।
+
+  **यह भी विकास है।**
+
+  ---
+
+  # **छोटे-छोटे प्रयास दोहराए जाएँ तो आदत बन जाते हैं।**
+
+  # **आदतें मिलकर क्षमता बनाती हैं।**
+
+  # **और लगातार विकसित होती क्षमता अंततः उपलब्धि बनती है।**
+
+  ---
+
+  # ⭐ **मेरी सीखने की यात्रा मैं स्वयं बनाता हूँ।**
+
+  ### **योजना बनाओ → अभ्यास करो → दर्ज करो → पीछे मुड़कर देखो → फिर से चुनौती स्वीकार करो**
+
+  किसी दूसरे व्यक्ति के यह बताने का इंतज़ार मत करो कि आपको कब पढ़ना चाहिए।
+
+  सीखें कि आप—
+
+  **स्वयं सोचें,**
+
+  **स्वयं निर्णय लें,**
+
+  **स्वयं कदम उठाएँ,**
+
+  **अपनी प्रगति स्वयं देखें,**
+
+  और
+
+  **लगातार आगे बढ़ते रहें।**
+
+  ## **आपकी सीखने की यात्रा आपकी अपनी है।**
+
+  और आप इसे स्वयं बना सकते हैं—
+
+  **एक कदम, फिर एक कदम।**
+
+  ---
+
+  GKE StudyUp हर विद्यार्थी को **स्वतंत्र रूप से सीखने की शक्ति** विकसित करने में सहायता करना चाहता है।
+
+  आप अपने लक्ष्य स्वयं तय कर सकें,
+
+  उनकी ओर लगातार आगे बढ़ सकें,
+
+  और हर दिन थोड़ा-थोड़ा विकसित होते रहें।
+
+  हो सकता है कि आज का आपका प्रयास बहुत छोटा हो।
+
+  शायद आपने केवल 10 मिनट अधिक पढ़ा हो।
+
+  शायद आपने अपनी अगली पढ़ाई की योजना लिखी हो।
+
+  शायद आज आपको कठिनाई हुई हो, फिर भी आपने दोबारा शुरुआत करने का निर्णय लिया हो।
+
+  ## **इनमें से हर कदम मूल्यवान है।**
+
+  क्योंकि जो छोटे कदम हम लगातार उठाते रहते हैं,
+
+  वे एक दिन हमें वहाँ पहुँचा सकते हैं
+
+  जहाँ हमने कभी सोचा भी नहीं था कि हम पहुँच पाएँगे।
+
+  और शायद किसी दिन पीछे मुड़कर देखते हुए आप स्वयं से कहेंगे—
+
+  ## **“अच्छा हुआ, उस दिन मैंने हार नहीं मानी।”**
+
+  ---
+
+  # 🌱 विकास चरण → 🔥 चुनौती चरण → 🏆 उपलब्धि चरण
+
+  ## **आज का आपका छोटा कदम ही आपके कल के आपको बनाता है।**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 힌디어
+
+    'VI': '''# 
+  ⭐ GKE StudyUp – Hướng dẫn học bổng dành cho học sinh
+
+    ## **Việc học của tôi được ghi lại, và sự trưởng thành của tôi trở thành thành quả.**
+
+  GKE StudyUp không phải là nơi bạn học chỉ vì có ai đó yêu cầu hay ép buộc bạn phải học.
+
+  Đây là một nền tảng học tập giúp bạn phát triển một năng lực quan trọng hơn:
+
+  **tự đặt mục tiêu, tự lập kế hoạch học tập, biến kế hoạch thành hành động và tự chịu trách nhiệm với hành trình học tập của chính mình.**
+
+  Thời gian học, quá trình thực hành, những gì bạn đã học, cũng như các đánh giá và ghi chép về việc học đều được ghi lại bằng ⭐ ngôi sao.
+
+  Nhưng—
+
+  ## **⭐ Ngôi sao không đơn giản chỉ là một điểm số.**
+
+  ### **Ngôi sao là dấu ấn cho thấy bạn đã tự mình học tập.**
+
+  Đó là dấu vết của những nỗ lực mà chính bạn đã thực hiện trên hành trình trưởng thành của mình.
+
+  Hôm nay bạn học thêm một chút.
+
+  Bạn ghi lại những gì mình đã học.
+
+  Bạn nhìn lại kết quả bài kiểm tra.
+
+  Bạn suy nghĩ và lập kế hoạch cho lần học tiếp theo.
+
+  **Mỗi bước nhỏ như vậy đều được tích lũy và trở thành một phần trong thành quả học tập và sự trưởng thành của bạn.**
+
+  ---
+
+  # ⭐ Làm thế nào để nhận được ngôi sao?
+
+  ## 1. Thời gian học
+
+  ### **1 phút học tập = 1 ⭐ ngôi sao**
+
+  Khi bạn duy trì việc học đều đặn, những nỗ lực của bạn sẽ từng ngày được ghi lại và tích lũy.
+
+  ---
+
+  # 2. Thực hành học tập và sự kiên trì
+
+  * **Hoàn thành từ 70% trở lên thời lượng học bằng Timer → +10 ⭐**
+  * **Viết nhật ký học tập sau khi hoàn thành buổi học → +10 ⭐**
+  * **Học từ 50 phút trở lên trong một ngày → +50 ⭐**
+  * **Học mỗi ngày từ Chủ nhật đến Thứ bảy trong trọn một tuần, không bỏ ngày nào → +300 ⭐**
+  * **Học mỗi ngày trong trọn một tháng, không bỏ ngày nào → +500 ⭐**
+
+  Một ngày kiên trì là một bước nhỏ.
+
+  Một tuần kiên trì có thể trở thành một thói quen.
+
+  Và một tháng kiên trì chính là một thử thách lớn đối với bản thân.
+
+  **Mỗi khi bạn tiếp tục cố gắng, bạn không chỉ tích lũy thêm những ngôi sao. Bạn đang xây dựng sự tự tin, tính kỷ luật và sức mạnh để tiến về phía trước.**
+
+  ---
+
+  # 3. Đánh giá và ghi lại quá trình học tập
+
+  * **Ghi lại đánh giá học tập hằng tuần → +10 ⭐**
+  * **Ghi lại đánh giá từng bài/chủ đề học tập → +10 ⭐**
+  * **Ghi lại kết quả kiểm tra giữa kỳ → +50 ⭐**
+  * **Ghi lại kết quả kiểm tra cuối kỳ → +50 ⭐**
+  * **Ghi lại kết quả bài thi thử → +50 ⭐**
+
+  ## **Bạn không nhận được ngôi sao chỉ vì đạt điểm cao trong bài kiểm tra.**
+
+  Bởi vì với GKE StudyUp, kết quả cuối cùng không phải là điều duy nhất quan trọng.
+
+  Điều quan trọng là bạn biết nhìn lại kết quả của chính mình.
+
+  Bạn nhận ra mình đã làm tốt điều gì.
+
+  Bạn hiểu mình cần cải thiện điều gì.
+
+  Và bạn tự hỏi:
+
+  ### **“Lần sau mình có thể làm tốt hơn điều gì?”**
+
+  Nhìn lại quá trình học tập và rút kinh nghiệm cho bước tiếp theo cũng chính là một phần quan trọng của việc học.
+
+  **Học tập không chỉ là đạt điểm cao.**
+
+  **Học tập là hiểu bản thân hơn, học hỏi từ những điều chưa tốt và mỗi ngày tiến thêm một bước.**
+
+  ---
+
+  # 🌱 Giai đoạn Phát triển
+
+  ## **“Mình đang từng bước xây dựng thói quen học tập.”**
+
+  Bạn không cần phải làm mọi thứ thật hoàn hảo ngay từ đầu.
+
+  Bạn cũng không cần phải học hàng giờ ngay từ ngày đầu tiên.
+
+  Hãy bắt đầu bằng một bước nhỏ.
+
+  Học một chút mỗi ngày.
+
+  Tự mình học.
+
+  Ghi lại những gì mình đã học.
+
+  Và cố gắng duy trì ngay cả khi những bước tiến của bạn còn rất nhỏ.
+
+  **Giai đoạn Phát triển** là giai đoạn bạn bắt đầu việc học và từng bước xây dựng những thói quen học tập tốt.
+
+  ---
+
+  # 🔥 Giai đoạn Thử thách
+
+  ## **“Mình muốn thử thách bản thân với một mục tiêu cao hơn một chút.”**
+
+  Khi thói quen học tập của bạn bắt đầu ổn định, hãy bước thêm một bước nữa.
+
+  Tự đặt mục tiêu cho mình.
+
+  Sau đó từng bước tiến về phía mục tiêu ấy.
+
+  Qua quá trình kiên trì, bạn sẽ phát triển khả năng học tập, nâng cao năng lực tự quản lý thời gian và biết cách chủ động quản lý nỗ lực của mình.
+
+  **Giai đoạn Thử thách** là giai đoạn bạn bắt đầu tự đặt ra những mục tiêu cao hơn và chủ động hành động để đạt được chúng.
+
+  ---
+
+  # 🏆 Giai đoạn Thành tựu
+
+  ## **“Mình đang từng bước đạt được những mục tiêu do chính mình đặt ra.”**
+
+  Điều này không chỉ có nghĩa là học đều đặn.
+
+  Đó còn là việc học cách tự quản lý toàn bộ quá trình học tập của mình:
+
+  ### **Lập kế hoạch học tập → Thực hiện → Ghi lại → Đánh giá → Cải thiện**
+
+  Mình lập kế hoạch.
+
+  Mình thực hiện.
+
+  Mình ghi lại những gì đã làm.
+
+  Mình nhìn lại kết quả.
+
+  Sau đó, mình dùng những gì đã học được để làm cho kế hoạch tiếp theo tốt hơn.
+
+  **Giai đoạn Thành tựu** là giai đoạn bạn duy trì việc tự học và ngày càng có khả năng tự quản lý hành trình học tập của chính mình.
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **Hành trình học tập của mình được xây dựng từng bước.**
+
+  ### 🌱 Giai đoạn Phát triển
+
+  ↓
+  **Xây dựng thói quen học tập đều đặn**
+
+  ### 🔥 Giai đoạn Thử thách
+
+  ↓
+  **Thử thách bản thân với những mục tiêu cao hơn**
+
+  ### 🏆 Giai đoạn Thành tựu
+
+  ↓
+  **Tự đặt mục tiêu và đạt được mục tiêu bằng nỗ lực của chính mình**
+
+  ---
+
+  # **Điều quan trọng nhất không phải là tiền.**
+
+  Dù bạn đang ở Giai đoạn Phát triển, Giai đoạn Thử thách hay Giai đoạn Thành tựu,
+
+  giá trị thực sự của việc học không nằm ở số tiền bạn có thể nhận được.
+
+  Điều quan trọng hơn là:
+
+  ## **“Mình đang trưởng thành và tiến bộ như thế nào bằng chính nỗ lực của mình?”**
+
+  Hôm nay mình có tốt hơn hôm qua một chút không?
+
+  Hôm nay mình có tiến thêm một bước không?
+
+  **Đó mới là sự trưởng thành thực sự trong việc học.**
+
+  ---
+
+  # 💰 Những ngôi sao có ý nghĩa gì đối với học bổng?
+
+  Hiện tại, học bổng tại GKE StudyUp được tính theo cách sau:
+
+  ### **⭐ 1 ngôi sao = 2, 3 hoặc 4 Won Hàn Quốc (KRW)**
+
+  Nhưng ý nghĩa quan trọng nhất của ngôi sao không phải là tiền.
+
+  ## **⭐ Ngôi sao là hồ sơ ghi lại quá trình học tập, nỗ lực và trưởng thành của bạn.**
+
+  Cha mẹ có thể nhìn thấy những thành quả học tập mà bạn đã tích lũy trong suốt hành trình của mình.
+
+  Dựa trên những thành quả và nỗ lực đó, cha mẹ có thể trao học bổng cho bạn như một cách:
+
+  **ghi nhận sự cố gắng, khích lệ tinh thần và đồng hành cùng bạn trên con đường học tập.**
+
+  Giá trị học bổng sẽ do cha mẹ quyết định tùy theo hoàn cảnh và khả năng của mỗi gia đình.
+
+  Vì vậy, **ngôi sao và học bổng không mang cùng một ý nghĩa.**
+
+  ### **Ngôi sao ghi lại nỗ lực và sự trưởng thành của bạn.**
+
+  ### **Học bổng thể hiện sự động viên và ủng hộ của cha mẹ dành cho hành trình ấy.**
+
+  Mục đích không phải là dùng tiền để đánh giá việc học của một đứa trẻ.
+
+  **Tiền có thể là một lời động viên, nhưng điều quý giá hơn chính là thói quen học tập, sự tự tin, khả năng tự học và sự trưởng thành mà đứa trẻ đang từng ngày xây dựng.**
+
+  ---
+
+  # 🎯 Hãy luôn nhớ!
+
+  ## **Học tập không phải là cuộc cạnh tranh với người khác.**
+
+  Điều quan trọng không phải là bạn giỏi hơn một người khác hay không.
+
+  Điều quan trọng là:
+
+  **Bạn của hôm nay tốt hơn bạn của ngày hôm qua một chút,**
+
+  và
+
+  **Bạn của ngày mai tiến thêm một bước so với bạn của hôm nay.**
+
+  Hôm nay bạn học thêm 10 phút.
+
+  **Đó cũng là trưởng thành.**
+
+  Hôm nay bạn ghi lại quá trình học tập của mình.
+
+  **Đó cũng là trưởng thành.**
+
+  Hôm nay bạn nhìn lại kết quả bài kiểm tra một cách nghiêm túc.
+
+  **Đó cũng là trưởng thành.**
+
+  Việc học hôm nay không diễn ra như kế hoạch, nhưng bạn đã lập lại kế hoạch và quyết định thử lại.
+
+  **Đó cũng là trưởng thành.**
+
+  ---
+
+  # **Những nỗ lực nhỏ, khi được lặp lại, sẽ trở thành thói quen.**
+
+  # **Thói quen được tích lũy sẽ trở thành năng lực.**
+
+  # **Năng lực được phát triển từng ngày sẽ trở thành thành tựu.**
+
+  ---
+
+  # ⭐ **Mình tự tạo nên hành trình học tập của chính mình.**
+
+  ### **Lập kế hoạch → Thực hiện → Ghi lại → Nhìn lại → Tiếp tục thử thách bản thân**
+
+  Đừng chờ người khác nói cho bạn biết khi nào bạn phải học.
+
+  Hãy học cách:
+
+  **tự suy nghĩ,**
+
+  **tự quyết định,**
+
+  **tự hành động,**
+
+  **tự nhìn thấy sự tiến bộ của mình,**
+
+  và
+
+  **tiếp tục bước về phía trước.**
+
+  ## **Hành trình học tập của bạn thuộc về chính bạn.**
+
+  Và bạn có thể tự mình tạo nên hành trình ấy—
+
+  **từng bước một.**
+
+  ---
+
+  GKE StudyUp mong muốn giúp mỗi học sinh phát triển **năng lực tự học**,
+
+  tự đặt mục tiêu cho bản thân,
+
+  kiên trì tiến về phía những mục tiêu ấy,
+
+  và từng ngày trưởng thành hơn.
+
+  Có thể nỗ lực của bạn hôm nay rất nhỏ.
+
+  Có thể bạn chỉ học thêm 10 phút.
+
+  Có thể bạn viết kế hoạch cho buổi học tiếp theo.
+
+  Có thể hôm nay bạn gặp khó khăn, nhưng vẫn quyết định bắt đầu lại.
+
+  ## **Mỗi bước như vậy đều có giá trị.**
+
+  Bởi vì những bước nhỏ mà chúng ta kiên trì thực hiện mỗi ngày
+
+  có thể đưa chúng ta đến một ngày nào đó
+
+  xa hơn rất nhiều so với nơi chúng ta từng nghĩ mình có thể đến.
+
+  Và rồi sẽ có một ngày, khi nhìn lại con đường mình đã đi qua, bạn có thể mỉm cười và nói với chính mình:
+
+  ## **“Thật may là ngày hôm đó mình đã không bỏ cuộc.”**
+
+  ---
+
+  # 🌱 Giai đoạn Phát triển → 🔥 Giai đoạn Thử thách → 🏆 Giai đoạn Thành tựu
+
+  ## **Bước nhỏ của bạn hôm nay sẽ tạo nên bạn của ngày mai.**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 베트남어
+
+    'ES': '''
+   # ⭐ GKE StudyUp – Guía de becas para estudiantes
+
+    ## **Mi aprendizaje queda registrado y mi crecimiento se convierte en un logro.**
+
+  GKE StudyUp no es una plataforma en la que estudias simplemente porque alguien te lo ordena o te obliga a hacerlo.
+
+  Es una plataforma de aprendizaje que te ayuda a desarrollar algo mucho más importante:
+
+  **aprender a establecer tus propios objetivos, planificar tu estudio, convertir tus planes en acciones y asumir la responsabilidad de tu propio camino de aprendizaje.**
+
+  El tiempo que dedicas a estudiar, tu proceso de aprendizaje, tus prácticas, tus registros y tus evaluaciones quedan registrados mediante ⭐ estrellas.
+
+  Pero una estrella no es simplemente un número o una puntuación.
+
+  ## ⭐ **Una estrella es la huella de que has estudiado por ti mismo.**
+
+  Es una pequeña señal de cada esfuerzo que has hecho y de cada paso que has dado para crecer.
+
+  Hoy estudiaste unos minutos más.
+
+  Registraste lo que aprendiste.
+
+  Revisaste el resultado de un examen.
+
+  Pensaste en lo que necesitas estudiar después y preparaste un nuevo plan.
+
+  **Cada uno de esos pequeños pasos se va acumulando y se convierte en parte de tu aprendizaje, tu crecimiento y tus logros.**
+
+  ---
+
+  # ⭐ ¿Cómo puedo obtener estrellas?
+
+  ## 1. Tiempo de estudio
+
+  ### **1 minuto de estudio = 1 ⭐ estrella**
+
+  Cuando estudias de manera constante, cada minuto de esfuerzo queda registrado y se acumula como parte de tu camino de aprendizaje.
+
+  ---
+
+  # 2. Práctica y constancia en el aprendizaje
+
+  * **Completar el 70 % o más de una sesión de estudio con el temporizador → +10 ⭐**
+  * **Escribir un registro de aprendizaje después de terminar de estudiar → +10 ⭐**
+  * **Estudiar 50 minutos o más en un día → +50 ⭐**
+  * **Estudiar todos los días de domingo a sábado durante una semana completa, sin faltar ningún día → +300 ⭐**
+  * **Estudiar todos los días durante un mes completo, sin faltar ningún día → +500 ⭐**
+
+  Un día de constancia es un pequeño paso.
+
+  Una semana de constancia puede convertirse en un hábito.
+
+  Y un mes de constancia puede convertirse en un verdadero desafío para ti mismo.
+
+  **Cada vez que continúas a pesar de las dificultades, no solo acumulas estrellas. También estás construyendo disciplina, confianza en ti mismo y la fuerza para seguir avanzando.**
+
+  ---
+
+  # 3. Evaluación y registro del aprendizaje
+
+  * **Registrar la evaluación semanal → +10 ⭐**
+  * **Registrar la evaluación de una unidad → +10 ⭐**
+  * **Registrar el examen de mitad de curso → +50 ⭐**
+  * **Registrar el examen final → +50 ⭐**
+  * **Registrar el examen de práctica → +50 ⭐**
+
+  ## **Las estrellas no se obtienen simplemente por conseguir una buena nota en un examen.**
+
+  Porque para nosotros, la nota final no es lo único importante.
+
+  También es importante que puedas mirar tu propio resultado,
+
+  reconocer lo que hiciste bien,
+
+  entender lo que necesitas mejorar,
+
+  y preguntarte:
+
+  ### **“¿Qué puedo hacer mejor la próxima vez?”**
+
+  Mirar atrás, reflexionar sobre tu aprendizaje y utilizar lo que has aprendido para dar un paso mejor la próxima vez también forma parte de aprender.
+
+  **Estudiar no significa solamente conseguir buenas notas.**
+
+  **Aprender significa conocerte mejor, aprender de tus errores y avanzar un paso más cada vez.**
+
+  ---
+
+  # 🌱 Etapa de Crecimiento
+
+  ## **“Estoy construyendo poco a poco mis hábitos de estudio.”**
+
+  No necesitas hacerlo todo perfectamente desde el principio.
+
+  Tampoco necesitas estudiar durante muchas horas desde el primer día.
+
+  Empieza con un pequeño paso.
+
+  Estudia un poco cada día.
+
+  Aprende por decisión propia.
+
+  Registra lo que has aprendido.
+
+  Y trata de mantener el esfuerzo, incluso cuando tus avances parezcan pequeños.
+
+  **La Etapa de Crecimiento** es el momento en el que comienzas a estudiar y vas construyendo poco a poco buenos hábitos de aprendizaje.
+
+  ---
+
+  # 🔥 Etapa de Desafío
+
+  ## **“Quiero desafiarme con una meta un poco más alta.”**
+
+  Cuando tus hábitos de estudio comienzan a consolidarse, es momento de dar un paso más.
+
+  Establece tus propios objetivos.
+
+  Después, avanza hacia ellos paso a paso.
+
+  Con la práctica constante, desarrollarás tus capacidades de aprendizaje, aprenderás a estudiar de manera más eficaz y mejorarás tu capacidad para gestionar tu tiempo y tus esfuerzos.
+
+  **La Etapa de Desafío** es el momento en el que comienzas a establecer objetivos más altos por ti mismo y a actuar activamente para alcanzarlos.
+
+  ---
+
+  # 🏆 Etapa de Logro
+
+  ## **“Estoy alcanzando poco a poco los objetivos que yo mismo me he propuesto.”**
+
+  No se trata solamente de estudiar de manera constante.
+
+  También se trata de aprender a gestionar por ti mismo todo tu proceso de aprendizaje:
+
+  ### **Planificar → Practicar → Registrar → Evaluar → Mejorar**
+
+  Planifico.
+
+  Lo pongo en práctica.
+
+  Registro lo que he hecho.
+
+  Reviso el resultado.
+
+  Y utilizo lo que he aprendido para hacer mejor mi próximo plan.
+
+  **La Etapa de Logro** es el momento en el que mantienes un aprendizaje autónomo y desarrollas cada vez más la capacidad de dirigir tu propio proceso de aprendizaje.
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **Mi camino de aprendizaje crece paso a paso.**
+
+  ### 🌱 Etapa de Crecimiento
+
+  ↓
+  **Construir un hábito constante de estudio**
+
+  ### 🔥 Etapa de Desafío
+
+  ↓
+  **Desafiarme para alcanzar objetivos más altos**
+
+  ### 🏆 Etapa de Logro
+
+  ↓
+  **Establecer mis propios objetivos y alcanzarlos con mi propio esfuerzo**
+
+  ---
+
+  # **Lo más importante no es el dinero.**
+
+  Estés en la Etapa de Crecimiento, en la Etapa de Desafío o en la Etapa de Logro,
+
+  el verdadero valor de tu aprendizaje no está en cuánto dinero puedas recibir.
+
+  La pregunta más importante es:
+
+  ## **“¿Cuánto estoy aprendiendo y cuánto estoy creciendo gracias a mi propio esfuerzo?”**
+
+  ¿Soy hoy un poco mejor que ayer?
+
+  ¿He dado hoy un paso hacia adelante?
+
+  **Eso es lo que realmente significa crecer a través del aprendizaje.**
+
+  ---
+
+  # 💰 ¿Qué significado tienen las estrellas en relación con la beca?
+
+  Actualmente, la beca de GKE StudyUp se calcula de la siguiente manera:
+
+  ### **⭐ 1 estrella = 2, 3 o 4 wones surcoreanos (KRW)**
+
+  Pero el significado más importante de una estrella no es el dinero.
+
+  ## **⭐ Una estrella es un registro de tu aprendizaje, tu esfuerzo y tu crecimiento.**
+
+  Tus padres pueden comprobar los logros de aprendizaje que has acumulado durante tu camino.
+
+  A partir de esos logros y de tu esfuerzo constante, tus padres pueden darte una beca como una forma de:
+
+  **reconocer tu esfuerzo, animarte a seguir adelante y acompañarte en tu camino de aprendizaje.**
+
+  La cantidad de la beca será determinada por los padres de acuerdo con las circunstancias y las posibilidades de cada familia.
+
+  Por eso, **las estrellas y la beca no significan lo mismo.**
+
+  ### **Las estrellas registran tu esfuerzo y tu crecimiento.**
+
+  ### **La beca representa el apoyo, el reconocimiento y el ánimo de tus padres hacia ese camino.**
+
+  El propósito no es poner un precio al estudio de un niño.
+
+  **El dinero puede ser una forma de motivación, pero lo verdaderamente valioso es el hábito de estudio, la confianza en uno mismo, la capacidad de aprender por cuenta propia y el crecimiento que el estudiante va construyendo cada día.**
+
+  ---
+
+  # 🎯 ¡Recuérdalo siempre!
+
+  ## **Estudiar no es competir con los demás.**
+
+  Lo importante no es ser mejor que otra persona.
+
+  Lo importante es que:
+
+  **el tú de hoy sea un poco mejor que el tú de ayer,**
+
+  y que:
+
+  **el tú de mañana haya avanzado un paso más que el tú de hoy.**
+
+  Hoy estudiaste 10 minutos más.
+
+  **Eso también es crecer.**
+
+  Hoy escribiste tu registro de aprendizaje.
+
+  **Eso también es crecer.**
+
+  Hoy revisaste con sinceridad el resultado de tu examen.
+
+  **Eso también es crecer.**
+
+  Hoy tu estudio no salió como habías planeado, pero volviste a hacer un plan y decidiste intentarlo de nuevo.
+
+  **Eso también es crecer.**
+
+  ---
+
+  # **Los pequeños esfuerzos, cuando se repiten, se convierten en hábitos.**
+
+  # **Los hábitos acumulados se convierten en capacidades.**
+
+  # **Y las capacidades que desarrollamos poco a poco se convierten en logros.**
+
+  ---
+
+  # ⭐ **Yo construyo mi propio camino de aprendizaje.**
+
+  ### **Planifica → Practica → Registra → Reflexiona → Vuelve a desafiarte**
+
+  No esperes a que otra persona te diga cuándo debes estudiar.
+
+  Aprende a:
+
+  **pensar por ti mismo,**
+
+  **tomar tus propias decisiones,**
+
+  **actuar por ti mismo,**
+
+  **reconocer tu propio progreso,**
+
+  y
+
+  **seguir avanzando.**
+
+  ## **Tu camino de aprendizaje te pertenece.**
+
+  Y puedes construirlo tú mismo,
+
+  **paso a paso.**
+
+  ---
+
+  GKE StudyUp quiere ayudar a cada estudiante a desarrollar **la capacidad de aprender por sí mismo**,
+
+  a establecer sus propios objetivos,
+
+  a avanzar constantemente hacia ellos
+
+  y a crecer un poco más cada día.
+
+  Puede que tu esfuerzo de hoy parezca muy pequeño.
+
+  Tal vez solo estudiaste 10 minutos más.
+
+  Tal vez escribiste el plan para tu próxima sesión de estudio.
+
+  Tal vez hoy encontraste dificultades, pero decidiste volver a empezar.
+
+  ## **Cada uno de esos pasos tiene valor.**
+
+  Porque los pequeños pasos que seguimos dando cada día
+
+  pueden llevarnos algún día mucho más lejos
+
+  de lo que alguna vez imaginamos.
+
+  Y quizá algún día, cuando mires hacia atrás y veas todo el camino que has recorrido, puedas decirte a ti mismo:
+
+  ## **“Qué bueno que aquel día no me rendí.”**
+
+  ---
+
+  # 🌱 Etapa de Crecimiento → 🔥 Etapa de Desafío → 🏆 Etapa de Logro
+
+  ## **El pequeño paso que das hoy construye a la persona que serás mañana.**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 스페인어
+
+    'TH': '''
+  # ⭐ GKE StudyUp – คู่มือทุนการศึกษาสำหรับนักเรียน
+
+    ## **การเรียนของฉันได้รับการบันทึก และการเติบโตของฉันกลายเป็นความสำเร็จ**
+
+  GKE StudyUp ไม่ใช่แพลตฟอร์มที่ทำให้คุณต้องเรียนเพียงเพราะมีใครสั่งหรือบังคับให้เรียน
+
+  แต่เป็นแพลตฟอร์มการเรียนรู้ที่ช่วยให้คุณพัฒนาความสามารถที่สำคัญยิ่งกว่า นั่นคือ
+
+  **การตั้งเป้าหมายด้วยตัวเอง วางแผนการเรียนด้วยตัวเอง ลงมือทำตามแผน และรับผิดชอบเส้นทางการเรียนรู้ของตัวเอง**
+
+  เวลาที่คุณใช้เรียน กระบวนการฝึกฝน สิ่งที่คุณเรียนรู้ รวมถึงบันทึกและการประเมินผลการเรียน จะถูกบันทึกไว้ในรูปแบบของ ⭐ ดาว
+
+  แต่ดาวไม่ได้เป็นเพียงตัวเลขหรือคะแนนธรรมดา
+
+  ## ⭐ **ดาวคือร่องรอยของการเรียนรู้ที่คุณลงมือทำด้วยตัวเอง**
+
+  ดาวแต่ละดวงเป็นเหมือนหลักฐานเล็ก ๆ ของความพยายาม และทุกก้าวที่คุณเดินไปบนเส้นทางแห่งการเติบโต
+
+  วันนี้คุณเรียนเพิ่มขึ้นอีกเล็กน้อย
+
+  คุณบันทึกสิ่งที่ได้เรียนรู้
+
+  คุณทบทวนผลการสอบของตัวเอง
+
+  คุณคิดถึงสิ่งที่ควรเรียนต่อไปและวางแผนใหม่
+
+  **ทุกก้าวเล็ก ๆ เหล่านี้จะค่อย ๆ สะสม และกลายเป็นส่วนหนึ่งของการเรียนรู้ การเติบโต และความสำเร็จของคุณ**
+
+  ---
+
+  # ⭐ จะได้รับดาวได้อย่างไร?
+
+  ## 1. เวลาที่ใช้ในการเรียน
+
+  ### **เรียน 1 นาที = ⭐ 1 ดาว**
+
+  เมื่อคุณเรียนอย่างสม่ำเสมอ ทุกนาทีแห่งความพยายามจะถูกบันทึกและสะสมไว้เป็นส่วนหนึ่งของเส้นทางการเรียนรู้ของคุณ
+
+  ---
+
+  # 2. การฝึกฝนและความสม่ำเสมอในการเรียน
+
+  * **เรียนด้วย Timer และทำครบตั้งแต่ 70% ขึ้นไป → +10 ⭐**
+  * **เขียนบันทึกการเรียนหลังจากเรียนเสร็จ → +10 ⭐**
+  * **เรียนวันละ 50 นาทีขึ้นไป → +50 ⭐**
+  * **เรียนทุกวันตั้งแต่วันอาทิตย์ถึงวันเสาร์ครบหนึ่งสัปดาห์ โดยไม่ขาดแม้แต่วันเดียว → +300 ⭐**
+  * **เรียนทุกวันตลอดหนึ่งเดือน โดยไม่ขาดแม้แต่วันเดียว → +500 ⭐**
+
+  การพยายามอย่างต่อเนื่องหนึ่งวัน คือก้าวเล็ก ๆ
+
+  การพยายามอย่างต่อเนื่องหนึ่งสัปดาห์ อาจกลายเป็นนิสัย
+
+  และการพยายามอย่างต่อเนื่องหนึ่งเดือน คือความท้าทายที่ยิ่งใหญ่สำหรับตัวคุณเอง
+
+  **ทุกครั้งที่คุณยังคงพยายามต่อไป คุณไม่ได้เพียงสะสมดาวเท่านั้น แต่คุณกำลังสร้างวินัย ความมั่นใจในตัวเอง และพลังที่จะก้าวต่อไปด้วย**
+
+  ---
+
+  # 3. การประเมินและบันทึกการเรียนรู้
+
+  * **บันทึกผลการประเมินรายสัปดาห์ → +10 ⭐**
+  * **บันทึกผลการประเมินแต่ละหน่วยการเรียน → +10 ⭐**
+  * **บันทึกผลสอบกลางภาค → +50 ⭐**
+  * **บันทึกผลสอบปลายภาค → +50 ⭐**
+  * **บันทึกผลสอบจำลอง → +50 ⭐**
+
+  ## **คุณไม่ได้รับดาวเพียงเพราะได้คะแนนสอบสูง**
+
+  เพราะเราเชื่อว่าคะแนนไม่ได้เป็นสิ่งสำคัญเพียงอย่างเดียว
+
+  สิ่งสำคัญคือการที่คุณสามารถมองย้อนกลับไปยังผลการเรียนของตัวเอง
+
+  มองเห็นว่าสิ่งใดที่คุณทำได้ดี
+
+  เข้าใจว่าสิ่งใดที่คุณควรปรับปรุง
+
+  และถามตัวเองว่า
+
+  ### **“ครั้งหน้าฉันจะทำอะไรให้ดีขึ้นได้บ้าง?”**
+
+  การทบทวนการเรียนรู้ของตัวเอง และนำสิ่งที่ได้เรียนรู้ไปปรับใช้กับก้าวต่อไป ก็เป็นส่วนสำคัญของการเรียนรู้เช่นกัน
+
+  **การเรียนไม่ใช่เพียงการทำคะแนนให้สูง**
+
+  **การเรียนรู้คือการเข้าใจตัวเองมากขึ้น เรียนรู้จากสิ่งที่ผิดพลาด และก้าวไปข้างหน้าอีกหนึ่งก้าวในทุกครั้ง**
+
+  ---
+
+  # 🌱 ช่วงแห่งการเติบโต
+
+  ## **“ฉันกำลังสร้างนิสัยการเรียนของตัวเองทีละก้าว”**
+
+  คุณไม่จำเป็นต้องทำทุกอย่างให้สมบูรณ์แบบตั้งแต่เริ่มต้น
+
+  และไม่จำเป็นต้องเรียนหลายชั่วโมงตั้งแต่วันแรก
+
+  เริ่มจากก้าวเล็ก ๆ
+
+  เรียนวันละเล็กน้อย
+
+  เรียนรู้ด้วยความตั้งใจของตัวเอง
+
+  บันทึกสิ่งที่ได้เรียนรู้
+
+  และพยายามทำอย่างต่อเนื่อง แม้ว่าความก้าวหน้าของคุณจะยังดูเล็กน้อยก็ตาม
+
+  **ช่วงแห่งการเติบโต** คือช่วงเวลาที่คุณเริ่มต้นเรียนรู้และค่อย ๆ สร้างนิสัยการเรียนที่ดีให้กับตัวเอง
+
+  ---
+
+  # 🔥 ช่วงแห่งความท้าทาย
+
+  ## **“ฉันอยากท้าทายตัวเองด้วยเป้าหมายที่สูงขึ้นอีกเล็กน้อย”**
+
+  เมื่อเริ่มสร้างนิสัยการเรียนที่มั่นคงแล้ว ถึงเวลาที่จะก้าวไปอีกขั้น
+
+  ตั้งเป้าหมายด้วยตัวเอง
+
+  จากนั้นค่อย ๆ เดินไปสู่เป้าหมายนั้นทีละก้าว
+
+  เมื่อฝึกฝนอย่างต่อเนื่อง คุณจะพัฒนาความสามารถในการเรียนรู้ เรียนได้อย่างมีประสิทธิภาพมากขึ้น และเรียนรู้ที่จะจัดการเวลาและความพยายามของตัวเอง
+
+  **ช่วงแห่งความท้าทาย** คือช่วงเวลาที่คุณเริ่มตั้งเป้าหมายที่สูงขึ้นด้วยตัวเอง และลงมือทำอย่างจริงจังเพื่อไปให้ถึงเป้าหมายนั้น
+
+  ---
+
+  # 🏆 ช่วงแห่งความสำเร็จ
+
+  ## **“ฉันกำลังทำให้เป้าหมายที่ฉันตั้งไว้ด้วยตัวเองกลายเป็นจริงทีละขั้น”**
+
+  สิ่งนี้ไม่ได้หมายถึงเพียงการเรียนอย่างสม่ำเสมอ
+
+  แต่หมายถึงการเรียนรู้ที่จะดูแลและจัดการกระบวนการเรียนรู้ของตัวเองทั้งหมด
+
+  ### **วางแผนการเรียน → ลงมือทำ → บันทึก → ประเมิน → ปรับปรุง**
+
+  ฉันวางแผน
+
+  ฉันลงมือทำ
+
+  ฉันบันทึกสิ่งที่ทำ
+
+  ฉันทบทวนผลลัพธ์
+
+  จากนั้นฉันนำสิ่งที่ได้เรียนรู้มาปรับแผนครั้งต่อไปให้ดีขึ้น
+
+  **ช่วงแห่งความสำเร็จ** คือช่วงที่คุณสามารถเรียนรู้ด้วยตัวเองอย่างต่อเนื่อง และพัฒนาความสามารถในการจัดการเส้นทางการเรียนรู้ของตัวเองได้มากขึ้น
+
+  ---
+
+  # 🌱 → 🔥 → 🏆
+
+  ## **เส้นทางการเรียนรู้ของฉันเติบโตขึ้นทีละก้าว**
+
+  ### 🌱 ช่วงแห่งการเติบโต
+
+  ↓
+  **สร้างนิสัยการเรียนอย่างสม่ำเสมอ**
+
+  ### 🔥 ช่วงแห่งความท้าทาย
+
+  ↓
+  **ท้าทายตัวเองด้วยเป้าหมายที่สูงขึ้น**
+
+  ### 🏆 ช่วงแห่งความสำเร็จ
+
+  ↓
+  **ตั้งเป้าหมายด้วยตัวเองและทำให้สำเร็จด้วยความพยายามของตัวเอง**
+
+  ---
+
+  # **สิ่งที่สำคัญที่สุดไม่ใช่เงิน**
+
+  ไม่ว่าคุณจะอยู่ในช่วงแห่งการเติบโต ช่วงแห่งความท้าทาย หรือช่วงแห่งความสำเร็จ
+
+  คุณค่าที่แท้จริงของการเรียนไม่ได้อยู่ที่จำนวนเงินที่คุณจะได้รับ
+
+  คำถามที่สำคัญกว่าคือ
+
+  ## **“ฉันกำลังเรียนรู้และเติบโตขึ้นมากแค่ไหนจากความพยายามของตัวเอง?”**
+
+  วันนี้ฉันดีกว่าเมื่อวานขึ้นอีกเล็กน้อยหรือไม่?
+
+  วันนี้ฉันก้าวไปข้างหน้าอีกหนึ่งก้าวหรือไม่?
+
+  **นี่ต่างหากคือความก้าวหน้าที่แท้จริงของการเรียนรู้**
+
+  ---
+
+  # 💰 ดาวมีความหมายอย่างไรต่อทุนการศึกษา?
+
+  ปัจจุบันทุนการศึกษาของ GKE StudyUp คำนวณตามระบบดังนี้
+
+  ### **⭐ 1 ดาว = 2, 3 หรือ 4 วอนเกาหลี (KRW)**
+
+  แต่ความหมายที่สำคัญที่สุดของดาวไม่ใช่เงิน
+
+  ## **⭐ ดาวคือบันทึกความพยายาม การเรียนรู้ และการเติบโตของคุณ**
+
+  ผู้ปกครองสามารถมองเห็นความสำเร็จด้านการเรียนรู้ที่คุณสะสมมาตลอดเส้นทางการเรียนของคุณ
+
+  จากความสำเร็จและความพยายามเหล่านั้น ผู้ปกครองสามารถมอบทุนการศึกษาให้คุณ เพื่อเป็น
+
+  **การยอมรับในความพยายาม การให้กำลังใจ และการสนับสนุนคุณบนเส้นทางการเรียนรู้**
+
+  จำนวนเงินทุนการศึกษาจะขึ้นอยู่กับการตัดสินใจของผู้ปกครอง โดยพิจารณาตามสถานการณ์และความสามารถของแต่ละครอบครัว
+
+  ดังนั้น **ดาวและทุนการศึกษาจึงไม่ได้มีความหมายเดียวกัน**
+
+  ### **ดาวบันทึกความพยายามและการเติบโตของคุณ**
+
+  ### **ทุนการศึกษาเป็นการแสดงถึงกำลังใจ การยอมรับ และการสนับสนุนจากผู้ปกครองต่อเส้นทางของคุณ**
+
+  จุดประสงค์ไม่ใช่การนำเงินมาเป็นตัววัดคุณค่าของการเรียนของเด็ก
+
+  **เงินอาจเป็นกำลังใจอย่างหนึ่ง แต่สิ่งที่มีคุณค่ามากกว่าคือ นิสัยการเรียน ความมั่นใจในตัวเอง ความสามารถในการเรียนรู้ด้วยตัวเอง และการเติบโตที่เด็กแต่ละคนกำลังสร้างขึ้นในทุก ๆ วัน**
+
+  ---
+
+  # 🎯 จงจำไว้เสมอ!
+
+  ## **การเรียนไม่ใช่การแข่งขันกับคนอื่น**
+
+  สิ่งสำคัญไม่ใช่ว่าคุณเก่งกว่าคนอื่นหรือไม่
+
+  สิ่งสำคัญคือ
+
+  **ตัวคุณในวันนี้ดีกว่าตัวคุณเมื่อวานขึ้นอีกเล็กน้อย**
+
+  และ
+
+  **ตัวคุณในวันพรุ่งนี้ก้าวไปไกลกว่าตัวคุณในวันนี้อีกหนึ่งก้าว**
+
+  วันนี้คุณเรียนเพิ่มอีก 10 นาที
+
+  **นี่ก็เป็นการเติบโต**
+
+  วันนี้คุณเขียนบันทึกการเรียนรู้ของตัวเอง
+
+  **นี่ก็เป็นการเติบโต**
+
+  วันนี้คุณทบทวนผลการสอบของตัวเองอย่างจริงจัง
+
+  **นี่ก็เป็นการเติบโต**
+
+  วันนี้การเรียนไม่เป็นไปตามแผน แต่คุณกลับมาวางแผนใหม่และตัดสินใจลองอีกครั้ง
+
+  **นี่ก็เป็นการเติบโต**
+
+  ---
+
+  # **ความพยายามเล็ก ๆ เมื่อทำซ้ำอย่างต่อเนื่อง จะกลายเป็นนิสัย**
+
+  # **นิสัยที่สะสมจะกลายเป็นความสามารถ**
+
+  # **และความสามารถที่พัฒนาขึ้นทุกวัน จะกลายเป็นความสำเร็จ**
+
+  ---
+
+  # ⭐ **ฉันเป็นคนสร้างเส้นทางการเรียนรู้ของตัวเอง**
+
+  ### **วางแผน → ลงมือทำ → บันทึก → ทบทวน → ท้าทายตัวเองอีกครั้ง**
+
+  อย่ารอให้คนอื่นบอกว่าคุณควรเรียนเมื่อไร
+
+  จงเรียนรู้ที่จะ
+
+  **คิดด้วยตัวเอง**
+
+  **ตัดสินใจด้วยตัวเอง**
+
+  **ลงมือทำด้วยตัวเอง**
+
+  **มองเห็นความก้าวหน้าของตัวเอง**
+
+  และ
+
+  **ก้าวต่อไปข้างหน้าอย่างต่อเนื่อง**
+
+  ## **เส้นทางการเรียนรู้ของคุณเป็นของคุณเอง**
+
+  และคุณสามารถสร้างเส้นทางนั้นด้วยตัวเอง
+
+  **ทีละก้าว**
+
+  ---
+
+  GKE StudyUp ต้องการช่วยให้นักเรียนทุกคนพัฒนา **พลังแห่งการเรียนรู้ด้วยตัวเอง**
+
+  ให้สามารถตั้งเป้าหมายของตัวเอง
+
+  ก้าวไปสู่เป้าหมายนั้นอย่างต่อเนื่อง
+
+  และเติบโตขึ้นทีละเล็กทีละน้อยในทุก ๆ วัน
+
+  ความพยายามของคุณในวันนี้อาจดูเหมือนเป็นเรื่องเล็กมาก
+
+  บางทีคุณอาจเรียนเพิ่มเพียง 10 นาที
+
+  บางทีคุณอาจเขียนแผนสำหรับการเรียนครั้งต่อไป
+
+  บางทีวันนี้คุณอาจพบกับความยากลำบาก แต่คุณก็ตัดสินใจที่จะเริ่มต้นใหม่อีกครั้ง
+
+  ## **ทุกก้าวเหล่านี้มีคุณค่า**
+
+  เพราะก้าวเล็ก ๆ ที่เรายังคงเดินต่อไปในทุกวัน
+
+  อาจพาเราไปได้ไกลกว่าที่เราเคยคิดว่าตัวเองจะไปถึง
+
+  และวันหนึ่ง เมื่อคุณหันกลับมามองเส้นทางที่เดินผ่านมา คุณอาจพูดกับตัวเองด้วยรอยยิ้มว่า
+
+  ## **“ดีจริง ๆ ที่วันนั้นฉันไม่ยอมแพ้”**
+
+  ---
+
+  # 🌱 ช่วงแห่งการเติบโต → 🔥 ช่วงแห่งความท้าทาย → 🏆 ช่วงแห่งความสำเร็จ
+
+  ## **ก้าวเล็ก ๆ ที่คุณทำในวันนี้ จะสร้างตัวคุณในวันพรุ่งนี้**
+
+  **GKE StudyUp**
+
+  **Global Knowledge Education**
+  ''', // 태국어
   };
 
   // 🆕 현재 선택된 언어에 맞는 안내문 반환. 해당 언어가 아직 비어있으면(원장님이 아직
@@ -5330,14 +8448,237 @@ Global Knowledge Education
 
   // 🆕 [장학금 방 UI 개편 2026-09-17] 탭2 "실시간 성취별" — 기본별/보너스별 내역과
   // 안내문을 담은 "나의 성취별 현황" 카드를 별도 탭으로 분리했습니다.
+  // 🆕 [부모 운동 응원별 2026-09-29] 그 바로 아래에 "부모님이 보내 준 응원별" 카드 추가
+  // (자녀 본인 별·장학금과 완전히 별개 - 읽기만 함)
   Widget _buildAchievementStarsTabContent() {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [_buildAchievementStarsCard()],
+          children: [
+            _buildAchievementStarsCard(),
+            _buildParentGiftStarsCard(),
+          ],
         ),
+      ),
+    );
+  }
+
+  // ============================================================================
+  // 🆕 [부모 운동 응원별 2026-09-29] 부모님이 운동해서 모아 보내 준 별 — 진한 황금색 카드.
+  // links/{내 코드}의 parentGiftStars / parentGiftSpecialStars / parentGiftHistory를
+  // 실시간으로 읽기만 함. 특별 축하 별은 따로 짙은 칸에 금색 글씨로 구분해서 보여줌.
+  // ============================================================================
+  Widget _buildParentGiftStarsCard() {
+    if (_myLinkCode == null) return const SizedBox.shrink(); // 부모와 연결 전이면 표시 안 함
+    // 🆕 [B안 2026-09-30] 금색 머리띠 + 남색 몸통 (명품 포장처럼 금색은 머리띠·숫자·테두리에만)
+    const Color ink = Color(0xFF1A1203);
+    const Color deepGold = Color(0xFFD4AF37);
+    const Color paleGold = Color(0xFFFFE9A8);
+    const Color softGold = Color(0xFFC9B27A);
+    const Color cream = Color(0xFFFFF6D6);
+    const Color navy = Color(0xFF0D1527);
+    const Color navyInner = Color(0xFF111A2E);
+    final String lang = DkeLang.current;
+    final bool isKo = lang == 'KO';
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(_myLinkCode!),
+      builder: (context, snapshot) {
+        final Map<String, dynamic> data = snapshot.data?.data() ?? {};
+        final int total = (data['parentGiftStars'] as num?)?.toInt() ?? 0;
+        final int special = (data['parentGiftSpecialStars'] as num?)?.toInt() ?? 0;
+        final int normal = total - special;
+        final List<Map<String, dynamic>> recent = ((data['parentGiftHistory'] as List?) ?? [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+            .reversed
+            .take(3)
+            .toList();
+
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 18),
+          decoration: BoxDecoration(
+            color: navy,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: deepGold, width: 1.5),
+            boxShadow: [BoxShadow(color: deepGold.withOpacity(0.25), blurRadius: 22, spreadRadius: 1)],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(17),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ---------- 금색 머리띠 ----------
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFE9C860), deepGold, Color(0xFFB8922A)],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.favorite_rounded, color: ink, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: isKo
+                            ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('CHEER STARS', style: GoogleFonts.gowunBatang(color: ink, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+                            Text(csKo('giftTitle'), style: GoogleFonts.notoSansKr(color: ink, fontWeight: FontWeight.w900, fontSize: 15.5)),
+                          ],
+                        )
+                            : Text(cs('giftTitle', lang: lang), style: GoogleFonts.notoSans(color: ink, fontWeight: FontWeight.w900, fontSize: 15)),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ---------- 남색 몸통 ----------
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 받은 응원별 전체
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(cs('giftTotal', lang: lang), style: GoogleFonts.notoSansKr(color: softGold, fontSize: 12)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  cs('nStars', lang: lang, args: {'n': total}),
+                                  style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 30),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: const Color(0xFFFFD700).withOpacity(0.45), blurRadius: 18, spreadRadius: 1)],
+                            ),
+                            child: const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 38),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 일반 응원 / 특별 축하
+                      Row(
+                        children: [
+                          Expanded(child: _giftStat(Icons.star_rounded, cs('giftNormal', lang: lang), cs('nStars', lang: lang, args: {'n': normal}), highlight: false)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _giftStat(Icons.celebration_rounded, cs('giftSpecial', lang: lang), cs('nStars', lang: lang, args: {'n': special}), highlight: true)),
+                        ],
+                      ),
+
+                      // 최근 받은 응원 3개
+                      if (recent.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text(cs('giftRecent', lang: lang), style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        ...recent.map((h) {
+                          final int stars = (h['stars'] as num?)?.toInt() ?? 0;
+                          final bool isSpecial = h['type'] == 'special';
+                          final String message = (h['message'] as String?) ?? '';
+                          final dynamic sentAt = h['sentAt'];
+                          final DateTime? when = sentAt is Timestamp ? sentAt.toDate() : null;
+                          final String dateText = when != null ? '${when.month}/${when.day}' : '';
+                          // 🆕 [2026-09-30] 부모가 그날 한 일 (운동 시간 + 가족 활동 체크)
+                          final List<String> actKeys = ((h['acts'] as List?) ?? []).map((e) => e.toString()).toList();
+                          final int exMin = (h['exMin'] as num?)?.toInt() ?? 0;
+                          final List<String> actNames = [
+                            if (exMin > 0) cs('giftActEx', lang: lang, args: {'n': exMin}),
+                            ...actKeys.map((k) => cs('it_$k', lang: lang)),
+                          ];
+                          return Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: navyInner,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: isSpecial ? deepGold.withOpacity(0.6) : Colors.white10),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(isSpecial ? '🎉' : '⭐', style: const TextStyle(fontSize: 16)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '$dateText · ${cs('nStars', lang: lang, args: {'n': stars})}',
+                                        style: GoogleFonts.notoSansKr(color: isSpecial ? paleGold : cream, fontWeight: FontWeight.bold, fontSize: 12.5),
+                                      ),
+                                      if (message.isNotEmpty)
+                                        Text(message, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.4)),
+                                      if (actNames.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Text(
+                                            cs('giftActs', lang: lang, args: {'list': actNames.join(' · ')}),
+                                            style: GoogleFonts.notoSansKr(color: softGold, fontSize: 11.5, height: 1.4, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ] else ...[
+                        const SizedBox(height: 14),
+                        Text(cs('giftEmpty', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 12, height: 1.5)),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(cs('giftNote', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11, height: 1.5)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // 🆕 [B안] 일반 응원 = 남색 칸 / 특별 축하 = 짙은 금빛 칸에 금테 (따로 구분)
+  Widget _giftStat(IconData icon, String label, String value, {required bool highlight}) {
+    const Color deepGold = Color(0xFFD4AF37);
+    const Color paleGold = Color(0xFFFFE9A8);
+    const Color softGold = Color(0xFFC9B27A);
+    const Color cream = Color(0xFFFFF6D6);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: highlight ? const Color(0xFF2A1F05) : const Color(0xFF111A2E),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: highlight ? deepGold : Colors.white10, width: highlight ? 1.2 : 1),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: highlight ? paleGold : deepGold, size: 20),
+          const SizedBox(height: 4),
+          Text(value, style: GoogleFonts.notoSansKr(color: highlight ? paleGold : cream, fontWeight: FontWeight.w900, fontSize: 17)),
+          Text(label, style: GoogleFonts.notoSansKr(color: highlight ? paleGold.withOpacity(0.85) : softGold, fontSize: 11.5)),
+        ],
       ),
     );
   }
@@ -5500,6 +8841,55 @@ Global Knowledge Education
     final map = _difficultyMap[key];
     if (map == null) return key;
     return map[DkeLang.current] ?? map['EN'] ?? map['KO'] ?? key;
+  }
+
+  // 🆕 [2026-09-27] 영문 + 한글 함께 보여주기 (기본모드: 영문 위·한글 아래 / 외국어: 그 언어만)
+  static String _biT(String key) {
+    final map = _uiText[key];
+    if (map == null) return key;
+    if (DkeLang.isForeignSelected) return _t(key);
+    return "${map['EN'] ?? ''}\n${map['KO'] ?? ''}";
+  }
+
+  // 🆕 [2026-09-27] 별 개수·횟수 단위 12개 언어
+  static const Map<String, String> _kStarUnit = {'KO': '개', 'EN': 'stars', 'JA': '個', 'ZH': '颗', 'FR': 'étoiles', 'DE': 'Sterne', 'RU': 'звёзд', 'AR': 'نجمة', 'HI': 'सितारे', 'VI': 'sao', 'ES': 'estrellas', 'TH': 'ดวง'};
+  static const Map<String, String> _kTimesUnit = {'KO': '회', 'EN': 'times', 'JA': '回', 'ZH': '次', 'FR': 'fois', 'DE': 'Mal', 'RU': 'раз', 'AR': 'مرة', 'HI': 'बार', 'VI': 'lần', 'ES': 'veces', 'TH': 'ครั้ง'};
+
+  // 기본모드 "690개 / stars", 외국어 "690 星" 처럼
+  static String _starsText(int n) {
+    if (DkeLang.isForeignSelected) return '$n ${_kStarUnit[DkeLang.current] ?? 'stars'}';
+    return '$n개 / stars';
+  }
+
+  // 기본모드 "3회 / times", 외국어 "3 回" 처럼
+  static String _timesText(int n) {
+    if (DkeLang.isForeignSelected) return '$n ${_kTimesUnit[DkeLang.current] ?? 'times'}';
+    return '$n회 / times';
+  }
+
+  // 🆕 [2026-09-27] 장학금 유형 이름 12개 언어 (순서: 성장형 / 도전형 / 성취형)
+  static const List<Map<String, String>> _kTypeLabels = [
+    {'KO': '성장형', 'EN': 'Growth', 'JA': '成長型', 'ZH': '成长型', 'FR': 'Croissance', 'DE': 'Wachstum', 'RU': 'Рост', 'AR': 'النمو', 'HI': 'विकास', 'VI': 'Phát triển', 'ES': 'Crecimiento', 'TH': 'เติบโต'},
+    {'KO': '도전형', 'EN': 'Challenge', 'JA': '挑戦型', 'ZH': '挑战型', 'FR': 'Défi', 'DE': 'Herausforderung', 'RU': 'Вызов', 'AR': 'التحدي', 'HI': 'चुनौती', 'VI': 'Thử thách', 'ES': 'Desafío', 'TH': 'ท้าทาย'},
+    {'KO': '성취형', 'EN': 'Achievement', 'JA': '達成型', 'ZH': '成就型', 'FR': 'Réussite', 'DE': 'Erfolg', 'RU': 'Достижение', 'AR': 'الإنجاز', 'HI': 'उपलब्धि', 'VI': 'Thành tựu', 'ES': 'Logro', 'TH': 'ความสำเร็จ'},
+  ];
+
+  // 제목: 기본모드 "Growth · (영문 제목)" 줄 + "성장형 · (한글 제목)" 줄 / 외국어: 그 언어 한 줄
+  static String _typeTitleLine(int typeIndex) {
+    final Map<String, String> tl = _kTypeLabels[typeIndex];
+    final Map<String, String>? title = _uiText['thisMonthEstimatedScholarship'];
+    if (DkeLang.isForeignSelected) {
+      return "${tl[DkeLang.current] ?? tl['EN']} · ${_t('thisMonthEstimatedScholarship')}";
+    }
+    return "${tl['EN']} · ${title?['EN'] ?? ''}\n${tl['KO']} · ${title?['KO'] ?? ''}";
+  }
+
+  // 🆕 [2026-09-27] 원 단위 12개 언어 - 기본모드 "13,800원 / won", 외국어 "13,800 ウォン" 처럼
+  static const Map<String, String> _kWonUnit = {'KO': '원', 'EN': 'won', 'JA': 'ウォン', 'ZH': '韩元', 'FR': 'won', 'DE': 'Won', 'RU': 'вон', 'AR': 'وون', 'HI': 'वॉन', 'VI': 'won', 'ES': 'won', 'TH': 'วอน'};
+
+  static String _wonText(String formatted) {
+    if (DkeLang.isForeignSelected) return '$formatted ${_kWonUnit[DkeLang.current] ?? 'won'}';
+    return '$formatted원 / won';
   }
 
   static const Map<String, Map<String, String>> _causeMap = {

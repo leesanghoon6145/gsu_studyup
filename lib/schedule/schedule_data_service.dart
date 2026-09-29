@@ -10,6 +10,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30
 
 class ScheduleItem {
   final String id;
@@ -56,7 +57,7 @@ class ScheduleItem {
 }
 
 class ScheduleDataService {
-  static const String _kScheduleKey = 'gke_general_planner_schedules_v1';
+  static String get _kScheduleKey => plannerScopedKey('gke_general_planner_schedules_v1'); // 🆕 [계정별 분리]
 
   // 🆕 전체 일정 목록 불러오기
   static Future<List<ScheduleItem>> loadAll() async {

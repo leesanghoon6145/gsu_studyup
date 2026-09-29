@@ -43,7 +43,7 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _weekStart = now.subtract(Duration(days: now.weekday - 1));
+    _weekStart = now.subtract(Duration(days: now.weekday % 7)); // 🆕 [2026-09-30] 앱 원칙: 일~토
     _weekEnd = _weekStart.add(const Duration(days: 6));
     _load();
   }
@@ -66,7 +66,7 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
     // 🆕 [운동 연동] 이번 주 운동 기록 + 종목(아이콘/이름 조회용) 로드
     final exerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
     final typesById = {for (final t in exerciseTypes) t.id: t};
-    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords();
+    final allExerciseRecords = await ExerciseDataService.instance.getSessionRecords();
     final weekExercises = allExerciseRecords.where((r) => _inRange(r.date)).toList();
 
     if (!mounted) return;
