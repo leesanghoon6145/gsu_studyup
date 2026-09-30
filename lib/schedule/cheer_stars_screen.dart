@@ -12,6 +12,7 @@
 //   한국어 = 위 규칙 / English = 영어만 / 10개 언어 = 그 언어만
 
 import 'dart:async';
+import 'dart:math' show cos, sin; // 🆕 [2026-10-01] 황금장 별 그리기
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -26,6 +27,8 @@ import 'app_language_service.dart'; // 🆕 [다국어 2026-09-29] 지금 언어
 import 'cheer_phrases.dart'; // 🆕 [2026-09-29] 응원 문구 6개 (12개 언어)
 import 'cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 이 화면의 모든 글자 (12개 언어)
 import 'family_check_dialog.dart'; // 🆕 [가족 활동 체크 2026-09-30]
+import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
+import '../services/user_profile_service.dart'; // 🆕 [응원 가족] 내 이름
 
 class CheerStarsScreen extends StatefulWidget {
   const CheerStarsScreen({super.key});
@@ -89,6 +92,10 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
   final GlobalKey _chooseKey = GlobalKey(); // 🆕 [가족 활동 체크] "타이머로 모으기" 누르면 여기로 내려감
 
   late Future<List<String>> _linkedCodesFuture;
+  // 🆕 [응원 가족 2026-09-30] 내가 "응원 가족"으로 연결된 아이들 (보호자로 연결된 아이와 따로)
+  Set<String> _supporterCodes = {};
+  Map<String, SupportTarget> _supportInfo = {};
+  List<SupportTarget> _pendingTargets = [];
   Future<List<ExerciseRecord>>? _recentRecordsFuture; // 🆕 타이머로 한 최근 운동 기록
 
   // 🆕 종목별 표시 색 (_choices 순서와 같음)
@@ -118,8 +125,43 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     appLanguage.addListener(_onLanguageChanged); // 🆕 [다국어] 언어를 바꾸면 바로 다시 그림
-    _linkedCodesFuture = FamilyLinkService.getLinkedCodes();
+    _linkedCodesFuture = _loadSendTargets(); // 🆕 [응원 가족] 보호자 자녀 + 응원 가족 아이 함께
     _recentRecordsFuture = _loadRecentRecords();
+  }
+
+  // 🆕 [응원 가족 2026-09-30] 보낼 수 있는 아이 = 보호자로 연결된 자녀 + 승인된 응원 가족 아이
+  Future<List<String>> _loadSendTargets() async {
+    final List<String> guardian = await FamilyLinkService.getLinkedCodes();
+    final List<SupportTarget> targets = await SupporterService.getMyTargets();
+    final Map<String, SupportTarget> info = {};
+    final Set<String> sup = {};
+    final List<SupportTarget> pending = [];
+    for (final t in targets) {
+      if (guardian.contains(t.code)) continue; // 보호자로 이미 연결된 아이는 보호자로 보냄
+      if (t.approved) {
+        sup.add(t.code);
+        info[t.code] = t;
+      } else {
+        pending.add(t);
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _supporterCodes = sup;
+        _supportInfo = info;
+        _pendingTargets = pending;
+      });
+    }
+    return [...guardian, ...sup];
+  }
+
+  void _refreshSendTargets() {
+    setState(() => _linkedCodesFuture = _loadSendTargets());
+  }
+
+  String _relationLabel(String relation, String relationText) {
+    if (relation == 'other' && relationText.trim().isNotEmpty) return relationText.trim();
+    return cs('rel_$relation');
   }
 
   // 🆕 이 화면(타이머)으로 한 운동 기록만 최근 10개
@@ -758,11 +800,7 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
               Container(
                 width: 54,
                 height: 54,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: _gold.withOpacity(0.55), blurRadius: 20, spreadRadius: 2)],
-                ),
-                child: const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 50),
+                child: const FacetedGoldStar(size: 54), // 🆕 [2026-10-01] 고급 황금장 별 (원장님 그림의 앞쪽 별 모양)
               ),
             ],
           ),
@@ -1441,44 +1479,114 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
   }
 
   // ---------------- 자녀에게 보내기 ----------------
+  // 🆕 [응원 가족 2026-09-30] 보호자 자녀 + 응원 가족 아이를 함께 보여 주고,
+  // 아래에 [응원 가족으로 연결] 버튼과 "승인 기다리는 중" 목록을 둠
   Widget _buildSendCard() {
     return FutureBuilder<List<String>>(
       future: _linkedCodesFuture,
       builder: (context, snapshot) {
         final List<String> codes = snapshot.data ?? [];
-        if (codes.isEmpty) {
-          // 🔒 자녀 연결 전: 궁금증을 만드는 안내
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white12),
+
+        final Widget connectButton = SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _openSupporterConnectDialog,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: _gold.withOpacity(0.6)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.lock_rounded, color: _gold, size: 22),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        cs('sendLocked'),
-                        style: GoogleFonts.notoSansKr(color: _cream, fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        cs('sendLockedHint'),
-                        style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5, height: 1.5),
-                      ),
-                    ],
-                  ),
+            icon: const Icon(Icons.group_add_rounded, color: _gold, size: 18),
+            label: Text(cs('supConnectBtn'), style: GoogleFonts.notoSansKr(color: _gold, fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+        );
+
+        final List<Widget> pendingRows = _pendingTargets
+            .map((t) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              const Icon(Icons.hourglass_top_rounded, color: Colors.white38, size: 15),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(cs('supPending', args: {'c': t.code}), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5)),
+              ),
+            ],
+          ),
+        ))
+            .toList();
+
+        // 응원 가족으로 연결된 아이: 이름 + 이번 달 총 공부 시간·공부한 날 수 (그 이상은 볼 수 없음)
+        final List<Widget> supporterRows = _supportInfo.values
+            .map((t) => Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(10)),
+          child: Row(
+            children: [
+              Text(SupporterService.relationEmoji[t.relation] ?? '💛', style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.studentName.isNotEmpty ? t.studentName : cs('codeLabel', args: {'c': t.code}),
+                      style: GoogleFonts.notoSansKr(color: _cream, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    Text(
+                      cs('supMonthLine', args: {'h': (t.monthMinutes / 60).toStringAsFixed(1), 'd': t.monthDays}),
+                      style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Text(_relationLabel(t.relation, t.relationText), style: GoogleFonts.notoSansKr(color: _gold, fontSize: 11.5, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ))
+            .toList();
+
+        if (codes.isEmpty) {
+          // 🔒 자녀 연결 전: 궁금증을 만드는 안내 + 응원 가족 연결 버튼
+          return Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.lock_rounded, color: _gold, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            cs('sendLocked'),
+                            style: GoogleFonts.notoSansKr(color: _cream, fontWeight: FontWeight.bold, fontSize: 13, height: 1.4),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            cs('sendLockedHint'),
+                            style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5, height: 1.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              connectButton,
+              ...pendingRows,
+            ],
           );
         }
         // 자녀 연결 뒤: 보내기 버튼
@@ -1495,6 +1603,8 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
             children: [
               Text(cs('sendLinked', args: {'n': codes.length}), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5)),
               const SizedBox(height: 10),
+              ...supporterRows,
+              if (supporterRows.isNotEmpty) const SizedBox(height: 4),
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -1508,6 +1618,9 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
                   label: Text(cs('btnSendStars'), style: GoogleFonts.notoSansKr(color: _pageBg, fontWeight: FontWeight.w900, fontSize: 14)),
                 ),
               ),
+              const SizedBox(height: 10),
+              connectButton,
+              ...pendingRows,
             ],
           ),
         );
@@ -1515,10 +1628,182 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
     );
   }
 
+  // 🆕 [응원 가족 2026-09-30] 응원 가족 신청 창 (알람 설정과 같은 금테 가운데 팝업)
+  Future<void> _openSupporterConnectDialog() async {
+    final TextEditingController codeController = TextEditingController();
+    final TextEditingController nameController = TextEditingController(text: (await DkeUserProfile.getRealName()) ?? '');
+    final TextEditingController otherController = TextEditingController();
+    if (!mounted) return;
+    String relation = 'grandma';
+    bool sending = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          InputDecoration deco(String hint) => InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.notoSansKr(color: Colors.white30, fontSize: 12.5),
+            filled: true,
+            fillColor: const Color(0xFF111827),
+            counterText: '',
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white12)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _gold)),
+          );
+          Widget fieldLabel(String t) => Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 6),
+            child: Text(t, style: GoogleFonts.notoSansKr(color: _gold, fontWeight: FontWeight.bold, fontSize: 12.5)),
+          );
+
+          Future<void> submit() async {
+            setDialogState(() {
+              sending = true;
+              errorText = null;
+            });
+            final String? err = await SupporterService.requestToSupport(
+              code: codeController.text.trim(),
+              name: nameController.text.trim(),
+              relation: relation,
+              relationText: relation == 'other' ? otherController.text.trim() : '',
+            );
+            if (err != null) {
+              setDialogState(() {
+                sending = false;
+                errorText = cs(err);
+              });
+              return;
+            }
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+            if (mounted) {
+              ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(cs('supReqDone'), style: GoogleFonts.notoSansKr())));
+              _refreshSendTargets();
+            }
+          }
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF050B14),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _gold, width: 1.5),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (appLanguage.isDefault) ...[
+                      Text(csEn('supDlgTitle'), style: GoogleFonts.gowunBatang(color: _gold, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1)),
+                      Text(csKo('supDlgTitle'), style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 19)),
+                    ] else
+                      Text(cs('supDlgTitle'), style: GoogleFonts.notoSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                    const SizedBox(height: 6),
+                    Text(cs('supDlgIntro'), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5, height: 1.5)),
+
+                    fieldLabel(cs('supCodeLabel')),
+                    TextField(
+                      controller: codeController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      style: GoogleFonts.notoSans(color: Colors.white, fontSize: 20, letterSpacing: 4),
+                      decoration: deco('000000'),
+                    ),
+
+                    fieldLabel(cs('supNameLabel')),
+                    TextField(
+                      controller: nameController,
+                      style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                      decoration: deco(cs('supNameLabel')),
+                    ),
+
+                    fieldLabel(cs('supRelLabel')),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: SupporterService.supporterRelations.map((r) {
+                        final bool sel = relation == r;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => setDialogState(() => relation = r),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: sel ? _gold : const Color(0xFF111827),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: sel ? _gold : Colors.white12),
+                            ),
+                            child: Text(
+                              '${SupporterService.relationEmoji[r] ?? ''} ${cs('rel_$r')}',
+                              style: GoogleFonts.notoSansKr(color: sel ? _pageBg : Colors.white70, fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    if (relation == 'other') ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: otherController,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13.5),
+                        decoration: deco(cs('supOtherHint')),
+                      ),
+                    ],
+                    if (errorText != null) ...[
+                      const SizedBox(height: 10),
+                      Text(errorText!, style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Spacer(),
+                        TextButton(
+                          onPressed: sending ? null : () => Navigator.pop(dialogContext),
+                          child: Text(cs('btnClose'), style: GoogleFonts.notoSansKr(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 15)),
+                        ),
+                        const SizedBox(width: 6),
+                        ElevatedButton(
+                          onPressed: sending ? null : submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _gold,
+                            disabledBackgroundColor: const Color(0xFF1F2937),
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          child: Text(sending ? cs('btnSaving') : cs('supSendReq'), style: GoogleFonts.notoSansKr(color: _pageBg, fontWeight: FontWeight.bold, fontSize: 15)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    Future.delayed(const Duration(milliseconds: 500), () {
+      codeController.dispose();
+      nameController.dispose();
+      otherController.dispose();
+    });
+  }
+
   // 연결된 자녀들의 이름 불러오기 (이름이 없으면 "코드 123456"으로 표시)
   Future<Map<String, String>> _loadChildNames(List<String> codes) async {
     final Map<String, String> names = {};
     for (final code in codes) {
+      // 🆕 [응원 가족] 응원 가족은 아이 문서를 읽을 수 없으니 요약에서 받은 이름을 씀
+      if (_supporterCodes.contains(code)) {
+        final String n = _supportInfo[code]?.studentName ?? '';
+        names[code] = n.isNotEmpty ? n : cs('codeLabel', args: {'c': code});
+        continue;
+      }
       try {
         final snap = await FamilyLinkService.watch(code).first.timeout(const Duration(seconds: 5));
         final String? name = snap.data()?['studentName'] as String?;
@@ -1537,8 +1822,11 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
   // - 응원 문구 6개 중 고르거나 직접 씀 (cheer_phrases.dart, 12개 언어)
   // - 🆕 [다국어] 창 안의 모든 글자는 cheer_stars_i18n.dart에서 꺼냄
   Future<void> _openSendDialog(List<String> codes) async {
-    final int balance = await ExerciseStarService.getMyBalance();
+    // 🆕 [2026-09-30] 창 위쪽에 총 별 / 보낸 별 / 현재 별을 함께 보여줌
+    final (int totalEarned, int totalSent, int balance) = await ExerciseStarService.getMyBankSummary();
     final Map<String, String> names = await _loadChildNames(codes);
+    String guardianRelation = await SupporterService.getMyGuardianRelation(); // 🆕 [응원 가족] 보호자가 고른 관계 기억
+    final String myName = (await DkeUserProfile.getRealName()) ?? '';
     if (!mounted) return;
     if (balance <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1639,22 +1927,38 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
 
             final List<String> sentNames = [];
             String? failMessage;
+            SupporterService.setMyGuardianRelation(guardianRelation);
             for (final String code in selectedCodes.toList()) {
+              // 🆕 [응원 가족 2026-09-30] 응원 가족으로 연결된 아이인지, 보호자로 연결된 아이인지
+              final bool asSup = _supporterCodes.contains(code);
+              final SupportTarget? st = _supportInfo[code];
+              final String rel = asSup ? (st?.relation ?? 'other') : guardianRelation;
+              final String relText = asSup ? (st?.relationText ?? '') : '';
+              final String fromName = asSup && (st?.myName ?? '').isNotEmpty ? st!.myName : myName;
+              final String who =
+                  '${SupporterService.relationEmoji[rel] ?? ''} ${_relationLabel(rel, relText)}${fromName.isNotEmpty ? ' ($fromName)' : ''}';
               final String? error = await ExerciseStarService.sendStarsToChild(
                 code: code,
                 stars: stars,
                 message: msg,
                 isSpecial: isSpecial,
+                fromName: fromName,
+                fromRelation: rel,
+                fromRelationText: relText,
+                asSupporter: asSup,
               );
               if (error != null) {
                 failMessage = '${names[code] ?? cs('codeLabel', args: {'c': code})}: ${errorToText(error)}';
                 break;
               }
-              // 자녀 화면에 응원 팝업 (기존 응원 문구 기능 그대로 사용)
-              await FamilyLinkService.pushEncouragementToChild(
-                code,
-                message: isSpecial ? cs('popupSpecial', args: {'n': stars, 'msg': msg}) : cs('popupNormal', args: {'n': stars, 'msg': msg}),
-              );
+              // 자녀 화면에 응원 팝업 (맨 위에 "누가 보냈는지" 한 줄)
+              final String popup = '${cs('popupFrom', args: {'who': who})}\n'
+                  '${isSpecial ? cs('popupSpecial', args: {'n': stars, 'msg': msg}) : cs('popupNormal', args: {'n': stars, 'msg': msg})}';
+              if (asSup) {
+                await SupporterService.pushMessageAsSupporter(code, popup);
+              } else {
+                await FamilyLinkService.pushEncouragementToChild(code, message: popup);
+              }
               sentNames.add(names[code] ?? cs('codeLabel', args: {'c': code}));
             }
 
@@ -1701,7 +2005,65 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
                     ] else
                       Center(child: Text(cs('sendTitle'), textAlign: TextAlign.center, style: GoogleFonts.notoSans(color: _gold, fontWeight: FontWeight.bold, fontSize: 17))),
                     const SizedBox(height: 6),
-                    Center(child: Text(cs('sendBalance', args: {'n': balance}), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12))),
+                    // 🆕 [2026-09-30] 총 별 · 보낸 별 · 현재 별 세 칸
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: _pageBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: _gold.withOpacity(0.25), width: 1),
+                            ),
+                            child: Column(
+                              children: [
+                                FittedBox(fit: BoxFit.scaleDown, child: Text(cs('sumTotal'), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11))),
+                                const SizedBox(height: 2),
+                                FittedBox(fit: BoxFit.scaleDown, child: Text(cs('nStars', args: {'n': totalEarned}), style: GoogleFonts.notoSansKr(color: _cream, fontWeight: FontWeight.w900, fontSize: 15))),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: _pageBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: _gold.withOpacity(0.25), width: 1),
+                            ),
+                            child: Column(
+                              children: [
+                                FittedBox(fit: BoxFit.scaleDown, child: Text(cs('sumSent'), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11))),
+                                const SizedBox(height: 2),
+                                FittedBox(fit: BoxFit.scaleDown, child: Text(cs('nStars', args: {'n': totalSent}), style: GoogleFonts.notoSansKr(color: Colors.white60, fontWeight: FontWeight.w900, fontSize: 15))),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: _pageBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: _gold, width: 1.3),
+                            ),
+                            child: Column(
+                              children: [
+                                FittedBox(fit: BoxFit.scaleDown, child: Text(cs('sumNow'), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11))),
+                                const SizedBox(height: 2),
+                                FittedBox(fit: BoxFit.scaleDown, child: Text(cs('nStars', args: {'n': balance}), style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 15))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
 
                     label(cs('lblReceivers')),
                     Wrap(
@@ -1731,6 +2093,22 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
                         })),
                       ],
                     ),
+
+                    // 🆕 [응원 가족 2026-09-30] 보호자로 보낼 때 "보내는 사람" 고르기 (아이 카드에 이름표로 보임)
+                    if (selectedCodes.any((c) => !_supporterCodes.contains(c))) ...[
+                      label(cs('senderLabel')),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: SupporterService.guardianRelations
+                            .map((r) => choiceChip(
+                          '${SupporterService.relationEmoji[r] ?? ''} ${cs('rel_$r')}',
+                          guardianRelation == r,
+                              () => setDialogState(() => guardianRelation = r),
+                        ))
+                            .toList(),
+                      ),
+                    ],
 
                     label(cs('lblMode')),
                     Wrap(
@@ -1945,4 +2323,65 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
       ),
     );
   }
+}
+
+
+// ============================================================================
+// 🆕 [2026-10-01] 고급 황금장 별 — 원장님이 주신 그림의 "앞쪽 별"을 그대로 그린 것.
+// 다섯 꼭짓점마다 밝은 면·어두운 면 두 조각으로 나눠 입체감(보석처럼 깎인 면)을 줌.
+// 🆕 [2026-10-01 수정] 뒤쪽 배경 번짐과 흰 줄 없이 별만 깔끔하게. 그림 파일이 아니라 코드로 그려서 어떤 크기에도 선명함.
+// ============================================================================
+class FacetedGoldStar extends StatelessWidget {
+  final double size;
+  const FacetedGoldStar({super.key, this.size = 54});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _FacetedGoldStarPainter()),
+    );
+  }
+}
+
+class _FacetedGoldStarPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset c = Offset(size.width / 2, size.height / 2 + size.height * 0.03);
+    final double outer = size.width * 0.5;
+    final double inner = outer * 0.43;
+
+    Offset pt(double deg, double r) {
+      final double rad = deg * 3.141592653589793 / 180;
+      return Offset(c.dx + r * cos(rad), c.dy + r * sin(rad));
+    }
+
+    final Rect box = Rect.fromCircle(center: c, radius: outer);
+    final Paint light = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFFFF4C2), Color(0xFFFFD34D), Color(0xFFF2B21C)],
+      ).createShader(box);
+    final Paint dark = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFF0A81A), Color(0xFFD4860B), Color(0xFFA8650A)],
+      ).createShader(box);
+
+    for (int i = 0; i < 5; i++) {
+      final double a = -90 + i * 72.0;
+      final Offset tip = pt(a, outer);
+      final Offset left = pt(a - 36, inner);
+      final Offset right = pt(a + 36, inner);
+      // 왼쪽 면(밝게) / 오른쪽 면(어둡게) — 깎인 보석처럼
+      canvas.drawPath(Path()..moveTo(c.dx, c.dy)..lineTo(left.dx, left.dy)..lineTo(tip.dx, tip.dy)..close(), light);
+      canvas.drawPath(Path()..moveTo(c.dx, c.dy)..lineTo(tip.dx, tip.dy)..lineTo(right.dx, right.dy)..close(), dark);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

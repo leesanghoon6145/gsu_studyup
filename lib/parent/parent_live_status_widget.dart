@@ -222,8 +222,11 @@ class ParentLiveStatusWidget extends StatefulWidget {
   final String lastSentTimeText;
   final Widget Function(String, String, {required double fontSize, String? foreignTitle}) buildCustomSectionTitle;
 
+  final Widget? topBar; // 🆕 [2026-10-01] 로그아웃 · 다국어 줄 (내용 맨 첫 줄)
+
   const ParentLiveStatusWidget({
     Key? key,
+    this.topBar,
     this.isStudyingNow = false,
     this.liveSubject = '',
     this.liveElapsedSeconds = 0,
@@ -459,6 +462,8 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.topBar != null) ...[widget.topBar!, const SizedBox(height: 14)], // 🆕 [2026-10-01]
+
           // 🆕 [실시간 학습 현황 2026-09-19] "지금 이 순간 학습 중"이면 이 카드를
           // 통째로 실시간 카드로 교체함. 쉬는 중이면 기존 과거 세션 요약 카드를
           // 그대로 보여줌 (아래 원래 있던 Container는 그대로 유지, 손대지 않음).

@@ -12,6 +12,10 @@ import '../services/scholarship_currency.dart'; // 🆕 [2026-09-27] 장학금 �
 import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [실시간 장학금 금액] 부모님이 선택한 유형을 실시간 구독하기 위함
 import '../services/family_link_service.dart'; // 🆕 [실시간 장학금 금액] getMyLinkCode()/watch() 사용을 위함
 import '../schedule/cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 받은 응원별 카드 12개 언어
+import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
+import '../services/report_archive_service.dart'; // 🆕 [리포트 저장·공유 2026-10-01]
+import '../services/ranking_service.dart'; // 🆕 [랭킹 2026-10-01] 진짜 순위 계산
+import '../services/diagnosis_service.dart'; // 🆕 [리포트 저장·공유 2026-10-01] 부모님 연결 전에 쓰는 문장 은행
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -1941,6 +1945,8 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
         _yesterdayTotalStudyMinutes = yesterdayTotalMinutes;
         _realMostImprovedSubjectCache = mostImprovedSubjectName; // 🆕
       });
+      // 🆕 [랭킹 2026-10-01] 이번 달 공부 시간을 올리고 친구·전 세계 순위를 받아 옴
+      _loadRanking(aggregated.fold<int>(0, (sum, e) => sum + (e['monthRealMinutes'] as int)));
     } catch (e) {
       debugPrint("[MemberAchievement] 실제 학습시간 데이터 집계 실패: $e");
     }
@@ -1992,19 +1998,58 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
             100)
         .round();
   }
+  // ============================================================================
+  // 🆕 [랭킹 2026-10-01] "1위" 고정 글자를 없애고 진짜 순위로.
+  // 기준: 이번 달 공부 시간. 친구 = 같은 학교·같은 학년. 이름은 절대 안 보이고 내 순위만 보임.
+  // 학생이 혼자면 "1위 (1명 중)", 학생이 늘어나면 순위가 저절로 바뀜.
+  // ============================================================================
+  RankResult? _friendRank;
+  RankResult? _globalRank;
+  bool _rankLoaded = false;
+  bool _hasSchoolGrade = false;
 
-  // 🆕 [데이터 연결] 가장 많이 학습한 과목(전체 기간 누적 분 기준) - "가장 많이 학습한 과목" 표시용
-  // 🆕 [요청] 서버가 아직 없어서 비교 대상이 나 혼자뿐이므로, 지금은 항상 1위로 표시.
-  // 추후 서버(다른 유저 데이터베이스)가 연결되면 이 두 게터 안의 로직만 실제 순위 계산으로 교체하면
-  // 화면 쪽은 손댈 필요 없이 자동으로 실제 순위가 반영됨.
+  static const Map<String, Map<String, String>> _kRankText = {
+    'loading': {'KO': '집계 중…', 'EN': 'Calculating…', 'JA': '集計中…', 'ZH': '统计中…', 'FR': 'Calcul…', 'DE': 'Wird berechnet…', 'RU': 'Подсчёт…', 'AR': 'جارٍ الحساب…', 'HI': 'गणना हो रही है…', 'VI': 'Đang tính…', 'ES': 'Calculando…', 'TH': 'กำลังคำนวณ…'},
+    'needSchool': {'KO': '마이페이지에 학교·학년을 넣으면 보여요', 'EN': 'Add school & grade in My Page', 'JA': 'マイページで学校・学年を入力すると表示', 'ZH': '在我的页面填写学校和年级后显示', 'FR': "Ajoutez école et niveau dans Mon profil", 'DE': 'Schule & Klasse in Mein Profil eintragen', 'RU': 'Укажите школу и класс в профиле', 'AR': 'أضف المدرسة والصف في صفحتي', 'HI': 'मेरे पेज में स्कूल व कक्षा जोड़ें', 'VI': 'Nhập trường & lớp ở Trang của tôi', 'ES': 'Añade escuela y curso en Mi página', 'TH': 'ใส่โรงเรียนและชั้นในหน้าของฉัน'},
+    'friend': {'KO': '{r}위 ({t}명 중)', 'EN': '#{r} of {t}', 'JA': '{r}位（{t}人中）', 'ZH': '第{r}名（共{t}人）', 'FR': '{r}e sur {t}', 'DE': 'Platz {r} von {t}', 'RU': '{r}-е из {t}', 'AR': 'المركز {r} من {t}', 'HI': '{t} में से {r}वां', 'VI': 'Hạng {r}/{t}', 'ES': '{r}.º de {t}', 'TH': 'อันดับ {r} จาก {t}'},
+    'global': {'KO': '{r}위 · 상위 {p}%', 'EN': '#{r} · Top {p}%', 'JA': '{r}位 · 上位{p}%', 'ZH': '第{r}名 · 前{p}%', 'FR': '{r}e · Top {p} %', 'DE': 'Platz {r} · Top {p} %', 'RU': '{r}-е · Топ {p}%', 'AR': 'المركز {r} · الأعلى {p}٪', 'HI': '{r}वां · शीर्ष {p}%', 'VI': 'Hạng {r} · Top {p}%', 'ES': '{r}.º · Top {p}%', 'TH': 'อันดับ {r} · ท็อป {p}%'},
+    'globalOnly': {'KO': '{r}위 ({t}명 중)', 'EN': '#{r} of {t}', 'JA': '{r}位（{t}人中）', 'ZH': '第{r}名（共{t}人）', 'FR': '{r}e sur {t}', 'DE': 'Platz {r} von {t}', 'RU': '{r}-е из {t}', 'AR': 'المركز {r} من {t}', 'HI': '{t} में से {r}वां', 'VI': 'Hạng {r}/{t}', 'ES': '{r}.º de {t}', 'TH': 'อันดับ {r} จาก {t}'},
+  };
+
+  static String _rankText(String key, {int r = 0, int t = 0, int p = 0}) {
+    final Map<String, String> m = _kRankText[key]!;
+    return (m[DkeLang.current] ?? m['EN']!)
+        .replaceAll('{r}', '$r')
+        .replaceAll('{t}', '$t')
+        .replaceAll('{p}', '$p');
+  }
+
+  Future<void> _loadRanking(int monthMinutes) async {
+    final result = await RankingService.updateAndFetch(monthMinutes);
+    if (!mounted) return;
+    setState(() {
+      _friendRank = result.friend;
+      _globalRank = result.global;
+      _hasSchoolGrade = result.hasGroup;
+      _rankLoaded = true;
+    });
+  }
+
   String get _realFriendRankDisplay {
-    // TODO(서버 연결 시): 친구 목록 중 학습 별/시간 기준 실제 순위 계산으로 교체
-    return "1위";
+    if (!_rankLoaded) return _rankText('loading');
+    if (!_hasSchoolGrade) return _rankText('needSchool');
+    final RankResult? f = _friendRank;
+    if (f == null) return '-';
+    return _rankText('friend', r: f.rank, t: f.total);
   }
 
   String get _realGlobalRankDisplay {
-    // TODO(서버 연결 시): 전체 유저 중 실제 퍼센타일 계산으로 교체
-    return "1위";
+    if (!_rankLoaded) return _rankText('loading');
+    final RankResult? g = _globalRank;
+    if (g == null) return '-';
+    // 10명 미만일 때는 "상위 %"가 어색하므로 "몇 명 중 몇 위"로
+    if (g.total < 10) return _rankText('globalOnly', r: g.rank, t: g.total);
+    return _rankText('global', r: g.rank, p: g.topPercent);
   }
 
   String? get _realMostStudiedSubject => _realMostStudiedSubjectCache;
@@ -8345,12 +8390,12 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                     diagnosisText = _t('emptyFallbackShort');
                   } else {
                     final lastExam = filtered.last;
-                    // 🆕 [5번] 유사 점수대 진단은 캐시 재사용 / [7번] 일반 리포트 = AI Light 배정 예정
-                    diagnosisText = await _generateOrReuseDiagnosis(
+                    // 🆕 [2026-10-01] 저장·공유되는 진단서 (부모님 화면과 같은 글, 같은 평가는 언제 열어도 같은 글)
+                    diagnosisText = await _archivedExamAnalysis(
                       type: currentType,
-                      score: lastExam.score,
                       subject: lastExam.subject,
-                      tier: AiTier.light,
+                      score: lastExam.score,
+                      date: lastExam.date,
                     );
                   }
 
@@ -8489,6 +8534,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   Widget _buildParentGiftStarsCard() {
     if (_myLinkCode == null) return const SizedBox.shrink(); // 부모와 연결 전이면 표시 안 함
     // 🆕 [B안 2026-09-30] 금색 머리띠 + 남색 몸통 (명품 포장처럼 금색은 머리띠·숫자·테두리에만)
+    // 🆕 [응원 가족 2026-09-30] 보낸 사람별(엄마·할머니·삼촌…) 목록 + 전체 합계
     const Color ink = Color(0xFF1A1203);
     const Color deepGold = Color(0xFFD4AF37);
     const Color paleGold = Color(0xFFFFE9A8);
@@ -8499,14 +8545,16 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     final String lang = DkeLang.current;
     final bool isKo = lang == 'KO';
 
+    String relLabel(String rel, String relText) =>
+        rel == 'other' && relText.trim().isNotEmpty ? relText.trim() : cs('rel_$rel', lang: lang);
+
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FamilyLinkService.watch(_myLinkCode!),
       builder: (context, snapshot) {
         final Map<String, dynamic> data = snapshot.data?.data() ?? {};
-        final int total = (data['parentGiftStars'] as num?)?.toInt() ?? 0;
-        final int special = (data['parentGiftSpecialStars'] as num?)?.toInt() ?? 0;
-        final int normal = total - special;
-        final List<Map<String, dynamic>> recent = ((data['parentGiftHistory'] as List?) ?? [])
+        final int legacyTotal = (data['parentGiftStars'] as num?)?.toInt() ?? 0;
+        final int legacySpecial = (data['parentGiftSpecialStars'] as num?)?.toInt() ?? 0;
+        final List<Map<String, dynamic>> legacyRecent = ((data['parentGiftHistory'] as List?) ?? [])
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList()
@@ -8514,162 +8562,246 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
             .take(3)
             .toList();
 
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(top: 18),
-          decoration: BoxDecoration(
-            color: navy,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: deepGold, width: 1.5),
-            boxShadow: [BoxShadow(color: deepGold.withOpacity(0.25), blurRadius: 22, spreadRadius: 1)],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(17),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ---------- 금색 머리띠 ----------
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFE9C860), deepGold, Color(0xFFB8922A)],
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.favorite_rounded, color: ink, size: 22),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: isKo
-                            ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('CHEER STARS', style: GoogleFonts.gowunBatang(color: ink, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
-                            Text(csKo('giftTitle'), style: GoogleFonts.notoSansKr(color: ink, fontWeight: FontWeight.w900, fontSize: 15.5)),
-                          ],
-                        )
-                            : Text(cs('giftTitle', lang: lang), style: GoogleFonts.notoSans(color: ink, fontWeight: FontWeight.w900, fontSize: 15)),
-                      ),
-                    ],
-                  ),
-                ),
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: SupporterService.watchGifts(_myLinkCode!),
+          builder: (context, giftSnap) {
+            final List<Map<String, dynamic>> gifts = giftSnap.data?.docs.map((d) => d.data()).toList() ?? [];
 
-                // ---------- 남색 몸통 ----------
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 받은 응원별 전체
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(cs('giftTotal', lang: lang), style: GoogleFonts.notoSansKr(color: softGold, fontSize: 12)),
-                                const SizedBox(height: 2),
-                                Text(
-                                  cs('nStars', lang: lang, args: {'n': total}),
-                                  style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 30),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [BoxShadow(color: const Color(0xFFFFD700).withOpacity(0.45), blurRadius: 18, spreadRadius: 1)],
-                            ),
-                            child: const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 38),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+            // 보낸 사람별로 모으기 (보호자는 예전부터 합계가 있으므로, 전체 합계에는 응원 가족 것만 더함)
+            int supTotal = 0;
+            int supSpecial = 0;
+            final Map<String, Map<String, dynamic>> bySender = {};
+            for (final g in gifts) {
+              final int st = (g['stars'] as num?)?.toInt() ?? 0;
+              final bool sp = g['type'] == 'special';
+              if (g['role'] == 'supporter') {
+                supTotal += st;
+                if (sp) supSpecial += st;
+              }
+              final String uid = (g['fromUid'] as String?) ?? '?';
+              final Map<String, dynamic> row = bySender.putIfAbsent(uid, () => {
+                'name': (g['fromName'] as String?) ?? '',
+                'rel': (g['fromRelation'] as String?) ?? 'other',
+                'relText': (g['fromRelationText'] as String?) ?? '',
+                'stars': 0,
+                'special': 0,
+              });
+              row['stars'] = (row['stars'] as int) + st;
+              if (sp) row['special'] = (row['special'] as int) + st;
+            }
+            final List<Map<String, dynamic>> senders = bySender.values.toList()
+              ..sort((a, b) => (b['stars'] as int).compareTo(a['stars'] as int));
 
-                      // 일반 응원 / 특별 축하
-                      Row(
+            final int total = legacyTotal + supTotal;
+            final int special = legacySpecial + supSpecial;
+            final int normal = total - special;
+
+            // 최근 받은 응원 3개: 보낸 사람이 기록된 새 방식이 있으면 그것을, 없으면 예전 기록을 보여줌
+            final bool useGifts = gifts.isNotEmpty;
+            final List<Map<String, dynamic>> recent = useGifts ? gifts.take(3).toList() : legacyRecent;
+
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 18),
+              decoration: BoxDecoration(
+                color: navy,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: deepGold, width: 1.5),
+                boxShadow: [BoxShadow(color: deepGold.withOpacity(0.25), blurRadius: 22, spreadRadius: 1)],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(17),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ---------- 금색 머리띠 ----------
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFE9C860), deepGold, Color(0xFFB8922A)],
+                        ),
+                      ),
+                      child: Row(
                         children: [
-                          Expanded(child: _giftStat(Icons.star_rounded, cs('giftNormal', lang: lang), cs('nStars', lang: lang, args: {'n': normal}), highlight: false)),
+                          const Icon(Icons.favorite_rounded, color: ink, size: 22),
                           const SizedBox(width: 10),
-                          Expanded(child: _giftStat(Icons.celebration_rounded, cs('giftSpecial', lang: lang), cs('nStars', lang: lang, args: {'n': special}), highlight: true)),
-                        ],
-                      ),
-
-                      // 최근 받은 응원 3개
-                      if (recent.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Text(cs('giftRecent', lang: lang), style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(height: 8),
-                        ...recent.map((h) {
-                          final int stars = (h['stars'] as num?)?.toInt() ?? 0;
-                          final bool isSpecial = h['type'] == 'special';
-                          final String message = (h['message'] as String?) ?? '';
-                          final dynamic sentAt = h['sentAt'];
-                          final DateTime? when = sentAt is Timestamp ? sentAt.toDate() : null;
-                          final String dateText = when != null ? '${when.month}/${when.day}' : '';
-                          // 🆕 [2026-09-30] 부모가 그날 한 일 (운동 시간 + 가족 활동 체크)
-                          final List<String> actKeys = ((h['acts'] as List?) ?? []).map((e) => e.toString()).toList();
-                          final int exMin = (h['exMin'] as num?)?.toInt() ?? 0;
-                          final List<String> actNames = [
-                            if (exMin > 0) cs('giftActEx', lang: lang, args: {'n': exMin}),
-                            ...actKeys.map((k) => cs('it_$k', lang: lang)),
-                          ];
-                          return Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: navyInner,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: isSpecial ? deepGold.withOpacity(0.6) : Colors.white10),
-                            ),
-                            child: Row(
+                          Expanded(
+                            child: isKo
+                                ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(isSpecial ? '🎉' : '⭐', style: const TextStyle(fontSize: 16)),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '$dateText · ${cs('nStars', lang: lang, args: {'n': stars})}',
-                                        style: GoogleFonts.notoSansKr(color: isSpecial ? paleGold : cream, fontWeight: FontWeight.bold, fontSize: 12.5),
-                                      ),
-                                      if (message.isNotEmpty)
-                                        Text(message, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.4)),
-                                      if (actNames.isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: Text(
-                                            cs('giftActs', lang: lang, args: {'list': actNames.join(' · ')}),
-                                            style: GoogleFonts.notoSansKr(color: softGold, fontSize: 11.5, height: 1.4, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                                Text('CHEER STARS', style: GoogleFonts.gowunBatang(color: ink, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+                                Text(csKo('giftTitle'), style: GoogleFonts.notoSansKr(color: ink, fontWeight: FontWeight.w900, fontSize: 15.5)),
                               ],
-                            ),
-                          );
-                        }),
-                      ] else ...[
-                        const SizedBox(height: 14),
-                        Text(cs('giftEmpty', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 12, height: 1.5)),
-                      ],
-                      const SizedBox(height: 12),
-                      Text(cs('giftNote', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11, height: 1.5)),
-                    ],
-                  ),
+                            )
+                                : Text(cs('giftTitle', lang: lang), style: GoogleFonts.notoSans(color: ink, fontWeight: FontWeight.w900, fontSize: 15)),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ---------- 남색 몸통 ----------
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 받은 응원별 전체
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(cs('giftTotal', lang: lang), style: GoogleFonts.notoSansKr(color: softGold, fontSize: 12)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      cs('nStars', lang: lang, args: {'n': total}),
+                                      style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 30),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [BoxShadow(color: const Color(0xFFFFD700).withOpacity(0.45), blurRadius: 18, spreadRadius: 1)],
+                                ),
+                                child: const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 38),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // 일반 응원 / 특별 축하
+                          Row(
+                            children: [
+                              Expanded(child: _giftStat(Icons.star_rounded, cs('giftNormal', lang: lang), cs('nStars', lang: lang, args: {'n': normal}), highlight: false)),
+                              const SizedBox(width: 10),
+                              Expanded(child: _giftStat(Icons.celebration_rounded, cs('giftSpecial', lang: lang), cs('nStars', lang: lang, args: {'n': special}), highlight: true)),
+                            ],
+                          ),
+
+                          // 🆕 [응원 가족] 응원해 주는 가족 (보낸 사람별 합계)
+                          if (senders.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Text(cs('giftByFamily', lang: lang), style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 8),
+                            ...senders.map((r) {
+                              final String rel = r['rel'] as String;
+                              final String name = r['name'] as String;
+                              final int sp = r['special'] as int;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                decoration: BoxDecoration(color: navyInner, borderRadius: BorderRadius.circular(10)),
+                                child: Row(
+                                  children: [
+                                    Text(SupporterService.relationEmoji[rel] ?? '💛', style: const TextStyle(fontSize: 17)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '${relLabel(rel, r['relText'] as String)}${name.isNotEmpty ? ' ($name)' : ''}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.notoSansKr(color: cream, fontWeight: FontWeight.bold, fontSize: 12.5),
+                                      ),
+                                    ),
+                                    Text(
+                                      cs('nStars', lang: lang, args: {'n': r['stars']}),
+                                      style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 13),
+                                    ),
+                                    if (sp > 0) ...[
+                                      const SizedBox(width: 6),
+                                      Text('🎉 $sp', style: GoogleFonts.notoSansKr(color: paleGold, fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+
+                          // 최근 받은 응원 3개
+                          if (recent.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Text(cs('giftRecent', lang: lang), style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 8),
+                            ...recent.map((h) {
+                              final int stars = (h['stars'] as num?)?.toInt() ?? 0;
+                              final bool isSpecial = h['type'] == 'special';
+                              final String message = (h['message'] as String?) ?? '';
+                              final dynamic sentAt = h['sentAt'];
+                              final DateTime? when = sentAt is Timestamp ? sentAt.toDate() : null;
+                              final String dateText = when != null ? '${when.month}/${when.day}' : '';
+                              // 보낸 사람 (새 방식 기록에만 있음)
+                              final String rel = (h['fromRelation'] as String?) ?? '';
+                              final String who = rel.isEmpty ? '' : relLabel(rel, (h['fromRelationText'] as String?) ?? '');
+                              // 보낸 사람이 그날 한 일 (운동 시간 + 가족 활동 체크)
+                              final List<String> actKeys = ((h['acts'] as List?) ?? []).map((e) => e.toString()).toList();
+                              final int exMin = (h['exMin'] as num?)?.toInt() ?? 0;
+                              final List<String> actNames = [
+                                if (exMin > 0) cs('giftActEx', lang: lang, args: {'n': exMin}),
+                                ...actKeys.map((k) => cs('it_$k', lang: lang)),
+                              ];
+                              return Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: navyInner,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: isSpecial ? deepGold.withOpacity(0.6) : Colors.white10),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(isSpecial ? '🎉' : '⭐', style: const TextStyle(fontSize: 16)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '$dateText · ${cs('nStars', lang: lang, args: {'n': stars})}${who.isNotEmpty ? ' · ${SupporterService.relationEmoji[rel] ?? ''} $who' : ''}',
+                                            style: GoogleFonts.notoSansKr(color: isSpecial ? paleGold : cream, fontWeight: FontWeight.bold, fontSize: 12.5),
+                                          ),
+                                          if (message.isNotEmpty)
+                                            Text(message, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.4)),
+                                          if (actNames.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 4),
+                                              child: Text(
+                                                who.isNotEmpty
+                                                    ? cs('giftActsWho', lang: lang, args: {'who': who, 'list': actNames.join(' · ')})
+                                                    : cs('giftActs', lang: lang, args: {'list': actNames.join(' · ')}),
+                                                style: GoogleFonts.notoSansKr(color: softGold, fontSize: 11.5, height: 1.4, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ] else ...[
+                            const SizedBox(height: 14),
+                            Text(cs('giftEmpty', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 12, height: 1.5)),
+                          ],
+                          const SizedBox(height: 12),
+                          Text(cs('giftNote', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11, height: 1.5)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -10300,84 +10432,138 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     );
   }
 
-  // 🆕 [요청 2026-09-04] "종합 리포트" 버튼용 실시간 콘텐츠 생성 함수.
-  // 기존의 "이규현" 가짜 고정 텍스트(summaryReportBody)를 대체하며, "오늘 학습한 과목" 카드와
-  // 동일하게 선택된 날짜(_selectedSessionDate, 좌우 화살표로 이동 가능)의 실제 학습 세션과
-  // 실제 목표 달성도를 반영한 진단 피드백을 실시간으로 구성합니다.
+  // ============================================================================
+  // 🆕 [리포트 저장·공유 2026-10-01] 원장님 원칙
+  // - 종합 리포트: 그날 총 학습시간 구간별 문장 은행에서 꺼내 씀(새로 지어내지 않음)
+  //   → 서버(links/{내 코드}/reports)에 저장 → 부모님 화면에도 똑같은 글, 다시 열어도 같은 글
+  // - 같은 학생에게는 전에 받은 문장 조합을 다시 쓰지 않음
+  // - "목표 달성률 60%대" 같은 문장은 목표를 정하지 않은 학생에게 맞지 않아 더 이상 쓰지 않음
+  // ============================================================================
+  static const Map<String, String> _kAiNote = {
+    'KO': '※ 이 분석은 GKE 학습 전문 AI가 그날의 학습 기록(강의·평가·학습 시간)을 참고하여 작성했습니다. 기록이 꾸준히 쌓일수록 분석은 더 정밀해집니다.',
+    'EN': "※ This analysis was written by GKE's learning-specialist AI based on that day's study records (lectures, evaluations, study time). The more consistently records build up, the more precise it becomes.",
+    'JA': '※ この分析は、GKE学習専門AIがその日の学習記録（講義・評価・学習時間）をもとに作成しました。記録が積み重なるほど、分析はより精密になります。',
+    'ZH': '※ 本分析由GKE学习专业AI参考当天的学习记录（课程·评估·学习时间）撰写。记录积累得越多，分析就越精准。',
+    'FR': "※ Cette analyse a été rédigée par l'IA spécialisée de GKE à partir des données d'étude du jour (cours, évaluations, temps d'étude). Plus les données s'accumulent, plus elle devient précise.",
+    'DE': '※ Diese Analyse wurde von der Lern-KI von GKE anhand der Lernaufzeichnungen des Tages (Unterricht, Bewertungen, Lernzeit) erstellt. Je mehr Aufzeichnungen, desto genauer wird sie.',
+    'RU': '※ Этот анализ составлен учебным ИИ GKE на основе записей за день (занятия, оценки, время учёбы). Чем больше записей, тем точнее анализ.',
+    'AR': '※ كُتب هذا التحليل بواسطة ذكاء GKE الاصطناعي المتخصص في التعلم استنادًا إلى سجلات ذلك اليوم (الدروس، التقييمات، وقت الدراسة). كلما تراكمت السجلات أصبح التحليل أدق.',
+    'HI': '※ यह विश्लेषण GKE के लर्निंग-विशेषज्ञ AI ने उस दिन के अध्ययन रिकॉर्ड (पाठ, मूल्यांकन, अध्ययन समय) के आधार पर लिखा है। रिकॉर्ड जितने बढ़ेंगे, विश्लेषण उतना सटीक होगा।',
+    'VI': '※ Phân tích này do AI chuyên về học tập của GKE viết dựa trên hồ sơ học tập trong ngày (bài giảng, đánh giá, thời gian học). Hồ sơ càng nhiều, phân tích càng chính xác.',
+    'ES': '※ Este análisis fue redactado por la IA de aprendizaje de GKE a partir de los registros del día (clases, evaluaciones, tiempo de estudio). Cuantos más registros, más preciso será.',
+    'TH': '※ บทวิเคราะห์นี้เขียนโดย AI ผู้เชี่ยวชาญด้านการเรียนของ GKE จากบันทึกการเรียนของวันนั้น (บทเรียน การประเมิน เวลาเรียน) ยิ่งบันทึกสะสมมาก การวิเคราะห์ยิ่งแม่นยำ',
+  };
+  static const Map<String, String> _kNoEvalDirection = {
+    'KO': '이날은 평가 기록이 없어 학습 시간과 과목을 중심으로 기록했습니다. 평가를 기록하면 과목별 정밀 진단이 함께 제공됩니다.',
+    'EN': 'There were no evaluations recorded that day, so this record focuses on study time and subjects. Log an evaluation to receive a detailed subject diagnosis.',
+    'JA': 'この日は評価記録がないため、学習時間と科目を中心に記録しました。評価を記録すると、科目別の精密診断も提供されます。',
+    'ZH': '当天没有评估记录，因此以学习时间和科目为主进行记录。记录评估后，将同时提供各科目的精准诊断。',
+    'FR': "Aucune évaluation n'a été enregistrée ce jour-là ; ce relevé porte donc sur le temps d'étude et les matières. Enregistrez une évaluation pour obtenir un diagnostic détaillé.",
+    'DE': 'An diesem Tag wurde keine Bewertung erfasst, daher konzentriert sich der Eintrag auf Lernzeit und Fächer. Erfasse eine Bewertung für eine genaue Fachdiagnose.',
+    'RU': 'В этот день не было записанных оценок, поэтому запись основана на времени учёбы и предметах. Запишите оценку, чтобы получить подробную диагностику.',
+    'AR': 'لم تُسجَّل تقييمات في ذلك اليوم، لذا يركز هذا السجل على وقت الدراسة والمواد. سجّل تقييمًا لتحصل على تشخيص مفصل للمادة.',
+    'HI': 'उस दिन कोई मूल्यांकन दर्ज नहीं था, इसलिए यह रिकॉर्ड अध्ययन समय और विषयों पर केंद्रित है। मूल्यांकन दर्ज करें तो विषयवार विस्तृत निदान मिलेगा।',
+    'VI': 'Ngày hôm đó không có đánh giá nào được ghi lại, nên bản ghi tập trung vào thời gian học và môn học. Hãy ghi đánh giá để nhận chẩn đoán chi tiết theo môn.',
+    'ES': 'Ese día no hubo evaluaciones registradas, así que este registro se centra en el tiempo de estudio y las materias. Registra una evaluación para recibir un diagnóstico detallado.',
+    'TH': 'วันนั้นไม่มีการบันทึกการประเมิน จึงบันทึกโดยเน้นเวลาเรียนและวิชา หากบันทึกการประเมินจะได้รับการวินิจฉัยรายวิชาอย่างละเอียด',
+  };
+
+  // 기본모드(한국어·영어)는 한글 + 영어 두 줄, 외국어는 그 언어 한 줄
+  String _biMap(Map<String, String> m) {
+    if (DkeLang.isForeignSelected) return m[DkeLang.current] ?? m['EN'] ?? '';
+    return '${m['KO']}\n${m['EN']}';
+  }
+
+  String get _reportPersonKey => 'student_${FirebaseAuth.instance.currentUser?.uid ?? 'guest'}';
+
+  Future<String> _archivedDailySummary(int subjectCount, int totalMin) {
+    if (_myLinkCode == null) {
+      // 부모님과 연결 전이면 기기 안의 문장 은행만 사용
+      return DiagnosisService.getDailySummary(personKey: _reportPersonKey, subjectCount: subjectCount, totalMinutes: totalMin);
+    }
+    return ReportArchiveService.dailySummary(
+      code: _myLinkCode!,
+      personKey: _reportPersonKey,
+      day: _selectedSessionDate,
+      subjectCount: subjectCount,
+      totalMinutes: totalMin,
+    );
+  }
+
+  Future<String> _archivedExamAnalysis({required String type, required String subject, required double score, required DateTime date}) {
+    if (_myLinkCode == null) {
+      return DiagnosisService.getAnalysis(personKey: _reportPersonKey, type: type, subject: subject, score: score);
+    }
+    return ReportArchiveService.examAnalysis(
+      code: _myLinkCode!,
+      personKey: _reportPersonKey,
+      rawExam: {'date': date.toIso8601String()},
+      type: type,
+      subject: subject,
+      score: score,
+    );
+  }
+
+  // 🆕 [2026-10-01] "종합 리포트" — 고른 날짜의 실제 학습 기록 + 저장·공유되는 총평
   Future<String> _buildTotalReportContent() async {
     if (_selectedDaySessions.isEmpty) {
       return _sessionEmptyMessage;
     }
-
-    final int totalMin = _selectedDaySessions.fold<int>(
-      0,
-          (sum, s) => sum + (s["minutes"] as int),
-    );
+    final bool ko = DkeLang.current == 'KO';
+    final int totalMin = _selectedDaySessions.fold<int>(0, (sum, s) => sum + (s["minutes"] as int));
     final int evalCount = _selectedDaySessions.where((s) => s['recordType'] == '평가').length;
     final int lectureCount = _selectedDaySessions.length - evalCount;
+    final int subjectCount = _selectedDaySessions.map((s) => s["subject"]).toSet().length;
+    final String dayWord = _isSelectedDateToday
+        ? (ko ? '오늘' : 'Today')
+        : (ko ? '${_selectedSessionDate.month}월 ${_selectedSessionDate.day}일' : '${_selectedSessionDate.month}/${_selectedSessionDate.day}');
 
     final buffer = StringBuffer();
-    buffer.write(
-      DkeLang.current == 'KO' ? '[종합 리포트]\n\n' : '[Total Report]\n\n',
-    );
-    buffer.write(
-      DkeLang.current == 'KO'
-          ? '오늘 총 학습시간: $totalMin분\n강의 $lectureCount건 · 평가 $evalCount건\n\n'
-          : 'Total study time today: $totalMin min\nLectures $lectureCount · Evaluations $evalCount\n\n',
-    );
-
-    // 🆕 [요청 2026-09-22] 세션 나열 대신, 오늘 전체(평가+강의)를 묶어서
-    // 학습 방법과 응원 중심의 코칭 멘트만 제공 (상세분석과 톤을 명확히 구분)
-    final String topSubject = _selectedDaySessions.first["subject"] as String;
-    final String diagnosis = await _generateOrReuseDiagnosis(
-      type: "일일종합",
-      score: _realGoalAttainmentPercent.toDouble(),
-      subject: topSubject,
-      tier: AiTier.light,
-    );
-    buffer.write(diagnosis);
-
+    buffer.write(ko ? '[종합 리포트]\n\n' : '[Total Report]\n\n');
+    buffer.write(ko
+        ? '$dayWord 총 학습시간: $totalMin분\n강의 $lectureCount건 · 평가 $evalCount건\n\n'
+        : '$dayWord total study time: $totalMin min\nLectures $lectureCount · Evaluations $evalCount\n\n');
+    buffer.write(await _archivedDailySummary(subjectCount, totalMin));
+    buffer.write('\n\n${_biMap(_kAiNote)}');
     return buffer.toString();
   }
 
-  // 🆕 [요청 2026-09-04] "상세분석기록" 버튼용 실시간 콘텐츠 생성 함수.
-  // 기존의 "이규현" 가짜 고정 텍스트(detailedReportBody)를 대체하며, 선택된 날짜의 실제 학습시간과
-  // 가장 많이 학습한 과목을 반영한 상세 진단을 실시간으로 구성합니다.
+  // 🆕 [2026-10-01] "상세분석기록" — 교시별 기록 + (평가가 있으면) 가장 낮은 점수 평가의 저장·공유 진단서
   Future<String> _buildDetailedReportContent() async {
     if (_selectedDaySessions.isEmpty) {
       return _sessionEmptyMessage;
     }
-
+    final bool ko = DkeLang.current == 'KO';
     final buffer = StringBuffer();
-    buffer.write(
-      DkeLang.current == 'KO' ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n',
-    );
+    buffer.write(ko ? '[상세분석기록]\n\n' : '[Detailed Analytics]\n\n');
 
     for (int i = 0; i < _selectedDaySessions.length; i++) {
       final s = _selectedDaySessions[i];
-      final String period = DkeLang.current == 'KO' ? '제${i + 1}${_t('sessionOrdinal')}' : '${_t('sessionOrdinal')} ${i + 1}';
+      final String period = ko ? '제${i + 1}${_t('sessionOrdinal')}' : '${_t('sessionOrdinal')} ${i + 1}';
       buffer.write("■ $period · ${_subjectName(s["subject"] as String)} ${_sessionTypeLabel(s)}\n");
       buffer.write("  ${s["minutes"]}${_t('minutesUnitSuffix')}\n\n");
     }
 
-    final List<double> evalScores = _selectedDaySessions
+    buffer.write(_isSelectedDateToday
+        ? (ko ? '[오늘의 방향 제안]\n' : "[Today's Direction]\n")
+        : (ko ? '[그날의 방향 제안]\n' : "[That Day's Direction]\n"));
+
+    final List<Map<String, dynamic>> evals = _selectedDaySessions
         .where((s) => s['recordType'] == '평가' && s['score'] != null)
-        .map((s) => (s['score'] as num).toDouble())
         .toList();
-    final double diagScore = evalScores.isNotEmpty
-        ? evalScores.reduce((a, b) => a < b ? a : b)
-        : _realGoalAttainmentPercent.toDouble();
-    final String topSubject = _selectedDaySessions.first["subject"] as String;
-
-    buffer.write(DkeLang.current == 'KO' ? '[오늘의 방향 제안]\n' : "[Today's Direction]\n");
-    final String diagnosis = await _generateOrReuseDiagnosis(
-      type: "일일상세",
-      score: diagScore,
-      subject: topSubject,
-      tier: AiTier.pro,
-    );
-    buffer.write(diagnosis);
-
+    if (evals.isEmpty) {
+      buffer.write(_biMap(_kNoEvalDirection));
+    } else {
+      evals.sort((a, b) => (a['score'] as num).compareTo(b['score'] as num));
+      final Map<String, dynamic> lowest = evals.first;
+      buffer.write(await _archivedExamAnalysis(
+        type: '평가',
+        subject: lowest["subject"] as String,
+        score: (lowest['score'] as num).toDouble(),
+        date: lowest["timestamp"] as DateTime,
+      ));
+    }
+    buffer.write('\n\n${_biMap(_kAiNote)}');
     return buffer.toString();
   }
 

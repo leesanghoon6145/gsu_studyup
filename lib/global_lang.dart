@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/widgets.dart'; // 🆕 [2026-10-01] 언어 바꾸면 화면 전체 즉시 다시 그리기
 
 class DkeLang {
   // 👑 [DKE 언어 중앙 제어 스위치]: 기본값은 한국어('KO')
@@ -33,6 +34,8 @@ class DkeLang {
     current = supportedLanguages.contains(normalized) ? normalized : 'EN';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_country', current);
+    // 🆕 [2026-10-01] 앱을 다시 켜지 않아도, 지금 떠 있는 모든 화면을 새 언어로 바로 다시 그림
+    WidgetsBinding.instance.reassembleApplication();
   }
 
   // 🌐 아랍어는 오른쪽에서 왼쪽으로 읽는 언어라, 화면 방향(RTL) 판단이 필요한 화면에서 공용으로 사용

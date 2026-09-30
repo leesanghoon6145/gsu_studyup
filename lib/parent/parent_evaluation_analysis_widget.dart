@@ -159,8 +159,11 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
   final VoidCallback onShowDetailAnalysisReport;
   final Widget Function(String, String, {required double fontSize, String? foreignTitle}) buildCustomSectionTitle;
 
+  final Widget? topBar; // 🆕 [2026-10-01] 로그아웃 · 다국어 줄 (내용 맨 첫 줄)
+
   const ParentEvaluationAnalysisWidget({
     Key? key,
+    this.topBar,
     required this.childName,
     required this.selectedEvaluationType,
     required this.selectedBigUnits,
@@ -191,6 +194,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (topBar != null) ...[topBar!, const SizedBox(height: 14)], // 🆕 [2026-10-01]
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,13 +203,7 @@ class ParentEvaluationAnalysisWidget extends StatelessWidget {
               const SizedBox(width: 8),
               // 🆕 [요청] 자녀 이름을 큰따옴표로 감싸 보여주던 방식 대신, 언어별 고정 문구("성적기록보기")로 단순화
               Flexible(
-                child: Text(
-                  childRecordTitle(),
-                  textAlign: TextAlign.right,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                ),
+                child: buildCustomSectionTitle("Grade Records", "[ 성적 기록 보기 ]", fontSize: 14.0, foreignTitle: '[ ${t(kChildRecordTitleMap)} ]'), // 🆕 [2026-10-01] 왼쪽 [평가 결과]와 같은 모양
               ),
             ],
           ),

@@ -22,6 +22,8 @@ import '../services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25
 import '../services/exercise_star_service.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 별 통장 표시
 import '../schedule/general_planner_home_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] "운동하기" → 일반 플래너
 import '../schedule/cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 카드 글자 12개 언어
+import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
+import '../services/report_archive_service.dart'; // 🆕 [리포트 저장 2026-10-01]
 
 // ---------------------------------------------------------------------------
 // 🆕 [다국어] DkeLang 연동: 기본모드(KO/EN)는 한글+영문 동시 표시,
@@ -193,19 +195,20 @@ const Map<String, String> kPeriodWordMap = {
   'ES': 'Sesión',
   'TH': 'คาบ',
 };
+// 🆕 [2026-10-01] 숫자 뒤에 이미 "분"이 붙으므로 여기서는 "분"을 뺌 ("2분 분 집중완료" 수정)
 const Map<String, String> kFocusCompletedMap = {
-  'KO': '분 집중완료',
-  'EN': 'min focused',
-  'JA': '分 集中完了',
-  'ZH': '分钟 专注完成',
-  'FR': 'min de concentration terminées',
-  'DE': 'Min. fokussiert',
-  'RU': 'мин сосредоточенности',
-  'AR': 'دقيقة تركيز مكتمل',
-  'HI': 'मिनट फोकस पूर्ण',
-  'VI': 'phút tập trung hoàn thành',
-  'ES': 'min de concentración',
-  'TH': 'นาที โฟกัสสำเร็จ',
+  'KO': '집중완료',
+  'EN': 'focused',
+  'JA': '集中完了',
+  'ZH': '专注完成',
+  'FR': 'de concentration',
+  'DE': 'fokussiert',
+  'RU': 'сосредоточенности',
+  'AR': 'تركيز مكتمل',
+  'HI': 'फोकस पूर्ण',
+  'VI': 'tập trung',
+  'ES': 'de concentración',
+  'TH': 'โฟกัสสำเร็จ',
 };
 const Map<String, String> kScoreLabelMap = {
   'KO': '점수',
@@ -1787,6 +1790,292 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
       }
     });
   }
+  // ============================================================================
+  // 🆕 [응원 가족 2026-09-30] 자녀 칩 줄 바로 아래 "응원 가족 n/5 · 신청 n건" 띠.
+  // 누르면 신청 승인·거절, 응원 가족 해제를 할 수 있는 금테 창이 열림.
+  // ============================================================================
+  Widget _buildSupporterBar() {
+    final String? code = _selectedChildCode;
+    if (code == null) return const SizedBox.shrink();
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FamilyLinkService.watch(code),
+      builder: (context, snapshot) {
+        final Map<String, dynamic> data = snapshot.data?.data() ?? {};
+        final int supCount = ((data['supporterUids'] as List?) ?? []).length;
+        final int reqCount = ((data['supporterRequests'] as Map?) ?? {}).length;
+        final String lang = DkeLang.current;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _openSupporterManager(code),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: reqCount > 0 ? brandGolden.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: brandGolden.withValues(alpha: reqCount > 0 ? 0.9 : 0.35)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.diversity_3_rounded, color: brandGolden, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      cs('dashSupBar', lang: lang, args: {'n': supCount, 'max': SupporterService.maxSupporters}),
+                      style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5),
+                    ),
+                  ),
+                  if (reqCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
+                      child: Text(
+                        cs('dashSupReq', lang: lang, args: {'n': reqCount}),
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right_rounded, color: brandGolden, size: 20),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openSupporterManager(String code) async {
+    final String lang = DkeLang.current;
+    String relLabel(String rel, String relText) =>
+        rel == 'other' && relText.trim().isNotEmpty ? relText.trim() : cs('rel_$rel', lang: lang);
+    String whoOf(Map<String, dynamic> info) {
+      final String rel = (info['relation'] as String?) ?? 'other';
+      final String name = (info['name'] as String?) ?? '';
+      return '${SupporterService.relationEmoji[rel] ?? '💛'} ${relLabel(rel, (info['relationText'] as String?) ?? '')}${name.isNotEmpty ? ' ($name)' : ''}';
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(dialogContext).size.height * 0.8),
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF050B14),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: brandGolden, width: 1.5),
+          ),
+          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FamilyLinkService.watch(code),
+            builder: (context, snapshot) {
+              final Map<String, dynamic> data = snapshot.data?.data() ?? {};
+              final Map<String, dynamic> requests = Map<String, dynamic>.from((data['supporterRequests'] as Map?) ?? {});
+              final Map<String, dynamic> supporters = Map<String, dynamic>.from((data['supporters'] as Map?) ?? {});
+              final List<String> supUids = ((data['supporterUids'] as List?) ?? []).map((e) => e.toString()).toList();
+
+              Widget row(String who, List<Widget> buttons) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: const Color(0xFF111827), borderRadius: BorderRadius.circular(10)),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(who, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
+                    ...buttons,
+                  ],
+                ),
+              );
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (lang == 'KO') ...[
+                    Text(csEn('dashSupTitle'), style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.1)),
+                    Text(csKo('dashSupTitle'), style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 19)),
+                  ] else
+                    Text(cs('dashSupTitle', lang: lang), style: GoogleFonts.notoSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (requests.isNotEmpty) ...[
+                            Text(cs('dashSupReqTitle', lang: lang), style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                            const SizedBox(height: 8),
+                            ...requests.entries.map((e) {
+                              final Map<String, dynamic> info = Map<String, dynamic>.from((e.value as Map?) ?? {});
+                              return row(whoOf(info), [
+                                TextButton(
+                                  onPressed: () => SupporterService.reject(code, e.key),
+                                  child: Text(cs('dashReject', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontWeight: FontWeight.bold)),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: brandGolden, padding: const EdgeInsets.symmetric(horizontal: 14)),
+                                  onPressed: () async {
+                                    final String? err = await SupporterService.approve(code, e.key, info);
+                                    if (err != null && dialogContext.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(cs(err, lang: lang))));
+                                    }
+                                  },
+                                  child: Text(cs('dashApprove', lang: lang), style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+                                ),
+                              ]);
+                            }),
+                            const SizedBox(height: 10),
+                          ],
+                          Text(
+                            '${cs('dashSupListTitle', lang: lang)} ${supUids.length}/${SupporterService.maxSupporters}',
+                            style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5),
+                          ),
+                          const SizedBox(height: 8),
+                          if (supUids.isEmpty)
+                            Text(cs('dashSupEmpty', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 12, height: 1.6))
+                          else
+                            ...supUids.map((uid) {
+                              final Map<String, dynamic> info = Map<String, dynamic>.from((supporters[uid] as Map?) ?? {});
+                              final String who = whoOf(info);
+                              return row(who, [
+                                TextButton(
+                                  onPressed: () async {
+                                    final bool? ok = await showDialog<bool>(
+                                      context: context,
+                                      builder: (c) => AlertDialog(
+                                        backgroundColor: premiumCardBg,
+                                        content: Text(cs('dashRemoveConfirm', lang: lang, args: {'who': who}), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(cs('btnCancel', lang: lang), style: const TextStyle(color: Colors.white54))),
+                                          TextButton(onPressed: () => Navigator.pop(c, true), child: Text(cs('dashRemove', lang: lang), style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
+                                        ],
+                                      ),
+                                    );
+                                    if (ok == true) await SupporterService.remove(code, uid);
+                                  },
+                                  child: Text(cs('dashRemove', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                ),
+                              ]);
+                            }),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: Text(cs('btnClose', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================================
+  // 🆕 [부모홈 넓히기 2026-10-01 수정] 로그아웃 · 다국어 줄을 각 탭 내용의 맨 첫 줄로 넣음.
+  // 글·그래프와 함께 자연스럽게 위로 밀려 올라가므로 스크롤이 부드러움.
+  // ============================================================================
+  Widget _topActionRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: _buildTopPillButton(
+            icon: Icons.logout_rounded,
+            label: _bi(kLogoutLabelMap),
+            onTap: _confirmLogout,
+          ),
+        ),
+        const SizedBox(width: 10),
+        _buildTopPillButton(
+          icon: Icons.language_rounded,
+          label: _languageDisplayName(DkeLang.current),
+          onTap: _showLanguagePicker,
+        ),
+      ],
+    );
+  }
+
+  // ============================================================================
+  // 🆕 [지난 날짜 리포트 2026-10-01] 날짜 좌우 화살표로 고른 "그날" 리포트를 보여주고,
+  // 한 번 만든 총평·진단서는 서버에 저장 → 부모·자녀가 같은 글, 언제 다시 열어도 그대로.
+  // ============================================================================
+  static const Map<String, String> _kOverallReportTitleMap = {'KO': '종합 리포트', 'EN': 'Overall Report', 'JA': '総合レポート', 'ZH': '综合报告', 'FR': 'Rapport global', 'DE': 'Gesamtbericht', 'RU': 'Общий отчёт', 'AR': 'التقرير الشامل', 'HI': 'समग्र रिपोर्ट', 'VI': 'Báo cáo tổng hợp', 'ES': 'Informe general', 'TH': 'รายงานสรุป'};
+  static const Map<String, String> _kDetailReportTitleMap = {'KO': '상세 분석기록', 'EN': 'Detailed Analysis', 'JA': '詳細分析記録', 'ZH': '详细分析记录', 'FR': 'Analyse détaillée', 'DE': 'Detaillierte Analyse', 'RU': 'Подробный анализ', 'AR': 'سجل التحليل التفصيلي', 'HI': 'विस्तृत विश्लेषण', 'VI': 'Phân tích chi tiết', 'ES': 'Análisis detallado', 'TH': 'บันทึกวิเคราะห์เชิงลึก'};
+  static const Map<String, String> _kDayTotalTimeMap = {'KO': '총 학습시간', 'EN': 'Total Study Time', 'JA': '総学習時間', 'ZH': '总学习时间', 'FR': "Temps d'étude total", 'DE': 'Gesamtlernzeit', 'RU': 'Общее время учёбы', 'AR': 'إجمالي وقت الدراسة', 'HI': 'कुल अध्ययन समय', 'VI': 'Tổng thời gian học', 'ES': 'Tiempo total de estudio', 'TH': 'เวลาเรียนรวม'};
+  static const Map<String, String> _kDaySummaryHeaderMap = {'KO': '[그날의 종합 분석]', 'EN': "[That Day's Overall Analysis]", 'JA': '[その日の総合分析]', 'ZH': '[当日综合分析]', 'FR': '[Analyse globale du jour]', 'DE': '[Gesamtanalyse des Tages]', 'RU': '[Общий анализ за день]', 'AR': '[التحليل الشامل لذلك اليوم]', 'HI': '[उस दिन का समग्र विश्लेषण]', 'VI': '[Phân tích tổng hợp ngày đó]', 'ES': '[Análisis general de ese día]', 'TH': '[การวิเคราะห์โดยรวมของวันนั้น]'};
+
+  String _dateStr(DateTime d) =>
+      '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
+
+  String _reportTitle(Map<String, String> todayMap, Map<String, String> plainMap, DateTime d) =>
+      _isSameDate(d, DateTime.now()) ? _t(todayMap) : '${_dateStr(d)} ${_t(plainMap)}';
+
+  Future<String> _buildArchivedDailyReport({
+    required String code,
+    required String childName,
+    required DateTime day,
+    required List<ParentSessionRecord> sessions,
+    required int totalMinutes,
+  }) async {
+    if (sessions.isEmpty) return _biLong(kNoSessionTodayMap);
+    final bool isToday = _isSameDate(day, DateTime.now());
+    final buffer = StringBuffer();
+    buffer.writeln("${_t(kReportHeaderMap)}\n");
+    for (int i = 0; i < sessions.length; i++) {
+      final rec = sessions[i];
+      final String periodLabel = _isNumberFirstLang
+          ? "제${i + 1}${_t(kPeriodWordMap)}"
+          : "${_t(kPeriodWordMap)} ${i + 1}";
+      buffer.writeln(
+        "$periodLabel · ${rec.subject} · ${rec.durationMinutes}${_t(kMinutesUnitMap)} ${_t(kFocusCompletedMap)}",
+      );
+      if (rec.recordType == '평가' && rec.score != null) {
+        buffer.writeln("  ${_t(kScoreLabelMap)}: ${rec.score}");
+      }
+    }
+    buffer.writeln(
+      "\n${_t(isToday ? kTodayTotalTimeMap : _kDayTotalTimeMap)}: $totalMinutes${_t(kMinutesUnitMap)}",
+    );
+    final String summary = await ReportArchiveService.dailySummary(
+      code: code,
+      personKey: 'student_$childName',
+      day: day,
+      subjectCount: sessions.map((r) => r.subject).toSet().length,
+      totalMinutes: totalMinutes,
+    );
+    buffer.writeln("\n${_t(isToday ? kTodaySummaryHeaderMap : _kDaySummaryHeaderMap)}");
+    buffer.writeln(summary);
+    return buffer.toString();
+  }
+
+  Future<String> _buildArchivedExamReport({
+    required String code,
+    required String childName,
+    required Object? rawExam,
+    required String type,
+    required String subject,
+    required double score,
+  }) {
+    return ReportArchiveService.examAnalysis(
+      code: code,
+      personKey: 'student_$childName',
+      rawExam: rawExam,
+      type: type,
+      subject: subject,
+      score: score,
+    );
+  }
+
 
   Widget _buildAddChildChip() {
     return GestureDetector(
@@ -2246,7 +2535,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // sessionHistory를 기반으로 지난 일자 조회를, 없으면 기존처럼 로컬 데이터를 사용합니다.
   Widget _buildDetailedAnalysisTabContent() {
     if (_selectedChildCode == null) {
-      return ParentDetailedAnalysisWidget(
+      return ParentDetailedAnalysisWidget(topBar: _topActionRow(),
         childName: _realChildName,
         premiumCardBg: premiumCardBg,
         brandGolden: brandGolden,
@@ -2336,25 +2625,28 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           DateTime.now(),
         );
 
-        return ParentDetailedAnalysisWidget(
+        return ParentDetailedAnalysisWidget(topBar: _topActionRow(),
           childName: childName,
           premiumCardBg: premiumCardBg,
           brandGolden: brandGolden,
           luxuryDarkBg: luxuryDarkBg,
           buildCustomSectionTitle: _buildCustomSectionTitle,
+          // 🆕 [2026-10-01] 날짜 좌우 화살표로 고른 "그날" 리포트 + 서버 저장(부모·자녀 같은 글)
           onShowReportPopup: () async {
-            final String content = await _buildSummaryReportTextFor(
-              childName,
-              _todaySessionsFrom(allSessions),
-              todayTotal,
+            final String content = await _buildArchivedDailyReport(
+              code: _selectedChildCode!,
+              childName: childName,
+              day: _detailedViewDate,
+              sessions: sessionsForDate,
+              totalMinutes: todayTotal,
             );
             if (!mounted) return;
-            _showReportPopup(context, _t(kTodayOverallReportTitleMap), content);
+            _showReportPopup(context, _reportTitle(kTodayOverallReportTitleMap, _kOverallReportTitleMap, _detailedViewDate), content);
           },
           onShowDetailedAnalysisPopup: () => _showReportPopup(
             context,
-            _t(kTodayDetailReportTitleMap),
-            _buildDetailedAnalysisTextFor(_todaySessionsFrom(allSessions)),
+            _reportTitle(kTodayDetailReportTitleMap, _kDetailReportTitleMap, _detailedViewDate),
+            _buildDetailedAnalysisTextFor(sessionsForDate),
           ),
           selectedDate: _detailedViewDate,
           onPreviousDay: _goToPreviousDetailDay,
@@ -2375,7 +2667,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // examRecords/sessionHistory를 기반으로, 없으면 기존처럼 로컬 데이터를 사용합니다.
   Widget _buildEvaluationAnalysisTabContent() {
     if (_selectedChildCode == null) {
-      return ParentEvaluationAnalysisWidget(
+      return ParentEvaluationAnalysisWidget(topBar: _topActionRow(),
         childName: _realChildName,
         selectedEvaluationType: _selectedEvaluationType,
         selectedBigUnits: _selectedBigUnits,
@@ -2439,7 +2731,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
         final List<Map<String, dynamic>> subjectAggregates =
             _computeSubjectAggregatesFrom(allSessions);
 
-        return ParentEvaluationAnalysisWidget(
+        return ParentEvaluationAnalysisWidget(topBar: _topActionRow(),
           childName: childName,
           selectedEvaluationType: _selectedEvaluationType,
           selectedBigUnits: _selectedBigUnits,
@@ -2471,8 +2763,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
               return;
             }
             final lastExam = examRecords.last;
-            final String content = await DiagnosisService.getAnalysis(
-              personKey: 'student_$childName',
+            // 🆕 [2026-10-01] 같은 평가는 언제 열어도 같은 진단서, 새 평가는 전에 안 받은 글로
+            final String content = await _buildArchivedExamReport(
+              code: _selectedChildCode!,
+              childName: childName,
+              rawExam: (data['examRecords'] as List).last,
               type: lastExam.type,
               subject: lastExam.subject,
               score: lastExam.score,
@@ -2489,7 +2784,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // gradeRecords/gradeConfigs/examRecords를 기반으로, 없으면 기존처럼 로컬 데이터를 사용합니다.
   Widget _buildGradeManagementTabContent() {
     if (_selectedChildCode == null) {
-      return ParentGradeManagementWidget(
+      return ParentGradeManagementWidget(topBar: _topActionRow(),
         childName: _realChildName,
         premiumCardBg: premiumCardBg,
         brandGolden: brandGolden,
@@ -2551,7 +2846,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
             ? null
             : scores.reduce((a, b) => a + b) / scores.length;
 
-        return ParentGradeManagementWidget(
+        return ParentGradeManagementWidget(topBar: _topActionRow(),
           childName: childName,
           premiumCardBg: premiumCardBg,
           brandGolden: brandGolden,
@@ -2621,7 +2916,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            _buildCheerStarsCard(), // 🆕 [부모 운동 응원별 2026-09-29]
+            _topActionRow(), const SizedBox(height: 14), _buildCheerStarsCard(), // 🆕 [부모 운동 응원별 2026-09-29]
             const SizedBox(height: 40),
             Text(
               _biLong(kScholarshipNoChildMap),
@@ -2683,6 +2978,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _topActionRow(), // 🆕 [2026-10-01] 로그아웃 · 다국어
+              const SizedBox(height: 14),
               _buildCheerStarsCard(), // 🆕 [부모 운동 응원별 2026-09-29] 이번 달 장학금 바로 위
               const SizedBox(height: 22),
               Row(
@@ -3094,7 +3391,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
       return const SizedBox.shrink();
     }
     if (_selectedChildCode == null) {
-      return ParentLiveStatusWidget(
+      return ParentLiveStatusWidget(topBar: _topActionRow(),
         childName: _realChildName,
         lastSessionSubject: _todaySessions.isNotEmpty
             ? _todaySessions.last.subject
@@ -3169,7 +3466,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           }
         }
 
-        return ParentLiveStatusWidget(
+        return ParentLiveStatusWidget(topBar: _topActionRow(),
           childName: childName,
           isStudyingNow: showAsStudying,
           liveSubject: liveSubject,
@@ -3338,35 +3635,11 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
       body: Column(
         children: [
-          // 🆕 [2026-09-23] 로그아웃(왼쪽) / 회원 연동(오른쪽) - 제목 아래로 이동 (로고 겹침 해소)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: _buildTopPillButton(
-                    icon: Icons.logout_rounded,
-                    label: _bi(kLogoutLabelMap),
-                    onTap: _confirmLogout,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: _buildTopPillButton(
-                    icon: _isVipMember ? null : Icons.link_rounded,
-                    label: _isVipMember ? _t(kVipBadgeMap) : _bi(kVipLinkMap),
-                    filled: _isVipMember,
-                    onTap: () => setState(() => _isVipMember = true),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 4),
+          _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 연결된 자녀 명단 + 추가 버튼
+          _buildSupporterBar(), // 🆕 [응원 가족 2026-09-30] 응원 가족 n/5 · 신청 n건
           const SizedBox(height: _kTopSectionGap),
-          _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 상단에 항상 표시되는 연결된 자녀 명단 + 추가 버튼
-          const SizedBox(height: _kTopSectionGap),
-          // 🆕 [2026-09-23] 공지 및 교육상담(왼쪽) / 언어 선택(오른쪽)
+          // 🆕 [2026-10-01] 공지 및 교육상담(왼쪽) / 회원 연동(오른쪽). 로그아웃·언어는 내용 맨 위로 옮김
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
@@ -3383,10 +3656,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                           await Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const NoticeCounselScreen(isParent: true)),
                           );
-                          _refreshNoticeDot(); // 🆕 [빨간 점] 돌아오면 다시 확인
+                          _refreshNoticeDot();
                         },
                       ),
-                      // 🆕 [빨간 점 2026-09-25] 새 소식이 있으면 오른쪽 위에 빨간 점
                       if (_noticeDot)
                         Positioned(
                           top: -3,
@@ -3405,10 +3677,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                   ),
                 ),
                 const SizedBox(width: 10),
-                _buildTopPillButton(
-                  icon: Icons.language_rounded,
-                  label: _languageDisplayName(DkeLang.current),
-                  onTap: _showLanguagePicker,
+                Flexible(
+                  child: _buildTopPillButton(
+                    icon: _isVipMember ? null : Icons.link_rounded,
+                    label: _isVipMember ? _t(kVipBadgeMap) : _bi(kVipLinkMap),
+                    filled: _isVipMember,
+                    onTap: () => setState(() => _isVipMember = true),
+                  ),
                 ),
               ],
             ),
@@ -3416,9 +3691,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
           const SizedBox(height: _kTopSectionGap),
 
           const Divider(color: Colors.white10, height: 1),
-          Expanded(
-            child: IndexedStack(
-              index: _currentIndex,
+      Expanded(
+        child: IndexedStack(
+          index: _currentIndex,
               children: [
                 // 🆕 [자녀 선택 UI + Firestore 연동] 자녀가 선택되어 있으면 해당 자녀의 Firestore
                 // 데이터를, 없으면(단일기기 사용자) 기존처럼 로컬 데이터를 보여줌
@@ -3437,8 +3712,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                 // 🆕 [장학금 방 2026-09-17] 5번째 탭
                 _buildScholarshipTabContent(),
               ],
-            ),
-          ),
+        ),
+      ),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(

@@ -31,8 +31,11 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
   final String? strongestSubject;
   final String? weakestSubject;
 
+  final Widget? topBar; // 🆕 [2026-10-01] 로그아웃 · 다국어 줄 (내용 맨 첫 줄)
+
   const ParentDetailedAnalysisWidget({
     Key? key,
+    this.topBar,
     required this.childName,
     required this.premiumCardBg,
     required this.brandGolden,
@@ -85,8 +88,8 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
     'homeSupportLabel': {'KO': '🛡️ 가정에서 도와줄 포인트', 'EN': '🛡️ How to Help at Home', 'JA': '🛡️ 家庭でのサポートポイント', 'ZH': '🛡️ 家庭辅导要点', 'FR': '🛡️ Conseils pour aider à la maison', 'DE': '🛡️ Unterstützungstipps für zu Hause', 'RU': '🛡️ Как помочь дома', 'AR': '🛡️ نصائح للمساعدة في المنزل', 'HI': '🛡️ घर पर मदद के तरीके', 'VI': '🛡️ Cách hỗ trợ tại nhà', 'ES': '🛡️ Cómo ayudar en casa', 'TH': '🛡️ แนวทางช่วยเหลือที่บ้าน'},
     'weakSubjectAdviceFormat': {'KO': '{subject} 학습 시간 확보 및 오답 정리 지원 권장', 'EN': 'Recommend securing more study time for {subject} and reviewing mistakes', 'JA': '{subject}の学習時間確保と誤答整理のサポートを推奨します', 'ZH': '建议为{subject}安排更多学习时间并协助整理错题', 'FR': 'Il est recommandé de consacrer plus de temps à {subject} et de revoir les erreurs', 'DE': 'Empfohlen wird, mehr Lernzeit für {subject} einzuplanen und Fehler zu überprüfen', 'RU': 'Рекомендуется выделить больше времени на {subject} и разобрать ошибки', 'AR': 'يُنصح بتخصيص وقت أطول لدراسة {subject} ومراجعة الأخطاء', 'HI': '{subject} के लिए अधिक अध्ययन समय और गलतियों की समीक्षा में सहायता की सिफारिश की जाती है', 'VI': 'Nên dành thêm thời gian học {subject} và hỗ trợ xem lại lỗi sai', 'ES': 'Se recomienda dedicar más tiempo de estudio a {subject} y repasar los errores', 'TH': 'แนะนำให้จัดสรรเวลาเรียนวิชา {subject} เพิ่มขึ้นและช่วยทบทวนข้อผิดพลาด'},
     'waitForEvalMsg': {'KO': '평가 기록이 쌓이면 안내됩니다', 'EN': 'Guidance will appear once evaluation records accumulate', 'JA': '評価記録が蓄積されるとご案内します', 'ZH': '累积评估记录后将提供指导', 'FR': 'Des conseils apparaîtront une fois les évaluations accumulées', 'DE': 'Hinweise erscheinen, sobald Bewertungsdaten vorliegen', 'RU': 'Рекомендации появятся после накопления записей оценивания', 'AR': 'سيتم تقديم إرشادات بمجرد تراكم سجلات التقييم', 'HI': 'मूल्यांकन रिकॉर्ड जमा होने पर मार्गदर्शन दिखाई देगा', 'VI': 'Hướng dẫn sẽ xuất hiện khi có đủ dữ liệu đánh giá', 'ES': 'Se mostrará orientación cuando se acumulen registros de evaluación', 'TH': 'คำแนะนำจะปรากฏเมื่อมีการสะสมข้อมูลการประเมิน'},
-    'viewSummaryBtn': {'KO': '오늘 종합 리포트 보기 🔺', 'EN': "View Today's Overall Report 🔺", 'JA': '本日の総合レポートを見る 🔺', 'ZH': '查看今日综合报告 🔺', 'FR': 'Voir le rapport global du jour 🔺', 'DE': 'Heutigen Gesamtbericht ansehen 🔺', 'RU': 'Смотреть общий отчёт за сегодня 🔺', 'AR': 'عرض التقرير الشامل لليوم 🔺', 'HI': 'आज की समग्र रिपोर्ट देखें 🔺', 'VI': 'Xem báo cáo tổng hợp hôm nay 🔺', 'ES': 'Ver informe general de hoy 🔺', 'TH': 'ดูรายงานสรุปวันนี้ 🔺'},
-    'viewDetailBtn': {'KO': '오늘 상세 분석 보기 🔺', 'EN': "View Today's Detailed Analysis 🔺", 'JA': '本日の詳細分析を見る 🔺', 'ZH': '查看今日详细分析 🔺', 'FR': "Voir l'analyse détaillée du jour 🔺", 'DE': 'Heutige detaillierte Analyse ansehen 🔺', 'RU': 'Смотреть подробный анализ за сегодня 🔺', 'AR': 'عرض التحليل التفصيلي لليوم 🔺', 'HI': 'आज का विस्तृत विश्लेषण देखें 🔺', 'VI': 'Xem phân tích chi tiết hôm nay 🔺', 'ES': 'Ver análisis detallado de hoy 🔺', 'TH': 'ดูการวิเคราะห์เชิงลึกวันนี้ 🔺'},
+    'viewSummaryBtn': {'KO': '종합 리포트 보기 🔺', 'EN': 'View Overall Report 🔺', 'JA': '総合レポートを見る 🔺', 'ZH': '查看综合报告 🔺', 'FR': 'Voir le rapport global 🔺', 'DE': 'Gesamtbericht ansehen 🔺', 'RU': 'Смотреть общий отчёт 🔺', 'AR': 'عرض التقرير الشامل 🔺', 'HI': 'समग्र रिपोर्ट देखें 🔺', 'VI': 'Xem báo cáo tổng hợp 🔺', 'ES': 'Ver informe general 🔺', 'TH': 'ดูรายงานสรุป 🔺'},
+    'viewDetailBtn': {'KO': '상세 분석 보기 🔺', 'EN': 'View Detailed Analysis 🔺', 'JA': '詳細分析を見る 🔺', 'ZH': '查看详细分析 🔺', 'FR': "Voir l'analyse détaillée 🔺", 'DE': 'Detaillierte Analyse ansehen 🔺', 'RU': 'Смотреть подробный анализ 🔺', 'AR': 'عرض التحليل التفصيلي 🔺', 'HI': 'विस्तृत विश्लेषण देखें 🔺', 'VI': 'Xem phân tích chi tiết 🔺', 'ES': 'Ver análisis detallado 🔺', 'TH': 'ดูการวิเคราะห์เชิงลึก 🔺'},
     'metricScore': {'KO': '점수', 'EN': 'Score', 'JA': '点数', 'ZH': '分数', 'FR': 'Score', 'DE': 'Punktzahl', 'RU': 'Балл', 'AR': 'الدرجة', 'HI': 'स्कोर', 'VI': 'Điểm', 'ES': 'Puntuación', 'TH': 'คะแนน'},
     'metricUnderstanding': {'KO': '이해도', 'EN': 'Understanding', 'JA': '理解度', 'ZH': '理解度', 'FR': 'Compréhension', 'DE': 'Verständnis', 'RU': 'Понимание', 'AR': 'الفهم', 'HI': 'समझ', 'VI': 'Mức hiểu', 'ES': 'Comprensión', 'TH': 'ความเข้าใจ'},
     'metricDifficulty': {'KO': '난이도', 'EN': 'Difficulty', 'JA': '難易度', 'ZH': '难度', 'FR': 'Difficulté', 'DE': 'Schwierigkeit', 'RU': 'Сложность', 'AR': 'الصعوبة', 'HI': 'कठिनाई', 'VI': 'Độ khó', 'ES': 'Dificultad', 'TH': 'ความยาก'},
@@ -210,6 +213,7 @@ class ParentDetailedAnalysisWidget extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24.0),
       children: [
+        if (topBar != null) ...[topBar!, const SizedBox(height: 14)], // 🆕 [2026-10-01]
         buildCustomSectionTitle(
           "Self-Directed Learning Records",
           "$childName $_dayLabelKo 자기주도 학습 성취도 상세보기",

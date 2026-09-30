@@ -278,6 +278,23 @@ class ExerciseStarService {
     }
   }
 
+  /// 🆕 [2026-09-30] 보내기 창 위쪽 요약용: (총 모은 별, 보낸 별, 현재 남은 별)
+  static Future<(int, int, int)> getMyBankSummary() async {
+    final ref = _myDoc();
+    if (ref == null) return (0, 0, 0);
+    try {
+      final data = (await ref.get()).data() ?? {};
+      return (
+      (data['totalEarned'] as num?)?.toInt() ?? 0,
+      (data['totalSent'] as num?)?.toInt() ?? 0,
+      (data['balance'] as num?)?.toInt() ?? 0,
+      );
+    } catch (e) {
+      debugPrint('[ExerciseStarService] getMyBankSummary 실패: $e');
+      return (0, 0, 0);
+    }
+  }
+
   /// 자녀에게 별 보내기. 내 통장에서 빼고 자녀 문서(links/{code})에 더하는 일을
   /// 한 번에(트랜잭션) 처리 — 중간에 끊겨도 별이 사라지거나 두 번 들어가지 않음.
   /// 자녀 문서에 쌓이는 칸 (자녀 본인 별·장학금과 완전히 별개):
@@ -291,27 +308,30 @@ class ExerciseStarService {
     required int stars,
     required String message,
     required bool isSpecial,
+    String fromName = '', // 🆕 [응원 가족 2026-09-30] 보낸 사람 이름
+    String fromRelation = 'guardian', // 🆕 보낸 사람 관계 (mom / grandma 등)
+    String fromRelationText = '', // 🆕 관계가 "기타"일 때 직접 쓴 말
+    bool asSupporter = false, // 🆕 true = 응원 가족 (아이 문서는 읽지 못하므로 gifts 기록만 남김)
   }) async {
     final bankRef = _myDoc();
     if (bankRef == null) return 'errLogin';
     if (stars <= 0) return 'errCount';
     final linkRef = _db.collection('links').doc(code);
+    final giftRef = linkRef.collection('gifts').doc(); // 🆕 누가·몇 개 보냈는지 한 장씩 기록
 
     try {
       await _db.runTransaction((tx) async {
         final bankSnap = await tx.get(bankRef);
-        final linkSnap = await tx.get(linkRef);
+        final DocumentSnapshot<Map<String, dynamic>>? linkSnap = asSupporter ? null : await tx.get(linkRef);
 
         final Map<String, dynamic> bankData = bankSnap.data() ?? {};
         final int balance = (bankData['balance'] as num?)?.toInt() ?? 0;
         if (stars > balance) throw StateError('errBalanceLow:$balance');
         if (!isSpecial && stars > maxStarsPerSend) throw StateError('errCap');
-        if (!linkSnap.exists) throw StateError('errNoLink');
+        if (!asSupporter && !(linkSnap?.exists ?? false)) throw StateError('errNoLink');
 
-        final Map<String, dynamic> linkData = linkSnap.data() ?? {};
-        final List<dynamic> history = List<dynamic>.from((linkData['parentGiftHistory'] as List?) ?? []);
-        // 🆕 [2026-09-30] 오늘 부모가 한 일(가족 활동 체크 항목 + 운동 시간)을 함께 담아,
-        // 자녀 카드에 "오늘 엄마 아빠는: 계단 · 대화 · 운동 30분"으로 보여줌
+        // 🆕 [2026-09-30] 오늘 보낸 사람이 한 일(가족 활동 체크 항목 + 운동 시간)을 함께 담아,
+        // 아이 카드에 "오늘 할머니의 노력: 걷기 · 운동 30분"으로 보여줌
         final String todayKey = dateKey(DateTime.now());
         final Map<String, dynamic> fcAll = Map<String, dynamic>.from((bankData['familyCheck'] as Map?) ?? {});
         final Map<String, dynamic> fcToday = Map<String, dynamic>.from((fcAll[todayKey] as Map?) ?? {});
@@ -321,20 +341,6 @@ class ExerciseStarService {
         });
         final Map<String, dynamic> dailyAll = Map<String, dynamic>.from((bankData['dailyMinutes'] as Map?) ?? {});
         final int exMin = (dailyAll[todayKey] as num?)?.toInt() ?? 0;
-
-        history.add({
-          'stars': stars,
-          'message': message,
-          'type': isSpecial ? 'special' : 'normal',
-          'sentAt': Timestamp.now(), // 목록 안에서는 서버 시각을 쓸 수 없어 기기 시각 사용
-          'acts': acts, // 🆕 오늘 체크한 가족 활동 이름표들
-          'exMin': exMin, // 🆕 오늘 타이머로 운동한 분
-        });
-        while (history.length > 50) {
-          history.removeAt(0);
-        }
-        final int giftTotal = ((linkData['parentGiftStars'] as num?)?.toInt() ?? 0) + stars;
-        final int giftSpecial = ((linkData['parentGiftSpecialStars'] as num?)?.toInt() ?? 0) + (isSpecial ? stars : 0);
 
         // 🆕 이번 달 "보낸 별"도 함께 기록
         final Map<String, dynamic> monthly = Map<String, dynamic>.from((bankData['monthly'] as Map?) ?? {});
@@ -350,11 +356,43 @@ class ExerciseStarService {
           'monthly': monthly,
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        tx.update(linkRef, {
-          'parentGiftStars': giftTotal,
-          'parentGiftSpecialStars': giftSpecial,
-          'parentGiftHistory': history,
-          'parentGiftUpdatedAt': FieldValue.serverTimestamp(),
+
+        // 보호자(부모)는 예전처럼 아이 문서의 합계·최근 기록도 함께 갱신
+        if (!asSupporter) {
+          final Map<String, dynamic> linkData = linkSnap!.data() ?? {};
+          final List<dynamic> history = List<dynamic>.from((linkData['parentGiftHistory'] as List?) ?? []);
+          history.add({
+            'stars': stars,
+            'message': message,
+            'type': isSpecial ? 'special' : 'normal',
+            'sentAt': Timestamp.now(), // 목록 안에서는 서버 시각을 쓸 수 없어 기기 시각 사용
+            'acts': acts,
+            'exMin': exMin,
+          });
+          while (history.length > 50) {
+            history.removeAt(0);
+          }
+          tx.update(linkRef, {
+            'parentGiftStars': ((linkData['parentGiftStars'] as num?)?.toInt() ?? 0) + stars,
+            'parentGiftSpecialStars': ((linkData['parentGiftSpecialStars'] as num?)?.toInt() ?? 0) + (isSpecial ? stars : 0),
+            'parentGiftHistory': history,
+            'parentGiftUpdatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // 🆕 [응원 가족 2026-09-30] 보낸 사람별 기록 한 장 (보호자·응원 가족 모두)
+        tx.set(giftRef, {
+          'fromUid': FirebaseAuth.instance.currentUser?.uid,
+          'fromName': fromName,
+          'fromRelation': fromRelation,
+          'fromRelationText': fromRelationText,
+          'role': asSupporter ? 'supporter' : 'guardian',
+          'stars': stars,
+          'type': isSpecial ? 'special' : 'normal',
+          'message': message,
+          'acts': acts,
+          'exMin': exMin,
+          'sentAt': FieldValue.serverTimestamp(),
         });
       });
       return null;

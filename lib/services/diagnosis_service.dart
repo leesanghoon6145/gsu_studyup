@@ -43,6 +43,7 @@ class DiagnosisService {
 
   // 🆕 [12개국어] 평가 종류(주평가/단원평가/중간고사/기말고사/모의고사) 표시용 번역
   static const Map<String, Map<String, String>> _typeLabelMap = {
+    "평가": {'KO': '평가', 'EN': 'evaluation', 'JA': '評価', 'ZH': '评估', 'FR': 'évaluation', 'DE': 'Bewertung', 'RU': 'оценка', 'AR': 'التقييم', 'HI': 'मूल्यांकन', 'VI': 'bài đánh giá', 'ES': 'evaluación', 'TH': 'การประเมิน'},
     "주평가": {'KO': '주평가', 'EN': 'Weekly Evaluation', 'JA': '週評価', 'ZH': '周评价', 'FR': 'évaluation hebdomadaire', 'DE': 'wöchentliche Bewertung', 'RU': 'недельная оценка', 'AR': 'التقييم الأسبوعي', 'HI': 'साप्ताहिक मूल्यांकन', 'VI': 'đánh giá hàng tuần', 'ES': 'evaluación semanal', 'TH': 'การประเมินรายสัปดาห์'},
     "단원평가": {'KO': '단원평가', 'EN': 'Unit Test', 'JA': '単元評価', 'ZH': '单元评价', 'FR': "évaluation d'unité", 'DE': 'Einheitstest', 'RU': 'проверка по разделу', 'AR': 'اختبار الوحدة', 'HI': 'इकाई परीक्षण', 'VI': 'kiểm tra chương', 'ES': 'examen de unidad', 'TH': 'การทดสอบหน่วย'},
     "중간고사": {'KO': '중간고사', 'EN': 'Midterm Exam', 'JA': '中間試験', 'ZH': '期中考试', 'FR': 'examen de mi-parcours', 'DE': 'Zwischenprüfung', 'RU': 'промежуточный экзамен', 'AR': 'الاختبار النصفي', 'HI': 'मिडटर्म परीक्षा', 'VI': 'kỳ thi giữa kỳ', 'ES': 'examen parcial', 'TH': 'การสอบกลางภาค'},
@@ -295,6 +296,81 @@ class DiagnosisService {
       'texts': texts,
       'createdAt': DateTime.now().toIso8601String(),
     };
+  }
+  // ==========================================================================
+  // 🆕 [리포트 저장 2026-10-01] 부모·자녀가 같은 리포트를 보도록 서버에 저장할 때 쓰는 도구
+  // (report_archive_service.dart가 사용). seen = 이 학생이 이미 받은 조합 → 받은 시각.
+  // 아직 안 받은 조합을 먼저 고르고, 모두 받았으면 가장 오래전에 받은 조합을 고름.
+  // ==========================================================================
+  static String displayTexts(Map<String, String> texts) => _display(texts);
+  static String dailyTierOf(int totalMinutes) => _dailyTierFor(totalMinutes);
+
+  static String _pickFresh(List<String> ids, Map<String, String> seen) {
+    final List<String> fresh = ids.where((id) => !seen.containsKey(id)).toList();
+    if (fresh.isNotEmpty) return fresh[Random().nextInt(fresh.length)];
+    final List<String> sorted = List<String>.from(ids)..sort((a, b) => (seen[a] ?? '').compareTo(seen[b] ?? ''));
+    return sorted.first;
+  }
+
+  /// 종합 총평: 첫 문장 × 마무리 × 덧붙임 = 구간마다 27가지 (숫자는 {subjectCount}/{totalMinutes} 자리로 남김)
+  static Map<String, dynamic> newDailyCombo(String tier, Map<String, String> seen) {
+    final int nO = _dailyOpenings[tier]!['KO']!.length;
+    final int nC = _dailyClosings[tier]!['KO']!.length;
+    final int nF = _dailyFillers['KO']!.length;
+    final List<String> ids = [
+      for (int o = 0; o < nO; o++)
+        for (int c = 0; c < nC; c++)
+          for (int f = 0; f < nF; f++) 'daily_${tier}_o${o}_c${c}_f$f',
+    ];
+    final String id = _pickFresh(ids, seen);
+    final RegExpMatch m = RegExp(r'_o(\d+)_c(\d+)_f(\d+)$').firstMatch(id)!;
+    final int o = int.parse(m.group(1)!);
+    final int c = int.parse(m.group(2)!);
+    final int f = int.parse(m.group(3)!);
+    final Map<String, String> texts = {};
+    for (final lang in _langCodes) {
+      texts[lang] = _dailyOpenings[tier]![lang]![o] + _dailyClosings[tier]![lang]![c] + _dailyFillers[lang]![f];
+    }
+    return {'comboId': id, 'texts': texts};
+  }
+
+  /// 정밀 진단서: 점수 구간별 첫 문장 × 관찰 × 조언 × 마무리 = 구간마다 54가지
+  static Map<String, dynamic> newAnalysisCombo({
+    required double score,
+    required String type,
+    required String subject,
+    required Map<String, String> seen,
+  }) {
+    final String tier = tierFor(score);
+    final int nO = _openings[tier]!['KO']!.length;
+    final int nV = _observations[tier]!['KO']!.length;
+    final int nA = _advices[tier]!['KO']!.length;
+    final int nC = _closings[tier]!['KO']!.length;
+    final List<String> ids = [
+      for (int o = 0; o < nO; o++)
+        for (int v = 0; v < nV; v++)
+          for (int a = 0; a < nA; a++)
+            for (int c = 0; c < nC; c++) '${tier}_o${o}_v${v}_a${a}_c$c',
+    ];
+    final String id = _pickFresh(ids, seen);
+    final RegExpMatch m = RegExp(r'_o(\d+)_v(\d+)_a(\d+)_c(\d+)$').firstMatch(id)!;
+    final int oi = int.parse(m.group(1)!);
+    final int vi = int.parse(m.group(2)!);
+    final int ai = int.parse(m.group(3)!);
+    final int ci = int.parse(m.group(4)!);
+    final Map<String, String> texts = {};
+    for (final lang in _langCodes) {
+      final String opening = _openings[tier]![lang]![oi].replaceAll('{type}', _typeLabel(type, lang));
+      final String observation = _observations[tier]![lang]![vi].replaceAll('{subject}', subject);
+      String text = '$opening $observation ${_advices[tier]![lang]![ai]} ${_closings[tier]![lang]![ci]}';
+      if (lang == 'KO' && text.length < minLength) {
+        text += _extraGuidance[tier]!['KO'] ?? '';
+      } else if (lang != 'KO') {
+        text += _extraGuidance[tier]![lang] ?? '';
+      }
+      texts[lang] = text;
+    }
+    return {'comboId': id, 'texts': texts};
   }
 
   static String tierFor(double score) {

@@ -242,9 +242,9 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
   // ===========================================================================
   // 🆕 [부모 운동 응원별 2026-09-29] 맨 위 반반 버튼 두 개 (영문 한 줄 + 한글 한 줄)
   // ===========================================================================
-  static const Map<String, String> _cheerStarsLabel = {'JA': '運動応援スター', 'ZH': '运动加油星', 'FR': 'Étoiles d\'encouragement', 'DE': 'Anfeuerungssterne', 'RU': 'Звёзды поддержки', 'AR': 'نجوم التشجيع', 'HI': 'प्रोत्साहन सितारे', 'VI': 'Sao cổ vũ', 'ES': 'Estrellas de ánimo', 'TH': 'ดาวให้กำลังใจ'};
-  static const Map<String, String> _parentRoomLabel = {'JA': '保護者ルーム・子ども連携', 'ZH': '家长室・连接孩子', 'FR': 'Espace parents · Lier', 'DE': 'Elternbereich · Kind verbinden', 'RU': 'Для родителей · Связать', 'AR': 'غرفة الوالدين · ربط الطفل', 'HI': 'अभिभावक कक्ष · बच्चा जोड़ें', 'VI': 'Phòng phụ huynh · Liên kết con', 'ES': 'Sala de padres · Vincular', 'TH': 'ห้องผู้ปกครอง · เชื่อมบุตร'};
 
+  static const Map<String, String> _parentRoomLabel = {'JA': '保護者ホーム・子ども連携', 'ZH': '家长主页・连接孩子', 'FR': 'Accueil parents · Lier', 'DE': 'Eltern-Home · Kind verbinden', 'RU': 'Для родителей · Связать', 'AR': 'صفحة الوالدين · ربط الطفل', 'HI': 'अभिभावक होम · बच्चा जोड़ें', 'VI': 'Trang phụ huynh · Liên kết con', 'ES': 'Inicio padres · Vincular', 'TH': 'หน้าผู้ปกครอง · เชื่อมบุตร'};
+  static const Map<String, String> _cheerStarsLabel = {'JA': '応援・家族連携', 'ZH': '加油与家人连接', 'FR': 'Encouragement & Famille', 'DE': 'Anfeuern & Familie', 'RU': 'Поддержка и семья', 'AR': 'التشجيع وربط العائلة', 'HI': 'प्रोत्साहन व परिवार', 'VI': 'Cổ vũ & Gia đình', 'ES': 'Ánimo y familia', 'TH': 'กำลังใจและครอบครัว'};
   Widget _buildTopDoorButtons(BuildContext context) {
     return ListenableBuilder(
       listenable: appLanguage,
@@ -254,8 +254,8 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
             Expanded(
               child: _buildDoorButton(
                 icon: Icons.directions_run_rounded,
-                en: 'CHEER STARS',
-                ko: '부모 응원별', // 🆕 [2026-09-30] 운동 + 가족 활동으로 넓혀 이름 변경
+                en: 'CHEER & FAMILY',
+                ko: '부모 응원 및 가족연결', // 🆕 [2026-10-01] 가족연결을 찾기 쉽게 이름에 넣음
                 foreign: _cheerStarsLabel,
                 onTap: () => _openCheerStars(context),
               ),

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart'; // 🆕 [학부모 가시성 확보] d
 import 'user_profile_service.dart'; // 🆕 [자녀 이름 표시 2026-09-18] DkeUserProfile.getRealName() 조회용
 import 'dart:async'; // 🆕 [자녀 이름 표시 2026-09-18] unawaited() 함수 사용을 위함
 import '../star_economy.dart'; // 🆕 [재설치 복원 2026-09-25] 별 복원용
+import 'supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
 
 // 학생↔부모 기기 연결을 담당하는 서비스
 // (다른 서비스들과 동일하게 "단일 게이트웨이" 패턴 — 이 파일만 Firestore와 직접 통신)
@@ -463,6 +464,7 @@ class FamilyLinkService {
     }, SetOptions(merge: true));
 
     await prefs.setInt(_kLastPushKey, nowMs);
+    unawaited(SupporterService.pushSupportSummary(code)); // 🆕 [응원 가족 2026-09-30] 이번 달 공부 요약 (30분에 한 번)
   }
 
   static Future<void> pushStudentName(String realName) async {

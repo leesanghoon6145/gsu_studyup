@@ -88,8 +88,11 @@ class ParentGradeManagementWidget extends StatefulWidget {
   // 이 값 없이는 위젯이 생성되는 순간(=다른 탭에서도) 팝업이 떠버리는 문제가 있었습니다.
   final bool isActiveTab;
 
+  final Widget? topBar; // 🆕 [2026-10-01] 로그아웃 · 다국어 줄 (내용 맨 첫 줄)
+
   const ParentGradeManagementWidget({
     Key? key,
+    this.topBar,
     required this.childName,
     required this.premiumCardBg,
     required this.brandGolden,
@@ -539,6 +542,7 @@ class _ParentGradeManagementWidgetState extends State<ParentGradeManagementWidge
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.topBar != null) ...[widget.topBar!, const SizedBox(height: 14)], // 🆕 [2026-10-01]
           // 🆕 [요청 2026-09-09] 헤더를 고급스러운 그라디언트 박스로 재설계.
           // 부제목도 "이상훈 성적 관리 조회"와 "Grade Report Viewer"를 한 줄에 슬래시로
           // 붙이던 걸 각각 별도 줄로 분리했습니다.
