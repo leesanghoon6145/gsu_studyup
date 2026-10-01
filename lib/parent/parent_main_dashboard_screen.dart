@@ -1281,6 +1281,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                         isConnecting = false;
                         errorText = switch (result) {
                           ConnectResult.codeNotFound => '존재하지 않는 코드입니다 / Code not found',
+                          ConnectResult.pendingApproval => cs('parentReqSent', lang: DkeLang.current), // 🆕 [2026-10-02]
                           ConnectResult.capacityFull => '이미 정원이 가득 찼습니다 / Already full',
                           ConnectResult.notLoggedIn => '로그인이 필요합니다 / Please log in',
                           _ => '연결에 실패했습니다 / Connection failed',
@@ -1802,7 +1803,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
       builder: (context, snapshot) {
         final Map<String, dynamic> data = snapshot.data?.data() ?? {};
         final int supCount = ((data['supporterUids'] as List?) ?? []).length;
-        final int reqCount = ((data['supporterRequests'] as Map?) ?? {}).length;
+        final int reqCount = ((data['supporterRequests'] as Map?) ?? {}).length
+            + ((data['parentRequests'] as Map?) ?? {}).length; // 🆕 [2026-10-02] 보호자 신청도 함께 세기
         final String lang = DkeLang.current;
         return Padding(
           padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
@@ -1874,6 +1876,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
             builder: (context, snapshot) {
               final Map<String, dynamic> data = snapshot.data?.data() ?? {};
               final Map<String, dynamic> requests = Map<String, dynamic>.from((data['supporterRequests'] as Map?) ?? {});
+              final Map<String, dynamic> parentReqs = Map<String, dynamic>.from((data['parentRequests'] as Map?) ?? {}); // 🆕 [2026-10-02]
               final Map<String, dynamic> supporters = Map<String, dynamic>.from((data['supporters'] as Map?) ?? {});
               final List<String> supUids = ((data['supporterUids'] as List?) ?? []).map((e) => e.toString()).toList();
 
@@ -1904,6 +1907,28 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // 🆕 [보호자 승인 2026-10-02] 이미 보호자가 있는 아이에 새로 보호자로 들어오려는 신청
+                          if (parentReqs.isNotEmpty) ...[
+                            Text(cs('dashParentReqTitle', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                            const SizedBox(height: 8),
+                            ...parentReqs.entries.map((e) {
+                              final Map<String, dynamic> info = Map<String, dynamic>.from((e.value as Map?) ?? {});
+                              final String name = (info['name'] as String?) ?? '';
+                              final String email = (info['email'] as String?) ?? '';
+                              return row('🧑 $name${email.isNotEmpty ? '\n$email' : ''}', [
+                                TextButton(
+                                  onPressed: () => SupporterService.rejectParent(code, e.key),
+                                  child: Text(cs('dashReject', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontWeight: FontWeight.bold)),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: brandGolden, padding: const EdgeInsets.symmetric(horizontal: 14)),
+                                  onPressed: () => SupporterService.approveParent(code, e.key),
+                                  child: Text(cs('dashApprove', lang: lang), style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+                                ),
+                              ]);
+                            }),
+                            const SizedBox(height: 10),
+                          ],
                           if (requests.isNotEmpty) ...[
                             Text(cs('dashSupReqTitle', lang: lang), style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
                             const SizedBox(height: 8),

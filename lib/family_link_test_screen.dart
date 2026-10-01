@@ -258,6 +258,8 @@ class _ParentSideState extends State<_ParentSide> {
         return '로그인이 필요합니다 (부모 계정으로 로그인해주세요)';
       case ConnectResult.unknownError:
         return '연결 중 오류가 발생했습니다 (네트워크 또는 권한 문제)';
+      case ConnectResult.pendingApproval: // 🆕 [2026-10-02] 이미 보호자가 있어 승인 요청을 보낸 경우
+        return '이미 보호자가 연결된 아이입니다. 승인 요청을 보냈습니다';
       case ConnectResult.success:
         return '';
     }

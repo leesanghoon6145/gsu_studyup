@@ -255,7 +255,7 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
               child: _buildDoorButton(
                 icon: Icons.directions_run_rounded,
                 en: 'CHEER & FAMILY',
-                ko: '부모 응원 및 가족연결', // 🆕 [2026-10-01] 가족연결을 찾기 쉽게 이름에 넣음
+                ko: '부모+가족 응원 및 연결', // 🆕 [2026-10-02]
                 foreign: _cheerStarsLabel,
                 onTap: () => _openCheerStars(context),
               ),

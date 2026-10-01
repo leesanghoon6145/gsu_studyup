@@ -1843,8 +1843,18 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
     final int firstMax = balance ~/ codes.length;
     final TextEditingController countController =
     TextEditingController(text: '${firstMax >= 10 ? 10 : (firstMax > 0 ? firstMax : 1)}');
-    final List<String> phrases = cheerPhrasesFor(appLanguage.current); // 지금 언어의 응원 문구 6개
-    final TextEditingController messageController = TextEditingController(text: phrases[3]);
+    // 🆕 [응원 가족 2026-10-01] 받는 아이가 모두 "응원 가족으로 연결된 아이"면 가족 문구 5개,
+    // 하나라도 보호자로 연결된 아이가 있으면 부모 문구 6개 → 두 문구가 섞이지 않음
+    // 🆕 [2026-10-02] 보호자라도 "보내는 사람"이 엄마·아빠가 아니면(할머니 등) 가족 문구
+    List<String> phrasesNow() {
+      final Iterable<String> targets = selectedCodes.isNotEmpty ? selectedCodes : codes;
+      final bool allSupporter = targets.every(_supporterCodes.contains);
+      final bool parentVoice = !allSupporter && (guardianRelation == 'mom' || guardianRelation == 'dad');
+      return parentVoice ? cheerPhrasesFor(appLanguage.current) : familyCheerPhrasesFor(appLanguage.current);
+    }
+    final List<String> firstPhrases = phrasesNow();
+    final TextEditingController messageController =
+    TextEditingController(text: firstPhrases.length > 3 ? firstPhrases[3] : firstPhrases.first);
     final FocusNode messageFocus = FocusNode(); // 🆕 [2026-09-30] 문구를 고르면 바로 고쳐 쓸 수 있게
     final GlobalKey messageFieldKey = GlobalKey(); // 🆕 [2026-09-30] 문구를 고르면 고쳐 쓰는 칸으로 자동 이동
 
@@ -2097,17 +2107,51 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
                     // 🆕 [응원 가족 2026-09-30] 보호자로 보낼 때 "보내는 사람" 고르기 (아이 카드에 이름표로 보임)
                     if (selectedCodes.any((c) => !_supporterCodes.contains(c))) ...[
                       label(cs('senderLabel')),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: SupporterService.guardianRelations
-                            .map((r) => choiceChip(
-                          '${SupporterService.relationEmoji[r] ?? ''} ${cs('rel_$r')}',
-                          guardianRelation == r,
-                              () => setDialogState(() => guardianRelation = r),
-                        ))
-                            .toList(),
-                      ),
+                      // 🆕 [2026-10-02] 엄마 · 아빠 · 보호자 세 개만 먼저 보이고,
+                      // "보호자"를 누르면 할머니 · 할아버지 · 삼촌 · 고모 · 이모 · 이모부 · 형 · 누나가 펼쳐짐
+                      Builder(builder: (_) {
+                        final bool isParentVoice = guardianRelation == 'mom' || guardianRelation == 'dad';
+                        void pick(String r) {
+                          setDialogState(() {
+                            guardianRelation = r;
+                            // 부모 문구 ↔ 가족 문구가 바뀌면 고른 문구도 새 목록의 첫 문구로
+                            final List<String> now = phrasesNow();
+                            if (!now.contains(messageController.text)) messageController.text = now.first;
+                          });
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: SupporterService.guardianRelations
+                                  .map((r) => choiceChip(
+                                '${SupporterService.relationEmoji[r] ?? ''} ${cs('rel_$r')}',
+                                r == 'guardian' ? !isParentVoice : guardianRelation == r,
+                                    () => pick(r == 'guardian' && !isParentVoice ? guardianRelation : r),
+                              ))
+                                  .toList(),
+                            ),
+                            if (!isParentVoice) ...[
+                              const SizedBox(height: 8),
+                              Text(cs('senderMore'), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: SupporterService.extendedGuardianRelations
+                                    .map((r) => choiceChip(
+                                  '${SupporterService.relationEmoji[r] ?? ''} ${cs('rel_$r')}',
+                                  guardianRelation == r,
+                                      () => pick(r),
+                                ))
+                                    .toList(),
+                              ),
+                            ],
+                          ],
+                        );
+                      }),
                     ],
 
                     label(cs('lblMode')),
@@ -2160,7 +2204,8 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
                     ),
 
                     label(cs('lblMessage')),
-                    ...List.generate(phrases.length, (i) {
+                    ...List.generate(phrasesNow().length, (i) {
+                      final List<String> phrases = phrasesNow(); // 🆕 [응원 가족] 부모 문구 / 가족 문구 중 하나
                       final bool picked = messageController.text == phrases[i];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 6),

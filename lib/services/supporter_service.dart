@@ -52,17 +52,22 @@ class SupporterService {
   /// 응원 가족이 고를 수 있는 관계 (보호자는 제외)
   static const List<String> supporterRelations = [
     'grandma', 'grandpa', 'grandmaM', 'grandpaM',
-    'auntM', 'auntP', 'uncleP', 'uncleM',
+    'auntM', 'auntP', 'uncleP', 'uncleM', 'uncleW',
     'brother', 'sister', 'mom', 'dad', 'other',
   ];
 
   /// 보호자가 보낼 때 고르는 관계
-  static const List<String> guardianRelations = ['mom', 'dad', 'grandma', 'grandpa', 'guardian'];
+  static const List<String> guardianRelations = ['mom', 'dad', 'guardian'];
+
+  /// 🆕 [2026-10-02] "보호자"를 누르면 펼쳐지는 관계 (할머니·할아버지가 키우는 경우 등)
+  static const List<String> extendedGuardianRelations = [
+    'grandma', 'grandpa', 'uncleP', 'auntP', 'auntM', 'uncleW', 'brother', 'sister',
+  ];
 
   static const Map<String, String> relationEmoji = {
     'mom': '👩', 'dad': '👨', 'guardian': '🧑', 'grandma': '👵', 'grandpa': '👴',
     'grandmaM': '👵', 'grandpaM': '👴', 'auntM': '👩', 'auntP': '👩',
-    'uncleP': '👨', 'uncleM': '👨', 'brother': '🧑', 'sister': '👧', 'other': '💛',
+    'uncleP': '👨', 'uncleM': '👨', 'uncleW': '👨', 'brother': '🧑', 'sister': '👧', 'other': '💛',
   };
 
   static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
@@ -212,6 +217,33 @@ class SupporterService {
       await _db.collection('links').doc(code).update({'supporterRequests.$supporterUid': FieldValue.delete()});
     } catch (e) {
       debugPrint('[SupporterService] 거절 실패: $e');
+    }
+  }
+
+  // 🆕 [보호자 승인 2026-10-02] 이미 보호자가 있는 아이에 새 보호자가 연결하려면
+  // 먼저 연결된 보호자의 승인이 필요함 (가족이 아이 코드로 보호자인 척 들어오는 것을 막음)
+  static Future<String?> approveParent(String code, String parentUid) async {
+    final ref = _db.collection('links').doc(code);
+    try {
+      final snap = await ref.get();
+      final List<dynamic> now = (snap.data()?['parentUids'] as List?) ?? [];
+      if (!now.contains(parentUid) && now.length >= 3) return 'errSupFull';
+      await ref.update({
+        'parentUids': FieldValue.arrayUnion([parentUid]),
+        'parentRequests.$parentUid': FieldValue.delete(),
+      });
+      return null;
+    } catch (e) {
+      debugPrint('[SupporterService] 보호자 승인 실패: $e');
+      return 'errNetwork';
+    }
+  }
+
+  static Future<void> rejectParent(String code, String parentUid) async {
+    try {
+      await _db.collection('links').doc(code).update({'parentRequests.$parentUid': FieldValue.delete()});
+    } catch (e) {
+      debugPrint('[SupporterService] 보호자 거절 실패: $e');
     }
   }
 

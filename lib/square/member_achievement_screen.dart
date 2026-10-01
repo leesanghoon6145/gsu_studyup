@@ -8740,13 +8740,6 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                               // 보낸 사람 (새 방식 기록에만 있음)
                               final String rel = (h['fromRelation'] as String?) ?? '';
                               final String who = rel.isEmpty ? '' : relLabel(rel, (h['fromRelationText'] as String?) ?? '');
-                              // 보낸 사람이 그날 한 일 (운동 시간 + 가족 활동 체크)
-                              final List<String> actKeys = ((h['acts'] as List?) ?? []).map((e) => e.toString()).toList();
-                              final int exMin = (h['exMin'] as num?)?.toInt() ?? 0;
-                              final List<String> actNames = [
-                                if (exMin > 0) cs('giftActEx', lang: lang, args: {'n': exMin}),
-                                ...actKeys.map((k) => cs('it_$k', lang: lang)),
-                              ];
                               return Container(
                                 width: double.infinity,
                                 margin: const EdgeInsets.only(bottom: 6),
@@ -8771,16 +8764,6 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                                           ),
                                           if (message.isNotEmpty)
                                             Text(message, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.4)),
-                                          if (actNames.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(top: 4),
-                                              child: Text(
-                                                who.isNotEmpty
-                                                    ? cs('giftActsWho', lang: lang, args: {'who': who, 'list': actNames.join(' · ')})
-                                                    : cs('giftActs', lang: lang, args: {'list': actNames.join(' · ')}),
-                                                style: GoogleFonts.notoSansKr(color: softGold, fontSize: 11.5, height: 1.4, fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
                                         ],
                                       ),
                                     ),
