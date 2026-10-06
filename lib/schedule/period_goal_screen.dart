@@ -224,16 +224,17 @@ class _PeriodGoalScreenState extends State<PeriodGoalScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 16),
-                                  const SizedBox(width: 8),
-                                  BiInline(
+                              Expanded( // 🆕 [2026-10-04] 오버플로 수정: 글자가 남은 폭 안에서 줄어들게
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.fitness_center_rounded, color: _brandGolden, size: 16),
+                                      const SizedBox(width: 8),
+                                      Flexible(child: BiInline(
                                     en: 'Exercise Goal', ko: '운동 목표로 만들기', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5,
                                     translations: const {'JA': '運動目標にする', 'ZH': '设为运动目标', 'FR': "Objectif d'exercice", 'DE': 'Als Trainingsziel festlegen', 'RU': 'Сделать целью по тренировкам', 'AR': 'اجعله هدف تمرين', 'HI': 'व्यायाम लक्ष्य बनाएं', 'VI': 'Đặt làm mục tiêu tập luyện', 'ES': 'Convertir en objetivo de ejercicio', 'TH': 'ตั้งเป็นเป้าหมายออกกำลังกาย'},
-                                  ),
-                                ],
-                              ),
+                                      )),
+                                    ],
+                                  )),
                               Switch(value: isExerciseGoal, activeColor: _brandGolden, onChanged: (v) => setDialogState(() => isExerciseGoal = v)),
                             ],
                           ),

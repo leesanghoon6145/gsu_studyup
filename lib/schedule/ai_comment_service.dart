@@ -12,6 +12,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'report_data_service.dart';
 import 'timeline_data_service.dart';
+import 'exercise_data_service.dart'; // 🆕 [2026-10-04] 운동 기록도 코멘트에 반영
+import 'exercise_step_service.dart'; // 🆕 [수면 2026-10-05]
 
 class AiComment {
   final String date; // 'yyyy-MM-dd'
@@ -59,11 +61,13 @@ class AiCommentService {
   static Future<AiComment> getOrGenerate(DateTime date) async {
     final String dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final all = await _loadAll();
-    if (all.containsKey(dateKey)) {
+    // 🆕 [2026-10-04] "기록 없음" 코멘트는 저장해 두지 않고 다시 만들어 봄 (나중에 기록이 생기면 반영)
+    if (all.containsKey(dateKey) && !all[dateKey]!.textKo.startsWith('이 날짜에는 아직 기록이')) {
       return all[dateKey]!;
     }
 
     final comment = await _generateMockComment(date, dateKey);
+    if (comment.textKo.startsWith('이 날짜에는 아직 기록이')) return comment; // 🆕 기록 없음은 저장 안 함
     all[dateKey] = comment;
     await _saveAll(all);
     return comment;
@@ -105,6 +109,40 @@ class AiCommentService {
     final int percent = summary.completionPercent;
     final now = DateTime.now();
     final String generatedAt = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    // 🆕 [2026-10-04] 그날 운동 기록
+    final allEx = await ExerciseDataService.instance.getAllRecords(); // 🆕 자동 기록 포함
+    final dayEx = allEx.where((r) => r.date.year == date.year && r.date.month == date.month && r.date.day == date.day).toList();
+    final int exMin = dayEx.fold<int>(0, (s, r) => s + r.durationMin);
+
+    // 🆕 [수면 2026-10-05] 어젯밤 수면 한 문장
+    final SleepSummary? sleep = await DailyStepWatcherService.instance.getSleepFor(date);
+    String sleepKo = '';
+    String sleepEn = '';
+    if (sleep != null) {
+      final String hm = sleep.hoursText;
+      final String hmEn = '${sleep.minutes ~/ 60}h ${sleep.minutes % 60}m';
+      if (sleep.minutes < 360) {
+        sleepKo = ' 어젯밤 잠이 $hm으로 조금 부족했어요. 오늘은 조금 일찍 쉬어 보세요.';
+        sleepEn = ' You slept $hmEn last night, a little short. Try to rest a bit earlier tonight.';
+      } else if (sleep.minutes >= 420) {
+        sleepKo = ' 어젯밤 $hm 푹 주무셨네요. 좋은 컨디션이 하루를 받쳐 줬어요.';
+        sleepEn = ' You slept well last night ($hmEn) — good rest supported your day.';
+      } else {
+        sleepKo = ' 어젯밤 $hm 잠을 잤어요.';
+        sleepEn = ' You slept $hmEn last night.';
+      }
+    }
+
+    // 일정·타임라인은 없지만 운동은 한 날
+    if (!summary.hasData && dayEx.isNotEmpty) {
+      return AiComment(
+        date: dateKey,
+        textEn: 'You exercised $exMin min today (${dayEx.length} sessions). Great job taking care of your body! Adding a few schedule items tomorrow will give a fuller picture of your day.$sleepEn',
+        textKo: '오늘 운동을 $exMin분(${dayEx.length}회) 하셨네요. 몸을 챙긴 멋진 하루였어요! 내일은 일정도 몇 개 함께 기록하면 하루를 더 잘 돌아볼 수 있어요.$sleepKo',
+        generatedAt: generatedAt,
+      );
+    }
 
     if (!summary.hasData) {
       return AiComment(
@@ -148,6 +186,8 @@ class AiCommentService {
       ko.write(' 다음 집중 시간 전에 짧은 휴식이나 간식을 챙기는 것도 도움이 될 거예요.');
     }
 
+    en.write(sleepEn); // 🆕 [수면]
+    ko.write(sleepKo);
     return AiComment(date: dateKey, textEn: en.toString(), textKo: ko.toString(), generatedAt: generatedAt);
   }
 }

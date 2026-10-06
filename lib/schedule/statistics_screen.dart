@@ -44,6 +44,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   int _totalExerciseSessions = 0; // 🆕 [운동 연동]
   int _totalExerciseMinutes = 0; // 🆕 [운동 연동]
   double? _avgExerciseRpe; // 🆕 [운동 연동]
+  Map<int, int> _monthlyExerciseMin = {}; // 🆕 [2026-10-04] 올해 달별 운동 시간(분)
   bool _isLoading = true;
 
   @override
@@ -76,6 +77,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _totalExerciseSessions = allExerciseRecords.length; // 🆕 [운동 연동]
       _totalExerciseMinutes = exerciseMinutes; // 🆕 [운동 연동]
       _avgExerciseRpe = avgRpe; // 🆕 [운동 연동]
+      _monthlyExerciseMin = {
+        for (int m = 1; m <= 12; m++)
+          m: allExerciseRecords.where((r) => r.date.year == now.year && r.date.month == m).fold<int>(0, (s, r) => s + r.durationMin),
+      };
       _isLoading = false;
     });
   }
@@ -297,7 +302,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   const SizedBox(width: 10),
                   SizedBox(
                     width: 62,
-                    child: Text(hasData ? '$rate%' : 'No Data', style: TextStyle(color: hasData ? _brandGolden : Colors.white24, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                    // 🆕 [2026-10-04] 일정 기록이 없어도 운동한 달은 운동 시간 표시
+                    child: Text(
+                      hasData ? '$rate%' : ((_monthlyExerciseMin[month] ?? 0) > 0 ? '🏃${_monthlyExerciseMin[month]}m' : 'No Data'),
+                      style: TextStyle(color: hasData || (_monthlyExerciseMin[month] ?? 0) > 0 ? _brandGolden : Colors.white24, fontSize: 10.5, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),

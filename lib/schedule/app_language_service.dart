@@ -16,6 +16,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../global_lang.dart'; // 🆕 [2026-10-04] 첫 화면·학생 쪽 언어도 함께 바꾸기
 
 class AppLanguageService extends ChangeNotifier {
   static final AppLanguageService _instance = AppLanguageService._internal();
@@ -114,6 +115,7 @@ class AppLanguageService extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kPrefsKey, current);
+    DkeLang.setLanguage(current); // 🆕 [2026-10-04] 첫 화면·학생 쪽도 즉시 같은 언어로
   }
 
   // 아랍어 RTL(오른쪽에서 왼쪽) 판단

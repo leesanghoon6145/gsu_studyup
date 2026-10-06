@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [버그 수정] 로그인 기억하기 저장용
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // 🆕 [2026-10-04] 비밀번호는 암호화 금고에
 import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
 import 'parent/parent_main_dashboard_screen.dart'; // 🆕 [유형별 라우팅] 학부모 화면
@@ -19,6 +20,7 @@ import 'services/user_profile_service.dart'; // 🆕 [유형별 라우팅] 가�
 import 'services/family_link_service.dart'; // 🆕 [부모-자녀 응원 시스템] 이모지/응원문구 실시간 수신
 import 'timer/timer_screen.dart';
 import 'parent/parent_consent_screen.dart';
+import 'schedule/exercise_step_service.dart'; // 🆕 [2026-10-05] 걸음 자동 기록을 앱 시작부터
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +67,18 @@ void main() async {
   }
 
   runApp(const GsuStudyUpApp());
+
+  // 🆕 [2026-10-05] 걸음 자동 기록: 로그인되어 있으면 어느 화면으로 들어가든 바로 켜짐 (끌 때까지 계속)
+  if (!kIsWeb) {
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) {
+        DailyStepWatcherService.instance.stop(); // 계정이 바뀌면 새 계정으로 다시 시작
+        unawaited(DailyStepWatcherService.instance.resumeIfEnabled());
+      } else {
+        DailyStepWatcherService.instance.stop();
+      }
+    });
+  }
 }
 
 // ============================================================================
@@ -694,11 +708,16 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   static const String _kRememberedEmailKey = 'remembered_login_email';
   static const String _kRememberedPasswordKey = 'remembered_login_password';
   static const String _kRememberMeFlagKey = 'remembered_login_flag';
+  // 🆕 [2026-10-04] 비밀번호는 휴대폰 암호화 금고에 저장 (사용법은 그대로)
+  static const FlutterSecureStorage _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   // 🆕 [실제 로그인 연결] 이메일/비밀번호 입력값을 실제로 붙잡아두는 컨트롤러
   final TextEditingController _loginEmailController = TextEditingController();
   final TextEditingController _loginPasswordController = TextEditingController();
   bool _isLoggingIn = false;
+  bool _isLoginPasswordVisible = false; // 🆕 [2026-10-04] 로그인 비밀번호 눈 단추
 
   @override
   void initState() {
@@ -713,7 +732,19 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
     final bool remembered = prefs.getBool(_kRememberMeFlagKey) ?? false;
     if (!remembered) return;
     final String? savedEmail = prefs.getString(_kRememberedEmailKey);
-    final String? savedPassword = prefs.getString(_kRememberedPasswordKey);
+    // 🆕 [2026-10-04] 금고에서 비밀번호 읽기 + 예전 판에서 글자로 저장한 것은 금고로 옮기고 지움
+    String? savedPassword;
+    try {
+      savedPassword = await _secure.read(key: _kRememberedPasswordKey);
+    } catch (_) {}
+    final String? oldPlain = prefs.getString(_kRememberedPasswordKey);
+    if (oldPlain != null) {
+      savedPassword ??= oldPlain;
+      try {
+        await _secure.write(key: _kRememberedPasswordKey, value: oldPlain);
+      } catch (_) {}
+      await prefs.remove(_kRememberedPasswordKey);
+    }
     if (!mounted) return;
     setState(() {
       _isRememberMeChecked = true;
@@ -805,12 +836,101 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
     if (_isRememberMeChecked) {
       await prefs.setBool(_kRememberMeFlagKey, true);
       await prefs.setString(_kRememberedEmailKey, email);
-      await prefs.setString(_kRememberedPasswordKey, password);
+      try {
+        await _secure.write(key: _kRememberedPasswordKey, value: password); // 🆕 암호화 금고에 저장
+      } catch (_) {}
+      await prefs.remove(_kRememberedPasswordKey); // 🆕 글자로 남은 것은 지움
     } else {
       await prefs.setBool(_kRememberMeFlagKey, false);
       await prefs.remove(_kRememberedEmailKey);
       await prefs.remove(_kRememberedPasswordKey);
+      try {
+        await _secure.delete(key: _kRememberedPasswordKey); // 🆕 금고에서도 지움
+      } catch (_) {}
     }
+  }
+  // 🆕 [2026-10-04] 비밀번호 재설정 메일 보내기 창
+  Future<void> _showPasswordResetDialog() async {
+    final TextEditingController emailCtrl = TextEditingController(text: _loginEmailController.text.trim());
+    bool sending = false;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF0D1527),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE5C158), width: 1.2),
+          ),
+          title: Text('비밀번호 재설정 / Reset Password', style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '가입한 이메일을 입력하면 비밀번호를 새로 정하는 링크를 보내 드려요.\nEnter your email to receive a reset link.',
+                style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.5),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.mail_outline_rounded, color: Color(0xFFFCD34D)),
+                  hintText: 'Email Address',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true,
+                  fillColor: const Color(0xFF030712),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('닫기 / Close', style: GoogleFonts.notoSansKr(color: Colors.white54, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE5C158)),
+              onPressed: sending
+                  ? null
+                  : () async {
+                final String email = emailCtrl.text.trim();
+                if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(content: Text('올바른 이메일을 입력해주세요. / Please enter a valid email.')),
+                  );
+                  return;
+                }
+                setDialogState(() => sending = true);
+                try {
+                  await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  if (mounted) {
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        duration: const Duration(seconds: 6),
+                        content: Text('$email 로 재설정 메일을 보냈어요. 메일함(스팸함 포함)의 링크를 눌러 새 비밀번호를 정한 뒤 로그인해 주세요.'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setDialogState(() => sending = false);
+                  if (mounted) {
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(content: Text('메일을 보내지 못했어요. 이메일 주소와 인터넷 연결을 확인해 주세요.')),
+                    );
+                  }
+                }
+              },
+              child: Text(sending ? '보내는 중...' : '메일 보내기 / Send',
+                  style: GoogleFonts.notoSansKr(color: const Color(0xFF030712), fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // 🆕 [이메일 인증 필수화] 인증 안 된 계정으로 로그인 시도했을 때 보여주는 안내창
@@ -1025,7 +1145,18 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                     ], // end of Row children
                   ), // end of Row
 
-                  const SizedBox(height: 25), // 📐 네모 박스와 아래 'CREATE ACCOUNT' 버튼 사이의 최적 황금 마진 확보
+                  // 🆕 [2026-10-04] 비밀번호를 잊었을 때 이메일로 재설정 링크 받기
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => _showPasswordResetDialog(),
+                      child: Text(
+                        '비밀번호를 잊으셨나요? / Forgot password?',
+                        style: GoogleFonts.notoSansKr(color: const Color(0xFFE5C158), fontSize: 12.5, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10), // 📐 네모 박스와 아래 'CREATE ACCOUNT' 버튼 사이의 최적 황금 마진 확보
                   _buildGradientButton(
                     title: DkeLang.createAccountBtn, // 🆕 [12개국 다국어] 원문: 'CREATE ACCOUNT (회원가입)'
                     onPressed: () {
@@ -1079,13 +1210,20 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: isPassword,
+        obscureText: isPassword && !_isLoginPasswordVisible, // 🆕 [2026-10-04]
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: const Color(0xFFFCD34D)),
+          // 🆕 [2026-10-04] 비밀번호 칸 오른쪽 눈 단추
+          suffixIcon: isPassword
+              ? IconButton(
+            icon: Icon(_isLoginPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.white38),
+            onPressed: () => setState(() => _isLoginPasswordVisible = !_isLoginPasswordVisible),
+          )
+              : null,
           hintText: hintText,
           hintStyle: const TextStyle(
             color: Colors.white60,

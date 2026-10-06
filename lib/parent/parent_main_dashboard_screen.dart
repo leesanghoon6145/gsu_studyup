@@ -2101,6 +2101,89 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     );
   }
 
+  // ============================================================================
+  // 🆕 [가족 장학금 2026-10-02] 장학금 탭 — 응원 가족 각자가 정한 장학금 결산 (부모는 보기만)
+  // ============================================================================
+  Widget _buildFamilyScholarshipCard(String code) {
+    final String lang = DkeLang.current;
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: SupporterService.watchGifts(code),
+      builder: (context, giftSnap) {
+        final List<Map<String, dynamic>> gifts = giftSnap.data?.docs.map((d) => d.data()).toList() ?? [];
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: SupporterService.watchPlans(code),
+          builder: (context, planSnap) {
+            final Map<String, Map<String, dynamic>> plans = {
+              for (final d in planSnap.data?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) d.id: d.data(),
+            };
+            final List<FamilyScholarRow> rows = SupporterService.summarize(gifts, plans);
+            if (rows.isEmpty) return const SizedBox.shrink();
+            final int total = rows.fold<int>(0, (s, r) => s + r.monthWon);
+            final int lastTotal = rows.fold<int>(0, (s, r) => s + r.lastMonthWon);
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: premiumCardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: brandGolden.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('💰 ${cs('famTitle', lang: lang)}', style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  Text(cs('famParentNote', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11, height: 1.5)),
+                  const SizedBox(height: 10),
+                  ...rows.map((r) {
+                    final String who = r.relation == 'other' && r.relationText.trim().isNotEmpty
+                        ? r.relationText.trim()
+                        : cs('rel_${r.relation}', lang: lang);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(SupporterService.relationEmoji[r.relation] ?? '💛', style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('$who${r.name.isNotEmpty ? ' (${r.name})' : ''}', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                Text(famPlanText(r.planType, r.planCap, lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                          Text(famWonText(r.monthWon, lang: lang), style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.w900, fontSize: 14)),
+                        ],
+                      ),
+                    );
+                  }),
+                  const Divider(color: Colors.white10, height: 18),
+                  Row(
+                    children: [
+                      Expanded(child: Text(cs('famMonthTotal', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold))),
+                      Text(famWonText(total, lang: lang), style: GoogleFonts.notoSansKr(color: brandGolden, fontWeight: FontWeight.w900, fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Expanded(child: Text(cs('famLastTotal', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5))),
+                      Text(famWonText(lastTotal, lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
 
   Widget _buildAddChildChip() {
     return GestureDetector(
@@ -3007,6 +3090,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
               const SizedBox(height: 14),
               _buildCheerStarsCard(), // 🆕 [부모 운동 응원별 2026-09-29] 이번 달 장학금 바로 위
               const SizedBox(height: 22),
+              _buildFamilyScholarshipCard(_selectedChildCode!), // 🆕 [가족 장학금 2026-10-02] 가족들이 정한 장학금 (보기만)
               Row(
                 children: [
                   Expanded(
@@ -3493,6 +3577,8 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
         return ParentLiveStatusWidget(topBar: _topActionRow(),
           childName: childName,
+          // 🆕 [수면 2026-10-05] 학생이 보낸 어젯밤 수면 (links 문서의 lastSleep)
+          lastSleep: data['lastSleep'] is Map ? Map<String, dynamic>.from(data['lastSleep'] as Map) : null,
           isStudyingNow: showAsStudying,
           liveSubject: liveSubject,
           liveElapsedSeconds: liveElapsedSeconds,

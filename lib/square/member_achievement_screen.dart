@@ -8724,7 +8724,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                               );
                             }),
                           ],
-
+                          _buildFamilyScholarSection(gifts, lang), // 🆕 [가족 장학금 2026-10-02]
                           // 최근 받은 응원 3개
                           if (recent.isNotEmpty) ...[
                             const SizedBox(height: 16),
@@ -8785,6 +8785,81 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
               ),
             );
           },
+        );
+      },
+    );
+  }
+  // ============================================================================
+  // 🆕 [가족 장학금 2026-10-02] 응원 가족 각자가 정한 장학금의 이번 달 · 지난달 결산 (보기만)
+  // 앱은 금액만 보여 주고, 실제 전달은 가족이 직접 함
+  // ============================================================================
+  Widget _buildFamilyScholarSection(List<Map<String, dynamic>> gifts, String lang) {
+    const Color deepGold = Color(0xFFD4AF37);
+    const Color cream = Color(0xFFFFF6D6);
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: SupporterService.watchPlans(_myLinkCode!),
+      builder: (context, snap) {
+        final Map<String, Map<String, dynamic>> plans = {
+          for (final d in snap.data?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) d.id: d.data(),
+        };
+        final List<FamilyScholarRow> rows =
+        SupporterService.summarize(gifts, plans).where((r) => r.planCap > 0).toList();
+        if (rows.isEmpty) return const SizedBox.shrink();
+        final int total = rows.fold<int>(0, (s, r) => s + r.monthWon);
+        final int lastTotal = rows.fold<int>(0, (s, r) => s + r.lastMonthWon);
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111A2E),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: deepGold.withOpacity(0.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('💰 ${cs('famTitle', lang: lang)}', style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              ...rows.map((r) {
+                final String who = r.relation == 'other' && r.relationText.trim().isNotEmpty
+                    ? r.relationText.trim()
+                    : cs('rel_${r.relation}', lang: lang);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Text(SupporterService.relationEmoji[r.relation] ?? '💛', style: const TextStyle(fontSize: 15)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '$who${r.name.isNotEmpty ? ' (${r.name})' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.notoSansKr(color: cream, fontSize: 12.5, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Text(famWonText(r.monthWon, lang: lang), style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 13)),
+                    ],
+                  ),
+                );
+              }),
+              const Divider(color: Colors.white12, height: 16),
+              Row(
+                children: [
+                  Expanded(child: Text(cs('famMonthTotal', lang: lang), style: GoogleFonts.notoSansKr(color: cream, fontSize: 12.5, fontWeight: FontWeight.bold))),
+                  Text(famWonText(total, lang: lang), style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 15)),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Expanded(child: Text(cs('famLastTotal', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5))),
+                  Text(famWonText(lastTotal, lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                ],
+              ),
+            ],
+          ),
         );
       },
     );

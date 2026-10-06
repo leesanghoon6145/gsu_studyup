@@ -370,11 +370,7 @@ class FamilyLinkService {
     } on FirebaseException catch (e) {
       debugPrint('[FamilyLinkService] 연결 거부: ${e.code}');
       if (e.code == 'not-found') return ConnectResult.codeNotFound;
-      if (e.code == 'permission-denied') {
-        // 🆕 [보호자 승인 2026-10-02] 이미 보호자가 있는 아이 → 먼저 연결된 보호자에게 승인 요청
-        final bool sent = await _requestParentApproval(code, myUid);
-        return sent ? ConnectResult.pendingApproval : ConnectResult.capacityFull;
-      }
+      if (e.code == 'permission-denied') return ConnectResult.capacityFull; // 🆕 [2026-10-04 되돌림] 3명까지 바로 연결, 막히면 정원 초과
       return ConnectResult.unknownError;
     } catch (e) {
       return ConnectResult.unknownError;

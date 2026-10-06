@@ -16,6 +16,7 @@ import 'ai_comment_service.dart'; // 🆕 [AI 코치 코멘트 MVP]
 import 'exercise_data_service.dart'; // 🆕 [운동 연동]
 import 'exercise_models.dart'; // 🆕 [운동 연동]
 import 'exercise_theme.dart' show ExerciseTheme; // 🆕 [운동 연동] 종목 아이콘 매핑 재사용
+import 'exercise_step_service.dart'; // 🆕 [수면 2026-10-05]
 
 class DailyReportScreen extends StatefulWidget {
   const DailyReportScreen({super.key});
@@ -39,6 +40,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
   List<AiComment> _aiHistory = []; // 🆕 [AI 코치] 최근 기록 (날짜별로 계속 쌓이는지 바로 확인용)
   bool _showAiHistory = false;
   bool _isLoading = true;
+  SleepSummary? _sleep; // 🆕 [수면 2026-10-05] 어젯밤 수면
 
   @override
   void initState() {
@@ -59,13 +61,15 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     // 🆕 [운동 연동] 오늘 운동 기록 + 종목(아이콘/이름 조회용) 로드
     final exerciseTypes = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
     final typesById = {for (final t in exerciseTypes) t.id: t};
-    final allExerciseRecords = await ExerciseDataService.instance.getSessionRecords();
+    final allExerciseRecords = await ExerciseDataService.instance.getAllRecords(); // 🆕 [2026-10-05] 자동 기록(걸음 · 워치)도 포함
     final todayExercises = allExerciseRecords.where((r) {
       return r.date.year == now.year && r.date.month == now.month && r.date.day == now.day;
     }).toList();
 
+    final SleepSummary? sleep = await DailyStepWatcherService.instance.getSleepFor(now); // 🆕 [수면]
     if (!mounted) return;
     setState(() {
+      _sleep = sleep;
       _today = today;
       _yesterday = yesterdaySummary;
       _achievedGoalCount = achievedCount;
@@ -129,7 +133,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     final String todayDisplay = '${now.month}/${now.day} (${weekdayNames[now.weekday - 1]})';
 
     // 🆕 [운동 연동] 일정/타임라인 기록이 없어도 오늘 운동 기록만 있으면 빈 상태를 건너뛴다.
-    final bool hasReportableData = (_today != null && _today!.hasData) || _todayExercises.isNotEmpty;
+    final bool hasReportableData = (_today != null && _today!.hasData) || _todayExercises.isNotEmpty || _sleep != null;
 
     return Scaffold(
       backgroundColor: _pageBg,
@@ -174,6 +178,34 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
           ],
           if (_todayExercises.isNotEmpty) ...[
             _buildExerciseSummaryCard(), // 🆕 [운동 연동]
+            const SizedBox(height: 16),
+          ],
+          if (_sleep != null) ...[
+            // 🆕 [수면 2026-10-05] 어젯밤 수면 (삼성헬스)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: _containerBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: _brandGolden.withOpacity(0.45))),
+              child: Row(
+                children: [
+                  const Icon(Icons.bedtime_rounded, color: _brandGolden, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: BiInline(
+                      en: 'Last Night Sleep', ko: '어젯밤 수면', color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13,
+                      translations: const {'JA': '昨夜の睡眠', 'ZH': '昨晚睡眠', 'FR': 'Sommeil de la nuit', 'DE': 'Schlaf letzte Nacht', 'RU': 'Сон прошлой ночью', 'AR': 'نوم الليلة الماضية', 'HI': 'कल रात की नींद', 'VI': 'Giấc ngủ đêm qua', 'ES': 'Sueño de anoche', 'TH': 'การนอนเมื่อคืน'},
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(_sleep!.hoursText, style: const TextStyle(color: _brandGolden, fontSize: 17, fontWeight: FontWeight.bold)),
+                      Text(_sleep!.rangeText, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
           ],
           _buildGoalAchievedCard(),

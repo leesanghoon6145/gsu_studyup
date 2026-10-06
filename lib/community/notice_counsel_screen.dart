@@ -148,6 +148,14 @@ Widget _biTitle(String k, {double size = 15}) {
 String _fmtDate(DateTime d) =>
     '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 
+// 🆕 [자동 번역 2026-10-04] 한국어 모드는 원문, 다른 언어는 번역(아직 없으면 원문)
+String _trPick(Map<String, String> tr, String original) {
+  if (_curLang == 'KO') return original;
+  return tr[_curLang.toLowerCase()] ?? original;
+}
+String _nTitle(NoticeItem n) => _trPick(n.trTitle, n.title);
+String _nBody(NoticeItem n) => _trPick(n.trBody, n.body);
+
 void _snack(BuildContext context, String k) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
@@ -612,13 +620,13 @@ class _NoticeTabState extends State<_NoticeTab> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(cur.title, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(_nTitle(cur), style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                   const SizedBox(height: 4),
                   Text(_fmtDate(cur.createdAt), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11)),
                   const SizedBox(height: 14),
                   Flexible(
                     child: SingleChildScrollView(
-                      child: Text(cur.body, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14, height: 1.8)),
+                      child: Text(_nBody(cur), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14, height: 1.8)),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -919,7 +927,7 @@ class _NoticeCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(item.title, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(_nTitle(item), style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
             ],
           ),
           subtitle: Padding(
@@ -929,7 +937,7 @@ class _NoticeCard extends StatelessWidget {
           children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: Text(item.body, style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.7)),
+              child: Text(_nBody(item), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, height: 1.7)),
             ),
             // 🆕 [연재 2026-09-25] ◀ 이전 편 / 다음 편 ▶ - 누르면 읽기 팝업으로 바로 이동
             if (prev != null || next != null) ...[
@@ -976,7 +984,7 @@ Widget _seriesButton({required bool isNext, required NoticeItem target, required
           ),
           const SizedBox(height: 2),
           Text(
-            target.title,
+            _nTitle(target),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: isNext ? TextAlign.right : TextAlign.left,

@@ -57,6 +57,7 @@ import 'package:firebase_auth/firebase_auth.dart'; // 🆕 [부모 운동 응원
 import '../parent/parent_main_dashboard_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 학부모방 연결
 import 'cheer_stars_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 운동 타이머·별 통장
 import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30] 옛 데이터를 이 계정으로 옮기기
+import '../services/family_link_service.dart'; // 🆕 [2026-10-04] 학부모방 문 잠금
 class GeneralPlannerHomeScreen extends StatefulWidget {
 
   // 🆕 [부모 운동 응원별 2026-09-29] 학부모방에서 들어왔으면 true —
@@ -342,7 +343,30 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
   }
 
   // 🆕 일반인 계정도 같은 계정 그대로 학부모방에 들어가 자녀를 연결할 수 있음
-  void _openParentRoom(BuildContext context) {
+  // 🆕 [2026-10-04] 학생 사생활 보호: 보호자로 연결된 자녀가 없는 일반 계정은 학부모방에 들어갈 수 없음
+  Future<void> _openParentRoom(BuildContext context) async {
+    if (!widget.openedFromParentRoom) {
+      final List<String> codes = await FamilyLinkService.getLinkedCodes();
+      if (codes.isEmpty) {
+        if (!context.mounted) return;
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: _containerBg,
+            title: Text('학부모방 / Parent Room', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
+            content: Text(
+              '학부모방은 학생의 보호자만 들어갈 수 있어요.\n가족으로 응원하려면 「부모+가족 응원 및 연결」에서 응원 가족으로 연결해 주세요.\n\nOnly a student\'s guardian can enter. To cheer as family, connect as a family supporter.',
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: Text('확인 / OK', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold))),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+    if (!context.mounted) return;
     if (widget.openedFromParentRoom) {
       Navigator.pop(context); // 학부모방에서 왔으면 새로 열지 않고 돌아감
       return;

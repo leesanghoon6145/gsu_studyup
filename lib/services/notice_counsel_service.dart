@@ -21,6 +21,9 @@ class NoticeItem {
   final bool pinned;
   final DateTime createdAt;
   final String? prevId; // 🆕 [연재 2026-09-25] 이 공지가 이어지는 "이전 편" 공지 id (없으면 첫 편·단독)
+  // 🆕 [자동 번역 2026-10-04] Firebase 번역 확장이 채워 주는 언어별 제목·내용 ({'en': …, 'ja': …})
+  final Map<String, String> trTitle;
+  final Map<String, String> trBody;
 
   NoticeItem({
     required this.id,
@@ -31,6 +34,8 @@ class NoticeItem {
     required this.pinned,
     required this.createdAt,
     this.prevId,
+    this.trTitle = const {},
+    this.trBody = const {},
   });
 
   factory NoticeItem.fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
@@ -44,6 +49,8 @@ class NoticeItem {
       pinned: m['pinned'] == true,
       createdAt: (m['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       prevId: ((m['prevId'] as String?) ?? '').isEmpty ? null : m['prevId'] as String,
+      trTitle: _readTr(m['translatedTitle']), // 🆕 [자동 번역]
+      trBody: _readTr(m['translated']), // 🆕 [자동 번역]
     );
   }
 }
@@ -51,6 +58,12 @@ class NoticeItem {
 // 🆕 공지 대상 읽기 - 새 방식(audiences 목록) 우선, 예전 방식(audience 한 값)도 호환
 // 대상 값이 아예 없는 예전 공지는 전체(학생+학부모+일반인)로 처리
 const List<String> kAllAudiences = ['student', 'parent', 'general'];
+
+// 🆕 [자동 번역 2026-10-04] 번역 칸 읽기 (없으면 빈 칸)
+Map<String, String> _readTr(dynamic raw) {
+  if (raw is! Map) return const {};
+  return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
+}
 
 List<String> _readAudiences(Map<String, dynamic> m) {
   final dynamic raw = m['audiences'];

@@ -380,6 +380,18 @@ class ExerciseStarService {
           });
         }
 
+        // 🆕 [가족 장학금 2026-10-02] 응원 가족은 이번 달 이 아이에게 보낸 별을 내 문서에 쌓아 둠 (결산용)
+        if (asSupporter) {
+          final String? me = FirebaseAuth.instance.currentUser?.uid;
+          if (me != null) {
+            tx.set(_db.collection('supporterLinks').doc(me), {
+              'sent': {
+                code: {mk: FieldValue.increment(stars)},
+              },
+            }, SetOptions(merge: true));
+          }
+        }
+
         // 🆕 [응원 가족 2026-09-30] 보낸 사람별 기록 한 장 (보호자·응원 가족 모두)
         tx.set(giftRef, {
           'fromUid': FirebaseAuth.instance.currentUser?.uid,

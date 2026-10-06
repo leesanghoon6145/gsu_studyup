@@ -4,14 +4,12 @@
 // 들어오면:
 //  1) 상단에서 날짜를 ◀/▶로 하루씩 넘기며 과거 기록도 조회 가능
 //  2) 그 날짜의 "구성"(예: 버디/이글/보기 이상 등 카운터형 항목 비중)을 도넛차트로
-//  3) 숫자형 항목마다 각각 작은 막대그래프(최근 14일 추이)를 항목별로 분리해서 표시
+//  3) 숫자형 항목마다 각각 막대그래프(최근 14일 추이)를 항목별로 분리해서 표시
 //
-// 색상 원칙: ExerciseTheme.rainbowCycleColorAt(index) - 빨주노초파남보 순환.
-// 항목 순서(인덱스)로 색을 고정하기 때문에, 같은 항목은 이 화면을 다시 열어도
-// 항상 같은 색으로 보인다.
-//
-// 이 화면은 모든 종목에 공용으로 재사용 가능하도록 ExerciseType 하나를 받아서
-// 동작한다 - 골프에서 먼저 검증한 뒤 다른 15종목에도 그대로 연결하면 됨.
+// 🆕 [2026-10-04] 16개 종목 공통
+//  - 막대 2배 이상 굵게, 한 화면에 5~6일, 좌우로 밀면 2주 (처음엔 오늘이 오른쪽 끝)
+//  - 색: 위부터 빨강 · 녹색 · 파랑 · 황금 · 흰색 · 남색 · 노랑 (밝게)
+//  - 날짜를 매일 표시
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -50,6 +48,18 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
   }
 
   String _dateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // 🆕 [2026-10-04] 위부터 빨강 · 녹색 · 파랑 · 황금 · 흰색 · 남색 · 노랑 (밝게)
+  static const List<Color> _kFieldColors = [
+    Color(0xFFEF4444), // 빨강
+    Color(0xFF22C55E), // 녹색
+    Color(0xFF3B82F6), // 파랑
+    ExerciseTheme.brandGolden, // 황금
+    Color(0xFFF8FAFC), // 흰색
+    Color(0xFF6366F1), // 남색 (어두운 바탕에서 보이게 밝은 남색)
+    Color(0xFFFACC15), // 노랑
+  ];
+  static Color _fieldColor(int i) => _kFieldColors[(i < 0 ? 0 : i) % _kFieldColors.length];
 
   bool _isSameDate(DateTime a, DateTime b) => _dateKey(a) == _dateKey(b);
 
@@ -109,11 +119,23 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
           _buildSectionTitle('TRENDS (14 DAYS)', '항목별 14일 추이'),
           const SizedBox(height: 4),
           Text(
-            '항목마다 색이 고정되어 있어, 다른 종목과 비교할 때도 같은 색은 같은 성격의 항목입니다.',
+            '항목마다 색이 고정되어 있어, 다른 종목과 비교할 때도 같은 색은 같은 성격의 항목입니다. 그래프를 좌우로 밀면 2주를 볼 수 있어요.',
             style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
           ),
           const SizedBox(height: 14),
           ..._buildPerFieldCharts(),
+          // 🆕 [헬스 2026-10-04] 운동별(스쿼트 등) 최고 무게 2주 추이
+          if (widget.type.id == 'gym') ...[
+            const SizedBox(height: 14),
+            _buildSectionTitle('BEST WEIGHT BY EXERCISE (14 DAYS)', '운동별 최고 무게 (14일)'),
+            const SizedBox(height: 4),
+            Text(
+              '그날 그 운동에서 가장 무겁게 든 무게입니다. 자주 한 운동부터 최대 6개까지 보여요.',
+              style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
+            ),
+            const SizedBox(height: 14),
+            ..._buildGymExerciseCharts(),
+          ],
         ],
       ),
     );
@@ -160,7 +182,6 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
   }
 
   // ✅ [도넛차트] 카운터형(counter) 항목들 - 선택된 날짜의 값 비중을 보여줌.
-  // 골프 기준: 3퍼팅/이글/버디/보기 이상/OB 등. 전부 0이면 "기록 없음" 표시.
   Widget _buildCompositionDonut() {
     final List<ExerciseField> counterFields = widget.type.fields.where((f) => f.type == ExerciseFieldType.counter).toList();
     if (counterFields.isEmpty) {
@@ -189,8 +210,8 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
                 sectionsSpace: 2,
                 centerSpaceRadius: 32,
                 sections: entries.asMap().entries.map((e) {
-                  final int idx = counterFields.indexOf(e.value.key); // ✅ [2026-09-14 버그 수정] 전체 필드 목록이 아닌 counterFields 목록 안에서의 순서
-                  final Color color = ExerciseTheme.rainbowCycleColorAt(idx);
+                  final int idx = counterFields.indexOf(e.value.key);
+                  final Color color = _fieldColor(idx);
                   return PieChartSectionData(
                     value: e.value.value.toDouble(),
                     color: color,
@@ -206,8 +227,8 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: entries.map((e) {
-                final int idx = counterFields.indexOf(e.key); // ✅ [2026-09-14 버그 수정] 동일하게 counterFields 기준
-                final Color color = ExerciseTheme.rainbowCycleColorAt(idx);
+                final int idx = counterFields.indexOf(e.key);
+                final Color color = _fieldColor(idx);
                 final double pct = sum == 0 ? 0 : (e.value / sum * 100);
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
@@ -239,11 +260,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
     );
   }
 
-  // ✅ [항목별 미니 막대그래프] 숫자형(number) 항목마다 최근 14일 추이를
-  // 각각 작은 차트로 분리 - 한 그래프에 다 넣으면 항목마다 단위가 달라
-  // 비교가 불가능해지므로, 항목별로 나누는 게 원칙(사용자 제안 반영).
-  // ✅ [2026-09-13 추가] 최댓값에 맞춰 Y축 눈금 간격을 5개 안팎으로 보기 좋게
-  // 자동 계산 (1/2/5/10/20/50/100 배수 중 하나로 반올림하는 흔한 방식).
+  // ✅ 최댓값에 맞춰 Y축 눈금 간격을 5개 안팎으로 자동 계산
   double _niceAxisInterval(double top) {
     if (top <= 0) return 1;
     final double rough = top / 4;
@@ -254,26 +271,25 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
     return (rough / 100).ceil() * 100;
   }
 
+  // ✅ [항목별 막대그래프] 숫자형 항목마다 최근 14일 추이를 각각 분리해서 표시
   List<Widget> _buildPerFieldCharts() {
     final List<ExerciseField> numberFields = widget.type.fields.where((f) => f.type == ExerciseFieldType.number).toList();
     if (numberFields.isEmpty) return [_emptyCard('이 종목은 숫자형 추이 항목이 없습니다.')];
 
-    // ✅ [2026-09-13 추가] 막대 14개 각각이 정확히 어느 날짜인지 라벨에 쓰기 위해
-    // _last14DaysValues와 완전히 같은 순서로 날짜 목록도 같이 만든다.
     final DateTime today = DateTime.now();
     final List<DateTime> days = List.generate(14, (i) {
-      final d = DateTime(today.year, today.month, today.day).subtract(Duration(days: 13 - i));
-      return d;
+      return DateTime(today.year, today.month, today.day).subtract(Duration(days: 13 - i));
     });
 
     return numberFields.map((field) {
-      final int idx = numberFields.indexOf(field); // ✅ [2026-09-14 버그 수정] 전체 필드 목록이 아닌 numberFields 목록 안에서의 순서 - 같은 색 겹침 방지
-      final Color color = ExerciseTheme.rainbowCycleColorAt(idx);
+      final int idx = numberFields.indexOf(field);
+      final Color color = _fieldColor(idx); // 🆕 [2026-10-04] 위부터 빨·녹·파·황금·흰·남·노
       final List<num> values = _last14DaysValues(field.key);
       final double maxVal = values.isEmpty ? 0 : values.map((v) => v.toDouble()).reduce((a, b) => a > b ? a : b);
-      // ✅ [Y축 눈금] 최댓값에 맞춰 5개 안팎의 보기 좋은 눈금 간격을 자동 계산.
       final double top = maxVal <= 0 ? 4 : maxVal * 1.25;
       final double interval = _niceAxisInterval(top);
+      // 🆕 [2026-10-04] 맨 위 눈금 글자가 반쯤 잘리지 않게, 눈금 위에 여유를 조금 둠
+      final double maxY = (top / interval).ceil() * interval + interval * 0.25;
 
       return Container(
         margin: const EdgeInsets.only(bottom: 14),
@@ -299,87 +315,249 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
               ],
             ),
             const SizedBox(height: 12),
+            // 🆕 [2026-10-04] Y축(왼쪽 눈금)은 고정, 막대와 날짜(X축)만 좌우로 스크롤
+            // 한 화면에 5~6일, 좌우로 밀면 2주, 처음엔 오늘(오른쪽 끝)
             SizedBox(
-              height: 130,
-              child: BarChart(
-                BarChartData(
-                  minY: 0,
-                  maxY: top,
-                  alignment: BarChartAlignment.spaceAround,
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    horizontalInterval: interval,
-                    getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.06), strokeWidth: 1),
+              height: 180,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── 고정된 Y축: 막대 없이 눈금 글자만 그리는 좁은 그래프 (오른쪽 그래프와 높이·눈금이 정확히 같음)
+                  SizedBox(
+                    width: 40,
+                    child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: const [], showLeft: true)),
                   ),
-                  borderData: FlBorderData(
-                    show: true,
-                    border: Border(
-                      left: BorderSide(color: color.withOpacity(0.4), width: 1),
-                      bottom: BorderSide(color: color.withOpacity(0.4), width: 1),
-                      top: BorderSide.none,
-                      right: BorderSide.none,
-                    ),
-                  ),
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    // ✅ [Y축] 항목 수치 눈금
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 34,
-                        interval: interval,
-                        getTitlesWidget: (value, meta) {
-                          if (value == 0 && meta.max != 0) {
-                            // 0은 X축 바로 위라 굳이 안 겹치게 생략 가능하지만, 첫 눈금이라 표시함
-                          }
-                          return Text(
-                            value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1),
-                            style: const TextStyle(color: Colors.white54, fontSize: 9.5),
-                          );
-                        },
-                      ),
-                    ),
-                    // ✅ [X축] 날짜(일). 14개 전부 표시하면 겹치니 이틀에 하나씩만 표시.
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 20,
-                        getTitlesWidget: (value, meta) {
-                          final int i = value.toInt();
-                          if (i < 0 || i >= days.length) return const SizedBox.shrink();
-                          if (i % 2 != 0 && i != days.length - 1) return const SizedBox.shrink(); // 이틀에 하나 + 마지막(오늘)은 항상 표시
-                          final DateTime d = days[i];
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text('${d.month}/${d.day}', style: const TextStyle(color: Colors.white38, fontSize: 9)),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  barGroups: List.generate(values.length, (i) {
-                    return BarChartGroupData(
-                      x: i,
-                      barRods: [
-                        BarChartRodData(
-                          toY: values[i].toDouble(),
-                          color: color.withOpacity(0.85),
-                          width: 8,
-                          borderRadius: BorderRadius.circular(3),
+                  // ── 좌우로 움직이는 막대 + 날짜
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, box) => SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        reverse: true,
+                        child: SizedBox(
+                          width: box.maxWidth / 5.5 * 14,
+                          child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: values, showLeft: false)),
                         ),
-                      ],
-                    );
-                  }),
-                ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       );
     }).toList();
+  }
+
+
+  // 🆕 [헬스 2026-10-04] 운동별 최고 무게 그래프 (스쿼트 · 벤치프레스 …)
+  // 새 기록(exercises 목록)과 예전 기록(exerciseName + sets) 모두 읽음
+  List<Widget> _buildGymExerciseCharts() {
+    final DateTime today = DateTime.now();
+    final List<DateTime> days = List.generate(14, (i) {
+      return DateTime(today.year, today.month, today.day).subtract(Duration(days: 13 - i));
+    });
+    final Map<String, Map<String, double>> best = {}; // 운동 이름 → 날짜 → 그날 최고 무게
+    final Map<String, int> freq = {};
+    for (final r in _records) {
+      final dynamic ex = r.detail['exercises'];
+      List<Map> lines = [];
+      if (ex is List) {
+        lines = ex.whereType<Map>().toList();
+      } else if ((r.detail['exerciseName'] ?? '').toString().trim().isNotEmpty) {
+        lines = [
+          {'name': r.detail['exerciseName'], 'sets': r.detail['sets']},
+        ];
+      }
+      for (final line in lines) {
+        final String name = (line['name'] ?? '').toString().trim();
+        if (name.isEmpty) continue;
+        double top = 0;
+        for (final s in (line['sets'] as List?) ?? const []) {
+          if (s is Map && s['weightKg'] is num) {
+            final double w = (s['weightKg'] as num).toDouble();
+            if (w > top) top = w;
+          }
+        }
+        if (top <= 0) continue;
+        final String k = _dateKey(r.date);
+        final Map<String, double> m = best.putIfAbsent(name, () => {});
+        if (top > (m[k] ?? 0)) m[k] = top;
+        freq[name] = (freq[name] ?? 0) + 1;
+      }
+    }
+    if (best.isEmpty) {
+      return [_emptyCard('운동 이름과 세트 무게를 기록하면 운동별 최고 무게 그래프가 나와요.')];
+    }
+    String kg(double v) => v == v.roundToDouble() ? '${v.toInt()}kg' : '${v.toStringAsFixed(1)}kg';
+    final List<String> names = freq.keys.toList()..sort((a, b) => freq[b]!.compareTo(freq[a]!));
+    return names.take(6).toList().asMap().entries.map((e) {
+      final String name = e.value;
+      final Color color = _fieldColor(e.key);
+      final List<num> values = days.map((d) => best[name]![_dateKey(d)] ?? 0).toList();
+      final List<double> done = values.where((v) => v > 0).map((v) => v.toDouble()).toList();
+      String change = '';
+      if (done.length >= 2) {
+        final double diff = done.last - done.first;
+        change = '${kg(done.first)} → ${kg(done.last)}  (${diff >= 0 ? '+' : ''}${kg(diff)})';
+      } else if (done.length == 1) {
+        change = kg(done.first);
+      }
+      return _trendCard(title: name, unit: 'kg', color: color, values: values, days: days, note: change);
+    }).toList();
+  }
+
+  // 🆕 [2026-10-04] 추이 카드 하나 (Y축 고정 · 막대와 날짜만 좌우 스크롤)
+  Widget _trendCard({
+    required String title,
+    String? unit,
+    required Color color,
+    required List<num> values,
+    required List<DateTime> days,
+    String note = '',
+  }) {
+    final double maxVal = values.isEmpty ? 0 : values.map((v) => v.toDouble()).reduce((a, b) => a > b ? a : b);
+    final double top = maxVal <= 0 ? 4 : maxVal * 1.25;
+    final double interval = _niceAxisInterval(top);
+    final double maxY = (top / interval).ceil() * interval + interval * 0.25;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: ExerciseTheme.luxeCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              if (unit != null) Text(unit, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(note, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 180,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 40,
+                  child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: const [], showLeft: true)),
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, box) => SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: SizedBox(
+                        width: box.maxWidth / 5.5 * 14,
+                        child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: values, showLeft: false)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [2026-10-04] 고정 Y축 그래프와 움직이는 막대 그래프가 같은 눈금·높이를 쓰도록 한 곳에서 만듦
+  BarChartData _chartData({
+    required Color color,
+    required double maxY,
+    required double interval,
+    required List<DateTime> days,
+    required List<num> values,
+    required bool showLeft,
+  }) {
+    const TextStyle axisStyle = TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold); // 🆕 진하고 또렷하게
+    return BarChartData(
+      minY: 0,
+      maxY: maxY,
+      alignment: BarChartAlignment.spaceAround,
+      gridData: FlGridData(
+        show: !showLeft,
+        drawVerticalLine: false,
+        horizontalInterval: interval,
+        getDrawingHorizontalLine: (_) => FlLine(color: Colors.white.withOpacity(0.08), strokeWidth: 1),
+      ),
+      borderData: FlBorderData(
+        show: true,
+        border: Border(
+          right: showLeft ? BorderSide(color: color.withOpacity(0.6), width: 1.2) : BorderSide.none, // 고정 Y축의 세로선
+          bottom: showLeft ? BorderSide.none : BorderSide(color: color.withOpacity(0.6), width: 1.2),
+          top: BorderSide.none,
+          left: BorderSide.none,
+        ),
+      ),
+      barTouchData: BarTouchData(enabled: false),
+      titlesData: FlTitlesData(
+        show: true,
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: showLeft,
+            reservedSize: 38,
+            interval: interval,
+            getTitlesWidget: (value, meta) {
+              if (value > maxY - interval * 0.2) return const SizedBox.shrink(); // 여유 칸에는 글자 없음
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Text(
+                  value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1),
+                  style: axisStyle,
+                  textAlign: TextAlign.right,
+                ),
+              );
+            },
+          ),
+        ),
+        // X축 날짜: 고정 Y축 쪽도 같은 높이를 비워 두어 두 그래프의 바닥선이 정확히 맞음
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 24,
+            getTitlesWidget: (value, meta) {
+              if (showLeft) return const SizedBox.shrink();
+              final int i = value.toInt();
+              if (i < 0 || i >= days.length) return const SizedBox.shrink();
+              final DateTime d = days[i];
+              final bool isToday = i == days.length - 1;
+              return Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(
+                  '${d.month}/${d.day}',
+                  style: axisStyle.copyWith(color: isToday ? ExerciseTheme.brandGolden : Colors.white),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      barGroups: List.generate(values.length, (i) {
+        return BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: values[i].toDouble(),
+              color: color.withOpacity(0.9),
+              width: 22, // 막대 2배 이상
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ],
+        );
+      }),
+    );
   }
 }

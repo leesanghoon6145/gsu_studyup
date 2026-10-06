@@ -223,10 +223,12 @@ class ParentLiveStatusWidget extends StatefulWidget {
   final Widget Function(String, String, {required double fontSize, String? foreignTitle}) buildCustomSectionTitle;
 
   final Widget? topBar; // 🆕 [2026-10-01] 로그아웃 · 다국어 줄 (내용 맨 첫 줄)
+  final Map<String, dynamic>? lastSleep; // 🆕 [수면 2026-10-05] 자녀 어젯밤 수면 (links 문서의 lastSleep)
 
   const ParentLiveStatusWidget({
     Key? key,
     this.topBar,
+    this.lastSleep,
     this.isStudyingNow = false,
     this.liveSubject = '',
     this.liveElapsedSeconds = 0,
@@ -449,6 +451,50 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
     );
   }
 
+  // 🆕 [수면 2026-10-05] 자녀 어젯밤 수면 카드 (오늘 아침 기록일 때만)
+  Widget? _sleepCard() {
+    final Map<String, dynamic>? s = widget.lastSleep;
+    if (s == null) return null;
+    final DateTime n = DateTime.now();
+    final String todayKey = '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
+    if (s['date'] != todayKey) return null;
+    final int m = (s['minutes'] as num?)?.toInt() ?? 0;
+    if (m <= 0) return null;
+    String hm(String? iso) {
+      final DateTime? d = DateTime.tryParse(iso ?? '');
+      return d == null ? '-' : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    }
+    final String amount = DkeLang.isForeignSelected ? '${m ~/ 60}h ${m % 60}m' : '${m ~/ 60}시간 ${m % 60}분';
+    const Map<String, String> title = {'KO': '어젯밤 수면', 'EN': 'Last Night Sleep', 'JA': '昨夜の睡眠', 'ZH': '昨晚睡眠', 'FR': 'Sommeil de la nuit', 'DE': 'Schlaf letzte Nacht', 'RU': 'Сон прошлой ночью', 'AR': 'نوم الليلة الماضية', 'HI': 'कल रात की नींद', 'VI': 'Giấc ngủ đêm qua', 'ES': 'Sueño de anoche', 'TH': 'การนอนเมื่อคืน'};
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: widget.premiumCardBg,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: widget.brandGolden.withValues(alpha: 0.3), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Text('😴', style: TextStyle(fontSize: 22)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${widget.childName} · ${_bi(title)}',
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(amount, style: GoogleFonts.notoSansKr(color: widget.brandGolden, fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('${hm(s['start'] as String?)} ~ ${hm(s['end'] as String?)}', style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _customMessageController.dispose();
@@ -509,6 +555,7 @@ class _ParentLiveStatusWidgetState extends State<ParentLiveStatusWidget> {
               ),
             ),
           const SizedBox(height: _kSectionGap), // 🆕 [2026-09-23] 16 → 공통 간격
+          if (_sleepCard() != null) ...[_sleepCard()!, const SizedBox(height: _kSectionGap)], // 🆕 [수면 2026-10-05]
 
           Container(
             padding: const EdgeInsets.all(16),

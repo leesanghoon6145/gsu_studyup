@@ -19,6 +19,9 @@ import 'services/auth_service.dart'; // 🆕 [로그아웃 기능]
 import 'services/family_link_service.dart'; // 🆕 [재설치 복원 2026-09-25]
 import 'services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2026-09-25]
 import 'services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [수면 2026-10-05] 부모님께 보내기
+import 'schedule/exercise_step_service.dart'; // 🆕 [수면 2026-10-05] 삼성헬스 수면 읽기
+import 'services/exam_end_cheer.dart'; // 🆕 [2026-10-06] 시험 끝난 다음 날 위로 팝업
 import 'main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
@@ -45,6 +48,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
 
   bool _isVipMember = false;
   bool _noticeDot = false; // 🆕 [빨간 점] 공지·게시판·상담에 새 소식이 있는지
+  SleepSummary? _lastSleep; // 🆕 [수면 2026-10-05] 어젯밤 수면
   String _targetUniversity = "Seoul National University (서울대학교)";
 
   // 🆕 [저장 연동] 사용자가 추가/삭제한 과목·시험종류를 앱 재시작 후에도 유지
@@ -81,16 +85,52 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     FamilyLinkService.restoreFromCloudIfNeeded(); // 🆕 [재설치 복원 2026-09-25] 새로 깔았으면 서버 기록 복원
     CloudBackupService.instance.start(); // 🆕 [재설치 복원 2단계] 개인 백업 보관함 자동 복원·백업
     _refreshNoticeDot(); // 🆕 [빨간 점] 새 소식 확인
+    _syncSleepToParents(); // 🆕 [수면 2026-10-05] 어젯밤 수면 읽어 부모님께
 
     // 🆕 [D-day 팝업 연동] 첫 화면 진입 시(아침 6~10시 사이) 시험 D-day 응원 팝업 체크
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndShowExamDayPopup();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _checkAndShowExamDayPopup();
+      if (mounted) await ExamEndCheer.maybeShow(context); // 🆕 [2026-10-06] 시험 끝난 다음 날 위로
     });
   }
   // 🆕 [빨간 점 2026-09-25] 공지·게시판·상담에 새 소식이 있으면 메뉴 버튼에 빨간 점
   Future<void> _refreshNoticeDot() async {
     final Map<String, bool> r = await NoticeCounselService.checkUnread(viewer: 'student');
     if (mounted) setState(() => _noticeDot = r.values.any((v) => v));
+  }
+
+  // 🆕 [수면 2026-10-05] 삼성헬스에서 어젯밤 수면을 읽어 화면에 보이고, 부모님 화면으로 보냄
+  Future<void> _syncSleepToParents() async {
+    try {
+      if (!await HealthLink.isInstalled()) return;
+      if (!await HealthLink.hasExtendedPermission()) {
+        final prefs = await SharedPreferences.getInstance();
+        if (prefs.getBool('gke_student_sleep_asked') ?? false) return; // 처음 한 번만 물어봄
+        await prefs.setBool('gke_student_sleep_asked', true);
+        if (!await HealthLink.requestExtendedPermission()) return;
+      }
+      final DateTime now = DateTime.now();
+      final DateTime today = DateTime(now.year, now.month, now.day);
+      final SleepSummary? s = await HealthLink.sleepBetween(
+        today.subtract(const Duration(hours: 6)), // 어제 18시부터
+        today.add(const Duration(hours: 14)), // 오늘 14시까지
+      );
+      if (s == null) return;
+      if (mounted) setState(() => _lastSleep = s);
+      final String? code = await FamilyLinkService.getMyLinkCode();
+      if (code == null) return;
+      final String dateKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      await FirebaseFirestore.instance.collection('links').doc(code).set({
+        'lastSleep': {
+          'date': dateKey,
+          'minutes': s.minutes,
+          'start': s.start?.toIso8601String(),
+          'end': s.end?.toIso8601String(),
+        },
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[수면] 읽기·보내기 실패: $e');
+    }
   }
 
   // 🆕 [저장 연동] 과목/시험종류 저장값 복원
@@ -197,11 +237,27 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     final DateTime todayZero = DateTime(now.year, now.month, now.day);
     final int differenceInDays = todayZero.difference(examStartZero).inDays; // -1: D-1, 0: D-day, 1~4: D+1~D+4
 
-    final String? primaryMessage = StudyTimelinesMidTermAllDays.getPrimaryPopupMessage(differenceInDays);
-    if (primaryMessage == null) return; // 팝업 대상 구간(D-1~D+4)이 아니면 종료
+    // 🆕 [2026-10-05] 시험 마지막 날이 지나면: 팝업 끝 + 시험 시간표 끄기 → 평일 시간표로 복귀
+    // (마지막 날이 저장돼 있지 않은 예전 기록은 시작일 + 4일을 마지막 날로 봄)
+    final String? endStr = prefs.getString('gke_exam_end_date');
+    final DateTime? examEndDate = endStr == null ? null : DateTime.tryParse(endStr);
+    final DateTime examEndZero = examEndDate != null
+        ? DateTime(examEndDate.year, examEndDate.month, examEndDate.day)
+        : examStartZero.add(const Duration(days: 4));
+    if (todayZero.isAfter(examEndZero)) {
+      await prefs.setBool('gke_exam_timeline_enabled', false);
+      await prefs.setString(ExamEndCheer.kLastEndKey, examEndZero.toIso8601String()); // 🆕 [2026-10-06] 학사 타임라인에서 날짜를 지워도 위로 팝업은 뜨게
+      debugPrint('[시험] 마지막 날(${examEndZero.month}/${examEndZero.day})이 지나 시험 시간표를 끄고 평일 시간표로 돌아갑니다');
+      return;
+    }
+
+    // 🆕 [2026-10-06] 시험이 5일보다 길어도(6일 이상) 마지막 날까지 응원 — 5일째 이후는 5일째 문구 사용
+    final int popupDay = differenceInDays > 4 ? 4 : differenceInDays;
+    final String? primaryMessage = StudyTimelinesMidTermAllDays.getPrimaryPopupMessage(popupDay);
+    if (primaryMessage == null) return; // 팝업 대상 구간(D-1~마지막 날)이 아니면 종료
 
     final List<String> popupMessages = [primaryMessage];
-    if (StudyTimelinesMidTermAllDays.hasSecondaryPopup(differenceInDays)) {
+    if (StudyTimelinesMidTermAllDays.hasSecondaryPopup(popupDay)) {
       popupMessages.add(StudyTimelinesMidTermAllDays.examPopupSecondaryTips); // D-1은 2번째 팝업 없음
     }
 
@@ -831,7 +887,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                       children: [
                         _buildMenuButton(
                           icon: Icons.calendar_month_rounded, label: "자기주도 플래너", subLabel: "Self Learning Planner",
-                          onTap: () {
+                          onTap: () async {
+                            await ExamEndCheer.maybeShow(context); // 🆕 [2026-10-06] 평상시·방학·시험준비·개인시간표 어디로 가든 먼저 위로
+                            if (!mounted) return;
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -896,6 +954,40 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                   ],
                 ),
               ),
+              // 🆕 [수면 2026-10-05] 어젯밤 수면 (삼성헬스)
+              if (_lastSleep != null) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D1527),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: brandGolden.withOpacity(0.35)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text('😴', style: TextStyle(fontSize: 22)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Last Night Sleep', style: GoogleFonts.gowunBatang(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text('어젯밤 수면', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(_lastSleep!.hoursText, style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(_lastSleep!.rangeText, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 30),
 
               _buildSectionTitle('Subject Selection', '과목 선택'),

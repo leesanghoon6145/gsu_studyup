@@ -131,14 +131,14 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
 
   // 🆕 [응원 가족 2026-09-30] 보낼 수 있는 아이 = 보호자로 연결된 자녀 + 승인된 응원 가족 아이
   Future<List<String>> _loadSendTargets() async {
-    final List<String> guardian = await FamilyLinkService.getLinkedCodes();
+    final List<String> guardian = [...await FamilyLinkService.getLinkedCodes()];
     final List<SupportTarget> targets = await SupporterService.getMyTargets();
     final Map<String, SupportTarget> info = {};
     final Set<String> sup = {};
     final List<SupportTarget> pending = [];
     for (final t in targets) {
-      if (guardian.contains(t.code)) continue; // 보호자로 이미 연결된 아이는 보호자로 보냄
       if (t.approved) {
+        guardian.remove(t.code); // 🆕 [2026-10-04] 응원 가족으로 승인된 아이는 응원 가족으로 보임 (남아 있던 옛 보호자 기록보다 우선)
         sup.add(t.code);
         info[t.code] = t;
       } else {
@@ -1518,33 +1518,79 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
 
         // 응원 가족으로 연결된 아이: 이름 + 이번 달 총 공부 시간·공부한 날 수 (그 이상은 볼 수 없음)
         final List<Widget> supporterRows = _supportInfo.values
-            .map((t) => Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(10)),
-          child: Row(
-            children: [
-              Text(SupporterService.relationEmoji[t.relation] ?? '💛', style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.studentName.isNotEmpty ? t.studentName : cs('codeLabel', args: {'c': t.code}),
-                      style: GoogleFonts.notoSansKr(color: _cream, fontWeight: FontWeight.bold, fontSize: 13),
+            .map((t) => InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _openFamilyPlanDialog(t), // 🆕 [가족 장학금 2026-10-02] 눌러서 장학금 정하기
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: _pageBg, borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 🆕 [2026-10-04] 이름과 호칭(삼촌 등)을 같은 줄에, 호칭은 오른쪽 끝
+                        // 🆕 [2026-10-04] 이름과 호칭(삼촌 등)을 같은 줄에, 호칭은 오른쪽 끝
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                t.studentName.isNotEmpty ? t.studentName : cs('codeLabel', args: {'c': t.code}),
+                                style: GoogleFonts.notoSansKr(color: _cream, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
+                            Text(
+                              '${SupporterService.relationEmoji[t.relation] ?? '💛'} ${_relationLabel(t.relation, t.relationText)}',
+                              style: GoogleFonts.notoSansKr(color: _gold, fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+
+                        Text(
+                          cs('supMonthLine', args: {'h': (t.monthMinutes / 60).toStringAsFixed(1), 'd': t.monthDays}),
+                          style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11),
+                        ),
+                        // 🆕 [2026-10-04] 이번 달 이 아이에게 보낸 별
+                        Text(
+                          '⭐ ${cs('sumSent')} ${cs('nStars', args: {'n': t.monthStars})}',
+                          style: GoogleFonts.notoSansKr(color: _cream, fontSize: 11),
+                        ),
+                        // 🆕 [가족 장학금 2026-10-02] 내가 정한 장학금 + 이번 달 · 지난달 결산
+                        const SizedBox(height: 3),
+                        // 🆕 [2026-10-04] 눈에 띄는 금테 단추로 (누르면 장학금 정하기 창)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4, bottom: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: _gold.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _gold.withOpacity(0.7)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '💰 ${cs('famTitle')}: ${t.planCap > 0 ? famPlanText(t.planType, t.planCap) : cs('famNone')}',
+                                  style: GoogleFonts.notoSansKr(color: _gold, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Text('${cs('famTapToSet')} ›', style: GoogleFonts.notoSansKr(color: _cream, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        if (t.planCap > 0)
+                          Text(
+                            '${cs('famNow', args: {'won': famWonText(t.monthWon)})} · ${cs('famLast', args: {'won': famWonText(t.lastMonthWon)})}',
+                            style: GoogleFonts.notoSansKr(color: _cream, fontSize: 11),
+                          ),
+                      ],
                     ),
-                    Text(
-                      cs('supMonthLine', args: {'h': (t.monthMinutes / 60).toStringAsFixed(1), 'd': t.monthDays}),
-                      style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Text(_relationLabel(t.relation, t.relationText), style: GoogleFonts.notoSansKr(color: _gold, fontSize: 11.5, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ))
+            )))
             .toList();
 
         if (codes.isEmpty) {
@@ -1625,6 +1671,115 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
           ),
         );
       },
+    );
+  }
+
+  // 🆕 [가족 장학금 2026-10-02] 응원 가족이 손주 줄을 누르면 열리는 장학금 설정 창
+  // 1별 단가(성장형 2원 · 도전형 3원 · 성취형 4원) + 한 달 한도(없음 · 5,000 · 10,000).
+  // 한 번 정하면 다음 달에도 그대로, 언제든 바꿀 수 있음. 앱은 결산 금액만 보여 줌.
+  Future<void> _openFamilyPlanDialog(SupportTarget t) async {
+    int typeIndex = t.planType < 0 ? 0 : t.planType;
+    int cap = t.planCap;
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Widget chip(String text, bool on, VoidCallback onTap) => InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: on ? _gold : const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: on ? _gold : Colors.white12),
+              ),
+              child: Text(text, style: GoogleFonts.notoSansKr(color: on ? _pageBg : Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5)),
+            ),
+          );
+          Widget fieldLabel(String text) => Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 8),
+            child: Text(text, style: GoogleFonts.notoSansKr(color: _gold, fontWeight: FontWeight.bold, fontSize: 12.5)),
+          );
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF050B14),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _gold, width: 1.5),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '💰 ${cs('famTitle')}${t.studentName.isNotEmpty ? ' · ${t.studentName}' : ''}',
+                      style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(cs('famIntro'), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5, height: 1.5)),
+                    fieldLabel(cs('famCap')),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: SupporterService.familyCaps
+                          .map((c) => chip(c == 0 ? cs('famNone') : famWonText(c), cap == c, () => setDialogState(() => cap = c)))
+                          .toList(),
+                    ),
+                    if (cap > 0) ...[
+                      fieldLabel(cs('famTypeLbl')),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [0, 1, 2]
+                            .map((i) => chip(cs('famType$i'), typeIndex == i, () => setDialogState(() => typeIndex = i)))
+                            .toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        const Spacer(),
+                        TextButton(
+                          onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                          child: Text(cs('btnClose'), style: GoogleFonts.notoSansKr(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 15)),
+                        ),
+                        const SizedBox(width: 6),
+                        ElevatedButton(
+                          onPressed: saving
+                              ? null
+                              : () async {
+                            setDialogState(() => saving = true);
+                            final bool ok = await SupporterService.savePlan(t.code, typeIndex, cap);
+                            if (dialogContext.mounted) Navigator.pop(dialogContext);
+                            if (mounted) {
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                SnackBar(content: Text(ok ? cs('famSaved') : cs('errNetwork'), style: GoogleFonts.notoSansKr())),
+                              );
+                              _refreshSendTargets();
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _gold,
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          child: Text(cs('famSave'), style: GoogleFonts.notoSansKr(color: _pageBg, fontWeight: FontWeight.bold, fontSize: 15)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

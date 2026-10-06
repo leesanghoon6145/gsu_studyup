@@ -43,6 +43,13 @@ class _SetRow {
   int rpe = 7;
 }
 
+// 🆕 [헬스 2026-10-04] 운동 한 줄 = 이름 + 기구(여러 개) + 세트들
+class _GymLine {
+  final TextEditingController name = TextEditingController();
+  final Set<String> equipment = {};
+  final List<_SetRow> sets = [];
+}
+
 class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   final _service = ExerciseDataService.instance;
 
@@ -70,6 +77,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   final Map<String, List<String>> _multiSelectValues = {}; // 🆕 [중복선택] 헬스 운동부위/수영 영법/요가 유형용
   final Map<String, int> _counterValues = {};
   final List<_SetRow> _setRows = [];
+  final List<_GymLine> _gymLines = []; // 🆕 [헬스 2026-10-04] 운동 한 줄씩
+  bool get _isGym => widget.exerciseType.id == 'gym';
 
   // 🆕 [만보기 연동 1단계] 걸음수 자동 측정 상태
   StepTrackingSession? _stepSession;
@@ -99,6 +108,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 화면에서는 전혀 확인할 방법이 없었음.
   StreamSubscription<int>? _liveStepsSub;
   int? _liveAutoSteps;
+  ExerciseRecord? _pendingConfirm; // 🆕 [삼성헬스 2026-10-05] 확인을 기다리는 어제 자동 기록
 
   bool get _isEditMode => widget.existingRecord != null;
 
@@ -112,6 +122,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     super.initState();
     // 🆕 [8번] 시간(분) 그래프는 모든 종목 공통으로 항상 로드
     _durationHistoryFuture = _loadDurationByDate();
+    _loadPendingConfirm(); // 🆕 [워치 운동 2026-10-05] 모든 종목: 확인을 기다리는 자동 기록
+    _recentFuture = _loadRecent(); // 🆕 [2026-10-05] 최근 기록 목록 (자동 기록 포함)
     // 🆕 [걸음수 그래프] 걷기류(steps 필드가 있는 종목)에서만 별도로 로드
     if (_hasStepsField) _stepsHistoryFuture = _loadStepsByDate();
     // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 불러오기 (없으면 평균값 유지)
@@ -124,6 +136,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         if (mounted) setState(() {}); // 🆕 [2단계] 폰/워치 선택 상태를 화면에 반영
       });
       _loadLiveAutoSteps(); // 🆕 [화면 실시간 표시] 저장된 오늘 값 먼저 보여주고
+      DailyStepWatcherService.instance.syncNow().then((_) => _loadPendingConfirm()); // 🆕 [삼성헬스] 열 때 바로 다시 읽고 어제 확인 카드
       _liveStepsSub = DailyStepWatcherService.instance.liveTodaySteps.listen((steps) {
         if (mounted) setState(() => _liveAutoSteps = steps);
       }); // 🆕 이후로는 실시간 갱신값을 계속 반영
@@ -171,6 +184,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         }
       });
     }
+    _initGymLines(); // 🆕 [헬스 2026-10-04]
   }
 
   @override
@@ -185,6 +199,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _memoController.dispose();
     for (final c in _textControllers.values) {
       c.dispose();
+    }
+    for (final line in _gymLines) {
+      _disposeGymLine(line); // 🆕 [헬스 2026-10-04]
     }
     super.dispose();
   }
@@ -698,8 +715,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       }
     }
 
+    if (_isGym) _collectGymLines(detail); // 🆕 [헬스 2026-10-04] 운동 줄들을 모아 저장
     // 2) 자동계산 필드 채우기 (종목별 공식은 exercise_calculations.dart 참고)
     _fillCalculatedFields(detail, durationMin);
+    // 🆕 [삼성헬스 2026-10-05] 자동 걸음 기록을 사람이 고쳐 저장하면, 이후 자동으로 덮어쓰지 않음
+    if (widget.existingRecord?.recordId.startsWith('auto_') == true) { // 🆕 걸음 · 워치 운동 모두
+      detail['userEdited'] = true;
+    }
 
     final record = ExerciseRecord(
       recordId: widget.existingRecord?.recordId ??
@@ -885,6 +907,21 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          // 🆕 [삼성헬스 2026-10-05] 어디서 막혔는지 한눈에
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _showConnectionCheck,
+              icon: const Icon(Icons.health_and_safety_rounded, color: ExerciseTheme.brandGolden, size: 18),
+              label: const Text('🔍 삼성헬스 연결 점검', style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.6)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           if (_stepUnavailable)
             Text(
@@ -916,7 +953,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   icon: Icon(_isStepTracking ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
                   label: ExerciseTheme.biButtonLabel(
                     _isStepTracking ? 'Stop' : 'Start',
-                    _isStepTracking ? '측정 종료' : '측정 시작',
+                    _isStepTracking ? '측정 중 · 누르면 끝' : '측정 시작', // 🆕 [2026-10-05] 빨간 단추 = 지금 측정 중
                     color: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
                     size: 12.5,
                   ),
@@ -994,9 +1031,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Text(
                         _liveAutoSteps == null
-                            ? 'Loading... / 불러오는 중...'
+                            ? '삼성헬스(워치 포함) ${DailyStepWatcherService.instance.lastHealthSteps}보 · 폰 ${DailyStepWatcherService.instance.lastPhoneSteps}보 (아직 기록 전)'
                         // 🆕 [칼로리 추가] 걸음수 기준 추정 칼로리도 거리와 함께 표시
-                            : '$_liveAutoSteps steps 보 · ${_formatAutoDistance(_liveAutoSteps!)} · ${_estimateCaloriesForSteps(_liveAutoSteps!).round()}kcal',
+                        // 🆕 [2026-10-05] 기록값(많은 쪽) + 삼성헬스(워치 포함) · 폰 각각
+                            : '기록 $_liveAutoSteps보 · ${_formatAutoDistance(_liveAutoSteps!)} · ${_estimateCaloriesForSteps(_liveAutoSteps!).round()}kcal   |   삼성헬스(워치) ${DailyStepWatcherService.instance.lastHealthSteps}보 · 폰 ${DailyStepWatcherService.instance.lastPhoneSteps}보',
                         style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 14), // 🆕 12 -> 14로 살짝 키움
                         maxLines: 1,
                       ),
@@ -1010,11 +1048,259 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       ),
     );
   }
+  // ===================================================================
+  // 🆕 [삼성헬스 2026-10-05] 어제 걸음 확인 카드 · 연결 점검 창
+  // ===================================================================
+  Future<void> _loadPendingConfirm() async {
+    final List<ExerciseRecord> list = await DailyStepWatcherService.instance.getPendingConfirmRecords(widget.exerciseType.id);
+    final ExerciseRecord? r = list.isEmpty ? null : list.first;
+    if (mounted) setState(() => _pendingConfirm = r);
+  }
+
+  Widget _buildConfirmCard() {
+    final ExerciseRecord r = _pendingConfirm!;
+    final int steps = (r.detail['steps'] as num?)?.toInt() ?? 0;
+    final double km = (r.detail['distanceKm'] as num?)?.toDouble() ?? 0;
+    final String src = r.detail['autoSource'] == 'samsungHealth' ? '삼성헬스' : '폰';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ExerciseTheme.brandGolden.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: ExerciseTheme.brandGolden, width: 1.3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            r.recordId.startsWith('auto_workout_') ? '⌚ 워치 운동 자동 기록 — 맞나요?' : '어제 걸음 자동 기록 — 맞나요?',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            r.recordId.startsWith('auto_workout_')
+                ? '${r.date.month}/${r.date.day} ${r.date.hour.toString().padLeft(2, '0')}:${r.date.minute.toString().padLeft(2, '0')} · ${r.durationMin}분'
+                '${(r.detail['distanceKm'] as num?) != null ? ' · ${(r.detail['distanceKm'] as num).toStringAsFixed(2)}km' : ''}'
+                '${r.avgHeartRateBpm != null ? ' · 심박 ${r.avgHeartRateBpm}' : ''}'
+                '${(r.detail['calories'] as num?) != null ? ' · ${r.detail['calories']}kcal' : ''}'
+                : '${r.date.month}/${r.date.day} · $steps보 · ${km.toStringAsFixed(2)}km ($src)',
+            style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 4),
+          const Text('확인하지 않아도 이 값으로 저장돼요. 언제든 고칠 수 있어요.', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () async {
+                    final bool? changed = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: widget.exerciseType, existingRecord: r)),
+                    );
+                    if (changed == true) _loadPendingConfirm();
+                  },
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white38)),
+                  child: const Text('고치기', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await DailyStepWatcherService.instance.confirm(r);
+                    _loadPendingConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: ExerciseTheme.brandGolden),
+                  child: const Text('확인', style: TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showConnectionCheck() async {
+    List<StepCheckItem>? items;
+    bool busy = false;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (dctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          Future<void> run() async {
+            setD(() => busy = true);
+            final List<StepCheckItem> r = await DailyStepWatcherService.runConnectionCheck();
+            setD(() {
+              items = r;
+              busy = false;
+            });
+          }
+
+          if (items == null && !busy) Future.microtask(run);
+
+          Widget btn(String label, Future<void> Function() onTap) => OutlinedButton(
+            onPressed: busy
+                ? null
+                : () async {
+              await onTap();
+              await run();
+            },
+            style: OutlinedButton.styleFrom(side: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.6))),
+            child: Text(label, style: const TextStyle(color: ExerciseTheme.brandGolden, fontSize: 12, fontWeight: FontWeight.bold)),
+          );
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 18),
+            child: LuxuryDialogFrame(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    luxuryDialogHeader(icon: Icons.health_and_safety_rounded, en: 'CONNECTION CHECK', ko: '삼성헬스 연결 점검'),
+                    if (items == null)
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: CircularProgressIndicator(color: ExerciseTheme.brandGolden)),
+                      )
+                    else
+                      ...items!.map((it) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(it.ok ? '✅' : '❌', style: const TextStyle(fontSize: 15)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(it.label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Text(it.detail, style: const TextStyle(color: Colors.white60, fontSize: 11.5, height: 1.4)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        btn('설치·업데이트', () => HealthLink.install()),
+                        btn('권한 다시 요청', () async {
+                          await HealthLink.requestPermission();
+                        }),
+                        btn('운동·수면 권한 요청', () async {
+                          await HealthLink.requestExtendedPermission();
+                        }),
+                        btn('폰 권한 설정 열기', () async {
+                          await openAppSettings();
+                        }),
+                        btn('자동 기록 켜기', () async {
+                          await DailyStepWatcherService.instance.setEnabled(true);
+                          if (mounted) setState(() => _dailyAutoEnabled = true);
+                        }),
+                        btn('다시 점검', () async {}),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dctx),
+                        child: const Text('닫기', style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    _loadPendingConfirm();
+  }
+  // ===================================================================
+  // 🆕 [2026-10-05] 최근 기록 목록 — 자동 기록(걸음 · 워치 운동)이 어디 들어갔는지 바로 보이게
+  // ===================================================================
+  Future<List<ExerciseRecord>>? _recentFuture;
+
+  Future<List<ExerciseRecord>> _loadRecent() async {
+    final List<ExerciseRecord> list = [...await ExerciseDataService.instance.getRecordsByType(widget.exerciseType.id)];
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list.take(10).toList();
+  }
+
+  String _recordSummary(ExerciseRecord r) {
+    final Map<String, dynamic> d = r.detail;
+    final List<String> parts = ['${r.date.month}/${r.date.day}', '${r.durationMin}분'];
+    if (d['steps'] is num) parts.add('${d['steps']}보');
+    if (d['distanceKm'] is num) parts.add('${(d['distanceKm'] as num).toStringAsFixed(2)}km');
+    if (d['distanceM'] is num) parts.add('${d['distanceM']}m');
+    if (r.avgHeartRateBpm != null) parts.add('심박 ${r.avgHeartRateBpm}${r.maxHeartRateBpm != null ? '/${r.maxHeartRateBpm}' : ''}');
+    if (d['calories'] is num) parts.add('${(d['calories'] as num).round()}kcal');
+    if (d['paceMinPerKm'] is num) parts.add('1km ${d['paceMinPerKm']}분');
+    return parts.join(' · ');
+  }
+
+  Widget _buildRecentRecords() {
+    return FutureBuilder<List<ExerciseRecord>>(
+      future: _recentFuture,
+      builder: (context, snap) {
+        final List<ExerciseRecord> list = snap.data ?? const <ExerciseRecord>[];
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('📋 최근 기록  (⌚ 삼성헬스 자동 · ✏️ 직접)', style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 2),
+              const Text('눌러서 자세히 보기 · 고치기 · 지우기', style: TextStyle(color: Colors.white38, fontSize: 10.5)),
+              const SizedBox(height: 8),
+              if (list.isEmpty)
+                const Text('아직 기록이 없어요', style: TextStyle(color: Colors.white38, fontSize: 12))
+              else
+                ...list.map((r) => InkWell(
+                  onTap: () async {
+                    final bool? changed = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: widget.exerciseType, existingRecord: r)),
+                    );
+                    if (changed == true && mounted) {
+                      setState(() => _recentFuture = _loadRecent());
+                      _loadPendingConfirm();
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 24, child: Text(r.recordId.startsWith('auto_') ? '⌚' : '✏️')),
+                        Expanded(child: Text(_recordSummary(r), style: const TextStyle(color: Colors.white, fontSize: 12.5))),
+                        const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
+                      ],
+                    ),
+                  ),
+                )),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   // 🆕 [칼로리 추정] 걸음수 → 소요시간(분당 약 100보 가정) → MET 공식으로 칼로리 추정.
   // 저장된 몸무게(_bodyWeightKg)를 반영하며, 입력 안 했으면 평균값으로 계산됨.
   double _estimateCaloriesForSteps(int steps) {
-    final double estimatedMinutes = steps / 100.0;
+    final double estimatedMinutes = steps / 85.0; // 🆕 [2026-10-05] 보통 걸음 1분 85보
     final double met = kExerciseMetValues['walking'] ?? 3.8;
     return calcCaloriesByMet(met: met, durationMin: estimatedMinutes.round(), bodyWeightKg: _bodyWeightKg);
   }
@@ -1358,6 +1644,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   Widget _buildField(ExerciseField field) {
     if (field.isCalculated) return const SizedBox.shrink();
+    // 🆕 [헬스 2026-10-04] 운동 이름 자리에 "운동 한 줄씩" 묶음을 그리고, 기구·세트 칸은 줄 안으로 들어감
+    if (_isGym && field.key == 'exerciseName') return _buildGymLines();
+    if (_isGym && (field.key == 'equipment' || field.key == 'sets')) return const SizedBox.shrink();
 
     switch (field.type) {
       case ExerciseFieldType.number:
@@ -1494,6 +1783,294 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       case ExerciseFieldType.multiSet:
         return _buildMultiSetField(field);
     }
+  }
+  // ===================================================================
+  // 🆕 [헬스 2026-10-04] 운동 한 줄씩 쌓기 (이름 · 기구 여러 개 · 세트)
+  // 저장: detail['exercises'] = [{name, equipment:[...], sets:[...]}]
+  // 예전 칸(exerciseName · equipment · sets)도 합쳐서 함께 저장 → 분석·계산이 그대로 작동
+  // ===================================================================
+  static const Map<String, List<String>> _gymSuggestions = {
+    '가슴': ['벤치프레스', '인클라인 프레스', '덤벨 플라이', '체스트 프레스', '푸시업'],
+    '등': ['랫풀다운', '바벨 로우', '시티드 로우', '데드리프트', '풀업'],
+    '하체': ['스쿼트', '레그프레스', '런지', '레그 익스텐션', '레그 컬'],
+    '어깨': ['숄더 프레스', '사이드 레터럴 레이즈', '프론트 레이즈', '리어 델트 플라이'],
+    '팔': ['바벨 컬', '덤벨 컬', '해머 컬', '트라이셉스 푸시다운', '킥백'],
+    '복근': ['크런치', '플랭크', '레그 레이즈', '케이블 크런치'],
+    '전신': ['버피', '케틀벨 스윙', '클린', '스러스터'],
+  };
+
+  String _numText(dynamic v) {
+    final double n = (v as num).toDouble();
+    return n == n.roundToDouble() ? n.toInt().toString() : n.toString();
+  }
+
+  _SetRow _setRowFrom(dynamic s) {
+    final _SetRow row = _SetRow();
+    if (s is Map) {
+      if (s['weightKg'] is num) row.weight.text = _numText(s['weightKg']);
+      if (s['reps'] != null) row.reps.text = s['reps'].toString();
+    }
+    return row;
+  }
+
+  void _initGymLines() {
+    if (!_isGym) return;
+    final Map<String, dynamic> d = widget.existingRecord?.detail ?? const {};
+    final dynamic saved = d['exercises'];
+    if (saved is List && saved.isNotEmpty) {
+      for (final e in saved) {
+        if (e is! Map) continue;
+        final _GymLine line = _GymLine();
+        line.name.text = (e['name'] ?? '').toString();
+        line.equipment.addAll(((e['equipment'] as List?) ?? const []).map((x) => x.toString()));
+        for (final s in (e['sets'] as List?) ?? const []) {
+          line.sets.add(_setRowFrom(s));
+        }
+        if (line.sets.isEmpty) line.sets.add(_SetRow());
+        _gymLines.add(line);
+      }
+    } else if (d.isNotEmpty) {
+      // 예전 헬스 기록(운동 1개) → 한 줄로 보여 줌
+      final _GymLine line = _GymLine();
+      line.name.text = (d['exerciseName'] ?? '').toString();
+      final dynamic eq = d['equipment'];
+      if (eq is String && eq.isNotEmpty) line.equipment.addAll(eq.split(', '));
+      if (eq is List) line.equipment.addAll(eq.map((x) => x.toString()));
+      for (final s in (d['sets'] as List?) ?? const []) {
+        line.sets.add(_setRowFrom(s));
+      }
+      if (line.sets.isEmpty) line.sets.add(_SetRow());
+      _gymLines.add(line);
+    }
+    if (_gymLines.isEmpty) _gymLines.add(_GymLine()..sets.add(_SetRow()));
+  }
+
+  void _disposeGymLine(_GymLine line) {
+    line.name.dispose();
+    for (final s in line.sets) {
+      s.weight.dispose();
+      s.reps.dispose();
+    }
+  }
+
+  void _collectGymLines(Map<String, dynamic> detail) {
+    final List<Map<String, dynamic>> exercises = [];
+    final List<Map<String, dynamic>> allSets = [];
+    final Set<String> allEquip = {};
+    for (final line in _gymLines) {
+      final String name = line.name.text.trim();
+      final List<Map<String, dynamic>> sets = [];
+      for (final row in line.sets) {
+        final double? w = double.tryParse(row.weight.text.trim());
+        final int? r = int.tryParse(row.reps.text.trim());
+        if (w == null && r == null) continue;
+        sets.add(SetEntry(setNumber: sets.length + 1, weightKg: w, reps: r).toJson());
+        allSets.add(SetEntry(setNumber: allSets.length + 1, weightKg: w, reps: r).toJson());
+      }
+      if (name.isEmpty && sets.isEmpty) continue;
+      allEquip.addAll(line.equipment);
+      exercises.add({'name': name, 'equipment': line.equipment.toList(), 'sets': sets});
+    }
+    detail['exercises'] = exercises;
+    detail['sets'] = allSets; // 총 무게 · 최대 무게 · 총 세트 수 계산용 (모든 운동 합침)
+    final List<String> names = exercises.map((e) => e['name'] as String).where((n) => n.isNotEmpty).toList();
+    if (names.isNotEmpty) {
+      detail['exerciseName'] = names.join(', ');
+    } else {
+      detail.remove('exerciseName');
+    }
+    if (allEquip.isNotEmpty) {
+      detail['equipment'] = allEquip.join(', ');
+    } else {
+      detail.remove('equipment');
+    }
+  }
+
+  Widget _buildGymLines() {
+    final bool ko = appLanguage.isDefault;
+    final List<String> parts = _multiSelectValues['bodyPart'] ?? const [];
+    final List<String> suggestions = [for (final p in parts) ...(_gymSuggestions[p] ?? const <String>[])];
+    ExerciseField? equipField;
+    for (final f in widget.exerciseType.fields) {
+      if (f.key == 'equipment') equipField = f;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(ko ? '오늘 한 운동' : "Today's Exercises", style: ExerciseTheme.titleStyle(size: 14)),
+        const SizedBox(height: 4),
+        Text(
+          ko ? '운동마다 한 줄씩 적어요. 기구와 세트(무게 × 횟수)도 운동마다 따로 기록돼요.' : 'One line per exercise, each with its own equipment and sets.',
+          style: const TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        if (suggestions.isNotEmpty) ...[
+          Text(ko ? '눌러서 바로 넣기' : 'Tap to add', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: suggestions
+                .map((n) => ActionChip(
+              label: Text(n, style: const TextStyle(color: ExerciseTheme.brandGolden, fontSize: 12)),
+              backgroundColor: ExerciseTheme.pageBg,
+              side: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.5)),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => setState(() {
+                final _GymLine last = _gymLines.last;
+                if (last.name.text.trim().isEmpty) {
+                  last.name.text = n;
+                } else {
+                  _gymLines.add(_GymLine()
+                    ..name.text = n
+                    ..sets.add(_SetRow()));
+                }
+              }),
+            ))
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+        ] else ...[
+          Text(
+            ko ? '위에서 운동 부위를 고르면 추천 운동이 나와요.' : 'Pick a body part above to see suggestions.',
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+        ],
+        ..._gymLines.asMap().entries.map((e) => _buildGymLineCard(e.key, e.value, equipField)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => setState(() => _gymLines.add(_GymLine()..sets.add(_SetRow()))),
+            icon: const Icon(Icons.add_circle_outline_rounded, color: ExerciseTheme.brandGolden, size: 20),
+            label: ExerciseTheme.biButtonLabel('Add Exercise', '운동 추가', color: ExerciseTheme.brandGolden, size: 13),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildGymLineCard(int index, _GymLine line, ExerciseField? equipField) {
+    final bool ko = appLanguage.isDefault;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: ExerciseTheme.luxeCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: ExerciseTheme.brandGolden.withOpacity(0.18), shape: BoxShape.circle),
+                child: Text('${index + 1}', style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: line.name,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _decoration(ko ? '운동 이름' : 'Exercise').copyWith(
+                    hintText: ko ? '예) 스쿼트, 벤치프레스, 랫풀다운' : 'e.g. Squat, Bench Press',
+                    hintStyle: const TextStyle(color: Colors.white24, fontSize: 12.5),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              if (_gymLines.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18, color: Colors.white54),
+                  onPressed: () => setState(() {
+                    _disposeGymLine(line);
+                    _gymLines.removeAt(index);
+                  }),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(ko ? '사용 기구 (여러 개 선택)' : 'Equipment (multi-select)', style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: (equipField?.options ?? const <String>[]).map((o) {
+              final bool sel = line.equipment.contains(o);
+              return FilterChip(
+                label: Text(
+                  equipField == null ? o : _optionLabel(equipField, o),
+                  style: TextStyle(fontSize: 11.5, color: sel ? ExerciseTheme.brandGolden : Colors.white70, fontWeight: sel ? FontWeight.bold : FontWeight.normal),
+                ),
+                selected: sel,
+                visualDensity: VisualDensity.compact,
+                backgroundColor: ExerciseTheme.pageBg,
+                selectedColor: ExerciseTheme.brandGolden.withOpacity(0.25),
+                checkmarkColor: ExerciseTheme.brandGolden,
+                side: BorderSide(color: sel ? ExerciseTheme.brandGolden : Colors.white24),
+                onSelected: (v) => setState(() => v ? line.equipment.add(o) : line.equipment.remove(o)),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+          Text(ko ? '세트 (무게 × 횟수)' : 'Sets (weight × reps)', style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+          const SizedBox(height: 6),
+          ...line.sets.asMap().entries.map((s) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                SizedBox(width: 24, child: Text('${s.key + 1}', style: ExerciseTheme.bodyStyle())),
+                Expanded(
+                  child: TextField(
+                    controller: s.value.weight,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: _decoration(ko ? '무게' : 'Weight', unit: 'kg').copyWith(isDense: true),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: s.value.reps,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: _decoration(ko ? '횟수' : 'Reps', unit: ko ? '회' : null).copyWith(isDense: true),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, size: 18, color: line.sets.length > 1 ? Colors.white54 : Colors.white12),
+                  onPressed: line.sets.length > 1
+                      ? () => setState(() {
+                    final _SetRow removed = line.sets.removeAt(s.key);
+                    removed.weight.dispose();
+                    removed.reps.dispose();
+                  })
+                      : null,
+                ),
+              ],
+            ),
+          )),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() {
+                final _SetRow r = _SetRow();
+                if (line.sets.isNotEmpty) {
+                  // 앞 세트의 무게·횟수를 그대로 채워 줌 (같은 무게로 여러 세트 할 때 편하게)
+                  r.weight.text = line.sets.last.weight.text;
+                  r.reps.text = line.sets.last.reps.text;
+                }
+                line.sets.add(r);
+              }),
+              icon: const Icon(Icons.add, color: ExerciseTheme.brandGolden, size: 18),
+              label: ExerciseTheme.biButtonLabel('Add Set', '세트 추가', color: ExerciseTheme.brandGolden, size: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ✅ [2026-09-13 추가] 절반 폭 안에서도 절대 넘치지 않는 작은 원형 +/- 버튼.
@@ -1690,6 +2267,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             ),
           ),
 
+          _buildRecentRecords(), // 🆕 [2026-10-05] 최근 기록 (⌚ 자동 · ✏️ 직접)
+          const SizedBox(height: 16),
           // 공통: 운동시간
           BiInline(en: 'DURATION', ko: '운동시간', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
           const SizedBox(height: 6),
@@ -1786,6 +2365,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           const SizedBox(height: 12),
 
           // 🆕 [만보기 연동 1단계] '걸음수' 필드가 있는 종목에서만 자동측정 카드 노출
+          if (_pendingConfirm != null) ...[
+            _buildConfirmCard(), // 🆕 [삼성헬스] 자동 기록 확인 (걸음 · 워치 운동)
+            const SizedBox(height: 12),
+          ],
           if (_hasStepsField) ...[
             _buildAutoStepTrackingCard(),
             const SizedBox(height: 12),

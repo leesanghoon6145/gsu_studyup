@@ -51,14 +51,15 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
 
   // 🆕 [종목 랭킹 지정 색상 순서] 1위 진한파랑 / 2위 황금색 / 3위 빨강 / 4위 초록 /
   // 5위 진한남색 / 6위 보라 / 7위 노랑 (그 이상은 순환)
+  // 🆕 [2026-10-04] 위부터 빨강 · 녹색 · 파랑 · 황금 · 흰색 · 남색 · 노랑 (밝게)
   static const List<Color> _rankColors = [
-    Color(0xFF1E3A8A), // 1위 진한파랑
-    ExerciseTheme.brandGolden, // 2위 황금색
-    Color(0xFFDC2626), // 3위 빨강
-    Color(0xFF16A34A), // 4위 초록
-    Color(0xFF1E1B4B), // 5위 진한남색
-    Color(0xFF9333EA), // 6위 보라
-    Color(0xFFEAB308), // 7위 노랑
+    Color(0xFFEF4444), // 1위 빨강
+    Color(0xFF22C55E), // 2위 녹색
+    Color(0xFF3B82F6), // 3위 파랑
+    ExerciseTheme.brandGolden, // 4위 황금
+    Color(0xFFF8FAFC), // 5위 흰색
+    Color(0xFF6366F1), // 6위 남색 (어두운 바탕에서 보이게 밝은 남색)
+    Color(0xFFFACC15), // 7위 노랑
   ];
 
   static Color _rankColorAt(int index) => _rankColors[index % _rankColors.length];
@@ -256,7 +257,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
   // X축 요일명. fl_chart의 leftTitles/bottomTitles로 참고 이미지의 축 구성을 재현함.
   Widget _buildWeeklyDurationChart() {
     final now = DateTime.now();
-    final days = List.generate(7, (i) => now.subtract(Duration(days: 6 - i)));
+    final days = List.generate(14, (i) => now.subtract(Duration(days: 13 - i))); // 🆕 [2026-10-04] 2주
     final values = days.map((d) {
       final key = _dateKey(d);
       return _records
@@ -272,10 +273,16 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
     const weekdayLabels = ['월', '화', '수', '목', '금', '토', '일'];
 
     return Container(
-      height: 220,
-      padding: const EdgeInsets.fromLTRB(4, 20, 16, 8),
-      decoration: ExerciseTheme.luxeCardDecoration(highlighted: true), // 🆕 진한 테두리
-      child: BarChart(
+        height: 230,
+        padding: const EdgeInsets.fromLTRB(4, 20, 16, 8),
+        decoration: ExerciseTheme.luxeCardDecoration(highlighted: true), // 🆕 진한 테두리
+        // 🆕 [2026-10-04] 한 화면에 5~6일, 좌우로 2주, 처음엔 오늘(오른쪽 끝)이 보이게
+        child: LayoutBuilder(builder: (context, box) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: true,
+            child: SizedBox(
+              width: box.maxWidth / 5.5 * 14,
+              child: BarChart(
         BarChartData(
           maxY: maxVal,
           minY: 0,
@@ -327,7 +334,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
                   final idx = value.toInt();
                   if (idx < 0 || idx >= days.length) return const SizedBox.shrink();
                   final d = days[idx];
-                  final String label = weekdayLabels[d.weekday - 1];
+                  final String label = '${weekdayLabels[d.weekday - 1]}\n${d.month}/${d.day}'; // 🆕 2주라 날짜도 함께
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
@@ -359,7 +366,9 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
             );
           }),
         ),
-      ),
+              ),
+            ),
+        )),
     );
   }
 

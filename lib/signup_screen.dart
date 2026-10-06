@@ -119,6 +119,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool parentConsent = false;
   bool isPasswordVisible = false;
+  bool isConfirmPasswordVisible = false; // 🆕 [2026-10-04] 비밀번호 확인 칸 눈 단추
 
   // 🆕 [보호자 인증 재설계] 가짜 SMS/이메일 코드 대신, 이미 검증된 "가족 연결 코드" 방식으로 통일.
   // 자녀가 코드를 발급받아 보호자에게 알려주고, 보호자가 실제로 연결하면(=Firestore status가 connected로
@@ -429,7 +430,15 @@ class _SignupScreenState extends State<SignupScreen> {
               icon: Icons.lock_outline,
               controller: _confirmPasswordController,
               isPassword: true,
-              hideText: !isPasswordVisible,
+              // 🆕 [2026-10-04] 비밀번호 확인 칸에도 눈 단추
+              suffixIcon: IconButton(
+                icon: Icon(
+                  isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                  color: Colors.white38,
+                ),
+                onPressed: () => setState(() => isConfirmPasswordVisible = !isConfirmPasswordVisible),
+              ),
+              hideText: !isConfirmPasswordVisible,
             ),
 
             // 학생 전용 필드

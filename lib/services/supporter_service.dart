@@ -30,6 +30,11 @@ class SupportTarget {
   final String studentName; // 승인 뒤에만 알 수 있음
   final int monthMinutes;
   final int monthDays;
+  // 🆕 [가족 장학금 2026-10-02] 내가 정한 장학금 (-1 = 아직 안 정함 → "없음"으로 봄)
+  final int planType; // 0 성장형 · 1 도전형 · 2 성취형
+  final int planCap; // 0(없음) · 5000 · 10000
+  final int monthStars; // 이번 달 이 아이에게 보낸 별
+  final int lastMonthStars; // 지난달 이 아이에게 보낸 별
 
   const SupportTarget({
     required this.code,
@@ -40,7 +45,38 @@ class SupportTarget {
     this.studentName = '',
     this.monthMinutes = 0,
     this.monthDays = 0,
+    this.planType = -1,
+    this.planCap = 0,
+    this.monthStars = 0,
+    this.lastMonthStars = 0,
   });
+
+  int get monthWon => SupporterService.familyAmount(stars: monthStars, typeIndex: planType, cap: planCap);
+  int get lastMonthWon => SupporterService.familyAmount(stars: lastMonthStars, typeIndex: planType, cap: planCap);
+}
+
+/// 🆕 [가족 장학금 2026-10-02] 아이 · 부모 화면에 보여 줄 가족 한 사람의 결산 줄
+class FamilyScholarRow {
+  final String uid;
+  final String name;
+  final String relation;
+  final String relationText;
+  final int planType;
+  final int planCap;
+  final int monthStars;
+  final int lastMonthStars;
+  const FamilyScholarRow({
+    required this.uid,
+    required this.name,
+    required this.relation,
+    required this.relationText,
+    required this.planType,
+    required this.planCap,
+    required this.monthStars,
+    required this.lastMonthStars,
+  });
+  int get monthWon => SupporterService.familyAmount(stars: monthStars, typeIndex: planType, cap: planCap);
+  int get lastMonthWon => SupporterService.familyAmount(stars: lastMonthStars, typeIndex: planType, cap: planCap);
 }
 
 class SupporterService {
@@ -136,6 +172,15 @@ class SupporterService {
       debugPrint('[SupporterService] supporterLinks 읽기 실패: $e');
       return [];
     }
+    // 🆕 [가족 장학금] 이번 달 · 지난달 이 아이에게 보낸 별 (보낼 때마다 내 문서에 쌓임)
+    Map<String, dynamic> sentAll = {};
+    try {
+      final doc = await _db.collection('supporterLinks').doc(uid).get();
+      sentAll = Map<String, dynamic>.from((doc.data()?['sent'] as Map?) ?? {});
+    } catch (_) {}
+    final DateTime nowD = DateTime.now();
+    final String mkNow = _monthKey(nowD);
+    final String mkLast = _monthKey(DateTime(nowD.year, nowD.month - 1, 1));
     final List<SupportTarget> list = [];
     for (final e in entries.entries) {
       final Map<String, dynamic> info = Map<String, dynamic>.from((e.value as Map?) ?? {});
@@ -168,9 +213,109 @@ class SupporterService {
         studentName: studentName,
         monthMinutes: minutes,
         monthDays: days,
+        planType: ((info['plan'] as Map?)?['typeIndex'] as num?)?.toInt() ?? -1,
+        planCap: ((info['plan'] as Map?)?['cap'] as num?)?.toInt() ?? 0,
+        monthStars: (((sentAll[e.key] as Map?) ?? {})[mkNow] as num?)?.toInt() ?? 0,
+        lastMonthStars: (((sentAll[e.key] as Map?) ?? {})[mkLast] as num?)?.toInt() ?? 0,
       ));
     }
     return list;
+  }
+
+  // ===========================================================================
+  // 🆕 [가족 장학금 2026-10-02]
+  // - 가족 각자 단가(성장형 2원 · 도전형 3원 · 성취형 4원)와 한 달 한도(없음 · 5,000 · 10,000)를 정함
+  // - 한 번 정하면 다음 달에도 그대로, 언제든 바꿀 수 있음. 부모는 보기만 함
+  // - 앱은 매달 결산 금액만 보여 주고, 실제 전달은 가족이 직접
+  // ===========================================================================
+  static const List<int> familyRates = [2, 3, 4];
+  static const List<int> familyCaps = [0, 5000, 10000];
+
+  static int familyAmount({required int stars, required int typeIndex, required int cap}) {
+    if (cap <= 0 || typeIndex < 0 || typeIndex > 2) return 0;
+    final int raw = stars * familyRates[typeIndex];
+    return raw > cap ? cap : raw;
+  }
+
+  static String monthKeyOf(DateTime d) => _monthKey(d);
+
+  /// 내 장학금 설정 저장 — 아이·부모가 볼 수 있게 아이 쪽에도, 내 목록에도 함께 저장
+  static Future<bool> savePlan(String code, int typeIndex, int cap) async {
+    final String? uid = _uid;
+    if (uid == null) return false;
+    try {
+      await _db.collection('links').doc(code).collection('supporterPlans').doc(uid).set({
+        'typeIndex': typeIndex,
+        'cap': cap,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      await _db.collection('supporterLinks').doc(uid).set({
+        'entries': {
+          code: {
+            'plan': {'typeIndex': typeIndex, 'cap': cap},
+          },
+        },
+      }, SetOptions(merge: true));
+      return true;
+    } catch (e) {
+      debugPrint('[SupporterService] 가족 장학금 저장 실패: $e');
+      return false;
+    }
+  }
+
+  /// 아이 · 부모 화면: 가족들이 정한 장학금 설정
+  static Stream<QuerySnapshot<Map<String, dynamic>>> watchPlans(String code) {
+    return _db.collection('links').doc(code).collection('supporterPlans').snapshots();
+  }
+
+  /// 아이 · 부모 화면: 받은 응원 기록 + 설정으로 가족별 이번 달 · 지난달 결산
+  static List<FamilyScholarRow> summarize(
+      List<Map<String, dynamic>> gifts,
+      Map<String, Map<String, dynamic>> plans,
+      ) {
+    final DateTime now = DateTime.now();
+    final DateTime monthStart = DateTime(now.year, now.month, 1);
+    final DateTime lastStart = DateTime(now.year, now.month - 1, 1);
+    final Map<String, Map<String, dynamic>> acc = {};
+    for (final g in gifts) {
+      if (g['role'] != 'supporter') continue;
+      final String uid = (g['fromUid'] as String?) ?? '';
+      if (uid.isEmpty) continue;
+      final dynamic ts = g['sentAt'];
+      final DateTime when = ts is Timestamp ? ts.toDate() : now; // 막 보낸 별은 서버 시각이 오기 전이라 지금으로 봄
+      final int st = (g['stars'] as num?)?.toInt() ?? 0;
+      final Map<String, dynamic> row = acc.putIfAbsent(uid, () => {
+        'name': (g['fromName'] as String?) ?? '',
+        'rel': (g['fromRelation'] as String?) ?? 'other',
+        'relText': (g['fromRelationText'] as String?) ?? '',
+        'm': 0,
+        'l': 0,
+      });
+      if (!when.isBefore(monthStart)) {
+        row['m'] = (row['m'] as int) + st;
+      } else if (!when.isBefore(lastStart)) {
+        row['l'] = (row['l'] as int) + st;
+      }
+    }
+    // 아직 별은 안 보냈지만 장학금을 정한 가족도 줄에 보이게
+    for (final p in plans.entries) {
+      acc.putIfAbsent(p.key, () => {'name': '', 'rel': 'other', 'relText': '', 'm': 0, 'l': 0});
+    }
+    final List<FamilyScholarRow> rows = acc.entries.map((e) {
+      final Map<String, dynamic> plan = plans[e.key] ?? {};
+      return FamilyScholarRow(
+        uid: e.key,
+        name: e.value['name'] as String,
+        relation: e.value['rel'] as String,
+        relationText: e.value['relText'] as String,
+        planType: (plan['typeIndex'] as num?)?.toInt() ?? -1,
+        planCap: (plan['cap'] as num?)?.toInt() ?? 0,
+        monthStars: e.value['m'] as int,
+        lastMonthStars: e.value['l'] as int,
+      );
+    }).toList()
+      ..sort((a, b) => b.monthWon.compareTo(a.monthWon));
+    return rows;
   }
 
   /// 응원 가족이 아이에게 응원 팝업 보내기 (보안 규칙: pendingMessage 한 칸만 쓸 수 있음)
