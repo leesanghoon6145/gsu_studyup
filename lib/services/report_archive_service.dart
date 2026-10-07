@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'diagnosis_service.dart';
+import 'parent_data_service.dart'; // 🆕 [2026-10-07] 앞 6일 공부 시간 계산
 
 class ReportArchiveService {
   ReportArchiveService._();
@@ -71,6 +72,24 @@ class ReportArchiveService {
       debugPrint('[ReportArchiveService] 사용 기록 저장 실패: $e');
     }
   }
+  /// 🆕 [2026-10-07] 그날 이전 6일의 날짜별 공부 시간(분) — 부모·학생이 같은 기록(links 문서)을 보므로 두 화면 결과가 같음
+  static Future<List<int>> _previousDaysMinutes(String code, DateTime day) async {
+    try {
+      final snap = await _db.collection('links').doc(code).get();
+      final List raw = (snap.data()?['sessionHistory'] as List?) ?? const [];
+      final List<ParentSessionRecord> all = [];
+      for (final e in raw) {
+        try {
+          all.add(ParentSessionRecord.fromJson(Map<String, dynamic>.from(e as Map)));
+        } catch (_) {}
+      }
+      final DateTime d0 = DateTime(day.year, day.month, day.day);
+      return [for (int i = 1; i <= 6; i++) ParentDataService.totalMinutesForDay(all, d0.subtract(Duration(days: i)))];
+    } catch (e) {
+      debugPrint('[ReportArchiveService] 앞 6일 기록 읽기 실패(예전 방식으로): $e');
+      return const [];
+    }
+  }
 
   /// 그날의 종합 총평. 저장된 글이 있으면 그대로, 없으면 새로 만들어 저장.
   /// 오늘은 공부가 더 쌓여 구간(짧음→많음)이 바뀌면 새 글로 바꿈. 지난 날짜는 절대 바뀌지 않음.
@@ -81,7 +100,9 @@ class ReportArchiveService {
     required int subjectCount,
     required int totalMinutes,
   }) async {
-    final String tier = DiagnosisService.dailyTierOf(totalMinutes);
+    // 🆕 [2026-10-07] 앞 6일과 비교해서 단계 결정 (비교 못 하면 '짧다' 문장 안 씀)
+    final List<int> prev = await _previousDaysMinutes(code, day);
+    final String tier = DiagnosisService.dailyTierSafe(totalMinutes, prev);
     final ref = _col(code).doc('daily_${ymd(day)}');
     try {
       final snap = await ref.get();
@@ -104,7 +125,10 @@ class ReportArchiveService {
         k,
         v.replaceAll('{subjectCount}', '$subjectCount').replaceAll('{totalMinutes}', '$totalMinutes'),
       ));
-      return DiagnosisService.displayTexts(filled);
+      // 🆕 [2026-10-07] 실제 숫자 비교 한 줄을 끝에 붙임
+      final Map<String, String> cmp = DiagnosisService.dailyCompareTexts(totalMinutes, prev);
+      final Map<String, String> withCmp = filled.map((k, v) => MapEntry(k, cmp[k] != null ? '$v ${cmp[k]}' : v));
+      return DiagnosisService.displayTexts(withCmp);
     } catch (e) {
       debugPrint('[ReportArchiveService] 종합 총평 저장·조회 실패(기기 안에서 만든 글로 대신): $e');
       return DiagnosisService.getDailySummary(personKey: personKey, subjectCount: subjectCount, totalMinutes: totalMinutes);

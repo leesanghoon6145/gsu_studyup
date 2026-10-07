@@ -73,6 +73,16 @@ class ScholarshipService {
   //    뒤 저장한 평가에만 지급됩니다.
   static const int recordWriteMinSeconds = 30 * 60; // 30분
   static const int examWeeklyUnitMinSeconds = 30 * 60; // 30분
+
+  // 🆕 [포모도로 2026-10-07] 타이머를 25~29분으로 정한 학습(포모도로)은 22분 이상이면 인정
+  static const int pomodoroMinPlanSeconds = 25 * 60;
+  static const int pomodoroMinStudySeconds = 22 * 60;
+
+  /// 정한 시간(totalSeconds)에 따라 보너스 인정 기준 시간을 돌려줌
+  static int bonusMinSecondsFor(int totalSeconds) =>
+      (totalSeconds >= pomodoroMinPlanSeconds && totalSeconds < recordWriteMinSeconds)
+          ? pomodoroMinStudySeconds
+          : recordWriteMinSeconds;
   static const int bonusDailyAttendance = 50;
   static const int bonusWeeklyAttendance = 300;
   static const int bonusMonthlyAttendance = 1000;
@@ -195,7 +205,7 @@ class ScholarshipService {
     // 버튼을 누르기만 하면(몇 초짜리 세션이든) 무조건 지급했던 허점을 막기 위해,
     // 타이머가 실제로 30분(1800초) 이상 작동한 세션에서만 지급됩니다.
     // (퍼센트가 아니라 절대 시간 비교)
-    if (elapsedSeconds >= recordWriteMinSeconds) {
+    if (elapsedSeconds >= bonusMinSecondsFor(totalSeconds)) { // 🆕 [포모도로] 25분 학습은 22분 이상
       final String recordEventId = 'recordwrite_$sessionEventId';
       if (!await _isEventProcessed(recordEventId)) {
         await _addBonusStars(bonusRecordWrite, 'recordwrite');
@@ -207,6 +217,9 @@ class ScholarshipService {
     // 함께 확인. 타이머 로직은 전혀 건드리지 않고, 이미 쌓인 일별 기본별 데이터만
     // 읽어서 조건 충족 여부를 판정함.
     await _checkAttendanceBonuses();
+    // 🆕 [2026-10-07] 보너스가 없어도 공부를 마칠 때마다 이번 달 별을 부모님 화면으로 올림
+    // (예전: 보너스가 생길 때만 올려서, 보너스 없는 달엔 부모 화면이 0개로 보였음)
+    await _syncMonthlySummaryToFirestore();
   }
 
   // =======================================================================
@@ -283,18 +296,20 @@ class ScholarshipService {
     required String examCategory, // 주평가/단원평가/중간고사/기말고사/모의고사
     required String examRecordId,
     required int elapsedSeconds,
+    int totalSeconds = 0, // 🆕 [포모도로 2026-10-07] 타이머로 정한 시간 (25~29분이면 22분 이상 인정)
   }) async {
     final int amount;
     final String eventType;
+    final int minSec = bonusMinSecondsFor(totalSeconds);
     switch (examCategory) {
       case '주평가':
-      // 🆕 타이머 30분 미만이면 조건 미충족 — 보너스 없이 조용히 종료
-        if (elapsedSeconds < examWeeklyUnitMinSeconds) return;
+      // 🆕 기준 시간 미만이면 조건 미충족 — 보너스 없이 조용히 종료
+        if (elapsedSeconds < minSec) return;
         amount = bonusWeeklyAssessment;
         eventType = 'weekly';
         break;
       case '단원평가':
-        if (elapsedSeconds < examWeeklyUnitMinSeconds) return;
+        if (elapsedSeconds < minSec) return;
         amount = bonusUnitTest;
         eventType = 'unittest';
         break;

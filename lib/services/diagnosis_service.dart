@@ -199,14 +199,21 @@ class DiagnosisService {
     'TH': [' บันทึกของวันนี้ก็เป็นก้าวสำคัญในการสร้างความสม่ำเสมอเช่นกัน', ' หวังว่าคุณจะจำไว้ว่านิสัยเล็กๆ สะสมกลายเป็นการเปลี่ยนแปลงที่ยิ่งใหญ่', ' หวังว่าบันทึกการเรียนแบบนี้จะดำเนินต่อไปอย่างสม่ำเสมอ'],
   };
 
+  // 🆕 [2026-10-07] 끝에 실제 숫자 비교 한 줄 붙이기 (기록이 부족하면 그대로)
+  static Map<String, String> _withCompare(Map<String, String> texts, int totalMinutes, List<int>? previousDays) {
+    final Map<String, String> cmp = dailyCompareTexts(totalMinutes, previousDays ?? const []);
+    if (cmp.isEmpty) return texts;
+    return texts.map((k, v) => MapEntry(k, cmp[k] != null ? '$v ${cmp[k]}' : v));
+  }
   static Future<String> getDailySummary({
     required String personKey,
     required int subjectCount,
     required int totalMinutes,
+    List<int>? previousDays, // 🆕 [2026-10-07] 앞 6일 공부 시간(분) — 있으면 비교해서 단계 결정
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String tier = _dailyTierFor(totalMinutes);
+      final String tier = dailyTierSafe(totalMinutes, previousDays ?? const []); // 🆕 [2026-10-07] 비교 못 하면 '짧다' 문장 안 씀
       final String libraryKey = 'dke_daily_library_$tier';
       final String seenKey = 'dke_daily_seen_${personKey}_$tier';
 
@@ -247,7 +254,7 @@ class DiagnosisService {
         k,
         v.toString().replaceAll('{subjectCount}', '$subjectCount').replaceAll('{totalMinutes}', '$totalMinutes'),
       ));
-      return _display(texts);
+      return _display(_withCompare(texts, totalMinutes, previousDays)); // 🆕 [2026-10-07] 숫자 비교 한 줄
     } catch (e) {
       final fallback = _generateNewDailyCombo(_dailyTierFor(totalMinutes), {});
       final Map<String, dynamic> rawTexts = Map<String, dynamic>.from(fallback['texts'] as Map);
@@ -255,7 +262,7 @@ class DiagnosisService {
         k,
         v.toString().replaceAll('{subjectCount}', '$subjectCount').replaceAll('{totalMinutes}', '$totalMinutes'),
       ));
-      return _display(texts);
+      return _display(_withCompare(texts, totalMinutes, previousDays)); // 🆕 [2026-10-07] 숫자 비교 한 줄
     }
   }
 
@@ -304,6 +311,47 @@ class DiagnosisService {
   // ==========================================================================
   static String displayTexts(Map<String, String> texts) => _display(texts);
   static String dailyTierOf(int totalMinutes) => _dailyTierFor(totalMinutes);
+
+  // ==========================================================================
+  // 🆕 [2026-10-07] 그날 하루만 보지 않고 "앞 6일"과 비교해서 단계를 정함
+  // (예전: 그날 분량만 보고 '적음' → "다른 날에 비해 짧다"는 틀린 비교가 나옴)
+  // 앞 6일 중 공부한 날이 3일 미만이면 null → 예전 방식 사용
+  // ==========================================================================
+  static String? dailyTierRelative(int totalMinutes, List<int> previousDays) {
+    final List<int> active = previousDays.where((m) => m > 0).toList();
+    if (active.length < 3) return null;
+    final double avg = active.reduce((a, b) => a + b) / active.length;
+    final int maxPrev = active.reduce(max);
+    if (totalMinutes >= maxPrev || totalMinutes >= avg * 1.2) return 'high';
+    if (totalMinutes >= avg * 0.9) return 'good';
+    if (totalMinutes >= avg * 0.7) return 'mid';
+    return 'low';
+  }
+
+  /// 🆕 [2026-10-07] 안전한 단계: 비교할 기록이 있으면 비교, 없으면 "보통/짧음 비교 문장"을 쓰지 않음
+  static String dailyTierSafe(int totalMinutes, List<int> previousDays) {
+    final String? rel = dailyTierRelative(totalMinutes, previousDays);
+    if (rel != null) return rel;
+    if (totalMinutes >= 180) return 'high';
+    if (totalMinutes >= 60) return 'good';
+    return 'low';
+  }
+
+  /// 🆕 [2026-10-07] 실제 숫자로 비교한 한 줄 (기록이 부족하면 빈 맵 → 붙이지 않음)
+  static Map<String, String> dailyCompareTexts(int totalMinutes, List<int> previousDays) {
+    final List<int> active = previousDays.where((m) => m > 0).toList();
+    if (active.length < 3 || totalMinutes <= 0) return const {};
+    final int avg = (active.reduce((a, b) => a + b) / active.length).round();
+    final int maxPrev = active.reduce(max);
+    final int diff = totalMinutes - avg;
+    final bool isTop = totalMinutes >= maxPrev;
+    final String ko = diff >= 0 ? '$diff분 더' : '${-diff}분 덜';
+    final String en = diff >= 0 ? '$diff min more' : '${-diff} min less';
+    return {
+      'KO': '최근 6일 평균(공부한 날 기준) $avg분과 비교하면 $ko 공부했어요.${isTop ? ' 최근 7일 중 가장 많이 공부한 날이에요.' : ''}',
+      'EN': 'Compared with the recent 6-day average ($avg min, study days only), this was $en.${isTop ? ' It was the biggest study day of the last 7 days.' : ''}',
+    };
+  }
 
   static String _pickFresh(List<String> ids, Map<String, String> seen) {
     final List<String> fresh = ids.where((id) => !seen.containsKey(id)).toList();

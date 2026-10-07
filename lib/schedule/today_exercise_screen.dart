@@ -22,6 +22,9 @@ import 'exercise_profile_service.dart'; // 🆕 [개인정보 - 칼로리 계산
 import 'exercise_i18n.dart'; // ✅ [2026-09-06 추가] 필드/옵션/RPE 10개국어 번역 사전
 import 'exercise_field_help.dart'; // 🆕 [2026-09-29] 입력칸 한 줄 설명
 import 'exercise_type_analysis_screen.dart'; // ✅ [2026-09-13 추가] 하단 "운동분석" 탭 진입용
+import '../services/user_profile_service.dart'; // 🆕 [학생 운동 별 2026-10-06] 학생 계정 확인
+import '../star_economy.dart'; // 🆕 [학생 운동 별] 1분 1별, 하루 60개
+import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07]
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -108,7 +111,18 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 화면에서는 전혀 확인할 방법이 없었음.
   StreamSubscription<int>? _liveStepsSub;
   int? _liveAutoSteps;
+  // 🆕 [2026-10-07] 걷기 측정을 화면 밖에서도 유지 (시작 시각 · 그때 걸음 저장)
+  static const String _kWalkStartKey = 'gke_walk_session_start';
+  static const String _kWalkBaseKey = 'gke_walk_session_base';
+  int _walkBase = 0;
   ExerciseRecord? _pendingConfirm; // 🆕 [삼성헬스 2026-10-05] 확인을 기다리는 어제 자동 기록
+
+  // 🆕 [학생 운동 별 2026-10-06] 학생 계정에만 보이는 운동 타이머
+  bool _isStudent = false;
+  Timer? _exTimer;
+  DateTime? _exStart;
+  int _exElapsedSec = 0;
+  int _exStarsToday = 0;
 
   bool get _isEditMode => widget.existingRecord != null;
 
@@ -122,6 +136,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     super.initState();
     // 🆕 [8번] 시간(분) 그래프는 모든 종목 공통으로 항상 로드
     _durationHistoryFuture = _loadDurationByDate();
+    _initStudentExerciseTimer(); // 🆕 [학생 운동 별 2026-10-06]
     _loadPendingConfirm(); // 🆕 [워치 운동 2026-10-05] 모든 종목: 확인을 기다리는 자동 기록
     _recentFuture = _loadRecent(); // 🆕 [2026-10-05] 최근 기록 목록 (자동 기록 포함)
     // 🆕 [걸음수 그래프] 걷기류(steps 필드가 있는 종목)에서만 별도로 로드
@@ -138,8 +153,14 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       _loadLiveAutoSteps(); // 🆕 [화면 실시간 표시] 저장된 오늘 값 먼저 보여주고
       DailyStepWatcherService.instance.syncNow().then((_) => _loadPendingConfirm()); // 🆕 [삼성헬스] 열 때 바로 다시 읽고 어제 확인 카드
       _liveStepsSub = DailyStepWatcherService.instance.liveTodaySteps.listen((steps) {
-        if (mounted) setState(() => _liveAutoSteps = steps);
+        if (mounted) {
+          setState(() {
+            _liveAutoSteps = steps;
+            if (_isStepTracking) _autoSteps = (steps - _walkBase).clamp(0, 1000000); // 🆕 측정 중 걸음
+          });
+        }
       }); // 🆕 이후로는 실시간 갱신값을 계속 반영
+      _restoreWalkSession(); // 🆕 [2026-10-07] 켜 두었던 측정이면 그대로 이어서
     }
     for (final field in widget.exerciseType.fields) {
       if (field.isCalculated) continue;
@@ -185,11 +206,16 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       });
     }
     _initGymLines(); // 🆕 [헬스 2026-10-04]
+    _initFreeMoves(); // 🆕 [자유운동 2026-10-07]
   }
 
   @override
   void dispose() {
     _stepSession?.dispose(); // 🆕 [만보기 연동 1단계] 측정 중이었다면 스트림 구독 해제
+    _exTimer?.cancel(); // 🆕 [학생 운동 별] 화면을 나가도 시작 시각은 저장돼 있어 다시 오면 이어짐
+    for (final c in [..._freeSets.values, ..._freeReps.values]) {
+      c.dispose(); // 🆕 [자유운동]
+    }
     _liveStepsSub?.cancel(); // 🆕 [화면 실시간 표시] 화면을 나가면 구독 해제
     _stepsChartScrollController.dispose(); // 🆕 [일별 걸음수 그래프 - 스크롤]
     _durationChartScrollController.dispose(); // 🆕 [8번] 시간 그래프 - 스크롤
@@ -620,13 +646,36 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 🆕 [만보기 연동 1단계] 걸음수 자동 측정 시작/종료
   // ---------------------------------------------------------------------
 
-  Future<void> _toggleStepTracking() async {
-    if (_isStepTracking) {
-      // 측정 종료 -> 걸음수/거리/시간을 관련 필드에 자동으로 채워 넣음
-      _stepSession?.stop();
-      final int finalSteps = _autoSteps;
-      setState(() => _isStepTracking = false);
+  // 🆕 [2026-10-07] 걷기 측정 — 시작 시각과 그때의 오늘 걸음을 저장 → 화면을 나가도, 앱을 껐다 켜도 이어짐
+  Future<void> _restoreWalkSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? start = prefs.getString(_kWalkStartKey);
+    if (start == null) return;
+    _walkBase = prefs.getInt(_kWalkBaseKey) ?? 0;
+    _stepTrackingStartTime = DateTime.tryParse(start);
+    final int now = DailyStepWatcherService.instance.currentTodaySteps;
+    if (mounted) {
+      setState(() {
+        _isStepTracking = true;
+        _autoSteps = (now - _walkBase).clamp(0, 1000000);
+      });
+    }
+  }
 
+  Future<void> _toggleStepTracking() async {
+    final prefs = await SharedPreferences.getInstance();
+    final DailyStepWatcherService w = DailyStepWatcherService.instance;
+
+    if (_isStepTracking) {
+      // 측정 끝 → 걸음수 · 거리 · 시간을 칸에 채움
+      await w.syncNow();
+      final int finalSteps = (w.currentTodaySteps - _walkBase).clamp(0, 1000000);
+      await prefs.remove(_kWalkStartKey);
+      await prefs.remove(_kWalkBaseKey);
+      setState(() {
+        _isStepTracking = false;
+        _autoSteps = finalSteps;
+      });
       _textControllers['steps']?.text = finalSteps.toString();
       if (_textControllers.containsKey('distanceKm')) {
         _textControllers['distanceKm']!.text = ExerciseStepService.stepsToKm(finalSteps).toStringAsFixed(2);
@@ -635,26 +684,20 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         final int elapsedMin = DateTime.now().difference(_stepTrackingStartTime!).inMinutes;
         if (elapsedMin > 0) _durationController.text = elapsedMin.toString();
       }
-      if (mounted) ExerciseTheme.showLuxeSnackBar(context, '$finalSteps보 측정 완료 - 걸음수/거리에 자동 반영했습니다.');
+      if (mounted) ExerciseTheme.showLuxeSnackBar(context, '$finalSteps보 측정 완료 — 걸음수 · 거리 · 시간에 넣었어요. [기록 저장]을 눌러 주세요.');
       return;
     }
 
-    // 측정 시작
-    _stepSession = StepTrackingSession(
-      onUpdate: (steps) {
-        if (mounted) setState(() => _autoSteps = steps);
-      },
-      onError: (e) {
-        if (mounted) setState(() => _stepUnavailable = true);
-      },
-    );
-    final bool started = await _stepSession!.start();
-    if (!started) {
-      setState(() => _stepUnavailable = true);
-      if (mounted) ExerciseTheme.showLuxeSnackBar(context, '이 기기에서는 걸음수 측정을 사용할 수 없습니다. 직접 입력해 주세요.');
-      return;
+    // 측정 시작 — 하루 종일 도는 자동 기록이 꺼져 있으면 함께 켬
+    if (!w.isRunning) {
+      await w.setEnabled(true);
+      if (mounted) setState(() => _dailyAutoEnabled = true);
     }
+    await w.syncNow();
+    _walkBase = w.currentTodaySteps;
     _stepTrackingStartTime = DateTime.now();
+    await prefs.setInt(_kWalkBaseKey, _walkBase);
+    await prefs.setString(_kWalkStartKey, _stepTrackingStartTime!.toIso8601String());
     setState(() {
       _isStepTracking = true;
       _autoSteps = 0;
@@ -714,8 +757,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           break;
       }
     }
-
     if (_isGym) _collectGymLines(detail); // 🆕 [헬스 2026-10-04] 운동 줄들을 모아 저장
+    if (_isFree) _collectFreeMoves(detail); // 🆕 [자유운동 2026-10-07]
+
     // 2) 자동계산 필드 채우기 (종목별 공식은 exercise_calculations.dart 참고)
     _fillCalculatedFields(detail, durationMin);
     // 🆕 [삼성헬스 2026-10-05] 자동 걸음 기록을 사람이 고쳐 저장하면, 이후 자동으로 덮어쓰지 않음
@@ -1241,6 +1285,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   String _recordSummary(ExerciseRecord r) {
     final Map<String, dynamic> d = r.detail;
     final List<String> parts = ['${r.date.month}/${r.date.day}', '${r.durationMin}분'];
+    final String nm = (d['exerciseName'] ?? d['activityName'] ?? '').toString(); // 🆕 [2026-10-07] 운동 이름
+    if (nm.isNotEmpty) parts.add(nm.length > 18 ? '${nm.substring(0, 18)}…' : nm);
     if (d['steps'] is num) parts.add('${d['steps']}보');
     if (d['distanceKm'] is num) parts.add('${(d['distanceKm'] as num).toStringAsFixed(2)}km');
     if (d['distanceM'] is num) parts.add('${d['distanceM']}m');
@@ -1294,6 +1340,129 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           ),
         );
       },
+    );
+  }
+
+  // ===================================================================
+  // 🆕 [학생 운동 별 2026-10-06] 운동 타이머 — 1분 = 별 1개, 하루 최대 60개
+  // 시작 시각을 저장해 두어, 화면을 나갔다 와도 시간이 이어짐
+  // ===================================================================
+  String get _exStartKey => 'gke_student_ex_timer_start_${widget.exerciseType.id}';
+
+  Future<void> _initStudentExerciseTimer() async {
+    final String? type = await DkeUserProfile.getUserType();
+    if (type != '학생' || !mounted) return;
+    final int stars = await DkeStars.getTodayExerciseStars();
+    final prefs = await SharedPreferences.getInstance();
+    final String? saved = prefs.getString(_exStartKey);
+    if (!mounted) return;
+    setState(() {
+      _isStudent = true;
+      _exStarsToday = stars;
+    });
+    if (saved != null) {
+      final DateTime? start = DateTime.tryParse(saved);
+      if (start != null) _runExTimer(start);
+    }
+  }
+
+  void _runExTimer(DateTime start) {
+    _exStart = start;
+    _exTimer?.cancel();
+    _exTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _exElapsedSec = DateTime.now().difference(start).inSeconds);
+    });
+    setState(() => _exElapsedSec = DateTime.now().difference(start).inSeconds);
+  }
+
+  Future<void> _toggleStudentExerciseTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_exStart == null) {
+      final DateTime now = DateTime.now();
+      await prefs.setString(_exStartKey, now.toIso8601String());
+      _runExTimer(now);
+      return;
+    }
+    // 멈춤 → 운동 시간 칸 채우기 + 별 적립
+    _exTimer?.cancel();
+    await prefs.remove(_exStartKey);
+    final int minutes = _exElapsedSec ~/ 60;
+    setState(() {
+      _exStart = null;
+      _exElapsedSec = 0;
+    });
+    if (minutes > 0) _durationController.text = minutes.toString();
+    final int given = await DkeStars.addExerciseStars(minutes);
+    final int today = await DkeStars.getTodayExerciseStars();
+    if (!mounted) return;
+    setState(() => _exStarsToday = today);
+    ExerciseTheme.showLuxeSnackBar(
+      context,
+      minutes == 0
+          ? '1분 이상 운동하면 별이 쌓여요.'
+          : given > 0
+          ? '⭐ 별 $given개 적립! (오늘 운동 별 $today / ${DkeStars.exerciseDailyCap}) — 아래 [기록 저장]도 눌러 주세요.'
+          : '오늘 운동 별 ${DkeStars.exerciseDailyCap}개를 모두 모았어요. 운동 기록은 그대로 남아요. — [기록 저장]을 눌러 주세요.',
+    );
+  }
+
+  Widget _buildStudentExerciseTimer() {
+    final bool running = _exStart != null;
+    final int m = _exElapsedSec ~/ 60;
+    final int s = _exElapsedSec % 60;
+    final bool full = _exStarsToday >= DkeStars.exerciseDailyCap;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text('⏱', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('EXERCISE TIMER', style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10.5)),
+                    Text('운동 타이머 · 1분 = ⭐ 1개', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              ),
+              Text(
+                '⭐ $_exStarsToday / ${DkeStars.exerciseDailyCap}',
+                style: GoogleFonts.notoSansKr(color: full ? Colors.white38 : ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}',
+            style: GoogleFonts.rajdhani(color: running ? ExerciseTheme.brandGolden : Colors.white70, fontSize: 66, fontWeight: FontWeight.bold), // 🆕 [2026-10-07] 44 → 66 (50% 확대)
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _toggleStudentExerciseTimer,
+              icon: Icon(running ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 20),
+              label: Text(running ? '운동 끝 · 별 받기' : '운동 시작', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: running ? ExerciseTheme.dangerRed : ExerciseTheme.brandGolden,
+                foregroundColor: running ? Colors.white : ExerciseTheme.pageBg,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            full ? '오늘 운동 별은 모두 모았어요. 운동 기록은 계속 남길 수 있어요.' : '하루 최대 60분(별 60개)까지 별이 쌓여요. 운동 별은 공부 출석에는 들어가지 않아요.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1647,6 +1816,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     // 🆕 [헬스 2026-10-04] 운동 이름 자리에 "운동 한 줄씩" 묶음을 그리고, 기구·세트 칸은 줄 안으로 들어감
     if (_isGym && field.key == 'exerciseName') return _buildGymLines();
     if (_isGym && (field.key == 'equipment' || field.key == 'sets')) return const SizedBox.shrink();
+    // 🆕 [자유운동 2026-10-07] 운동 이름 자리에 "접었다 펴는 운동 목록", 나머지 칸은 숨김 (메모는 그대로)
+    if (_isFree && field.key == 'activityName') return _buildFreeMoves();
+    if (_isFree && (field.key == 'categoryTags' || field.key == 'bodyPartsUsed' || field.key == 'equipmentUsed')) return const SizedBox.shrink();
 
     switch (field.type) {
       case ExerciseFieldType.number:
@@ -2072,6 +2244,175 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       ),
     );
   }
+  // ===================================================================
+  // 🆕 [자유운동 2026-10-07] 줄넘기 · 푸시업 … 접었다 펴서 세트 × 개수 기록
+  // 저장: detail['freeMoves'] = [{key, name, unit, sets, reps, total}]
+  // ===================================================================
+  bool get _isFree => widget.exerciseType.id == 'etc';
+  final Map<String, TextEditingController> _freeSets = {};
+  final Map<String, TextEditingController> _freeReps = {};
+
+  void _initFreeMoves() {
+    if (!_isFree) return;
+    for (final m in kFreeMoves) {
+      _freeSets[m['key']!] = TextEditingController();
+      _freeReps[m['key']!] = TextEditingController();
+    }
+    final dynamic saved = widget.existingRecord?.detail['freeMoves'];
+    if (saved is List) {
+      for (final e in saved) {
+        if (e is! Map) continue;
+        final String? k = e['key']?.toString();
+        if (k == null || !_freeSets.containsKey(k)) continue;
+        _freeSets[k]!.text = (e['sets'] ?? '').toString();
+        _freeReps[k]!.text = (e['reps'] ?? '').toString();
+      }
+    }
+  }
+
+  void _collectFreeMoves(Map<String, dynamic> detail) {
+    final List<Map<String, dynamic>> list = [];
+    for (final m in kFreeMoves) {
+      final String k = m['key']!;
+      int sets = int.tryParse(_freeSets[k]?.text.trim() ?? '') ?? 0;
+      final int reps = int.tryParse(_freeReps[k]?.text.trim() ?? '') ?? 0;
+      if (reps <= 0) continue;
+      if (sets <= 0) sets = 1;
+      list.add({'key': k, 'name': m['name'], 'unit': m['unit'], 'sets': sets, 'reps': reps, 'total': sets * reps});
+    }
+    detail['freeMoves'] = list;
+    if (list.isNotEmpty) detail['activityName'] = list.map((e) => e['name']).join(', ');
+  }
+
+  // 🆕 [2026-10-07] 자유 운동 글자 (KO / EN / 10개 언어)
+  static const Map<String, Map<String, String>> _kFreeText = {
+    'title': {'KO': '오늘 한 자유 운동', 'EN': "TODAY'S FREE WORKOUT", 'JA': '今日の自由運動', 'ZH': '今天的自由运动', 'FR': 'Entraînement libre du jour', 'DE': 'Freies Training heute', 'RU': 'Свободная тренировка сегодня', 'AR': 'التمرين الحر اليوم', 'HI': 'आज का मुक्त व्यायाम', 'VI': 'Bài tập tự do hôm nay', 'ES': 'Entrenamiento libre de hoy', 'TH': 'ออกกำลังกายอิสระวันนี้'},
+    'help': {'KO': '운동을 눌러 펼친 뒤 개수와 세트를 적어요. 적은 운동만 저장돼요.', 'EN': 'Tap a move to open it, then enter reps and sets. Only filled moves are saved.', 'JA': '運動をタップして開き、回数とセットを入力します。入力した運動だけ保存されます。', 'ZH': '点击展开动作，填写次数和组数。只保存已填写的动作。', 'FR': "Touchez un exercice pour l'ouvrir, puis saisissez répétitions et séries. Seuls les exercices remplis sont enregistrés.", 'DE': 'Übung antippen, dann Wiederholungen und Sätze eingeben. Nur ausgefüllte Übungen werden gespeichert.', 'RU': 'Нажмите упражнение и введите повторы и подходы. Сохраняются только заполненные.', 'AR': 'اضغط على التمرين لفتحه ثم أدخل التكرارات والمجموعات. يُحفظ ما تملؤه فقط.', 'HI': 'व्यायाम पर टैप करें, फिर दोहराव और सेट लिखें। भरे गए व्यायाम ही सहेजे जाते हैं।', 'VI': 'Chạm để mở bài tập rồi nhập số lần và số hiệp. Chỉ lưu bài đã nhập.', 'ES': 'Toca un ejercicio para abrirlo e introduce repeticiones y series. Solo se guardan los completados.', 'TH': 'แตะเพื่อเปิดท่า แล้วใส่จำนวนครั้งและเซ็ต บันทึกเฉพาะท่าที่กรอก'},
+    'reps': {'KO': '1세트 개수', 'EN': 'Reps per set', 'JA': '1セットの回数', 'ZH': '每组次数', 'FR': 'Rép. par série', 'DE': 'Wdh. pro Satz', 'RU': 'Повторов в подходе', 'AR': 'تكرارات كل مجموعة', 'HI': 'प्रति सेट दोहराव', 'VI': 'Số lần mỗi hiệp', 'ES': 'Repeticiones por serie', 'TH': 'จำนวนครั้งต่อเซ็ต'},
+    'secs': {'KO': '1세트 시간 (초)', 'EN': 'Time per set (sec)', 'JA': '1セットの時間（秒）', 'ZH': '每组时间（秒）', 'FR': 'Durée par série (s)', 'DE': 'Zeit pro Satz (Sek.)', 'RU': 'Время подхода (сек)', 'AR': 'وقت كل مجموعة (ث)', 'HI': 'प्रति सेट समय (सेकंड)', 'VI': 'Thời gian mỗi hiệp (giây)', 'ES': 'Tiempo por serie (s)', 'TH': 'เวลาต่อเซ็ต (วินาที)'},
+    'sets': {'KO': '세트', 'EN': 'Sets', 'JA': 'セット数', 'ZH': '组数', 'FR': 'Séries', 'DE': 'Sätze', 'RU': 'Подходы', 'AR': 'المجموعات', 'HI': 'सेट', 'VI': 'Số hiệp', 'ES': 'Series', 'TH': 'จำนวนเซ็ต'},
+  };
+  String _ft(String key, String lang) => _kFreeText[key]?[lang] ?? _kFreeText[key]?['EN'] ?? key;
+
+  // 한국어: 위 영문(진한 명조) · 아래 한글(Noto Sans KR) / English: 영어(진한 명조) / 그 외: 그 언어
+  Widget _freeBi(String key, {double size = 12, Color color = Colors.white70}) {
+    if (appLanguage.isDefault) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_ft(key, 'EN'), style: GoogleFonts.gowunBatang(color: color.withOpacity(0.7), fontWeight: FontWeight.bold, fontSize: size - 1.5)),
+          Text(_ft(key, 'KO'), style: GoogleFonts.notoSansKr(color: color, fontWeight: FontWeight.bold, fontSize: size)),
+        ],
+      );
+    }
+    return Text(
+      _ft(key, appLanguage.current),
+      style: appLanguage.isEnglishOnly
+          ? GoogleFonts.gowunBatang(color: color, fontWeight: FontWeight.bold, fontSize: size)
+          : GoogleFonts.notoSans(color: color, fontWeight: FontWeight.bold, fontSize: size),
+    );
+  }
+
+  Widget _buildFreeMoves() {
+    final String lang = appLanguage.isDefault ? 'KO' : appLanguage.current;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _freeBi('title', size: 15, color: ExerciseTheme.brandGolden),
+        const SizedBox(height: 4),
+        Text(_ft('help', lang), style: const TextStyle(color: Colors.white38, fontSize: 11)),
+        const SizedBox(height: 10),
+        ...kFreeMoves.map((m) {
+          final String k = m['key']!;
+          final int s = int.tryParse(_freeSets[k]?.text.trim() ?? '') ?? 0;
+          final int r = int.tryParse(_freeReps[k]?.text.trim() ?? '') ?? 0;
+          final bool filled = r > 0;
+          final String unit = freeUnitLabel(m['unit']!, lang);
+          final String setsUnit = freeUnitLabel('세트', lang);
+          final String summary = lang == 'KO' ? '$r$unit × ${s <= 0 ? 1 : s}$setsUnit' : '$r $unit × ${s <= 0 ? 1 : s} $setsUnit';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: ExerciseTheme.luxeCardDecoration(highlighted: filled),
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: filled,
+                iconColor: ExerciseTheme.brandGolden,
+                collapsedIconColor: Colors.white54,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                title: Row(
+                  children: [
+                    Text(m['emoji']!, style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: lang == 'KO'
+                          ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(m['en']!, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 11)),
+                          Text(m['name']!, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      )
+                          : Text(
+                        freeMoveLabel(m, lang),
+                        style: appLanguage.isEnglishOnly
+                            ? GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
+                            : GoogleFonts.notoSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                    if (filled)
+                      Text(summary, style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                  ],
+                ),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _freeBi(m['unit'] == '초' ? 'secs' : 'reps'),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _freeReps[k],
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(() {}),
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              decoration: _decoration('', unit: unit),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _freeBi('sets'),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _freeSets[k],
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(() {}),
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              decoration: _decoration('', unit: setsUnit),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
 
   // ✅ [2026-09-13 추가] 절반 폭 안에서도 절대 넘치지 않는 작은 원형 +/- 버튼.
   // 표준 IconButton(최소 48x48)보다 훨씬 작아서(30x30) 2단 배치에 안전함.
@@ -2210,7 +2551,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           children: [
             Icon(ExerciseTheme.iconForType(type.id), color: ExerciseTheme.brandGolden, size: 20),
             const SizedBox(width: 8),
-            BiTitle(en: enName, ko: type.name, enSize: 17, koSize: 17),
+            BiTitle(en: type.id == 'etc' ? 'FREE WORKOUT' : enName, ko: exerciseDisplayName(type), enSize: 17, koSize: 17),
           ],
         ),
         actions: [
@@ -2230,6 +2571,22 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // 🆕 [2026-10-07] 지난 기록을 고치는 중임을 분명히
+          if (_isEditMode)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: ExerciseTheme.brandGolden.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: ExerciseTheme.brandGolden),
+              ),
+              child: const Text(
+                '✏️ 지난 기록 고치기 — 고친 뒤 맨 아래 [기록 저장] · 지우려면 오른쪽 위 🗑',
+                style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5),
+              ),
+            ),
           // 공통: 날짜
           InkWell(
             borderRadius: BorderRadius.circular(14),
@@ -2267,8 +2624,10 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             ),
           ),
 
-          _buildRecentRecords(), // 🆕 [2026-10-05] 최근 기록 (⌚ 자동 · ✏️ 직접)
-          const SizedBox(height: 16),
+          if (!_isEditMode) ...[
+            _buildRecentRecords(), // 🆕 [2026-10-05] 최근 기록 (⌚ 자동 · ✏️ 직접)
+            const SizedBox(height: 16),
+          ],
           // 공통: 운동시간
           BiInline(en: 'DURATION', ko: '운동시간', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
           const SizedBox(height: 6),
@@ -2356,8 +2715,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           Divider(color: ExerciseTheme.brandGolden.withOpacity(0.2)),
           const SizedBox(height: 12),
           BiInline(
-            en: '${ExerciseTheme.englishNameForType(type.id, type.name)} DETAILS',
-            ko: '${type.name} 세부 기록',
+            en: type.id == 'etc' ? 'FREE WORKOUT DETAILS' : '${ExerciseTheme.englishNameForType(type.id, type.name)} DETAILS', // 🆕 [2026-10-07]
+            ko: '${exerciseDisplayName(type)} 세부 기록',
             color: ExerciseTheme.goldenLight,
             fontWeight: FontWeight.bold,
             fontSize: 15,
@@ -2365,8 +2724,12 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           const SizedBox(height: 12),
 
           // 🆕 [만보기 연동 1단계] '걸음수' 필드가 있는 종목에서만 자동측정 카드 노출
-          if (_pendingConfirm != null) ...[
+          if (_pendingConfirm != null && !_isEditMode) ...[
             _buildConfirmCard(), // 🆕 [삼성헬스] 자동 기록 확인 (걸음 · 워치 운동)
+            const SizedBox(height: 12),
+          ],
+          if (_isStudent && !_isEditMode) ...[
+            _buildStudentExerciseTimer(), // 🆕 [학생 운동 별 2026-10-06]
             const SizedBox(height: 12),
           ],
           if (_hasStepsField) ...[

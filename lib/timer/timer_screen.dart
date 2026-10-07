@@ -14,6 +14,7 @@ import '../planner/widgets/study_timelines.dart'; // 타임라인 연동용 임�
 import '../star_economy.dart'; // 🆕 [별 경제 시스템] 별 적립 속도/누적저장/레벨계산을 한 곳에서 관리
 import '../services/family_link_service.dart'; // 🆕 [학부모 가시성 확보 2026-09-02] 학습 기록을 Firestore에도 함께 올리기 위함
 import '../services/scholarship_service.dart'; // 🆕 [장학금 방 2026-09-17] 보너스 별 지급 — 기존 로직은 전혀 건드리지 않고 저장 완료 시점에 새 함수 호출만 추가
+import '../services/subject_category.dart'; // 🆕 [과목 2단 구조 2026-10-07]
 
 class TimerScreen extends StatefulWidget {
   final String selectedSubject;
@@ -1110,6 +1111,11 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
 
     final ScrollController dialogScrollController = ScrollController();
 
+    // 🆕 [과목 2단 구조 2026-10-07] 교과는 그대로 두고, 오늘 한 세부만 바꿀 수 있게
+    final SubjectCategory recordCategory = subjectCategoryOf(widget.selectedSubject);
+    String recordDetail = subjectDetailOf(widget.selectedSubject);
+    String recordSubject = widget.selectedSubject;
+
     int? selectedUnderstanding;
     String? selectedDifficulty;
     String? selectedFocus;
@@ -1267,6 +1273,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
         examCategory: category,
         examRecordId: newRecord['id'] as String,
         elapsedSeconds: _elapsedSeconds,
+        totalSeconds: _totalSeconds, // 🆕 [포모도로 2026-10-07]
       );
     }
 
@@ -1344,8 +1351,37 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text('${_bi(_dlg['subject']!)} : ', style: GoogleFonts.gowunBatang(color: brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
-                          Text(widget.selectedSubject, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), softWrap: true),
+                          Text(recordSubject, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), softWrap: true),
                         ],
+                      ),
+                      // 🆕 [과목 2단 구조 2026-10-07] 오늘 한 세부 (바꿀 때만 누르기)
+                      const SizedBox(height: 8),
+                      Text(
+                        _isForeign ? 'Detail studied today (tap to change)' : '오늘 한 세부 (바꿀 때만 누르기)',
+                        style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6.0,
+                        runSpacing: 6.0,
+                        children: recordCategory.details.map((d) {
+                          final bool isSel = recordDetail == d[0];
+                          return ChoiceChip(
+                            label: Text(_isForeign ? d[1] : d[0], style: GoogleFonts.notoSansKr(color: isSel ? const Color(0xFF030712) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
+                            selected: isSel,
+                            selectedColor: brandGolden,
+                            backgroundColor: const Color(0xFF050B14),
+                            onSelected: (_) => setDialogState(() {
+                              if (isSel) {
+                                recordDetail = subjectDetailOf(widget.selectedSubject);
+                                recordSubject = widget.selectedSubject;
+                              } else {
+                                recordDetail = d[0];
+                                recordSubject = subjectFullName(recordCategory, detailKo: d[0]);
+                              }
+                            }),
+                          );
+                        }).toList(),
                       ),
                       const SizedBox(height: 16),
 
@@ -1901,14 +1937,13 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       await prefs.remove('dke_temp_subject');
                       await prefs.remove('dke_temp_elapsed');
 
-                      final String subjectKey = "dke_history_${widget
-                          .selectedSubject}";
+                      final String subjectKey = "dke_history_$recordSubject"; // 🆕 [과목 2단 구조] 오늘 한 세부로 저장
 
                       // 🆕 [기록 유형 구분] "강의"(특히 개념강의) 기록은 실제 점수가 없으므로
                       // score/incorrectNote를 0이나 임의값으로 채우지 않고 null로 저장함.
                       // (0을 저장하면 나중에 성취도 화면의 평균 점수 계산에 실제 0점처럼 섞여 통계가 왜곡됨)
                       final Map<String, dynamic> dkeFinalPacket = {
-                        'subject': widget.selectedSubject,
+                        'subject': recordSubject, // 🆕 [과목 2단 구조]
                         'recordType': selectedRecordType, // '강의' 또는 '평가'
                         'lectureSubType': selectedLectureSubType, // '개념강의' / '단원정리 및 문제해설' (강의일 때만)
                         'details': detailController.text.trim(),
@@ -1952,7 +1987,7 @@ class _TimerScreenState extends State<TimerScreen> with TickerProviderStateMixin
                       if (selectedRecordType == '평가' && selectedExamCategory != null) {
                         await appendExamRecord(
                           category: selectedExamCategory!,
-                          subject: widget.selectedSubject,
+                          subject: recordSubject, // 🆕 [과목 2단 구조]
                           score: (int.tryParse(scoreController.text.trim()) ?? 0).toDouble(),
                           difficulty: selectedDifficulty ?? "보통",
                           understandingPercent: selectedUnderstanding ?? 60,

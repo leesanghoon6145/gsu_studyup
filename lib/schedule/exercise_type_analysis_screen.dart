@@ -18,6 +18,7 @@ import 'exercise_models.dart';
 import 'exercise_data_service.dart';
 import 'exercise_theme.dart';
 import 'exercise_i18n.dart';
+import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07] 줄넘기·푸시업 등 목록
 
 class ExerciseTypeAnalysisScreen extends StatefulWidget {
   final ExerciseType type;
@@ -103,27 +104,41 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
       backgroundColor: ExerciseTheme.pageBg,
       appBar: ExerciseTheme.biAppBar(
         en: '$enName ANALYSIS',
-        ko: '${widget.type.name} 상세분석',
+        ko: '${exerciseDisplayName(widget.type)} 상세분석',
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: ExerciseTheme.brandGolden))
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildDateNavigator(),
-          const SizedBox(height: 20),
-          _buildSectionTitle('TODAY\'S COMPOSITION', '오늘의 구성'),
-          const SizedBox(height: 12),
-          _buildCompositionDonut(),
-          const SizedBox(height: 28),
-          _buildSectionTitle('TRENDS (14 DAYS)', '항목별 14일 추이'),
-          const SizedBox(height: 4),
-          Text(
-            '항목마다 색이 고정되어 있어, 다른 종목과 비교할 때도 같은 색은 같은 성격의 항목입니다. 그래프를 좌우로 밀면 2주를 볼 수 있어요.',
-            style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
-          ),
-          const SizedBox(height: 14),
-          ..._buildPerFieldCharts(),
+          // 🆕 [자유운동 2026-10-07] 운동별 개수 그래프 + 한 줄 분석
+          if (widget.type.id == 'etc') ...[
+            _buildSectionTitle('FREE WORKOUT (14 DAYS)', '자유 운동 한눈에 보기 (14일)'),
+            const SizedBox(height: 4),
+            Text(
+              appLanguage.isDefault ? '막대 = 그날 한 개수 합계 (세트 × 개수). 플랭크는 초. 좌우로 밀면 2주를 볼 수 있어요.' : 'Bars = daily total (sets × reps). Plank in seconds. Swipe to see 2 weeks.',
+              style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
+            ),
+            const SizedBox(height: 14),
+            ..._buildFreeSection(),
+            const SizedBox(height: 20),
+          ],
+          if (widget.type.id != 'etc') ...[
+            _buildDateNavigator(),
+            const SizedBox(height: 20),
+            _buildSectionTitle('TODAY\'S COMPOSITION', '오늘의 구성'),
+            const SizedBox(height: 12),
+            _buildCompositionDonut(),
+            const SizedBox(height: 28),
+            _buildSectionTitle('TRENDS (14 DAYS)', '항목별 14일 추이'),
+            const SizedBox(height: 4),
+            Text(
+              '항목마다 색이 고정되어 있어, 다른 종목과 비교할 때도 같은 색은 같은 성격의 항목입니다. 그래프를 좌우로 밀면 2주를 볼 수 있어요.',
+              style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
+            ),
+            const SizedBox(height: 14),
+            ..._buildPerFieldCharts(),
+          ],
           // 🆕 [헬스 2026-10-04] 운동별(스쿼트 등) 최고 무게 2주 추이
           if (widget.type.id == 'gym') ...[
             const SizedBox(height: 14),
@@ -335,7 +350,22 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
                         reverse: true,
                         child: SizedBox(
                           width: box.maxWidth / 5.5 * 14,
-                          child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: values, showLeft: false)),
+                          // 🆕 [2026-10-07] 막대 바로 위에 숫자 + 단위 (예: 3.2km, 45분, 120bpm)
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned.fill(
+                                child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: values, showLeft: false)),
+                              ),
+                              ..._barValueLabels(
+                                values: values,
+                                maxY: maxY,
+                                width: box.maxWidth / 5.5 * 14,
+                                unit: field.unit,
+                                color: color,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -349,6 +379,134 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
     }).toList();
   }
 
+
+
+  // ===================================================================
+  // 🆕 [자유운동 2026-10-07] 줄넘기 · 푸시업 · 스쿼트 … 운동별 14일 그래프 + 한 줄 분석
+  // ===================================================================
+  List<Widget> _buildFreeSection() {
+    final DateTime today = DateTime.now();
+    final DateTime t0 = DateTime(today.year, today.month, today.day);
+    final List<DateTime> days = List.generate(14, (i) => t0.subtract(Duration(days: 13 - i)));
+    final Map<String, Map<String, int>> totals = {}; // 이름 → 날짜 → 합계
+    final Map<String, String> units = {};
+    final Map<String, String> lastSet = {};
+    final List<ExerciseRecord> sorted = [..._records]..sort((a, b) => a.date.compareTo(b.date));
+    for (final r in sorted) {
+      final dynamic moves = r.detail['freeMoves'];
+      if (moves is! List) continue;
+      for (final m in moves) {
+        if (m is! Map) continue;
+        final String name = (m['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final int sets = (m['sets'] as num?)?.toInt() ?? 1;
+        final int reps = (m['reps'] as num?)?.toInt() ?? 0;
+        final String unit = (m['unit'] ?? '회').toString();
+        final String k = _dateKey(r.date);
+        final Map<String, int> byDay = totals.putIfAbsent(name, () => {});
+        byDay[k] = (byDay[k] ?? 0) + sets * reps;
+        units[name] = unit;
+        lastSet[name] = '${sets}세트 × $reps$unit';
+      }
+    }
+    if (totals.isEmpty) {
+      return [_emptyCard('줄넘기 · 푸시업 · 스쿼트 등을 기록하면 여기에 그래프와 분석이 나와요.')];
+    }
+
+    int sumRange(String name, int fromDaysAgo, int toDaysAgo) {
+      int s = 0;
+      for (int i = fromDaysAgo; i <= toDaysAgo; i++) {
+        s += totals[name]![_dateKey(t0.subtract(Duration(days: i)))] ?? 0;
+      }
+      return s;
+    }
+
+    final bool ko = appLanguage.isDefault; // 🆕 [2026-10-07] 한국어 / 그 외는 영어
+    final String lang = appLanguage.current;
+    String trendOf(String name) {
+      final int last = sumRange(name, 0, 6);
+      final int prev = sumRange(name, 7, 13);
+      if (last == 0 && prev == 0) return '';
+      if (prev == 0) return ko ? '이번 주 새로 시작했어요 👍' : 'Started this week 👍';
+      if (last == 0) return ko ? '이번 주는 아직 안 했어요. 오늘 가볍게 시작해 봐요 🙂' : 'Not yet this week. Start light today 🙂';
+      final int pct = ((last - prev) * 100 / prev).round();
+      if (pct >= 10) return ko ? '지난주보다 $pct% 늘었어요 📈' : 'Up $pct% from last week 📈';
+      if (pct <= -10) return ko ? '지난주보다 조금 줄었어요. 다시 힘내요 💪' : 'A bit less than last week. Keep going 💪';
+      return ko ? '꾸준히 하고 있어요 ✨' : 'Staying consistent ✨';
+    }
+
+    // 🆕 [2026-10-07] 운동 이름 · 단위를 화면 언어로
+    String nameIn(String koName, String l) {
+      final Map<String, String>? m = freeMoveByName(koName);
+      return m == null ? koName : freeMoveLabel(m, l);
+    }
+    String unitIn(String unitKo) => freeUnitLabel(unitKo, ko ? 'KO' : lang);
+
+    String emojiOf(String name) {
+      for (final m in kFreeMoves) {
+        if (m['name'] == name) return m['emoji']!;
+      }
+      return '💪';
+    }
+
+    // 한눈에 요약 (최근 7일)
+    final Set<String> activeDays = {};
+    String? topName;
+    int topVal = -1;
+    for (final name in totals.keys) {
+      for (int i = 0; i <= 6; i++) {
+        final String k = _dateKey(t0.subtract(Duration(days: i)));
+        if ((totals[name]![k] ?? 0) > 0) activeDays.add(k);
+      }
+      final int v = sumRange(name, 0, 6);
+      if (v > topVal) {
+        topVal = v;
+        topName = name;
+      }
+    }
+    final String summary = activeDays.isEmpty
+        ? (ko ? '최근 7일은 자유운동 기록이 없어요. 오늘 5분만 해 볼까요? 🙂' : 'No free workouts in the last 7 days. How about 5 minutes today? 🙂')
+        : ko
+        ? '최근 7일 동안 ${activeDays.length}일 운동했어요.\n가장 많이 한 운동: ${emojiOf(topName!)} $topName ($topVal${units[topName]})\n${activeDays.length >= 5 ? '정말 꾸준해요! 이 흐름을 이어가요 🔥' : activeDays.length >= 3 ? '좋은 습관이 자라고 있어요 🌱' : '조금씩 늘려 가면 금방 습관이 돼요 🙂'}'
+        : 'Worked out ${activeDays.length} of the last 7 days.\nMost done: ${emojiOf(topName!)} ${nameIn(topName, lang)} ($topVal ${unitIn(units[topName] ?? '회')})\n${activeDays.length >= 5 ? 'Very consistent! Keep it up 🔥' : activeDays.length >= 3 ? 'A good habit is growing 🌱' : 'Build up little by little 🙂'}';
+
+    final List<String> names = totals.keys.toList()
+      ..sort((a, b) => sumRange(b, 0, 13).compareTo(sumRange(a, 0, 13)));
+
+    return [
+      Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
+        decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('🧠', style: TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(summary, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.6, fontWeight: FontWeight.bold))),
+          ],
+        ),
+      ),
+      ...names.asMap().entries.map((e) {
+        final String name = e.value;
+        final List<num> values = days.map((d) => totals[name]![_dateKey(d)] ?? 0).toList();
+        final String unit = units[name] ?? '회';
+        final String trend = trendOf(name);
+        return _trendCard(
+          title: '${emojiOf(name)} ${ko ? name : nameIn(name, lang)}',
+          titleEn: ko ? nameIn(name, 'EN') : null, // 🆕 [2026-10-07] 위 영문 · 아래 한글
+          unit: ko ? unit : unitIn(unit),
+          color: _fieldColor(e.key),
+          values: values,
+          days: days,
+          note: ko
+              ? '최근 ${lastSet[name]} · 14일 합계 ${sumRange(name, 0, 13)}$unit${trend.isNotEmpty ? '\n$trend' : ''}'
+              : 'Total 14 days: ${sumRange(name, 0, 13)} ${unitIn(unit)}${trend.isNotEmpty ? '\n$trend' : ''}',
+        );
+      }),
+    ];
+  }
 
   // 🆕 [헬스 2026-10-04] 운동별 최고 무게 그래프 (스쿼트 · 벤치프레스 …)
   // 새 기록(exercises 목록)과 예전 기록(exerciseName + sets) 모두 읽음
@@ -415,6 +573,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
     required List<num> values,
     required List<DateTime> days,
     String note = '',
+    String? titleEn, // 🆕 [2026-10-07] 한국어일 때 제목 윗줄 영문
   }) {
     final double maxVal = values.isEmpty ? 0 : values.map((v) => v.toDouble()).reduce((a, b) => a > b ? a : b);
     final double top = maxVal <= 0 ? 4 : maxVal * 1.25;
@@ -432,7 +591,16 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
               Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                // 🆕 [2026-10-07] 한국어: 위 영문(진한 명조) · 아래 한글(Noto Sans KR)
+                child: (titleEn != null && appLanguage.isDefault)
+                    ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(titleEn, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(title, style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                )
+                    : Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
               if (unit != null) Text(unit, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
             ],
@@ -458,7 +626,22 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
                       reverse: true,
                       child: SizedBox(
                         width: box.maxWidth / 5.5 * 14,
-                        child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: values, showLeft: false)),
+                        // 🆕 [2026-10-07] 막대 바로 위에 숫자 + 단위 (예: 60회, 1.2km)
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned.fill(
+                              child: BarChart(_chartData(color: color, maxY: maxY, interval: interval, days: days, values: values, showLeft: false)),
+                            ),
+                            ..._barValueLabels(
+                              values: values,
+                              maxY: maxY,
+                              width: box.maxWidth / 5.5 * 14,
+                              unit: unit,
+                              color: color,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -472,6 +655,44 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
   }
 
   // 🆕 [2026-10-04] 고정 Y축 그래프와 움직이는 막대 그래프가 같은 눈금·높이를 쓰도록 한 곳에서 만듦
+  // 🆕 [2026-10-07] 막대 위 숫자 라벨 — 막대가 놓이는 자리(칸 가운데)와 높이를 계산해 그 위에 표시
+  // (그래프 높이 180 중 아래 24는 날짜 칸)
+  static const double _kChartH = 180;
+  static const double _kBottomReserved = 24;
+
+  List<Widget> _barValueLabels({
+    required List<num> values,
+    required double maxY,
+    required double width,
+    String? unit,
+    required Color color,
+  }) {
+    if (values.isEmpty || maxY <= 0) return const [];
+    final double slot = width / values.length;
+    final double plotH = _kChartH - _kBottomReserved;
+    final List<Widget> out = [];
+    for (int i = 0; i < values.length; i++) {
+      final double v = values[i].toDouble();
+      if (v <= 0) continue;
+      final String txt = v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+      final double top = plotH * (1 - v / maxY) - 16;
+      out.add(Positioned(
+        left: slot * i,
+        width: slot,
+        top: top < 0 ? 0 : top,
+        child: Text(
+          '$txt${unit ?? ''}',
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+          softWrap: false,
+          style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.bold),
+        ),
+      ));
+    }
+    return out;
+  }
+
   BarChartData _chartData({
     required Color color,
     required double maxY,

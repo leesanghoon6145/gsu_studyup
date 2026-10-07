@@ -16,6 +16,8 @@ import 'exercise_analysis_screen.dart';
 import 'exercise_personal_info_screen.dart'; // 🆕 [개인정보 - 칼로리 계산용]
 import 'exercise_consent_service.dart'; // 🆕 [건강정보 수집 동의]
 import 'exercise_theme.dart';
+import 'app_language_service.dart'; // 🆕 [2026-10-07] 🌐 언어 바꾸기
+import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07]
 
 class ExerciseTypeScreen extends StatefulWidget {
   const ExerciseTypeScreen({super.key});
@@ -85,8 +87,93 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
       MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: type)),
     );
     if (saved == true && mounted) {
-      ExerciseTheme.showLuxeSnackBar(context, "'${type.name}' 기록을 저장했습니다.");
+      ExerciseTheme.showLuxeSnackBar(context, "'${exerciseDisplayName(type)}' 기록을 저장했습니다.");
     }
+  }
+  // 🆕 [2026-10-07] 🌐 언어 고르기 창 (학부모방 언어 창과 같은 고급 모양)
+  static const Map<String, String> _kTitleTr = {
+    'JA': '運動', 'ZH': '运动', 'FR': 'Exercice', 'DE': 'Sport', 'RU': 'Упражнение',
+    'AR': 'تمرين', 'HI': 'व्यायाम', 'VI': 'Tập thể dục', 'ES': 'Ejercicio', 'TH': 'ออกกำลังกาย',
+  };
+  static const Map<String, String> _kFlags = {
+    'KO': '🇰🇷', 'EN': '🇺🇸', 'JA': '🇯🇵', 'ZH': '🇨🇳', 'FR': '🇫🇷', 'DE': '🇩🇪',
+    'RU': '🇷🇺', 'AR': '🇸🇦', 'HI': '🇮🇳', 'VI': '🇻🇳', 'ES': '🇪🇸', 'TH': '🇹🇭',
+  };
+
+  Future<void> _showLanguagePicker() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 540),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF11192E), Color(0xFF0A0F1E)]),
+            border: Border.all(color: ExerciseTheme.brandGolden, width: 2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+                child: Column(
+                  children: [
+                    Text('LANGUAGE', style: GoogleFonts.gowunBatang(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.2)),
+                    Text('언어 선택', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
+              ),
+              Divider(color: ExerciseTheme.brandGolden.withOpacity(0.25), height: 1, indent: 20, endIndent: 20),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(14),
+                  children: AppLanguageService.supportedLanguages.map((code) {
+                    final bool sel = appLanguage.current == code;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () async {
+                          await appLanguage.setLanguage(code);
+                          if (!mounted) return;
+                          Navigator.pop(dctx);
+                          setState(() {});
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: sel ? ExerciseTheme.brandGolden : Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: sel ? ExerciseTheme.brandGolden : Colors.white12),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(_kFlags[code] ?? '🏳️', style: const TextStyle(fontSize: 20)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  AppLanguageService.languageDisplayNames[code] ?? code,
+                                  style: GoogleFonts.notoSansKr(color: sel ? const Color(0xFF030712) : Colors.white, fontWeight: sel ? FontWeight.w900 : FontWeight.w500, fontSize: 14),
+                                ),
+                              ),
+                              if (sel) const Icon(Icons.check_circle_rounded, color: Color(0xFF030712), size: 20),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onAnalysisPressed() {
@@ -99,15 +186,35 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ExerciseTheme.pageBg,
-      appBar: ExerciseTheme.biAppBar(
-        en: 'EXERCISE',
-        ko: '운동',
-        enSize: 17,
-        koSize: 17,
-        translations: const {
-          'JA': '運動', 'ZH': '运动', 'FR': 'Exercice', 'DE': 'Sport', 'RU': 'Упражнение',
-          'AR': 'تمرين', 'HI': 'व्यायाम', 'VI': 'Tập thể dục', 'ES': 'Ejercicio', 'TH': 'ออกกำลังกาย',
-        },
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: ExerciseTheme.brandGolden),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 🆕 [2026-10-07] 🌐 언어 바꾸기 — 학생이 직접 12개 언어 중 선택
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _showLanguagePicker,
+              child: const Padding(
+                padding: EdgeInsets.all(6),
+                child: Icon(Icons.public_rounded, color: ExerciseTheme.brandGolden, size: 22),
+              ),
+            ),
+            const SizedBox(width: 6),
+            if (appLanguage.isDefault)
+              BiTitle(en: 'EXERCISE', ko: '운동', enSize: 17, koSize: 17)
+            else
+              Text(
+                appLanguage.isEnglishOnly ? 'EXERCISE' : (_kTitleTr[appLanguage.current] ?? 'EXERCISE'),
+                style: appLanguage.isEnglishOnly
+                    ? GoogleFonts.gowunBatang(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)
+                    : GoogleFonts.notoSans(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.insights_rounded, color: ExerciseTheme.brandGolden),
@@ -146,7 +253,7 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
   }
 
   Widget _buildTypeCard(ExerciseType type) {
-    final String enName = ExerciseTheme.englishNameForType(type.id, type.name);
+    final String enName = type.id == 'etc' ? 'FREE WORKOUT' : ExerciseTheme.englishNameForType(type.id, type.name);
 
     // ✅ [2026-09-13 최종 원복] 종목 허브 화면을 거치던 것도, 카드에 버튼
     // 2개를 넣던 것도 전부 되돌림. 입력/분석은 이제 각 종목 화면(today_
@@ -186,31 +293,38 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
               ],
             ),
             const Spacer(),
-            appLanguage.isDefault
-                ? Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(enName, style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
-                Text(
-                  type.name,
+            // 🆕 [2026-10-07] 자유 운동 카드: 위 영문 · 아래 한글, "기록 항목 수" 줄 없음
+            if (type.id == 'etc') ...[
+              Text('FREE WORKOUT', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text('자유 운동', style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15)),
+            ] else ...[
+              appLanguage.isDefault
+                  ? Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(enName, style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
+                  Text(
+                    exerciseDisplayName(type),
+                    style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ],
+              )
+                  : Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  exerciseDisplayName(type),
                   style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
                 ),
-              ],
-            )
-                : Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                type.name,
-                style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
               ),
-            ),
-            const SizedBox(height: 4),
-            BiInline(
-              en: '${type.fields.length} fields',
-              ko: '${type.fields.length}개 기록 항목',
-              color: Colors.white54,
-              fontSize: 11.5,
-            ),
+              const SizedBox(height: 4),
+              BiInline(
+                en: '${type.fields.length} fields',
+                ko: '${type.fields.length}개 기록 항목',
+                color: Colors.white54,
+                fontSize: 11.5,
+              ),
+            ],
           ],
         ),
       ),

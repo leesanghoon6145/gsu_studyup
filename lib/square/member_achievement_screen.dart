@@ -16,6 +16,10 @@ import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
 import '../services/report_archive_service.dart'; // 🆕 [리포트 저장·공유 2026-10-01]
 import '../services/ranking_service.dart'; // 🆕 [랭킹 2026-10-01] 진짜 순위 계산
 import '../services/diagnosis_service.dart'; // 🆕 [리포트 저장·공유 2026-10-01] 부모님 연결 전에 쓰는 문장 은행
+import '../schedule/exercise_data_service.dart'; // 🆕 [생활 균형 2026-10-07] 운동 기록
+import '../schedule/exercise_step_service.dart'; // 🆕 [생활 균형 2026-10-07] 잠(삼성헬스) 기록
+import '../services/sleep_log_service.dart'; // 🆕 [수면 2026-10-07] 잠 직접 기록
+import '../services/subject_category.dart'; // 🆕 [과목 2단 구조 2026-10-07] 교과로 합산
 
 class MemberAchievementScreen extends StatefulWidget {
   const MemberAchievementScreen({Key? key}) : super(key: key);
@@ -1801,8 +1805,10 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
         (k) => k.startsWith('dke_history_'),
       );
 
-      final DateTime now = DateTime.now();
+      // 🆕 [날짜 기준 2026-10-07] 고른 날짜(기본 오늘)로 그날·그 주·그 달·그 해 계산 (그날 이후 기록은 뺌)
+      final DateTime now = _selectedSessionDate;
       final DateTime todayStart = DateTime(now.year, now.month, now.day);
+      final DateTime refEnd = DateTime(now.year, now.month, now.day + 1);
       final DateTime yesterdayStart = todayStart.subtract(
         const Duration(days: 1),
       );
@@ -1856,6 +1862,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
             final int durationSeconds =
                 (item['durationSeconds'] as num?)?.toInt() ?? 0;
             final int minutes = (durationSeconds / 60).round();
+            if (!ts.isBefore(refEnd)) continue; // 🆕 [날짜 기준 2026-10-07] 고른 날 이후 기록은 빼기
 
             // 🆕 [위험한 오류 수정 2026-09-06] 각 기간에 해당하면 "그 기간에 공부했는지" 여부뿐 아니라
             // 실제 학습 분(分)도 함께 그대로 합산함(각 조건은 서로 독립적 — 한 기록이 여러 기간에
@@ -1946,7 +1953,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
         _realMostImprovedSubjectCache = mostImprovedSubjectName; // 🆕
       });
       // 🆕 [랭킹 2026-10-01] 이번 달 공부 시간을 올리고 친구·전 세계 순위를 받아 옴
-      _loadRanking(aggregated.fold<int>(0, (sum, e) => sum + (e['monthRealMinutes'] as int)));
+      if (_isSelectedDateToday) _loadRanking(aggregated.fold<int>(0, (sum, e) => sum + (e['monthRealMinutes'] as int))); // 🆕 순위는 오늘 기준일 때만 올림
     } catch (e) {
       debugPrint("[MemberAchievement] 실제 학습시간 데이터 집계 실패: $e");
     }
@@ -1976,16 +1983,26 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
   // 🆕 [요청] 고정 200분 목표는 개인차(예: 영어만 집중 4시간10분=250분)를 반영 못 해서 폐기.
   // 대신 오늘 실제 학습분을 기준으로 50분 단위로 자동 상승하는 목표(100→150→200→250→300...)를 사용.
   // 100분 밑으로는 목표를 낮추지 않고 항상 최소 100분을 기준으로 함(100분 밑은 "가위질"과 동일한 취급).
+  // 🆕 [2026-10-07] 목표 = 최근 7일(어제까지) 공부한 날의 평균 (최소 60분, 기록 없으면 100분)
+  // 예전: 공부할수록 목표가 50분씩 따라 올라가 달성도가 오락가락함
   int get _dynamicDailyGoalMinutes {
-    if (_todayTotalStudyMinutes < 100) return 100;
-    return (_todayTotalStudyMinutes / 50.0).ceil() * 50;
+    final DateTime now = _selectedSessionDate; // 🆕 [날짜 기준] 고른 날의 앞 7일 평균
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final List<int> prev = _dailyTotalHistory.where((d) {
+      final int diff = today.difference(d['date'] as DateTime).inDays;
+      return diff >= 1 && diff <= 7;
+    }).map((d) => d['totalMinutes'] as int).toList();
+    if (prev.isEmpty) return 100;
+    final int avg = (prev.reduce((a, b) => a + b) / prev.length).round();
+    final int goal = (avg / 10).round() * 10;
+    return goal < 60 ? 60 : goal;
   }
 
   // 🆕 목표 달성도(%) = 오늘 학습분 / 유동 목표(_dynamicDailyGoalMinutes) × 100. 100%를 넘으면 100으로 고정.
   int get _realGoalAttainmentPercent {
     final int pct = ((_todayTotalStudyMinutes / _dynamicDailyGoalMinutes) * 100)
         .round();
-    return pct.clamp(0, 100);
+    return pct.clamp(0, 200); // 🆕 [2026-10-07] 평소보다 더 하면 100% 넘게 보여 줌
   }
 
   // 🆕 어제 대비 오늘 증감(%) = (오늘 - 어제) / 어제 × 100. 어제 기록이 없으면(0분) 오늘 학습한 만큼 +100%로 표시.
@@ -2155,12 +2172,18 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
   final TextEditingController _unitController = TextEditingController();
   final TextEditingController _scoreController = TextEditingController();
 
+  // 🆕 [2026-10-07] 학기는 지금 달로 자동 (3~8월 1학기, 9~2월 2학기), 학년은 가입 정보로 자동
+  static int _currentSemester() {
+    final int m = DateTime.now().month;
+    return (m >= 3 && m <= 8) ? 1 : 2;
+  }
+
   int _inputGrade = 2;
-  int _inputSemester = 1;
+  int _inputSemester = _currentSemester();
 
   String _filterExamType = "주평가";
   int _filterGrade = 2;
-  int _filterSemester = 1;
+  int _filterSemester = _currentSemester();
 
   // 🆕 [버그 수정] 예전엔 "2026년/6월/1주차"로 고정되어 있었음 -> 지금 실제 날짜 기준으로 자동 계산
   // 🆕 [버그 재수정] 예전엔 "(day-1)~/7 +1" 방식이라 실제 달력 주차(일요일 시작)와 안 맞았음(7/27이 4주차로 잘못 나옴).
@@ -2182,7 +2205,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
   Set<String> _inputMidUnits = {
     "중단원 1",
   }; // 🆕 [버그 수정] 중단원 여러 개(범위) 선택 가능하도록 단일값→집합으로 전환
-  String _inputSemesterGroup = "1학기";
+  String _inputSemesterGroup = "${_currentSemester()}학기"; // 🆕 [2026-10-07] 지금 학기로 자동
 
   _ExamRecord? _lastSavedRecordForDisplay;
 
@@ -2412,6 +2435,7 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
     ); // 🆕 [요청 2026-09-04] 선택 날짜(기본값 오늘) 학습 세션 불러옴
     _loadScholarshipSummary(); // 🆕 [장학금 방 2026-09-17] "나의 성취별 현황" 카드용 월간 별 데이터 로드
     _checkAbandonedCode(); // 🆕 [방치 코드 정리 2026-09-18] 5주 이상 방치된 예전 코드가 있는지 확인
+    _loadLifeBalance(); // 🆕 [생활 균형 2026-10-07] 운동·잠 기록 불러옴
     // 🆕 [요청 2026-09-04] 첫 프레임이 렌더링된 직후, "주평가" 월 선택 가로 스크롤을 현재 월 위치로 이동.
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scrollMonthRowToCurrent(),
@@ -2566,6 +2590,12 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
       setState(() {
         _realSchoolName = school;
         _realGrade = grade;
+        // 🆕 [2026-10-07] 가입 때 넣은 학년(1~3)으로 성적 칸·그래프 학년 자동 맞춤
+        final int? g = int.tryParse(RegExp(r'\d').firstMatch(grade ?? '')?.group(0) ?? '');
+        if (g != null && g >= 1 && g <= 3) {
+          _inputGrade = g;
+          _filterGrade = g;
+        }
       });
     } catch (e) {
       debugPrint("[MemberAchievement] 학교/학년 불러오기 실패: $e");
@@ -3953,11 +3983,13 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
   }
 
   Widget _buildBeautifulFeedbackDisplayPanel() {
-    if (_lastSavedRecordForDisplay == null) {
+    // 🆕 [2026-10-07] 위에서 고른 평가 종류·학년·학기의 가장 최근 기록 (그래프와 같은 기록)
+    final List<_ExamRecord> shown = _getFilteredRecords(_selectedExamType ?? "주평가");
+    if (shown.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final rec = _lastSavedRecordForDisplay!;
+    final rec = shown.last;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 14),
@@ -4422,6 +4454,35 @@ class _MemberAchievementScreenState extends State<MemberAchievementScreen>
                           ],
                         ),
 
+                        // 🆕 [2026-10-07] 이번 달 보너스가 아직 없으면 "무엇을 하면 받는지" 안내 (포모도로 22분 포함)
+                        if (_scholarshipBonusBreakdown.isEmpty) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+                            child: Text(
+                              DkeLang.isForeignSelected
+                                  ? "No bonus stars yet this month.\n• Study 70%+ of your timer goal → +10\n• Save a study record after 30+ min on the timer (22+ min for 25-min Pomodoro) → +10\n• Study 50+ min in a day → +50\n• Log a weekly/unit test (after 30+ min, 22+ min for Pomodoro) → +10 · midterm/final/mock → +50"
+                                  : "이번 달 받은 보너스별이 아직 없어요.\n• 타이머로 정한 시간의 70% 이상 공부 → +10\n• 타이머 30분 이상(25분 포모도로는 22분 이상) 공부한 뒤 학습기록 저장 → +10\n• 하루 50분 이상 공부 → +50\n• 주간·단원평가 기록(타이머 30분 이상, 포모도로는 22분 이상) → +10 · 중간·기말·모의고사 기록 → +50",
+                              style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.6),
+                            ),
+                          ),
+                        ],
+                        if (_scholarshipBonusBreakdown.isEmpty) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+                            child: Text(
+                              DkeLang.isForeignSelected
+                                  ? "No bonus stars yet this month.\n• Study 70%+ of your timer goal → +10\n• Save a study record after 30+ min on the timer → +10\n• Study 50+ min in a day → +50\n• Log a weekly/unit test (after 30+ min) → +10 · midterm/final/mock → +50"
+                                  : "이번 달 받은 보너스별이 아직 없어요.\n• 타이머로 정한 시간의 70% 이상 공부 → +10\n• 타이머 30분 이상 공부한 뒤 학습기록 저장 → +10\n• 하루 50분 이상 공부 → +50\n• 주간·단원평가 기록(타이머 30분 이상) → +10 · 중간·기말·모의고사 기록 → +50",
+                              style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.6),
+                            ),
+                          ),
+                        ],
                         if (_scholarshipBonusBreakdown.isNotEmpty) ...[
                           const SizedBox(height: 14),
                           Text(_biT('bonusBreakdownTitle'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -4668,14 +4729,14 @@ GKE StudyUp은 누가 시켜서 공부하는 것이 아니라 내가 스스로 �
 
 2. 학습 실천
 -타이머 학습을 70% 이상 달성하면 +10별 
--학습을 마친 후 학습기록을 작성하면 +10별 
+-타이머로 30분 이상 학습한 뒤 학습기록을 작성하면 +10별 
 - 일일 50분이상 학습시 50별 
 - 1주 일요일 부터 토요일까지 빠짐없는 학습 300별 
 - 1달 빠짐없이 학습시 1000별
 
 3. 학습평가와 기록
-· 주간평가 기록 → +10별
-· 단원평가 기록 → +10별
+· 주간평가 기록 (타이머 30분 이상 학습 후) → +10별
+· 단원평가 기록 (타이머 30분 이상 학습 후) → +10별
 · 중간고사 기록 → +50별
 · 기말고사 기록 → +50별
 · 모의고사 기록 → +50별
@@ -4742,11 +4803,11 @@ The more consistently you study, the more your record grows.
 
 2. Study Practice
 Complete 70% or more of a timer session → +10 stars
-Write a study record after finishing → +10 stars
+Write a study record after studying 30+ min with the timer → +10 stars
 
 3. Assessments and Records
-· Weekly assessment logged → +10 stars
-· Unit test logged → +10 stars
+· Weekly assessment logged (after 30+ min on the timer) → +10 stars
+· Unit test logged (after 30+ min on the timer) → +10 stars
 · Midterm exam logged → +50 stars
 · Final exam logged → +50 stars
 · Mock exam logged → +50 stars
@@ -7895,10 +7956,44 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   // 🆕 현재 선택된 언어에 맞는 안내문 반환. 해당 언어가 아직 비어있으면(원장님이 아직
   // 안 채우신 언어) 영어로, 영어도 없으면 한국어로 자동 대체(fallback)되어 앱이
   // 절대 빈 화면을 보여주지 않도록 함.
+  // 🆕 [2026-10-07] 보너스 조건 안내 (안내문 맨 위에 자동으로 붙음, 12개 언어)
+  // 🆕 [포모도로 2026-10-07] 25분 단위 학습 기준 (12개 언어)
+  static const Map<String, String> _kPomodoroNote = {
+    'KO': '• 타이머를 25분으로 정한 포모도로 학습은 22분 이상 공부하면 위 보너스를 받아요.',
+    'EN': '• For 25-minute Pomodoro sessions, 22+ minutes of study counts for the bonuses above.',
+    'JA': '• タイマーを25分に設定したポモドーロ学習は、22分以上勉強すれば上のボーナスがもらえます。',
+    'ZH': '• 计时器设为25分钟的番茄钟学习，学习22分钟以上即可获得以上奖励。',
+    'FR': '• Pour les sessions Pomodoro de 25 minutes, 22 minutes d’étude suffisent pour les bonus ci-dessus.',
+    'DE': '• Bei 25-Minuten-Pomodoro-Einheiten zählen 22+ Minuten Lernen für die oben genannten Boni.',
+    'RU': '• Для 25-минутных занятий по Помодоро для бонусов выше достаточно 22+ минут учёбы.',
+    'AR': '• في جلسات بومودورو ذات 25 دقيقة، تكفي 22 دقيقة دراسة أو أكثر للمكافآت أعلاه.',
+    'HI': '• 25 मिनट के पोमोडोरो सत्र में 22+ मिनट पढ़ने पर ऊपर के बोनस मिलते हैं।',
+    'VI': '• Với phiên Pomodoro 25 phút, học từ 22 phút trở lên là được nhận các thưởng trên.',
+    'ES': '• En sesiones Pomodoro de 25 minutos, 22+ minutos de estudio cuentan para los bonos anteriores.',
+    'TH': '• การเรียนแบบโพโมโดโร 25 นาที เรียนตั้งแต่ 22 นาทีขึ้นไปก็ได้รับโบนัสข้างต้น',
+  };
+  static const Map<String, String> _kBonusConditionNote = {
+    'KO': '📌 꼭 알아 두세요\n• 학습기록 보너스(+10)는 타이머로 30분 이상 공부한 뒤 기록을 저장해야 받아요.\n• 주간평가 · 단원평가 보너스(+10)도 타이머 30분 이상 공부한 뒤 기록해야 받아요.\n• 중간고사 · 기말고사 · 모의고사(+50)는 기록하면 바로 받아요.\n\n',
+    'EN': '📌 Please note\n• The study-record bonus (+10) is given only when you save a record after 30+ minutes on the timer.\n• Weekly and unit test bonuses (+10) also need 30+ minutes on the timer before logging.\n• Midterm, final and mock exams (+50) are given as soon as you log them.\n\n',
+    'JA': '📌 必ず確認してください\n• 学習記録ボーナス（＋10）は、タイマーで30分以上勉強した後に記録を保存したときにもらえます。\n• 週間評価・単元テストのボーナス（＋10）も、タイマーで30分以上勉強した後の記録が対象です。\n• 中間・期末・模擬試験（＋50）は記録するとすぐにもらえます。\n\n',
+    'ZH': '📌 请注意\n• 学习记录奖励（+10）需要用计时器学习30分钟以上后保存记录才能获得。\n• 每周评价·单元测评奖励（+10）也需要计时器学习30分钟以上后记录。\n• 期中·期末·模拟考试（+50）记录后立即获得。\n\n',
+    'FR': "📌 À savoir\n• Le bonus de trace d'apprentissage (+10) est accordé seulement si tu enregistres après au moins 30 minutes au minuteur.\n• Les bonus d'évaluation hebdomadaire et de chapitre (+10) demandent aussi 30 minutes au minuteur avant l'enregistrement.\n• Les examens de mi-semestre, de fin de semestre et blancs (+50) sont accordés dès l'enregistrement.\n\n",
+    'DE': '📌 Bitte beachten\n• Den Lernaufzeichnungs-Bonus (+10) gibt es nur, wenn du nach mindestens 30 Minuten mit dem Timer speicherst.\n• Auch Wochen- und Unitest-Boni (+10) brauchen vorher mindestens 30 Minuten mit dem Timer.\n• Zwischen-, Abschluss- und Probeprüfungen (+50) gibt es sofort beim Eintragen.\n\n',
+    'RU': '📌 Обратите внимание\n• Бонус за запись об учёбе (+10) начисляется, только если запись сохранена после 30+ минут по таймеру.\n• Бонусы за еженедельную оценку и проверку по разделу (+10) тоже требуют 30+ минут по таймеру.\n• Промежуточный, итоговый и пробный экзамены (+50) начисляются сразу после записи.\n\n',
+    'AR': '📌 يرجى الانتباه\n• مكافأة سجل التعلم (+10) تُمنح فقط عند حفظ السجل بعد 30 دقيقة أو أكثر على المؤقت.\n• مكافآت التقييم الأسبوعي وتقييم الوحدة (+10) تحتاج أيضًا إلى 30 دقيقة أو أكثر على المؤقت قبل التسجيل.\n• اختبارات منتصف الفصل والنهائي والتجريبي (+50) تُمنح فور تسجيلها.\n\n',
+    'HI': '📌 कृपया ध्यान दें\n• लर्निंग रिकॉर्ड बोनस (+10) तभी मिलता है जब आप टाइमर पर 30+ मिनट पढ़ने के बाद रिकॉर्ड सहेजें।\n• साप्ताहिक और यूनिट मूल्यांकन बोनस (+10) के लिए भी पहले टाइमर पर 30+ मिनट ज़रूरी हैं।\n• मिडटर्म, फाइनल और मॉक परीक्षा (+50) दर्ज करते ही मिलते हैं।\n\n',
+    'VI': '📌 Lưu ý\n• Thưởng ghi nhật ký học tập (+10) chỉ được nhận khi bạn lưu sau khi học từ 30 phút trở lên bằng Timer.\n• Thưởng đánh giá tuần và đánh giá chương (+10) cũng cần học từ 30 phút trở lên bằng Timer trước khi ghi.\n• Kiểm tra giữa kỳ, cuối kỳ và thi thử (+50) được nhận ngay khi ghi lại.\n\n',
+    'ES': '📌 Ten en cuenta\n• El bono por registro de aprendizaje (+10) se da solo si guardas el registro después de 30+ minutos con el temporizador.\n• Los bonos de evaluación semanal y de unidad (+10) también requieren 30+ minutos con el temporizador antes de registrar.\n• Los exámenes de mitad de curso, finales y de práctica (+50) se dan al registrarlos.\n\n',
+    'TH': '📌 โปรดทราบ\n• โบนัสบันทึกการเรียน (+10) จะได้รับเมื่อบันทึกหลังจากเรียนด้วย Timer ตั้งแต่ 30 นาทีขึ้นไปเท่านั้น\n• โบนัสประเมินรายสัปดาห์และประเมินหน่วยการเรียน (+10) ก็ต้องเรียนด้วย Timer ตั้งแต่ 30 นาทีขึ้นไปก่อนบันทึก\n• สอบกลางภาค ปลายภาค และสอบจำลอง (+50) ได้รับทันทีเมื่อบันทึก\n\n',
+  };
+
   String get _scholarshipStudentNoticeText {
     final String code = DkeLang.current.toUpperCase();
+    // 🆕 [포모도로 2026-10-07] 조건 안내 끝에 포모도로 기준 한 줄을 덧붙임
+    final String note = (_kBonusConditionNote[code] ?? _kBonusConditionNote['EN']!)
+        .replaceFirst('\n\n', '\n${_kPomodoroNote[code] ?? _kPomodoroNote['EN']!}\n\n');
     final String? text = _scholarshipStudentNoticeByLang[code];
-    if (text != null && text.trim().isNotEmpty) return text;
+    if (text != null && text.trim().isNotEmpty) return '$note$text';
     return _scholarshipStudentNoticeByLang['EN']!.trim().isNotEmpty
         ? _scholarshipStudentNoticeByLang['EN']!
         : _scholarshipStudentNoticeByLang['KO']!;
@@ -8009,6 +8104,8 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildDateBanner(), // 🆕 [날짜 기준 2026-10-07]
+            const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -8093,7 +8190,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _t('nextLevelRoad'),
+                            '${_t('nextLevelRoad')}${_isSelectedDateToday ? '' : (DkeLang.current == 'KO' ? ' · 현재' : ' · Now')}', // 🆕 날짜와 상관없는 지금 상태
                             overflow: TextOverflow.fade,
                             softWrap: false,
                             maxLines: 1,
@@ -8267,7 +8364,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                               ),
                               children: [
                                 TextSpan(
-                                  text: _t('todayVsYesterday'),
+                                  text: _isSelectedDateToday ? _t('todayVsYesterday') : (DkeLang.current == 'KO' ? '전날 대비 그날 ' : 'vs previous day '),
                                   style: const TextStyle(color: Colors.white),
                                 ),
                                 TextSpan(
@@ -8381,9 +8478,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                 ),
                 onPressed: () async {
                   String currentType = _selectedExamType ?? "주평가";
-                  final filtered = _allRecords
-                      .where((r) => r.type == currentType)
-                      .toList();
+                  final filtered = _getFilteredRecords(currentType); // 🆕 [2026-10-07] 그래프와 같은 기록으로 진단
                   String diagnosisText;
 
                   if (filtered.isEmpty) {
@@ -8634,7 +8729,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                                 ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('CHEER STARS', style: GoogleFonts.gowunBatang(color: ink, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+                                Text(csEn('giftTitle'), style: GoogleFonts.gowunBatang(color: ink, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
                                 Text(csKo('giftTitle'), style: GoogleFonts.notoSansKr(color: ink, fontWeight: FontWeight.w900, fontSize: 15.5)),
                               ],
                             )
@@ -8657,7 +8752,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(cs('giftTotal', lang: lang), style: GoogleFonts.notoSansKr(color: softGold, fontSize: 12)),
+                                    _csBi('giftTotal', lang, color: softGold, size: 12, weight: FontWeight.normal),
                                     const SizedBox(height: 2),
                                     Text(
                                       cs('nStars', lang: lang, args: {'n': total}),
@@ -8680,16 +8775,16 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                           // 일반 응원 / 특별 축하
                           Row(
                             children: [
-                              Expanded(child: _giftStat(Icons.star_rounded, cs('giftNormal', lang: lang), cs('nStars', lang: lang, args: {'n': normal}), highlight: false)),
+                              Expanded(child: _giftStat(Icons.star_rounded, 'giftNormal', cs('nStars', lang: lang, args: {'n': normal}), highlight: false)),
                               const SizedBox(width: 10),
-                              Expanded(child: _giftStat(Icons.celebration_rounded, cs('giftSpecial', lang: lang), cs('nStars', lang: lang, args: {'n': special}), highlight: true)),
+                              Expanded(child: _giftStat(Icons.celebration_rounded, 'giftSpecial', cs('nStars', lang: lang, args: {'n': special}), highlight: true)),
                             ],
                           ),
 
                           // 🆕 [응원 가족] 응원해 주는 가족 (보낸 사람별 합계)
                           if (senders.isNotEmpty) ...[
                             const SizedBox(height: 16),
-                            Text(cs('giftByFamily', lang: lang), style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+                            _csBi('giftByFamily', lang, color: deepGold, size: 13),
                             const SizedBox(height: 8),
                             ...senders.map((r) {
                               final String rel = r['rel'] as String;
@@ -8728,7 +8823,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                           // 최근 받은 응원 3개
                           if (recent.isNotEmpty) ...[
                             const SizedBox(height: 16),
-                            Text(cs('giftRecent', lang: lang), style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+                            _csBi('giftRecent', lang, color: deepGold, size: 13),
                             const SizedBox(height: 8),
                             ...recent.map((h) {
                               final int stars = (h['stars'] as num?)?.toInt() ?? 0;
@@ -8819,7 +8914,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('💰 ${cs('famTitle', lang: lang)}', style: GoogleFonts.notoSansKr(color: deepGold, fontWeight: FontWeight.bold, fontSize: 13)),
+              Row(children: [const Text('💰 ', style: TextStyle(fontSize: 14)), _csBi('famTitle', lang, color: deepGold, size: 13)]),
               const SizedBox(height: 8),
               ...rows.map((r) {
                 final String who = r.relation == 'other' && r.relationText.trim().isNotEmpty
@@ -8847,14 +8942,14 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
               const Divider(color: Colors.white12, height: 16),
               Row(
                 children: [
-                  Expanded(child: Text(cs('famMonthTotal', lang: lang), style: GoogleFonts.notoSansKr(color: cream, fontSize: 12.5, fontWeight: FontWeight.bold))),
+                  Expanded(child: _csBi('famMonthTotal', lang, color: cream, size: 12.5)),
                   Text(famWonText(total, lang: lang), style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 15)),
                 ],
               ),
               const SizedBox(height: 2),
               Row(
                 children: [
-                  Expanded(child: Text(cs('famLastTotal', lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11.5))),
+                  Expanded(child: _csBi('famLastTotal', lang, color: Colors.white54, size: 11.5, weight: FontWeight.normal)),
                   Text(famWonText(lastTotal, lang: lang), style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5)),
                 ],
               ),
@@ -8865,6 +8960,26 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     );
   }
 
+  // 🆕 [2026-10-07] 응원별 카드 글자: 한국어 = 위 영문(진한 명조) · 아래 한글(Noto Sans KR)
+  // English = 영어(진한 명조) / 10개 언어 = 그 언어 한 줄
+  Widget _csBi(String key, String lang, {required Color color, double size = 12, FontWeight weight = FontWeight.bold, CrossAxisAlignment align = CrossAxisAlignment.start}) {
+    if (lang == 'KO') {
+      return Column(
+        crossAxisAlignment: align,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(cs(key, lang: 'EN'), style: GoogleFonts.gowunBatang(color: color.withOpacity(0.75), fontWeight: FontWeight.bold, fontSize: size - 1.5)),
+          Text(cs(key, lang: 'KO'), style: GoogleFonts.notoSansKr(color: color, fontWeight: weight, fontSize: size)),
+        ],
+      );
+    }
+    return Text(
+      cs(key, lang: lang),
+      style: lang == 'EN'
+          ? GoogleFonts.gowunBatang(color: color, fontWeight: FontWeight.bold, fontSize: size)
+          : GoogleFonts.notoSans(color: color, fontWeight: weight, fontSize: size),
+    );
+  }
   // 🆕 [B안] 일반 응원 = 남색 칸 / 특별 축하 = 짙은 금빛 칸에 금테 (따로 구분)
   Widget _giftStat(IconData icon, String label, String value, {required bool highlight}) {
     const Color deepGold = Color(0xFFD4AF37);
@@ -8883,7 +8998,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
           Icon(icon, color: highlight ? paleGold : deepGold, size: 20),
           const SizedBox(height: 4),
           Text(value, style: GoogleFonts.notoSansKr(color: highlight ? paleGold : cream, fontWeight: FontWeight.w900, fontSize: 17)),
-          Text(label, style: GoogleFonts.notoSansKr(color: highlight ? paleGold.withOpacity(0.85) : softGold, fontSize: 11.5)),
+          _csBi(label, DkeLang.current, color: highlight ? paleGold.withOpacity(0.85) : softGold, size: 11.5, weight: FontWeight.normal, align: CrossAxisAlignment.center), // 🆕 label = 글자 열쇠
         ],
       ),
     );
@@ -10055,9 +10170,10 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     // 🆕 [요청] Y축 슬라이딩 윈도우: 기본은 0~3시간 4단계 라벨.
     // 3시간을 넘으면(예: 6시간30분) 축 자체는 그대로 두고 "옆의 시간 숫자"만 위로 밀려서
     // 항상 4단계(예: 7,6,5,4시간)만 보이고, 그 아래 구간은 잘려서 안 보이게 함.
-    double windowTopHours = (maxMinutes / 60.0).ceil().toDouble();
+    // 🆕 [2026-10-07] 항상 0시간부터 (3시간 단위로 위 눈금만 늘어남) → 적게 한 날 막대도 보임
+    double windowTopHours = ((maxMinutes / 60.0) / 3).ceil() * 3.0;
     if (windowTopHours < 3) windowTopHours = 3;
-    final double windowBottomHours = windowTopHours - 3;
+    const double windowBottomHours = 0;
     final double windowTopMinutes = windowTopHours * 60;
     final double windowBottomMinutes = windowBottomHours * 60;
     final double windowRangeMinutes =
@@ -10065,9 +10181,9 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
 
     final List<String> yAxisLabels = [
       "${windowTopHours.toInt()}h",
-      "${(windowTopHours - 1).toInt()}h",
-      "${(windowTopHours - 2).toInt()}h",
-      "${windowBottomHours.toInt()}h",
+      "${(windowTopHours * 2 / 3).round()}h",
+      "${(windowTopHours / 3).round()}h",
+      "0h",
     ];
 
     return Column(
@@ -10148,7 +10264,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                             final Map<String, dynamic> d = entry.value;
                             final DateTime date = d["date"] as DateTime;
                             final int minutes = d["totalMinutes"] as int;
-                            final DateTime today = DateTime.now();
+                            final DateTime today = _selectedSessionDate; // 🆕 [날짜 기준] 고른 날 막대를 금색으로
                             final bool isToday =
                                 date.year == today.year &&
                                 date.month == today.month &&
@@ -10242,6 +10358,198 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
       ],
     );
   }
+  // ===================================================================
+  // 🆕 [생활 균형 2026-10-07] 진짜 "종합 생활 균형" — 공부 · 운동 · 잠 (일/주/월/연 탭과 같은 기간)
+  // 운동 = 운동 기록(직접 + 삼성헬스 자동), 잠 = 삼성헬스 수면 기록이 있는 밤만
+  // ===================================================================
+  final Map<int, Map<String, int>> _lifeBalance = {};
+  bool _healthLinked = false; // 🆕 [2026-10-07] 삼성헬스 자동 기록 연결 상태
+
+  Future<void> _loadLifeBalance() async {
+    try {
+      final DateTime now = _selectedSessionDate; // 🆕 [날짜 기준] 고른 날 기준 생활 균형
+      final DateTime today = DateTime(now.year, now.month, now.day);
+      final List<DateTime> starts = [
+        today,
+        DateTime(today.year, today.month, today.day - (now.weekday % 7)),
+        DateTime(now.year, now.month, 1),
+        DateTime(now.year, 1, 1),
+      ];
+      final records = await ExerciseDataService.instance.getAllRecords();
+      final Map<String, int> sleepByDay = {};
+      for (DateTime d = starts[3]; !d.isAfter(today); d = DateTime(d.year, d.month, d.day + 1)) {
+        final SleepSummary? s = await DailyStepWatcherService.instance.getSleepFor(d);
+        if (s != null && s.minutes > 0) sleepByDay['${d.year}-${d.month}-${d.day}'] = s.minutes;
+      }
+      final Map<int, Map<String, int>> result = {};
+      for (int tab = 0; tab < 4; tab++) {
+        final DateTime from = starts[tab];
+        int ex = 0;
+        for (final r in records) {
+          final DateTime day = DateTime(r.date.year, r.date.month, r.date.day);
+          if (!day.isBefore(from) && !day.isAfter(today)) ex += (r.durationMin as num).toInt();
+        }
+        int sleep = 0, nights = 0;
+        for (DateTime d = from; !d.isAfter(today); d = DateTime(d.year, d.month, d.day + 1)) {
+          final int? m = sleepByDay['${d.year}-${d.month}-${d.day}'];
+          if (m != null) {
+            sleep += m;
+            nights++;
+          }
+        }
+        result[tab] = {'exercise': ex, 'sleep': sleep, 'nights': nights, 'days': today.difference(from).inDays + 1};
+      }
+      final bool linked = await HealthLink.isReady() && DailyStepWatcherService.instance.isRunning; // 🆕 [2026-10-07]
+      if (!mounted) return;
+      setState(() {
+        _lifeBalance
+          ..clear()
+          ..addAll(result);
+        _healthLinked = linked;
+      });
+    } catch (e) {
+      debugPrint('[MemberAchievement] 생활 균형 불러오기 실패: $e');
+    }
+  }
+
+  // 🆕 [생활 균형 2026-10-07] 삼성헬스 연결 (걸음 · 워치 운동 · 잠 자동 기록 켜기)
+  Future<void> _connectSamsungHealth() async {
+    try {
+      if (!await HealthLink.isInstalled()) {
+        await HealthLink.install();
+        return;
+      }
+      await HealthLink.requestPermission();
+      await HealthLink.requestExtendedPermission();
+      final DailyStepWatcherService w = DailyStepWatcherService.instance;
+      if (!w.isRunning) await w.setEnabled(true);
+      await w.syncNow();
+      await _loadLifeBalance();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_healthLinked
+            ? (DkeLang.current == 'KO' ? '삼성헬스와 연결됐어요 · 걸음 · 운동 · 잠이 자동으로 기록돼요' : 'Connected · steps, workouts and sleep are recorded automatically')
+            : (DkeLang.current == 'KO' ? '권한을 모두 허용해야 자동으로 기록돼요' : 'Please allow all permissions for auto recording')),
+      ));
+    } catch (e) {
+      debugPrint('[MemberAchievement] 삼성헬스 연결 실패: $e');
+    }
+  }
+
+  Widget _buildRealLifeBalanceCard(int tabIndex, int studyMinutes) {
+    final bool ko = DkeLang.current == 'KO';
+    final Map<String, int>? lb = _lifeBalance[tabIndex];
+    final int ex = lb?['exercise'] ?? 0;
+    final int sleep = lb?['sleep'] ?? 0;
+    final int nights = lb?['nights'] ?? 0;
+    final int days = (lb?['days'] ?? 1) < 1 ? 1 : (lb?['days'] ?? 1);
+    final int total = studyMinutes + ex + sleep;
+    String hm(int m) => ko ? '${m ~/ 60}시간 ${m % 60}분' : '${m ~/ 60}h ${m % 60}m';
+    // 🆕 [2026-10-07] 앱 글자체 원칙: 한글 = Noto Sans KR, 영어 = 진한 명조체
+    TextStyle f(Color c, double s, {FontWeight w = FontWeight.bold}) => ko
+        ? GoogleFonts.notoSansKr(color: c, fontSize: s, fontWeight: w, height: 1.5)
+        : GoogleFonts.gowunBatang(color: c, fontSize: s, fontWeight: FontWeight.bold, height: 1.5);
+
+    Widget row(String emoji, String label, int minutes, Color c) {
+      final double frac = total > 0 ? minutes / total : 0;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            SizedBox(width: 44, child: Text(label, style: f(Colors.white, 13))),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(value: frac, minHeight: 10, backgroundColor: Colors.white10, color: c),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(width: 92, child: Text(hm(minutes), textAlign: TextAlign.right, style: f(c, 12.5))),
+          ],
+        ),
+      );
+    }
+
+    final int studyAvg = (studyMinutes / days).round();
+    final int exAvg = (ex / days).round();
+    final int sleepAvg = nights > 0 ? (sleep / nights).round() : 0;
+    final List<String> notes = [];
+    if (total == 0) {
+      notes.add(ko ? '이 기간의 기록이 아직 없어요.' : 'No records for this period yet.');
+    } else {
+      notes.add(ko ? '📚 하루 평균 공부 ${hm(studyAvg)}' : '📚 Study ${hm(studyAvg)} a day on average');
+      notes.add(exAvg < 20
+          ? (ko ? '🏃 운동이 하루 평균 20분보다 적어요. 가볍게 몸을 움직이면 집중력에도 도움이 돼요.' : '🏃 Under 20 min of exercise a day. Light movement helps focus too.')
+          : (ko ? '🏃 운동도 꾸준히 하고 있어요 (하루 평균 ${hm(exAvg)}).' : '🏃 Exercising steadily (${hm(exAvg)} a day).'));
+      notes.add(nights == 0
+          ? (ko ? '😴 잠 기록이 없어요. 삼성헬스를 연결하거나 아래 단추로 직접 기록해 주세요.' : '😴 No sleep records. Connect Samsung Health or log it below.')
+          : sleepAvg < 420
+          ? (ko ? '😴 하룻밤 평균 ${hm(sleepAvg)} — 7시간보다 적어요. 조금 더 일찍 자 보세요.' : '😴 ${hm(sleepAvg)} a night — under 7 hours. Try to sleep earlier.')
+          : (ko ? '😴 하룻밤 평균 ${hm(sleepAvg)} — 잠을 충분히 자고 있어요.' : '😴 ${hm(sleepAvg)} a night — good sleep.'));
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _ThemeColors.premiumCardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(0.3), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 🆕 [2026-10-07] 다른 칸 제목과 같은 모양: 위 영문(진한 명조) · 아래 한글(Noto Sans KR)
+          if (ko) Text('Life Balance', style: GoogleFonts.gowunBatang(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(_t('lifeBalance'), style: f(_ThemeColors.brandGolden, 17)),
+          Text(ko ? '(공부 · 운동 · 잠 — 위에서 고른 기간)' : '(Study · Exercise · Sleep — selected period)', style: f(Colors.white70, 12, w: FontWeight.w600)),
+          const SizedBox(height: 6),
+          // 🆕 [2026-10-07] 삼성헬스 연결 상태
+          if (_healthLinked)
+            Text(ko ? '⌚ 삼성헬스 연결됨 · 걸음 · 워치 운동 · 잠 자동 기록 중' : '⌚ Samsung Health connected · auto recording',
+                style: f(const Color(0xFF34C759), 11.5))
+          else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFF34C759))),
+                onPressed: _connectSamsungHealth,
+                icon: const Icon(Icons.watch_rounded, color: Color(0xFF34C759), size: 16),
+                label: Text(ko ? '삼성헬스 연결하기 (걸음 · 운동 · 잠 자동 기록)' : 'Connect Samsung Health', style: f(const Color(0xFF34C759), 12)),
+              ),
+            ),
+          const SizedBox(height: 8),
+          row('📚', ko ? '공부' : 'Study', studyMinutes, const Color(0xFF60A5FA)),
+          row('🏃', ko ? '운동' : 'Exercise', ex, const Color(0xFF34C759)),
+          row('😴', ko ? '잠' : 'Sleep', sleep, const Color(0xFFAF52DE)),
+          const SizedBox(height: 8),
+          ...notes.map((n) => Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(n, style: f(Colors.white, 13, w: FontWeight.w600)),
+          )),
+          const SizedBox(height: 10),
+          // 🆕 [수면 2026-10-07] 고른 날 아침 잠 직접 기록·고치기
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(side: BorderSide(color: _ThemeColors.brandGolden.withOpacity(0.6))),
+              onPressed: () async {
+                if (await SleepLogService.showEditor(context, day: _selectedSessionDate)) _loadLifeBalance();
+              },
+              icon: const Icon(Icons.bedtime_rounded, color: _ThemeColors.brandGolden, size: 16),
+              label: Text(
+                ko ? '${_selectedSessionDate.month}/${_selectedSessionDate.day} 잠 기록하기' : 'Log sleep ${_selectedSessionDate.month}/${_selectedSessionDate.day}',
+                style: f(_ThemeColors.brandGolden, 12.5),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildLuxuryGlowingStar() {
     return Stack(
@@ -10263,6 +10571,54 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
         ),
         const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 17),
       ],
+    );
+  }
+
+  // 🆕 [과목 2단 구조 2026-10-07] 원그래프 오른쪽 교과를 누르면 그 교과의 세부 비중
+  void _showCategoryDetailDialog(Map<String, dynamic> item, Color color) {
+    final bool ko = DkeLang.current == 'KO';
+    final Map<String, double> details = Map<String, double>.from((item['details'] as Map?) ?? {});
+    final List<MapEntry<String, double>> rows = details.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final double total = rows.fold<double>(0, (s, e) => s + e.value);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _ThemeColors.premiumCardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: color, width: 1.2)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (ko) Text('Detail Share', style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12)),
+            Text(
+              ko ? '${item['subject']} 세부 비중' : '${item['subject']} — Detail Share',
+              style: ko
+                  ? GoogleFonts.notoSansKr(color: color, fontWeight: FontWeight.bold, fontSize: 16)
+                  : GoogleFonts.gowunBatang(color: color, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: rows.map((e) {
+            final int pct = total > 0 ? (e.value / total * 100).round() : 0;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(child: Text(e.key, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold))),
+                  Text('${e.value.round()}m · $pct%', style: GoogleFonts.notoSansKr(color: color, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(ko ? '닫기' : 'Close', style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -10312,18 +10668,66 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
   }
 
   void _goToPreviousSessionDay() {
-    final DateTime newDate = _selectedSessionDate.subtract(
-      const Duration(days: 1),
-    );
-    setState(() => _selectedSessionDate = newDate);
-    _loadSessionsForDate(newDate);
+    _onDateChanged(_selectedSessionDate.subtract(const Duration(days: 1)));
   }
 
   void _goToNextSessionDay() {
     if (_isNextDayDisabled) return; // 오늘이 이미 선택되어 있으면 미래로는 이동 불가
-    final DateTime newDate = _selectedSessionDate.add(const Duration(days: 1));
-    setState(() => _selectedSessionDate = newDate);
-    _loadSessionsForDate(newDate);
+    _onDateChanged(_selectedSessionDate.add(const Duration(days: 1)));
+  }
+
+  // 🆕 [날짜 기준 2026-10-07] 날짜를 바꾸면 그날 기준으로 다시 계산 (레벨·순위·성적 기록은 그대로)
+  void _onDateChanged(DateTime d) {
+    setState(() => _selectedSessionDate = d);
+    _loadSessionsForDate(d);
+    _loadRealSubjectStudyData();
+    _loadLifeBalance();
+  }
+
+  Future<void> _pickSessionDate() async {
+    final DateTime now = DateTime.now();
+    final DateTime? p = await showDatePicker(
+      context: context,
+      initialDate: _selectedSessionDate.isAfter(now) ? now : _selectedSessionDate,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+    );
+    if (p != null) _onDateChanged(p);
+  }
+
+  Widget _buildDateBanner() {
+    final bool ko = DkeLang.current == 'KO';
+    final DateTime d = _selectedSessionDate;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: _isSelectedDateToday ? Colors.black38 : _ThemeColors.brandGolden.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _ThemeColors.brandGolden.withOpacity(_isSelectedDateToday ? 0.25 : 0.8)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _isSelectedDateToday
+                  ? (ko ? '📅 오늘 기준' : '📅 As of today')
+                  : (ko ? '📅 ${d.month}월 ${d.day}일 기준' : '📅 As of ${d.month}/${d.day}'),
+              style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+          TextButton(
+            onPressed: _pickSessionDate,
+            child: Text(ko ? '날짜 고르기' : 'Pick date', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+          ),
+          if (!_isSelectedDateToday)
+            TextButton(
+              onPressed: () => _onDateChanged(DateTime.now()),
+              child: Text(ko ? '오늘로' : 'Today', style: GoogleFonts.notoSansKr(color: _ThemeColors.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
+            ),
+        ],
+      ),
+    );
   }
 
   // 🆕 [요청 2026-09-04] 선택된 날짜의 학습 세션을 시간순으로 불러오는 함수.
@@ -10534,11 +10938,17 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
 
   String get _reportPersonKey => 'student_${FirebaseAuth.instance.currentUser?.uid ?? 'guest'}';
 
-  Future<String> _archivedDailySummary(int subjectCount, int totalMin) {
+  Future<String> _archivedDailySummary(int subjectCount, int totalMin) async {
     if (_myLinkCode == null) {
-      // 부모님과 연결 전이면 기기 안의 문장 은행만 사용
-      return DiagnosisService.getDailySummary(personKey: _reportPersonKey, subjectCount: subjectCount, totalMinutes: totalMin);
+      // 부모님과 연결 전이면 기기 안의 문장 은행 사용 — 🆕 [2026-10-07] 앞 6일 기록과 비교
+      return DiagnosisService.getDailySummary(
+        personKey: _reportPersonKey,
+        subjectCount: subjectCount,
+        totalMinutes: totalMin,
+        previousDays: await _localPreviousDaysMinutes(_selectedSessionDate),
+      );
     }
+    // 부모님과 연결된 학생은 서버에 저장 (부모님 화면과 같은 글, 앞 6일 비교는 저장 창구에서 함께 처리)
     return ReportArchiveService.dailySummary(
       code: _myLinkCode!,
       personKey: _reportPersonKey,
@@ -10546,6 +10956,30 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
       subjectCount: subjectCount,
       totalMinutes: totalMin,
     );
+  }
+
+  // 🆕 [2026-10-07] 휴대폰 안 학습 기록(dke_history_*)에서 그날 이전 6일의 날짜별 공부 시간(분)
+  Future<List<int>> _localPreviousDaysMinutes(DateTime day) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final DateTime d0 = DateTime(day.year, day.month, day.day);
+      final List<int> mins = List<int>.filled(6, 0);
+      for (final key in prefs.getKeys().where((k) => k.startsWith('dke_history_'))) {
+        for (final raw in prefs.getStringList(key) ?? const <String>[]) {
+          try {
+            final Map<String, dynamic> item = jsonDecode(raw);
+            final DateTime? ts = DateTime.tryParse(item['timestamp']?.toString() ?? '')?.toLocal();
+            if (ts == null) continue;
+            final int back = d0.difference(DateTime(ts.year, ts.month, ts.day)).inDays; // 1~6일 전
+            if (back < 1 || back > 6) continue;
+            mins[back - 1] += (((item['durationSeconds'] as num?)?.toInt() ?? 0) / 60).round();
+          } catch (_) {}
+        }
+      }
+      return mins;
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<String> _archivedExamAnalysis({required String type, required String subject, required double score, required DateTime date}) {
@@ -10861,6 +11295,25 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
       }
     }
 
+    // 🆕 [과목 2단 구조 2026-10-07] 같은 교과(영어 · 문법, 영어 · 독해, 예전 "영어 문법" 등)는 하나로 합침
+    final Map<String, Map<String, dynamic>> byCat = {};
+    for (final s in targetSubjects) {
+      final SubjectCategory cat = subjectCategoryOf(s['subject'] as String);
+      final Map<String, dynamic> row = byCat.putIfAbsent(cat.ko, () => {
+        ...s,
+        'subject': subjectCategoryLabel(cat, DkeLang.current), // 🆕 [다국어] 12개 언어 교과 이름
+        'calculatedMinutes': 0.0,
+        'details': <String, double>{},
+      });
+      final double m = s['calculatedMinutes'] as double;
+      row['calculatedMinutes'] = (row['calculatedMinutes'] as double) + m;
+      final String d = subjectDetailOf(s['subject'] as String);
+      final String dk = d.isEmpty ? (DkeLang.current == 'KO' ? '(세부 없음)' : '(no detail)') : d;
+      final Map<String, double> dm = row['details'] as Map<String, double>;
+      dm[dk] = (dm[dk] ?? 0) + m;
+    }
+    targetSubjects = byCat.values.toList();
+
     targetSubjects.sort(
       (a, b) => (b["calculatedMinutes"] as double).compareTo(
         a["calculatedMinutes"] as double,
@@ -10885,18 +11338,18 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     // 일/주/월/연 전부 동일하게 적용.
     double windowTopMinutes = 150.0;
     if (maxMinutesFound > windowTopMinutes) {
-      windowTopMinutes = (maxMinutesFound / 50.0).ceil() * 50.0;
+      windowTopMinutes = (maxMinutesFound / 150.0).ceil() * 150.0; // 🆕 [2026-10-07]
     }
-    final double windowBottomMinutes = windowTopMinutes - 150.0;
+    const double windowBottomMinutes = 0.0; // 🆕 [2026-10-07] 항상 0부터 → 적게 한 과목 막대도 보임
     final double yAxisMaxBoundary = windowTopMinutes; // 막대 높이 계산 기준(=창의 맨 위)
     final double yAxisWindowRange =
         windowTopMinutes - windowBottomMinutes; // 항상 150분 폭 유지
 
     List<String> dynamicYAxisLabels = [
       "${windowTopMinutes.round()}m",
-      "${(windowTopMinutes - 50).round()}m",
-      "${(windowTopMinutes - 100).round()}m",
-      "${windowBottomMinutes.round()}m",
+      "${(windowTopMinutes * 2 / 3).round()}m",
+      "${(windowTopMinutes / 3).round()}m",
+      "0m",
     ];
 
     List<Color> colorPalette = (tabIndex == 1) ? _weeklyColors : _todayColors;
@@ -10927,7 +11380,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      _t('average'),
+                      DkeLang.current == 'KO' ? '막대 = 학습 시간(분)' : 'Bar = study minutes', // 🆕 [2026-10-07]
                       style: GoogleFonts.notoSansKr(
                         color: Colors.white70,
                         fontSize: 11,
@@ -11052,13 +11505,11 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                                     hMaxDashboard;
 
                                 if (drawScoreHeight < 0) drawScoreHeight = 0;
-                                if (drawAvgHeight < 0) drawAvgHeight = 0;
+                                drawAvgHeight = 0; // 🆕 [2026-10-07] 가짜 평균 막대 숨김
                                 if (drawScoreHeight < 4 &&
                                     currentMins > windowBottomMinutes)
                                   drawScoreHeight = 4; // 윈도우 안에 있을 때만 최소 시인성 보장
-                                if (drawAvgHeight < 2 &&
-                                    currentMins > windowBottomMinutes)
-                                  drawAvgHeight = 2;
+
                                 if (drawScoreHeight > hMaxDashboard)
                                   drawScoreHeight = hMaxDashboard;
                                 if (drawAvgHeight > hMaxDashboard)
@@ -11088,7 +11539,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                                                     MainAxisAlignment.end,
                                                 children: [
                                                   Text(
-                                                    "${(data["averageScore"] * 100).toInt()}%",
+                                                    "", // 🆕 [2026-10-07] 가짜 평균 숫자 숨김
                                                     style: const TextStyle(
                                                       color: Colors.white54,
                                                       fontSize: 8.5,
@@ -11122,7 +11573,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                                                     MainAxisAlignment.end,
                                                 children: [
                                                   Text(
-                                                    "${(data["score"] * 100).toInt()}%",
+                                                    "${currentMins.round()}m", // 🆕 [2026-10-07] 막대 위에 실제 공부 시간
                                                     style: TextStyle(
                                                       color: pCol,
                                                       fontSize: 9.5,
@@ -11199,18 +11650,25 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _t('lifeBalance'),
+              DkeLang.current == 'KO' ? '과목별 학습 비중' : 'Study Share by Subject', // 🆕 [2026-10-07] 실제 내용대로
               overflow: TextOverflow.fade,
               softWrap: false,
               maxLines: 1,
-              style: GoogleFonts.gowunBatang(
+              // 🆕 [2026-10-07] 글자체 원칙: 한글 = Noto Sans KR, 영어 = 진한 명조체
+              style: DkeLang.current == 'KO'
+                  ? GoogleFonts.notoSansKr(
+                color: _ThemeColors.brandGolden,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              )
+                  : GoogleFonts.gowunBatang(
                 color: _ThemeColors.brandGolden,
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
               ),
             ),
             Text(
-              _t('lifeBalanceSub'),
+              DkeLang.current == 'KO' ? '(이 기간에 공부한 과목별 비율)' : '(Share of study time by subject)',
               overflow: TextOverflow.fade,
               softWrap: false,
               maxLines: 1,
@@ -11288,13 +11746,15 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                       : 0;
                   final Color c = colorPalette[idx % colorPalette.length];
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3.0),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
+                  return InkWell(
+                      onTap: () => _showCategoryDetailDialog(item, c), // 🆕 [과목 2단 구조] 눌러서 세부 비중
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
                           decoration: BoxDecoration(
                             color: c,
                             shape: BoxShape.circle,
@@ -11338,6 +11798,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                         ),
                       ],
                     ),
+                      ),
                   );
                 }),
               ),
@@ -11346,6 +11807,8 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
         ),
         const SizedBox(height: 16),
 
+        _buildRealLifeBalanceCard(tabIndex, totalMinutes), // 🆕 [생활 균형 2026-10-07] 공부·운동·잠
+        const SizedBox(height: 16),
         if (targetSubjects.isEmpty)
           AnimatedBuilder(
             animation: _warningAnimation,
@@ -11377,7 +11840,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _t('dbSyncTitle'),
+                          _t('dataCollectingMsg'), // 🆕 [2026-10-07] 가짜 동기화 문구 대신
                           overflow: TextOverflow.fade,
                           softWrap: false,
                           maxLines: 1,
@@ -11388,7 +11851,7 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                           ),
                         ),
                         Text(
-                          _t('dbSyncSub'),
+                          DkeLang.current == 'KO' ? '이 기간에 기록된 공부가 아직 없어요' : 'No study recorded in this period yet',
                           overflow: TextOverflow.fade,
                           softWrap: false,
                           maxLines: 1,

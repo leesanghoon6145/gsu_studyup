@@ -24,7 +24,7 @@ import '../schedule/general_planner_home_screen.dart'; // 🆕 [부모 운동 �
 import '../schedule/cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 카드 글자 12개 언어
 import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
 import '../services/report_archive_service.dart'; // 🆕 [리포트 저장 2026-10-01]
-
+import '../services/subject_category.dart'; // 🆕 [과목 2단 구조 2026-10-07] 교과로 합산
 // ---------------------------------------------------------------------------
 // 🆕 [다국어] DkeLang 연동: 기본모드(KO/EN)는 한글+영문 동시 표시,
 // 10개국어(JA/ZH/FR/DE/RU/AR/HI/VI/ES/TH) 선택 시 해당 언어만 단독 표시.
@@ -733,9 +733,9 @@ GKE StudyUp에서는 학습 활동에 따라 별이 적립됩니다.
 
 별 적립 기준
 - 타이머 학습이 70% 이상 진행되면 +10별
-- 타이머 학습 종료 후 학습기록 작성 시 +10별
-- 주간평가 기록 시 +10별
-- 단원평가 기록 시 +10별
+- 타이머로 30분 이상 학습한 뒤 학습기록 작성 시 +10별 (25분 포모도로 학습은 22분 이상)
+- 주간평가 기록 시 +10별 (타이머 30분 이상 학습 후)
+- 단원평가 기록 시 +10별 (타이머 30분 이상 학습 후)
 - 중간고사 기록 시 +50별
 - 기말고사 기록 시 +50별
 - 모의고사 기록 시 +50별
@@ -863,9 +863,9 @@ Stars aren't just a game score — they're a record that your child actually stu
 
 How stars are earned
 - Completing 70%+ of a timer session → +10 stars
-- Writing a study record after finishing a timer session → +10 stars
-- Logging a weekly assessment → +10 stars
-- Logging a unit test → +10 stars
+- Writing a study record after 30+ minutes on the timer → +10 stars (22+ minutes for 25-minute Pomodoro sessions)
+- Logging a weekly assessment (after 30+ minutes on the timer) → +10 stars
+- Logging a unit test (after 30+ minutes on the timer) → +10 stars
 - Logging a midterm exam → +50 stars
 - Logging a final exam → +50 stars
 - Logging a mock exam → +50 stars
@@ -2322,10 +2322,17 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
     // 🆕 [요청] 오늘 학습한 과목 전체를 종합한 150~200자 AI 총평을 별도 문단으로 추가
     final int subjectCount = todaySessions.map((r) => r.subject).toSet().length;
+    // 🆕 [2026-10-07] 앞 6일 공부 시간과 비교해서 분석 (하루만 보고 '짧다'고 하지 않게)
+    final DateTime nowD = DateTime.now();
+    final DateTime todayD = DateTime(nowD.year, nowD.month, nowD.day);
     final String dailySummary = await DiagnosisService.getDailySummary(
       personKey: 'student_$childName',
       subjectCount: subjectCount,
       totalMinutes: todayTotalMinutes,
+      previousDays: [
+        for (int i = 1; i <= 6; i++)
+          ParentDataService.totalMinutesForDay(_allSessions, todayD.subtract(Duration(days: i))),
+      ],
     );
     buffer.writeln("\n${_t(kTodaySummaryHeaderMap)}");
     buffer.writeln(dailySummary);
@@ -2597,7 +2604,9 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
     final Map<String, List<ParentSessionRecord>> bySubject = {};
     for (final r in all) {
-      bySubject.putIfAbsent(r.subject, () => []).add(r);
+      // 🆕 [과목 2단 구조 2026-10-07] 같은 교과는 하나로 합침 (영어 · 문법 + 영어 · 독해 → 영어)
+      final SubjectCategory cat = subjectCategoryOf(r.subject);
+      bySubject.putIfAbsent(subjectCategoryLabel(cat, DkeLang.current), () => []).add(r); // 🆕 [다국어] 12개 언어
     }
 
     final List<Map<String, dynamic>> aggregated = [];
@@ -3166,6 +3175,21 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                 ),
               ),
 
+              // 🆕 [2026-10-07] 이번 달 보너스가 아직 없으면 받는 방법 안내 (학생 화면과 같은 내용)
+              if (bonusBreakdownRaw.isEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: premiumCardBg, borderRadius: BorderRadius.circular(12)),
+                  child: Text(
+                    DkeLang.isForeignSelected
+                        ? "No bonus stars yet this month.\n• Study 70%+ of the timer goal → +10\n• Save a study record after 30+ min on the timer (22+ min for 25-min Pomodoro) → +10\n• Study 50+ min in a day → +50\n• Log a weekly/unit test (after 30+ min, 22+ min for Pomodoro) → +10 · midterm/final/mock → +50"
+                        : "이번 달 받은 보너스별이 아직 없어요.\n• 타이머로 정한 시간의 70% 이상 공부 → +10\n• 타이머 30분 이상(25분 포모도로는 22분 이상) 공부한 뒤 학습기록 저장 → +10\n• 하루 50분 이상 공부 → +50\n• 주간·단원평가 기록(타이머 30분 이상, 포모도로는 22분 이상) → +10 · 중간·기말·모의고사 기록 → +50",
+                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12, height: 1.6),
+                  ),
+                ),
+              ],
               // 보너스별 상세 내역 (학생 화면과 100% 동일한 색상/구성)
               if (bonusBreakdownRaw.isNotEmpty) ...[
                 const SizedBox(height: 16),

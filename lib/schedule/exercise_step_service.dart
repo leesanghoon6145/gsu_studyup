@@ -189,6 +189,71 @@ class HealthLink {
     return SleepSummary(minutes: minutes, start: start, end: end);
   }
 
+  /// 🆕 [걷기 자세히 2026-10-07] 걸음 조각(Health Connect)으로 실제 걸은 시간 · 1km 가장 빠른 시간 · 걷는 동안 심박 계산
+  /// 폰·워치가 같은 걸음을 따로 적은 경우 겹치지 않게 "걸음이 가장 많은 출처" 하나만 씀
+  static Future<WalkStats?> walkStatsBetween(DateTime from, DateTime to, {double? totalKm}) async {
+    await _cfg();
+    final pts = await _read(const [HealthDataType.STEPS], from, to);
+    final Map<String, List<HealthDataPoint>> bySrc = {};
+    for (final p in pts) {
+      if (p.value is NumericHealthValue) bySrc.putIfAbsent(p.sourceName, () => []).add(p);
+    }
+    if (bySrc.isEmpty) return null;
+    int sumOf(List<HealthDataPoint> l) =>
+        l.fold<int>(0, (a, p) => a + (p.value as NumericHealthValue).numericValue.round());
+    final List<HealthDataPoint> best = bySrc.values.reduce((a, b) => sumOf(a) >= sumOf(b) ? a : b)
+      ..sort((a, b) => a.dateFrom.compareTo(b.dateFrom));
+    final int steps = sumOf(best);
+    if (steps <= 0) return null;
+    final double strideM = (totalKm != null && totalKm > 0) ? totalKm * 1000 / steps : 0.7;
+
+    // 실제로 걸은 조각만 (1분에 30보 이상)
+    final List<HealthDataPoint> walking = best.where((p) {
+      final int sec = p.dateTo.difference(p.dateFrom).inSeconds;
+      final int st = (p.value as NumericHealthValue).numericValue.round();
+      return st > 0 && (sec <= 0 || st / (sec / 60.0) >= 30);
+    }).toList();
+    int activeSec = 0;
+    for (final p in walking) {
+      final int sec = p.dateTo.difference(p.dateFrom).inSeconds;
+      activeSec += sec > 0 ? sec : 60;
+    }
+    final int activeMin = (activeSec / 60).round();
+
+    // 1km 가장 빠른 시간: 연속된 조각에서 1km를 가장 짧은 시간에 간 구간
+    double? fastestMin;
+    int i = 0;
+    double dist = 0;
+    for (int j = 0; j < walking.length; j++) {
+      dist += (walking[j].value as NumericHealthValue).numericValue * strideM;
+      while (dist >= 1000 && i <= j) {
+        final double min = walking[j].dateTo.difference(walking[i].dateFrom).inSeconds / 60.0 * (1000 / dist);
+        if (min > 0 && (fastestMin == null || min < fastestMin)) fastestMin = min;
+        dist -= (walking[i].value as NumericHealthValue).numericValue * strideM;
+        i++;
+      }
+    }
+
+    // 걷는 동안의 심박 (워치가 있을 때만)
+    int? avgHr;
+    int? maxHr;
+    if (walking.isNotEmpty) {
+      final hrPts = await _read(const [HealthDataType.HEART_RATE], walking.first.dateFrom, walking.last.dateTo);
+      final List<double> v = [];
+      for (final h in hrPts) {
+        if (h.value is! NumericHealthValue) continue;
+        final DateTime t = h.dateFrom;
+        final bool inWalk = walking.any((w) => !t.isBefore(w.dateFrom) && !t.isAfter(w.dateTo.add(const Duration(minutes: 1))));
+        if (inWalk) v.add((h.value as NumericHealthValue).numericValue.toDouble());
+      }
+      if (v.isNotEmpty) {
+        avgHr = (v.reduce((a, b) => a + b) / v.length).round();
+        maxHr = v.reduce((a, b) => a > b ? a : b).round();
+      }
+    }
+    return WalkStats(activeMinutes: activeMin, fastestKmMin: fastestMin, avgHr: avgHr, maxHr: maxHr);
+  }
+
   /// Play 스토어의 Health Connect 설치·업데이트 화면 열기
   static Future<void> install() async {
     await _cfg();
@@ -201,12 +266,37 @@ class HealthLink {
 
   /// 구간 걸음 합계 (삼성헬스가 폰·워치를 겹치지 않게 합친 값). 실패하면 null
   static Future<int?> stepsBetween(DateTime from, DateTime to) async {
+    await _cfg(); // 🆕 [2026-10-07] 읽기 전에 항상 준비
+    int? total;
     try {
-      return await _h.getTotalStepsInInterval(from, to);
+      total = await _h.getTotalStepsInInterval(from, to);
     } catch (e) {
-      debugPrint('[HealthLink] stepsBetween 오류: $e');
-      return null;
+      debugPrint('[HealthLink] stepsBetween 합계 읽기 오류: $e');
     }
+    if (total != null && total > 0) return total;
+    // 🆕 [2026-10-07] 일부 폰에서 "합계 읽기"가 0/실패로 나오는 문제 → 걸음 기록을 직접 읽어 더함.
+    // 폰·워치가 따로 적은 기록을 겹쳐 세지 않도록, 보낸 앱(출처)별로 더한 뒤 가장 큰 값만 씀.
+    try {
+      final List<HealthDataPoint> pts = await _h.getHealthDataFromTypes(
+        types: const [HealthDataType.STEPS],
+        startTime: from,
+        endTime: to,
+      );
+      final Map<String, int> bySource = {};
+      for (final p in _h.removeDuplicates(pts)) {
+        final HealthValue v = p.value;
+        if (v is NumericHealthValue) {
+          bySource[p.sourceName] = (bySource[p.sourceName] ?? 0) + v.numericValue.round();
+        }
+      }
+      if (bySource.isNotEmpty) {
+        final int best = bySource.values.reduce((a, b) => a > b ? a : b);
+        if (best > 0) return best;
+      }
+    } catch (e) {
+      debugPrint('[HealthLink] stepsBetween 기록 읽기 오류: $e');
+    }
+    return total;
   }
 
   /// 구간 거리 합계(km). 없거나 실패하면 null
@@ -225,6 +315,98 @@ class HealthLink {
       debugPrint('[HealthLink] distanceKmBetween 오류: $e');
       return null;
     }
+  }
+}
+
+/// 🆕 [걷기 자세히 2026-10-07] 하루 걷기 분석 결과
+class WalkStats {
+  final int activeMinutes;
+  final double? fastestKmMin;
+  final int? avgHr;
+  final int? maxHr;
+  const WalkStats({required this.activeMinutes, this.fastestKmMin, this.avgHr, this.maxHr});
+}
+
+// ===========================================================================
+// 🆕 [칼로리 자동 계산 2026-10-07] 운동 강도(MET) × 몸무게 × 시간
+// 몸무게는 'gke_body_weight_kg'에 저장된 값 (없으면 60kg으로 계산)
+// 걷기 · 달리기 · 자전거는 속도에 따라 강도가 달라짐
+// ===========================================================================
+class ExerciseCalorie {
+  ExerciseCalorie._();
+  static const String weightKey = 'gke_body_weight_kg';
+  static const double defaultWeightKg = 60;
+
+  static Future<double> weightKg() async {
+    final prefs = await SharedPreferences.getInstance();
+    final double w = prefs.getDouble(weightKey) ?? defaultWeightKg;
+    return (w >= 20 && w <= 200) ? w : defaultWeightKg;
+  }
+
+  static Future<void> setWeightKg(double kg) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(weightKey, kg);
+  }
+
+  /// 종목 · 속도(km/h, 모르면 null)에 따른 운동 강도
+  static double met(String typeId, {double? speedKmh}) {
+    switch (typeId) {
+      case 'walking':
+        final double v = speedKmh ?? 4.5;
+        if (v < 3.2) return 2.0;
+        if (v < 4.0) return 2.8;
+        if (v < 4.8) return 3.0;
+        if (v < 5.6) return 3.5;
+        if (v < 6.4) return 4.3;
+        return 5.0;
+      case 'running':
+        if (speedKmh == null) return 9.8;
+        return (speedKmh * 1.02).clamp(6.0, 16.0).toDouble();
+      case 'cycling':
+        final double v = speedKmh ?? 17;
+        if (v < 16) return 4.0;
+        if (v < 19) return 6.8;
+        if (v < 22.5) return 8.0;
+        if (v < 25.7) return 10.0;
+        if (v < 30.6) return 12.0;
+        return 15.8;
+      case 'swimming':
+        return 7.0;
+      case 'hiking':
+        return 6.0;
+      case 'gym':
+        return 5.0;
+      case 'pilates':
+        return 3.0;
+      case 'yoga':
+        return 2.5;
+      case 'golf':
+        return 4.8;
+      case 'tennis':
+        return 7.3;
+      case 'badminton':
+        return 5.5;
+      case 'tabletennis':
+        return 4.0;
+      case 'basketball':
+        return 6.5;
+      case 'soccer':
+        return 7.0;
+      case 'skiing':
+        return 7.0;
+      case 'etc':
+        return 6.0; // 자유 운동 (줄넘기 · 푸시업 · 버피 등)
+      default:
+        return 5.0;
+    }
+  }
+
+  /// 칼로리(kcal) = 강도 × 몸무게 × 시간
+  static Future<int> estimate(String typeId, int minutes, {double? distanceKm}) async {
+    if (minutes <= 0) return 0;
+    final double? speed = (distanceKm != null && distanceKm > 0) ? distanceKm / (minutes / 60.0) : null;
+    final double w = await weightKg();
+    return (met(typeId, speedKmh: speed) * w * (minutes / 60.0)).round();
   }
 }
 
@@ -473,6 +655,8 @@ class DailyStepWatcherService {
   /// 연결 점검표에 보여 줄 최근 값
   int get lastPhoneSteps => _phoneToday;
   int get lastHealthSteps => _healthToday;
+  /// 🆕 [2026-10-07] 지금 오늘 걸음 (삼성헬스 · 폰 중 많은 쪽) — 걷기 "측정 중" 계산용
+  int get currentTodaySteps => _healthToday >= _phoneToday ? _healthToday : _phoneToday;
   DateTime? lastSyncAt;
 
   final StreamController<int> _liveStepsController = StreamController<int>.broadcast();
@@ -645,7 +829,10 @@ class DailyStepWatcherService {
     );
     if (s == null) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('gke_sleep_${_dateKeyOf(today)}', jsonEncode(s.toJson()));
+    final String key = 'gke_sleep_${_dateKeyOf(today)}';
+    final String? old = prefs.getString(key);
+    if (old != null && old.contains('"manual":true')) return; // 🆕 [2026-10-07] 직접 기록한 수면은 덮어쓰지 않음
+    await prefs.setString(key, jsonEncode(s.toJson()));
   }
 
   /// 그날 아침에 깬 수면 (저장된 것, 없으면 null)
@@ -733,7 +920,13 @@ class DailyStepWatcherService {
         }
         if (typeId == 'cycling') detail['maxSpeedKmh'] = double.parse((maxSpeed * 3.6).toStringAsFixed(1));
       }
-      if (kcal != null && kcal > 0) detail['calories'] = kcal.round();
+      if (kcal != null && kcal > 0) {
+        detail['calories'] = kcal.round();
+      } else {
+        // 🆕 [칼로리 2026-10-07] 워치가 칼로리를 안 주면 운동 강도로 계산
+        detail['calories'] = await ExerciseCalorie.estimate(typeId, minutes, distanceKm: km);
+        detail['caloriesEstimated'] = true;
+      }
 
       await ExerciseDataService.instance.addRecord(ExerciseRecord(
         recordId: '$workoutRecordIdPrefix$uid',
@@ -780,29 +973,57 @@ class DailyStepWatcherService {
     final double km = (distanceKm != null && distanceKm > 0)
         ? double.parse(distanceKm.toStringAsFixed(2))
         : double.parse(ExerciseStepService.stepsToKm(steps).toStringAsFixed(2));
-    final int minutes = (steps / 85).round(); // 🆕 [2026-10-05] 보통 걸음 1분 80~90보 → 85보로 추정
+
+    // 🆕 [걷기 자세히 2026-10-07] 삼성헬스 걸음 조각으로 실제 걸은 시간 · 1km 가장 빠른 시간 · 심박 계산
+    // (같은 날은 5분에 한 번만 다시 계산 — 폰 안에서만 읽어 서버 비용 없음)
+    WalkStats? ws;
+    if (source == 'samsungHealth') {
+      final DateTime now = DateTime.now();
+      final _CachedWalk? c = _walkCache[dateKey];
+      if (c != null && now.difference(c.at).inMinutes < 5) {
+        ws = c.stats;
+      } else {
+        final DateTime end = DateTime(date.year, date.month, date.day + 1);
+        ws = await HealthLink.walkStatsBetween(date, end.isAfter(now) ? now : end, totalKm: distanceKm);
+        _walkCache[dateKey] = _CachedWalk(now, ws);
+      }
+    }
+    final bool realTime = ws != null && ws.activeMinutes > 0;
+    final int minutes = realTime ? ws!.activeMinutes : (steps / 85).round(); // 없으면 1분 85보로 추정
+    final int kcal = await ExerciseCalorie.estimate('walking', minutes, distanceKm: km);
+
     final Map<String, dynamic> detail = {
       'steps': steps,
       'distanceKm': km,
       if (km > 0 && minutes > 0) 'paceMinPerKm': double.parse((minutes / km).toStringAsFixed(1)),
+      if (ws?.fastestKmMin != null) 'maxPaceMinPerKm': double.parse(ws!.fastestKmMin!.toStringAsFixed(1)),
+      if (minutes > 0) 'cadenceSpm': (steps / minutes).round(),
+      if (steps > 0 && km > 0) 'avgStrideM': double.parse((km * 1000 / steps).toStringAsFixed(2)),
+      if (kcal > 0) 'calories': kcal,
       'autoSource': source, // samsungHealth / phone
-      'estimated': true, // 시간 · 1km 걸린 시간은 추정
+      'estimated': !realTime, // 실제 걸은 시간을 못 읽었으면 추정
       if (distanceKm == null || distanceKm <= 0) 'distanceEstimated': true,
     };
 
+    final ExerciseRecord rec = ExerciseRecord(
+      recordId: recordId,
+      exerciseTypeId: 'walking',
+      date: existing?.date ?? date,
+      durationMin: minutes,
+      avgHeartRateBpm: ws?.avgHr,
+      maxHeartRateBpm: ws?.maxHr,
+      memo: _kMemo,
+      detail: detail,
+    );
     if (existing != null) {
-      await ExerciseDataService.instance.updateRecord(existing.copyWith(detail: detail, durationMin: minutes, memo: _kMemo));
+      await ExerciseDataService.instance.updateRecord(rec);
     } else {
-      await ExerciseDataService.instance.addRecord(ExerciseRecord(
-        recordId: recordId,
-        exerciseTypeId: 'walking',
-        date: date,
-        durationMin: minutes,
-        memo: _kMemo,
-        detail: detail,
-      ));
+      await ExerciseDataService.instance.addRecord(rec);
     }
   }
+
+  // 🆕 [걷기 자세히 2026-10-07] 같은 날 걷기 분석을 5분 동안 다시 쓰기 위한 보관
+  final Map<String, _CachedWalk> _walkCache = {};
 
   // ==========================================================================
   // 🔍 연결 점검 — 어느 단계에서 막혔는지 한눈에
@@ -862,4 +1083,11 @@ class DailyStepWatcherService {
     ));
     return items;
   }
+}
+
+// 🆕 [걷기 자세히 2026-10-07]
+class _CachedWalk {
+  final DateTime at;
+  final WalkStats? stats;
+  const _CachedWalk(this.at, this.stats);
 }

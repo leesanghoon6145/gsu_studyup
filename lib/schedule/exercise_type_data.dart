@@ -18,6 +18,56 @@
 
 import 'exercise_models.dart';
 
+// 🆕 [자유운동 2026-10-07] "기타" → "자유운동" 화면 이름 (예전에 저장된 이름이 '기타'여도 자유운동으로 보이게)
+String exerciseDisplayName(ExerciseType t) => t.id == 'etc' ? '자유 운동' : t.name;
+
+// 🆕 [자유운동 2026-10-07] 접었다 펴서 기록하는 맨몸 운동 목록 (unit: 회 / 초) — 'en' = 영문 이름
+const List<Map<String, String>> kFreeMoves = [
+  {'key': 'jumprope', 'name': '줄넘기', 'en': 'Jump Rope', 'emoji': '🪢', 'unit': '회'},
+  {'key': 'pushup', 'name': '푸시업', 'en': 'Push-ups', 'emoji': '💪', 'unit': '회'},
+  {'key': 'squat', 'name': '스쿼트', 'en': 'Squats', 'emoji': '🦵', 'unit': '회'},
+  {'key': 'pullup', 'name': '턱걸이', 'en': 'Pull-ups', 'emoji': '🧗', 'unit': '회'},
+  {'key': 'situp', 'name': '윗몸 일으키기', 'en': 'Sit-ups', 'emoji': '🔥', 'unit': '회'},
+  {'key': 'lunge', 'name': '런지', 'en': 'Lunges', 'emoji': '🚶', 'unit': '회'},
+  {'key': 'plank', 'name': '플랭크', 'en': 'Plank', 'emoji': '🧱', 'unit': '초'},
+  {'key': 'burpee', 'name': '버피 테스트', 'en': 'Burpees', 'emoji': '⚡', 'unit': '회'},
+];
+
+// 🆕 [2026-10-07] 10개 외국어 운동 이름
+const Map<String, Map<String, String>> kFreeMoveNames = {
+  'jumprope': {'JA': '縄跳び', 'ZH': '跳绳', 'FR': 'Corde à sauter', 'DE': 'Seilspringen', 'RU': 'Скакалка', 'AR': 'نط الحبل', 'HI': 'रस्सी कूद', 'VI': 'Nhảy dây', 'ES': 'Saltar la cuerda', 'TH': 'กระโดดเชือก'},
+  'pushup': {'JA': '腕立て伏せ', 'ZH': '俯卧撑', 'FR': 'Pompes', 'DE': 'Liegestütze', 'RU': 'Отжимания', 'AR': 'تمرين الضغط', 'HI': 'पुश-अप', 'VI': 'Hít đất', 'ES': 'Flexiones', 'TH': 'วิดพื้น'},
+  'squat': {'JA': 'スクワット', 'ZH': '深蹲', 'FR': 'Squats', 'DE': 'Kniebeugen', 'RU': 'Приседания', 'AR': 'القرفصاء', 'HI': 'स्क्वाट', 'VI': 'Squat', 'ES': 'Sentadillas', 'TH': 'สควอท'},
+  'pullup': {'JA': '懸垂', 'ZH': '引体向上', 'FR': 'Tractions', 'DE': 'Klimmzüge', 'RU': 'Подтягивания', 'AR': 'العقلة', 'HI': 'पुल-अप', 'VI': 'Kéo xà', 'ES': 'Dominadas', 'TH': 'ดึงข้อ'},
+  'situp': {'JA': '腹筋運動', 'ZH': '仰卧起坐', 'FR': 'Redressements assis', 'DE': 'Sit-ups', 'RU': 'Подъёмы туловища', 'AR': 'تمرين البطن', 'HI': 'सिट-अप', 'VI': 'Gập bụng', 'ES': 'Abdominales', 'TH': 'ซิทอัพ'},
+  'lunge': {'JA': 'ランジ', 'ZH': '弓步蹲', 'FR': 'Fentes', 'DE': 'Ausfallschritte', 'RU': 'Выпады', 'AR': 'الطعن', 'HI': 'लंज', 'VI': 'Chùng chân', 'ES': 'Zancadas', 'TH': 'ลันจ์'},
+  'plank': {'JA': 'プランク', 'ZH': '平板支撑', 'FR': 'Planche', 'DE': 'Unterarmstütz', 'RU': 'Планка', 'AR': 'البلانك', 'HI': 'प्लैंक', 'VI': 'Plank', 'ES': 'Plancha', 'TH': 'แพลงก์'},
+  'burpee': {'JA': 'バーピー', 'ZH': '波比跳', 'FR': 'Burpees', 'DE': 'Burpees', 'RU': 'Бёрпи', 'AR': 'بيربي', 'HI': 'बर्पी', 'VI': 'Burpee', 'ES': 'Burpees', 'TH': 'เบอร์พี'},
+};
+
+/// 화면 언어에 맞는 운동 이름 (KO=한글, EN=영어, 10개 언어=그 언어)
+String freeMoveLabel(Map<String, String> m, String lang) {
+  if (lang == 'KO') return m['name']!;
+  if (lang == 'EN') return m['en']!;
+  return kFreeMoveNames[m['key']]?[lang] ?? m['en']!;
+}
+
+/// 저장된 한글 이름으로 운동 찾기 (분석 화면용)
+Map<String, String>? freeMoveByName(String koName) {
+  for (final m in kFreeMoves) {
+    if (m['name'] == koName) return m;
+  }
+  return null;
+}
+
+/// 단위(회 · 초 · 세트)를 화면 언어로
+const Map<String, Map<String, String>> kFreeUnits = {
+  '회': {'KO': '회', 'EN': 'reps', 'JA': '回', 'ZH': '次', 'FR': 'rép.', 'DE': 'Wdh.', 'RU': 'раз', 'AR': 'مرة', 'HI': 'बार', 'VI': 'lần', 'ES': 'rep.', 'TH': 'ครั้ง'},
+  '초': {'KO': '초', 'EN': 'sec', 'JA': '秒', 'ZH': '秒', 'FR': 's', 'DE': 'Sek.', 'RU': 'сек', 'AR': 'ث', 'HI': 'सेकंड', 'VI': 'giây', 'ES': 's', 'TH': 'วินาที'},
+  '세트': {'KO': '세트', 'EN': 'sets', 'JA': 'セット', 'ZH': '组', 'FR': 'séries', 'DE': 'Sätze', 'RU': 'подх.', 'AR': 'مجموعات', 'HI': 'सेट', 'VI': 'hiệp', 'ES': 'series', 'TH': 'เซ็ต'},
+};
+String freeUnitLabel(String unitKo, String lang) => kFreeUnits[unitKo]?[lang] ?? kFreeUnits[unitKo]?['EN'] ?? unitKo;
+
 // ---------------------------------------------------------------------------
 // 여러 종목이 공유하는 필드 (재사용 헬퍼)
 // ---------------------------------------------------------------------------
@@ -1921,7 +1971,7 @@ final List<ExerciseType> kDefaultExerciseTypes = [
   // 16. 기타
   ExerciseType(
     id: 'etc',
-    name: '기타',
+    name: '자유 운동', // 🆕 [2026-10-07] 기타 → 자유 운동
     icon: '💪',
     isDefault: true,
     sortOrder: 16,

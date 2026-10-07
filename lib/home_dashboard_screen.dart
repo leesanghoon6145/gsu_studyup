@@ -21,7 +21,10 @@ import 'services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단계 2
 import 'services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
 import 'package:cloud_firestore/cloud_firestore.dart'; // 🆕 [수면 2026-10-05] 부모님께 보내기
 import 'schedule/exercise_step_service.dart'; // 🆕 [수면 2026-10-05] 삼성헬스 수면 읽기
+import 'services/sleep_log_service.dart'; // 🆕 [수면 2026-10-07] 직접 기록
 import 'services/exam_end_cheer.dart'; // 🆕 [2026-10-06] 시험 끝난 다음 날 위로 팝업
+import 'schedule/exercise_type_screen.dart'; // 🆕 [학생 운동 2026-10-06] 일반 운동 화면 연결
+import 'services/subject_category.dart'; // 🆕 [과목 2단 구조 2026-10-07] 교과 · 세부
 import 'main.dart' show EntranceScreen; // 🆕 [로그아웃 기능] 로그아웃 후 돌아갈 대문 화면
 // 또는 실제 경로에 맞게 // 앞서 생성한 학사 타임라인 화면
 
@@ -49,6 +52,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
   bool _isVipMember = false;
   bool _noticeDot = false; // 🆕 [빨간 점] 공지·게시판·상담에 새 소식이 있는지
   SleepSummary? _lastSleep; // 🆕 [수면 2026-10-05] 어젯밤 수면
+  bool _lastSleepManual = false; // 🆕 [수면 2026-10-07] 직접 기록한 값인지
   String _targetUniversity = "Seoul National University (서울대학교)";
 
   // 🆕 [저장 연동] 사용자가 추가/삭제한 과목·시험종류를 앱 재시작 후에도 유지
@@ -99,35 +103,78 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     if (mounted) setState(() => _noticeDot = r.values.any((v) => v));
   }
 
-  // 🆕 [수면 2026-10-05] 삼성헬스에서 어젯밤 수면을 읽어 화면에 보이고, 부모님 화면으로 보냄
-  Future<void> _syncSleepToParents() async {
+  // 🆕 [2026-10-07] 학생도 삼성헬스 걸음 · 워치 운동 · 잠 자동 기록 켜기
+  // 권한이 있으면 조용히 켜고, 없으면 처음 한 번만 물어봄 (휴대폰 안에서만 읽어 서버 비용 없음)
+  Future<void> _ensureHealthAutoRecord() async {
     try {
       if (!await HealthLink.isInstalled()) return;
-      if (!await HealthLink.hasExtendedPermission()) {
+      bool ok = await HealthLink.hasPermission();
+      if (!ok) {
         final prefs = await SharedPreferences.getInstance();
-        if (prefs.getBool('gke_student_sleep_asked') ?? false) return; // 처음 한 번만 물어봄
-        await prefs.setBool('gke_student_sleep_asked', true);
-        if (!await HealthLink.requestExtendedPermission()) return;
+        if (prefs.getBool('gke_student_steps_asked') ?? false) return;
+        await prefs.setBool('gke_student_steps_asked', true);
+        ok = await HealthLink.requestPermission();
       }
+      if (!ok) return;
+      final DailyStepWatcherService w = DailyStepWatcherService.instance;
+      if (!w.isRunning) await w.setEnabled(true);
+      await w.syncNow();
+    } catch (e) {
+      debugPrint('[자동 기록] 켜기 실패: $e');
+    }
+  }
+  Future<void> _syncSleepToParents() async {
+    try {
       final DateTime now = DateTime.now();
       final DateTime today = DateTime(now.year, now.month, now.day);
-      final SleepSummary? s = await HealthLink.sleepBetween(
-        today.subtract(const Duration(hours: 6)), // 어제 18시부터
-        today.add(const Duration(hours: 14)), // 오늘 14시까지
-      );
-      if (s == null) return;
-      if (mounted) setState(() => _lastSleep = s);
-      final String? code = await FamilyLinkService.getMyLinkCode();
-      if (code == null) return;
-      final String dateKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      await FirebaseFirestore.instance.collection('links').doc(code).set({
-        'lastSleep': {
-          'date': dateKey,
-          'minutes': s.minutes,
-          'start': s.start?.toIso8601String(),
-          'end': s.end?.toIso8601String(),
-        },
-      }, SetOptions(merge: true));
+      await _ensureHealthAutoRecord(); // 🆕 [2026-10-07] 걸음·워치 운동·잠 자동 기록 켜기
+      if (await SleepLogService.isManual(today)) {
+        final SleepSummary? m = await SleepLogService.get(today);
+        if (m != null) {
+          if (mounted) {
+            setState(() {
+              _lastSleep = m;
+              _lastSleepManual = true;
+            });
+          }
+          await SleepLogService.pushToParents(today, m, manual: true);
+        }
+        return;
+      }
+      if (await HealthLink.isInstalled()) {
+        bool ok = await HealthLink.hasExtendedPermission();
+        if (!ok) {
+          final prefs = await SharedPreferences.getInstance();
+          if (!(prefs.getBool('gke_student_sleep_asked') ?? false)) {
+            await prefs.setBool('gke_student_sleep_asked', true); // 처음 한 번만 물어봄
+            ok = await HealthLink.requestExtendedPermission();
+          }
+        }
+        if (ok) {
+          final SleepSummary? s = await HealthLink.sleepBetween(
+            today.subtract(const Duration(hours: 6)), // 어제 18시부터
+            today.add(const Duration(hours: 14)), // 오늘 14시까지
+          );
+          if (s != null) {
+            await SleepLogService.saveAuto(today, s);
+            if (mounted) {
+              setState(() {
+                _lastSleep = s;
+                _lastSleepManual = false;
+              });
+            }
+            await SleepLogService.pushToParents(today, s);
+            return;
+          }
+        }
+      }
+      final SleepSummary? saved = await SleepLogService.get(today);
+      if (saved != null && mounted) {
+        setState(() {
+          _lastSleep = saved;
+          _lastSleepManual = false;
+        });
+      }
     } catch (e) {
       debugPrint('[수면] 읽기·보내기 실패: $e');
     }
@@ -771,73 +818,133 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
     );
   }
 
+  // 🆕 [과목 2단 구조 2026-10-07] ① 교과(필수) → ② 세부(선택: 눌러 고르거나 직접 적기)
   void _showAddSubjectDialog() {
-    final TextEditingController subjectController = TextEditingController();
+    const Color brandGolden = Color(0xFFE5C158);
+    final TextEditingController detailController = TextEditingController();
+    SubjectCategory? cat;
+    String? pickedKo;
 
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: const Color(0xFF0D1527),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(22.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  "CREATE NEW SUBJECT\n[새로운 과목 생성]",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white24)),
-                  child: TextField(
-                    controller: subjectController,
-                    style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: "e.g. 요가, 축구, 영어, Yoga, Hobby",
-                      hintStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12),
-                      border: InputBorder.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text("CANCEL [취소]", style: GoogleFonts.notoSansKr(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                    const SizedBox(width: 14),
-                    ElevatedButton(
-                      onPressed: () {
-                        final text = subjectController.text.trim();
-                        if (text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('과목명을 입력해 주세요!', style: GoogleFonts.notoSansKr())));
-                          return;
-                        }
-                        _addNewSubject(text, '');
-                        Navigator.of(context).pop();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE5C158),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      ),
-                      child: Text("CREATE [생성]", style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                  ],
-                )
-              ],
+      builder: (dctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          Widget chip(String label, bool sel, VoidCallback onTap) => GestureDetector(
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: sel ? brandGolden : Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: sel ? brandGolden : Colors.white24),
+              ),
+              child: Text(label, style: GoogleFonts.notoSansKr(color: sel ? Colors.black : Colors.white70, fontWeight: FontWeight.bold, fontSize: 12.5)),
             ),
-          ),
-        );
-      },
+          );
+          final String detailNow = pickedKo ?? detailController.text.trim();
+          return Dialog(
+            backgroundColor: const Color(0xFF0D1527),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('CREATE NEW SUBJECT', textAlign: TextAlign.center, style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('새로운 과목 만들기', textAlign: TextAlign.center, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 18),
+                  Text('① SUBJECT AREA', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text('교과 고르기 (필수)', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: kSubjectCategories
+                        .map((c) => chip(c.ko, cat == c, () => setD(() {
+                      cat = c;
+                      pickedKo = null;
+                      detailController.clear();
+                    })))
+                        .toList(),
+                  ),
+                  if (cat != null) ...[
+                    const SizedBox(height: 18),
+                    Text('② DETAIL (OPTIONAL)', style: GoogleFonts.gowunBatang(color: brandGolden, fontSize: 11, fontWeight: FontWeight.bold)),
+                    Text('세부 고르기 또는 직접 적기 (선택)', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: cat!.details
+                          .map((d) => chip(d[0], pickedKo == d[0], () => setD(() {
+                        pickedKo = pickedKo == d[0] ? null : d[0];
+                        detailController.clear();
+                      })))
+                          .toList(),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white24)),
+                      child: TextField(
+                        controller: detailController,
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+                        onChanged: (v) => setD(() {
+                          if (v.trim().isNotEmpty) pickedKo = null;
+                        }),
+                        decoration: InputDecoration(
+                          hintText: '직접 적기 (예: 문법 특강, 수행평가 준비)',
+                          hintStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 12),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('만들어질 과목: ${subjectEnKo(cat!, detailKo: detailNow)['ko']}', style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ],
+                  const SizedBox(height: 22),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dctx).pop(),
+                        child: Text('CANCEL [취소]', style: GoogleFonts.notoSansKr(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                      const SizedBox(width: 14),
+                      ElevatedButton(
+                        onPressed: cat == null
+                            ? null
+                            : () {
+                          final Map<String, String> m = subjectEnKo(cat!, detailKo: detailNow);
+                          final String display = '${m['en']} (${m['ko']})';
+                          if (subjects.any((s) => '${s['en']} (${s['ko']})' == display)) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('이미 있는 과목이에요.', style: GoogleFonts.notoSansKr())));
+                            return;
+                          }
+                          setState(() {
+                            subjects.add(m);
+                            selectedSubject = display;
+                          });
+                          _persistSubjects();
+                          Navigator.of(dctx).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: brandGolden,
+                          disabledBackgroundColor: Colors.white12,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        ),
+                        child: Text('CREATE [생성]', style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -954,10 +1061,44 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                   ],
                 ),
               ),
-              // 🆕 [수면 2026-10-05] 어젯밤 수면 (삼성헬스)
-              if (_lastSleep != null) ...[
-                const SizedBox(height: 14),
-                Container(
+              // 🆕 [학생 운동 2026-10-06] 운동 기록 · 운동 타이머(하루 60별)
+              const SizedBox(height: 14),
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExerciseTypeScreen())),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [brandGolden.withOpacity(0.18), brandGolden.withOpacity(0.04)]),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: brandGolden.withOpacity(0.55), width: 1.2),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.directions_run_rounded, color: brandGolden, size: 26),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('EXERCISE & EARN STARS · UP TO 60 A DAY', style: GoogleFonts.gowunBatang(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)), // 🆕 [2026-10-07]
+                            Text('운동하고 별 모으기 (하루 60개)', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: brandGolden),
+                    ],
+                  ),
+                ),
+              ),
+              // 🆕 [수면 2026-10-07] 어젯밤 수면 — 삼성헬스 자동 또는 직접 기록 (눌러서 기록·고치기)
+              const SizedBox(height: 14),
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () async {
+                  if (await SleepLogService.showEditor(context)) _syncSleepToParents();
+                },
+                child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFF0D1527),
@@ -974,20 +1115,29 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
                           children: [
                             Text('Last Night Sleep', style: GoogleFonts.gowunBatang(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
                             Text('어젯밤 수면', style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                            Text(
+                              _lastSleep == null
+                                  ? '눌러서 잔 시각 · 일어난 시각 기록하기'
+                                  : (_lastSleepManual ? '✏️ 직접 기록 · 눌러서 고치기' : '⌚ 삼성헬스 · 눌러서 고치기'),
+                              style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 10.5),
+                            ),
                           ],
                         ),
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(_lastSleep!.hoursText, style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 16, fontWeight: FontWeight.bold)),
-                          Text(_lastSleep!.rangeText, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
-                        ],
-                      ),
+                      if (_lastSleep != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(_lastSleep!.hoursText, style: GoogleFonts.notoSansKr(color: brandGolden, fontSize: 16, fontWeight: FontWeight.bold)),
+                            Text(_lastSleep!.rangeText, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 11)),
+                          ],
+                        )
+                      else
+                        Icon(Icons.edit_calendar_rounded, color: brandGolden, size: 22),
                     ],
                   ),
                 ),
-              ],
+              ),
               const SizedBox(height: 30),
 
               _buildSectionTitle('Subject Selection', '과목 선택'),

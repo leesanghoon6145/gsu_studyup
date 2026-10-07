@@ -89,6 +89,46 @@ class DkeStars {
     return newAllTimeTotal;
   }
 
+  // ==========================================================================
+  // 🆕 [학생 운동 별 2026-10-06] 운동 타이머 1분 = 별 1개, 하루 최대 60개.
+  // 누적 별 · 레벨에는 더하지만, "오늘의 공부 별(stars_daily_)"에는 넣지 않음
+  // → 공부 출석 보너스(하루 50개)와 장학금 월 기본별이 운동으로 부풀지 않게.
+  // ==========================================================================
+  static const String _kExerciseDailyPrefix = 'stars_exercise_daily_';
+  static const int exerciseDailyCap = 60;
+
+  static String _exerciseTodayKey() => _scopedKey('$_kExerciseDailyPrefix${_dateStamp(DateTime.now())}');
+
+  /// 오늘 받은 운동 별
+  static Future<int> getTodayExerciseStars() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_exerciseTodayKey()) ?? 0;
+  }
+
+  /// 운동 [minutes]분 → 별 적립 (하루 60개까지). 실제로 준 별 개수를 돌려줌
+  static Future<int> addExerciseStars(int minutes) async {
+    if (minutes <= 0) return 0;
+    final prefs = await SharedPreferences.getInstance();
+    final String exKey = _exerciseTodayKey();
+    final int used = prefs.getInt(exKey) ?? 0;
+    final int remaining = exerciseDailyCap - used;
+    if (remaining <= 0) return 0;
+    final int give = minutes < remaining ? minutes : remaining;
+    await prefs.setInt(exKey, used + give);
+
+    final String allTimeKey = _scopedKey(_kAllTimeTotalKey);
+    final int newAllTimeTotal = (prefs.getInt(allTimeKey) ?? 0) + give;
+    await prefs.setInt(allTimeKey, newAllTimeTotal);
+
+    final int todayStudy = prefs.getInt(_todayKey()) ?? 0;
+    unawaited(FamilyLinkService.pushStudentStats(
+      totalStars: newAllTimeTotal,
+      todayStars: todayStudy + used + give, // 부모님 화면 "오늘의 별"에는 운동 별도 함께 보이게
+      level: levelForStars(newAllTimeTotal),
+    ));
+    return give;
+  }
+
   // 🆕 [재설치 복원 2026-09-25] 휴대폰의 누적 별이 0일 때만 서버 값으로 복원.
   // 적립 속도·레벨 공식 등 계산 로직은 전혀 건드리지 않음.
   static Future<void> restoreFromCloudIfEmpty({required int totalStars, required int todayStars}) async {
