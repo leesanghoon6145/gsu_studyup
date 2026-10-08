@@ -6,11 +6,13 @@
 //
 // ⚠️ [투명성] 이 값이 정확히 어디에 어떻게 쓰이는지, 서버로 전송되지
 // 않는다는 것을 화면에 명시적으로 안내함.
+// 🆕 [2026-10-08] 모든 안내 · 단추 · 창 글자를 12개 언어로
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'exercise_theme.dart';
 import 'exercise_profile_service.dart';
+import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 글자 12개 언어
 
 class ExercisePersonalInfoScreen extends StatefulWidget {
   const ExercisePersonalInfoScreen({super.key});
@@ -45,21 +47,22 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
   Future<void> _save() async {
     final double? weight = double.tryParse(_weightController.text.trim());
     if (weight == null || weight <= 0 || weight > 300) {
-      ExerciseTheme.showLuxeSnackBar(context, '올바른 몸무게(kg)를 입력해주세요.');
+      ExerciseTheme.showLuxeSnackBar(context, exText('piBad'));
       return;
     }
     await ExerciseProfileService.setWeightKg(weight);
     setState(() => _hasSavedWeight = true);
     if (mounted) {
-      ExerciseTheme.showLuxeSnackBar(context, '저장했습니다. 앞으로 칼로리 계산에 반영됩니다.');
+      ExerciseTheme.showLuxeSnackBar(context, exText('piSaved'));
     }
   }
 
   Future<void> _clear() async {
     final bool confirmed = await ExerciseTheme.showLuxeConfirmDialog(
       context,
-      title: '몸무게 정보 삭제',
-      message: '저장된 몸무게를 삭제하시겠습니까? 삭제하면 칼로리 계산은 평균값(${ExerciseProfileService.defaultWeightKg.toInt()}kg) 기준으로 돌아갑니다.',
+      title: exText('piDelTitle'),
+      message: exText('piDelMsg', {'w': ExerciseProfileService.defaultWeightKg.toInt()}),
+      confirmLabel: exText('del'),
       isDestructive: true,
     );
     if (!confirmed) return;
@@ -69,7 +72,7 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
       _weightController.clear();
       _hasSavedWeight = false;
     });
-    ExerciseTheme.showLuxeSnackBar(context, '삭제했습니다.');
+    ExerciseTheme.showLuxeSnackBar(context, exText('piDeleted'));
   }
 
   @override
@@ -115,7 +118,7 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '입력하신 몸무게는 이 기기 안에만 저장되며, 오직 운동 칼로리 계산에만 사용됩니다. 서버로 전송되거나 다른 곳에 공유되지 않습니다. 입력은 선택사항이며, 입력 안 하면 평균값(${ExerciseProfileService.defaultWeightKg.toInt()}kg)으로 계산됩니다.',
+                    exText('piInfo', {'w': ExerciseProfileService.defaultWeightKg.toInt()}),
                     style: ExerciseTheme.bodyStyle(size: 12, color: Colors.white70),
                   ),
                 ),
@@ -123,8 +126,17 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
             ),
           ),
           const SizedBox(height: 24),
-          Text('WEIGHT', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
-          Text('몸무게 (kg)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+          // 🆕 [2026-10-08] 한국어 = 위 영문 · 아래 한글 / 그 외 = 그 언어만
+          if (appLanguage.isDefault) ...[
+            Text('WEIGHT', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11)),
+            Text('몸무게 (kg)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+          ] else
+            Text(
+              exText('piWeight'),
+              style: appLanguage.isEnglishOnly
+                  ? GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
+                  : GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
           const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(
@@ -140,7 +152,7 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
                 prefixIcon: const Icon(Icons.monitor_weight_outlined, color: ExerciseTheme.brandGolden),
                 suffixText: 'kg',
                 suffixStyle: const TextStyle(color: Colors.white54),
-                hintText: '예: 65.0',
+                hintText: exText('piHint'),
                 hintStyle: const TextStyle(color: Colors.white38),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -157,7 +169,9 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: ExerciseTheme.biButtonLabel('Save', '저장', color: ExerciseTheme.pageBg, size: 14.5),
+              child: appLanguage.isDefault
+                  ? ExerciseTheme.biButtonLabel('Save', '저장', color: ExerciseTheme.pageBg, size: 14.5)
+                  : Text(exText('saveBtn'), style: const TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 14.5)),
             ),
           ),
           if (_hasSavedWeight) ...[
@@ -171,7 +185,7 @@ class _ExercisePersonalInfoScreenState extends State<ExercisePersonalInfoScreen>
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('삭제 (평균값으로 되돌리기)', style: TextStyle(color: ExerciseTheme.dangerRed, fontWeight: FontWeight.bold, fontSize: 13)),
+                child: Text(exText('piDelBtn'), textAlign: TextAlign.center, style: TextStyle(color: ExerciseTheme.dangerRed, fontWeight: FontWeight.bold, fontSize: 13)),
               ),
             ),
           ],

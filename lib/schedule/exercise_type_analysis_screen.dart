@@ -19,6 +19,9 @@ import 'exercise_data_service.dart';
 import 'exercise_theme.dart';
 import 'exercise_i18n.dart';
 import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07] 줄넘기·푸시업 등 목록
+import 'app_language_service.dart';
+import 'exercise_type_names.dart'; // 🆕 [2026-10-08] 종목 이름 12개 언어
+import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 안내 글자 12개 언어
 
 class ExerciseTypeAnalysisScreen extends StatefulWidget {
   final ExerciseType type;
@@ -105,6 +108,11 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
       appBar: ExerciseTheme.biAppBar(
         en: '$enName ANALYSIS',
         ko: '${exerciseDisplayName(widget.type)} 상세분석',
+        // 🆕 [2026-10-08] 10개 언어: 그 나라 종목 이름 + 분석
+        translations: {
+          for (final String l in AppLanguageService.foreignLanguageCodes)
+            l: '${exerciseNameIn(widget.type.id, widget.type.name, l)} · ${exTextIn('taAnalysis', l)}',
+        },
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: ExerciseTheme.brandGolden))
@@ -113,10 +121,10 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
         children: [
           // 🆕 [자유운동 2026-10-07] 운동별 개수 그래프 + 한 줄 분석
           if (widget.type.id == 'etc') ...[
-            _buildSectionTitle('FREE WORKOUT (14 DAYS)', '자유 운동 한눈에 보기 (14일)'),
+            _buildSectionTitle('FREE WORKOUT (14 DAYS)', '자유 운동 한눈에 보기 (14일)', 'taFree'),
             const SizedBox(height: 4),
             Text(
-              appLanguage.isDefault ? '막대 = 그날 한 개수 합계 (세트 × 개수). 플랭크는 초. 좌우로 밀면 2주를 볼 수 있어요.' : 'Bars = daily total (sets × reps). Plank in seconds. Swipe to see 2 weeks.',
+              exText('taFreeHint'), // 🆕 [2026-10-08] 12개 언어
               style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
             ),
             const SizedBox(height: 14),
@@ -126,14 +134,14 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
           if (widget.type.id != 'etc') ...[
             _buildDateNavigator(),
             const SizedBox(height: 20),
-            _buildSectionTitle('TODAY\'S COMPOSITION', '오늘의 구성'),
+            _buildSectionTitle('TODAY\'S COMPOSITION', '오늘의 구성', 'taComp'),
             const SizedBox(height: 12),
             _buildCompositionDonut(),
             const SizedBox(height: 28),
-            _buildSectionTitle('TRENDS (14 DAYS)', '항목별 14일 추이'),
+            _buildSectionTitle('TRENDS (14 DAYS)', '항목별 14일 추이', 'taTrends'),
             const SizedBox(height: 4),
             Text(
-              '항목마다 색이 고정되어 있어, 다른 종목과 비교할 때도 같은 색은 같은 성격의 항목입니다. 그래프를 좌우로 밀면 2주를 볼 수 있어요.',
+              exText('taTrendsHint'),
               style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
             ),
             const SizedBox(height: 14),
@@ -142,10 +150,10 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
           // 🆕 [헬스 2026-10-04] 운동별(스쿼트 등) 최고 무게 2주 추이
           if (widget.type.id == 'gym') ...[
             const SizedBox(height: 14),
-            _buildSectionTitle('BEST WEIGHT BY EXERCISE (14 DAYS)', '운동별 최고 무게 (14일)'),
+            _buildSectionTitle('BEST WEIGHT BY EXERCISE (14 DAYS)', '운동별 최고 무게 (14일)', 'taBest'),
             const SizedBox(height: 4),
             Text(
-              '그날 그 운동에서 가장 무겁게 든 무게입니다. 자주 한 운동부터 최대 6개까지 보여요.',
+              exText('taBestHint'),
               style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
             ),
             const SizedBox(height: 14),
@@ -156,8 +164,8 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
     );
   }
 
-  Widget _buildSectionTitle(String en, String ko) {
-    return BiInline(en: en, ko: ko, color: ExerciseTheme.goldenLight, fontWeight: FontWeight.bold, fontSize: 14.5);
+  Widget _buildSectionTitle(String en, String ko, [String? key]) {
+    return BiInline(en: en, ko: ko, translations: key == null ? null : exTextTranslations(key), color: ExerciseTheme.goldenLight, fontWeight: FontWeight.bold, fontSize: 14.5);
   }
 
   // ✅ [날짜 좌우 이동] ◀ 오늘/과거 날짜 ▶. 오늘보다 미래로는 못 넘어가게 제한.
@@ -200,7 +208,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
   Widget _buildCompositionDonut() {
     final List<ExerciseField> counterFields = widget.type.fields.where((f) => f.type == ExerciseFieldType.counter).toList();
     if (counterFields.isEmpty) {
-      return _emptyCard('이 종목은 구성 비중으로 보여줄 항목이 없습니다.');
+      return _emptyCard(exText('taEmptyComp'));
     }
     final List<MapEntry<ExerciseField, num>> entries = [];
     for (final f in counterFields) {
@@ -208,7 +216,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
       if (v > 0) entries.add(MapEntry(f, v));
     }
     if (entries.isEmpty) {
-      return _emptyCard('선택한 날짜에 기록된 항목이 없습니다.');
+      return _emptyCard(exText('taEmptyDate'));
     }
     final num sum = entries.fold(0, (s, e) => s + e.value);
 
@@ -289,7 +297,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
   // ✅ [항목별 막대그래프] 숫자형 항목마다 최근 14일 추이를 각각 분리해서 표시
   List<Widget> _buildPerFieldCharts() {
     final List<ExerciseField> numberFields = widget.type.fields.where((f) => f.type == ExerciseFieldType.number).toList();
-    if (numberFields.isEmpty) return [_emptyCard('이 종목은 숫자형 추이 항목이 없습니다.')];
+    if (numberFields.isEmpty) return [_emptyCard(exText('taEmptyNum'))];
 
     final DateTime today = DateTime.now();
     final List<DateTime> days = List.generate(14, (i) {
@@ -321,12 +329,12 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
                   child: Text(
                     _bilabel(field),
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
-                    maxLines: 1,
+                    maxLines: 2, // 🆕 [2026-10-08] 긴 번역도 두 줄까지
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (field.unit != null)
-                  Text(field.unit!, style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
+                  Text(exUnit(field.unit), style: const TextStyle(color: Colors.white38, fontSize: 10.5)), // 🆕 [2026-10-08] 단위 12개 언어
               ],
             ),
             const SizedBox(height: 12),
@@ -361,7 +369,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
                                 values: values,
                                 maxY: maxY,
                                 width: box.maxWidth / 5.5 * 14,
-                                unit: field.unit,
+                                unit: field.unit == null ? null : exUnit(field.unit), // 🆕 [2026-10-08]
                                 color: color,
                               ),
                             ],
@@ -410,7 +418,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
       }
     }
     if (totals.isEmpty) {
-      return [_emptyCard('줄넘기 · 푸시업 · 스쿼트 등을 기록하면 여기에 그래프와 분석이 나와요.')];
+      return [_emptyCard(exText('taEmptyFree'))];
     }
 
     int sumRange(String name, int fromDaysAgo, int toDaysAgo) {
@@ -421,18 +429,19 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
       return s;
     }
 
-    final bool ko = appLanguage.isDefault; // 🆕 [2026-10-07] 한국어 / 그 외는 영어
+    final bool ko = appLanguage.isDefault; // 🆕 [2026-10-07] 한국어 / 그 외 (2026-10-08 12개 언어)
     final String lang = appLanguage.current;
     String trendOf(String name) {
       final int last = sumRange(name, 0, 6);
       final int prev = sumRange(name, 7, 13);
       if (last == 0 && prev == 0) return '';
-      if (prev == 0) return ko ? '이번 주 새로 시작했어요 👍' : 'Started this week 👍';
-      if (last == 0) return ko ? '이번 주는 아직 안 했어요. 오늘 가볍게 시작해 봐요 🙂' : 'Not yet this week. Start light today 🙂';
+      // 🆕 [2026-10-08] 12개 언어
+      if (prev == 0) return exText('trNew');
+      if (last == 0) return exText('trNotYet');
       final int pct = ((last - prev) * 100 / prev).round();
-      if (pct >= 10) return ko ? '지난주보다 $pct% 늘었어요 📈' : 'Up $pct% from last week 📈';
-      if (pct <= -10) return ko ? '지난주보다 조금 줄었어요. 다시 힘내요 💪' : 'A bit less than last week. Keep going 💪';
-      return ko ? '꾸준히 하고 있어요 ✨' : 'Staying consistent ✨';
+      if (pct >= 10) return exText('trUp', {'p': pct});
+      if (pct <= -10) return exText('trDown');
+      return exText('trSteady');
     }
 
     // 🆕 [2026-10-07] 운동 이름 · 단위를 화면 언어로
@@ -464,11 +473,15 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
         topName = name;
       }
     }
-    final String summary = activeDays.isEmpty
-        ? (ko ? '최근 7일은 자유운동 기록이 없어요. 오늘 5분만 해 볼까요? 🙂' : 'No free workouts in the last 7 days. How about 5 minutes today? 🙂')
-        : ko
-        ? '최근 7일 동안 ${activeDays.length}일 운동했어요.\n가장 많이 한 운동: ${emojiOf(topName!)} $topName ($topVal${units[topName]})\n${activeDays.length >= 5 ? '정말 꾸준해요! 이 흐름을 이어가요 🔥' : activeDays.length >= 3 ? '좋은 습관이 자라고 있어요 🌱' : '조금씩 늘려 가면 금방 습관이 돼요 🙂'}'
-        : 'Worked out ${activeDays.length} of the last 7 days.\nMost done: ${emojiOf(topName!)} ${nameIn(topName, lang)} ($topVal ${unitIn(units[topName] ?? '회')})\n${activeDays.length >= 5 ? 'Very consistent! Keep it up 🔥' : activeDays.length >= 3 ? 'A good habit is growing 🌱' : 'Build up little by little 🙂'}';
+    // 🆕 [2026-10-08] 12개 언어
+    String summary = exText('sumNone');
+    if (activeDays.isNotEmpty) {
+      final String top = ko
+          ? '${emojiOf(topName!)} $topName ($topVal${units[topName]})'
+          : '${emojiOf(topName!)} ${nameIn(topName, lang)} ($topVal ${unitIn(units[topName] ?? '회')})';
+      final String cheer = exText(activeDays.length >= 5 ? 'sum5' : activeDays.length >= 3 ? 'sum3' : 'sum1');
+      summary = '${exText('sumLine', {'d': activeDays.length, 'top': top})}\n$cheer';
+    }
 
     final List<String> names = totals.keys.toList()
       ..sort((a, b) => sumRange(b, 0, 13).compareTo(sumRange(a, 0, 13)));
@@ -502,7 +515,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
           days: days,
           note: ko
               ? '최근 ${lastSet[name]} · 14일 합계 ${sumRange(name, 0, 13)}$unit${trend.isNotEmpty ? '\n$trend' : ''}'
-              : 'Total 14 days: ${sumRange(name, 0, 13)} ${unitIn(unit)}${trend.isNotEmpty ? '\n$trend' : ''}',
+              : '${exText('total14', {'s': sumRange(name, 0, 13), 'u': unitIn(unit)})}${trend.isNotEmpty ? '\n$trend' : ''}', // 🆕 [2026-10-08]
         );
       }),
     ];
@@ -545,7 +558,7 @@ class _ExerciseTypeAnalysisScreenState extends State<ExerciseTypeAnalysisScreen>
       }
     }
     if (best.isEmpty) {
-      return [_emptyCard('운동 이름과 세트 무게를 기록하면 운동별 최고 무게 그래프가 나와요.')];
+      return [_emptyCard(exText('taEmptyGym'))];
     }
     String kg(double v) => v == v.roundToDouble() ? '${v.toInt()}kg' : '${v.toStringAsFixed(1)}kg';
     final List<String> names = freq.keys.toList()..sort((a, b) => freq[b]!.compareTo(freq[a]!));

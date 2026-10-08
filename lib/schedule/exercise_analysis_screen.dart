@@ -17,6 +17,7 @@
 //   요일명을 참고 이미지와 동일한 스타일로 표시
 // - 종목별 랭킹 색상을 지정된 순서(진한파랑/황금색/빨강/초록/진한남색/보라/노랑)로 고정
 // - 종목별 운동시간 비율 도넛차트 신규 추가
+// 🆕 [2026-10-08] 종목 이름 · 요일 · 제목 · 요약 카드 · 빈 화면 안내를 12개 언어로
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,6 +25,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'exercise_models.dart';
 import 'exercise_data_service.dart';
 import 'exercise_theme.dart';
+import 'app_language_service.dart';
+import 'exercise_type_names.dart'; // 🆕 [2026-10-08] 종목 이름 · 요일 12개 언어
 
 class ExerciseAnalysisScreen extends StatefulWidget {
   const ExerciseAnalysisScreen({super.key});
@@ -51,15 +54,14 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
 
   // 🆕 [종목 랭킹 지정 색상 순서] 1위 진한파랑 / 2위 황금색 / 3위 빨강 / 4위 초록 /
   // 5위 진한남색 / 6위 보라 / 7위 노랑 (그 이상은 순환)
-  // 🆕 [2026-10-04] 위부터 빨강 · 녹색 · 파랑 · 황금 · 흰색 · 남색 · 노랑 (밝게)
   static const List<Color> _rankColors = [
-    Color(0xFFEF4444), // 1위 빨강
-    Color(0xFF22C55E), // 2위 녹색
-    Color(0xFF3B82F6), // 3위 파랑
-    ExerciseTheme.brandGolden, // 4위 황금
-    Color(0xFFF8FAFC), // 5위 흰색
-    Color(0xFF6366F1), // 6위 남색 (어두운 바탕에서 보이게 밝은 남색)
-    Color(0xFFFACC15), // 7위 노랑
+    Color(0xFF1E3A8A), // 1위 진한파랑
+    ExerciseTheme.brandGolden, // 2위 황금색
+    Color(0xFFDC2626), // 3위 빨강
+    Color(0xFF16A34A), // 4위 초록
+    Color(0xFF1E1B4B), // 5위 진한남색
+    Color(0xFF9333EA), // 6위 보라
+    Color(0xFFEAB308), // 7위 노랑
   ];
 
   static Color _rankColorAt(int index) => _rankColors[index % _rankColors.length];
@@ -72,7 +74,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
 
   Future<void> _load() async {
     final types = await ExerciseDataService.instance.getExerciseTypes(includeHidden: true);
-    final records = await ExerciseDataService.instance.getSessionRecords();
+    final records = await ExerciseDataService.instance.getAllRecords();
     if (!mounted) return;
     setState(() {
       _typesById = {for (final t in types) t.id: t};
@@ -84,6 +86,22 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
   String _dateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
+  // 🆕 [2026-10-08] 이 화면 글자 10개 외국어 (영문 글자가 열쇠)
+  static const Map<String, Map<String, String>> _kTr = {
+    'TODAY - ALL TYPES': {'JA': '今日の総合記録', 'ZH': '今日综合记录', 'FR': "Aujourd'hui - tous", 'DE': 'Heute - alle', 'RU': 'Сегодня - все виды', 'AR': 'اليوم - كل الأنواع', 'HI': 'आज - सभी', 'VI': 'Hôm nay - tất cả', 'ES': 'Hoy - todos', 'TH': 'วันนี้ - ทุกประเภท'},
+    'LAST 7 DAYS': {'JA': '最近7日間の運動時間', 'ZH': '最近 7 天运动时间', 'FR': '7 derniers jours', 'DE': 'Letzte 7 Tage', 'RU': 'Последние 7 дней', 'AR': 'آخر 7 أيام', 'HI': 'पिछले 7 दिन', 'VI': '7 ngày qua', 'ES': 'Últimos 7 días', 'TH': '7 วันล่าสุด'},
+    'RPE TREND (14 DAYS)': {'JA': '最近14日の運動強度', 'ZH': '最近 14 天运动强度', 'FR': 'Effort perçu (14 jours)', 'DE': 'Anstrengung (14 Tage)', 'RU': 'Нагрузка (14 дней)', 'AR': 'الجهد (14 يومًا)', 'HI': 'मेहनत (14 दिन)', 'VI': 'Mức gắng sức (14 ngày)', 'ES': 'Esfuerzo (14 días)', 'TH': 'ความเหนื่อย (14 วัน)'},
+    'BY EXERCISE TYPE': {'JA': '種目別の割合', 'ZH': '各项目占比', 'FR': 'Par sport', 'DE': 'Nach Sportart', 'RU': 'По видам', 'AR': 'حسب النوع', 'HI': 'खेल के अनुसार', 'VI': 'Theo môn', 'ES': 'Por deporte', 'TH': 'ตามประเภท'},
+    'TIME SHARE BY TYPE': {'JA': '種目別の運動時間の割合', 'ZH': '各项目运动时间比例', 'FR': 'Part du temps par sport', 'DE': 'Zeitanteil je Sportart', 'RU': 'Доля времени по видам', 'AR': 'نسبة الوقت حسب النوع', 'HI': 'खेल के अनुसार समय', 'VI': 'Tỉ lệ thời gian theo môn', 'ES': 'Tiempo por deporte', 'TH': 'สัดส่วนเวลาตามประเภท'},
+    'SESSIONS': {'JA': '回数', 'ZH': '次数', 'FR': 'Séances', 'DE': 'Einheiten', 'RU': 'Занятия', 'AR': 'الجلسات', 'HI': 'सत्र', 'VI': 'Buổi tập', 'ES': 'Sesiones', 'TH': 'ครั้ง'},
+    'MINUTES': {'JA': '合計時間（分）', 'ZH': '总时间（分钟）', 'FR': 'Minutes', 'DE': 'Minuten', 'RU': 'Минуты', 'AR': 'الدقائق', 'HI': 'कुल मिनट', 'VI': 'Tổng phút', 'ES': 'Minutos', 'TH': 'นาทีรวม'},
+    'AVG RPE': {'JA': '平均強度', 'ZH': '平均强度', 'FR': 'Effort moyen', 'DE': 'Ø Anstrengung', 'RU': 'Средняя нагрузка', 'AR': 'متوسط الجهد', 'HI': 'औसत मेहनत', 'VI': 'Gắng sức TB', 'ES': 'Esfuerzo medio', 'TH': 'ความเหนื่อยเฉลี่ย'},
+    'No exercise records yet': {'JA': 'まだ運動記録がありません', 'ZH': '还没有运动记录', 'FR': 'Aucune séance pour le moment', 'DE': 'Noch keine Trainingseinträge', 'RU': 'Записей пока нет', 'AR': 'لا توجد سجلات تمرين بعد', 'HI': 'अभी कोई व्यायाम रिकॉर्ड नहीं', 'VI': 'Chưa có bản ghi tập luyện', 'ES': 'Aún no hay registros', 'TH': 'ยังไม่มีบันทึกการออกกำลัง'},
+    'No exercise recorded today yet': {'JA': '今日はまだ運動の記録がありません', 'ZH': '今天还没有运动记录', 'FR': "Pas encore de séance aujourd'hui", 'DE': 'Heute noch kein Training', 'RU': 'Сегодня записей пока нет', 'AR': 'لا تمارين مسجلة اليوم بعد', 'HI': 'आज अभी कोई व्यायाम दर्ज नहीं', 'VI': 'Hôm nay chưa có buổi tập', 'ES': 'Hoy aún no hay registros', 'TH': 'วันนี้ยังไม่มีบันทึก'},
+    'No RPE data yet': {'JA': 'まだ強度のデータがありません', 'ZH': '还没有强度数据', 'FR': "Pas encore de données d'effort", 'DE': 'Noch keine Daten', 'RU': 'Данных пока нет', 'AR': 'لا توجد بيانات بعد', 'HI': 'अभी कोई डेटा नहीं', 'VI': 'Chưa có dữ liệu', 'ES': 'Aún no hay datos', 'TH': 'ยังไม่มีข้อมูล'},
+    'No data': {'JA': 'データなし', 'ZH': '暂无数据', 'FR': 'Aucune donnée', 'DE': 'Keine Daten', 'RU': 'Нет данных', 'AR': 'لا بيانات', 'HI': 'कोई डेटा नहीं', 'VI': 'Không có dữ liệu', 'ES': 'Sin datos', 'TH': 'ไม่มีข้อมูล'},
+  };
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ExerciseTheme.pageBg,
@@ -105,6 +123,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
         child: BiInline(
           en: 'No exercise records yet',
           ko: '아직 운동 기록이 없습니다',
+          translations: _kTr['No exercise records yet'],
           color: Colors.white38,
           fontSize: 14,
         ),
@@ -158,6 +177,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
         child: BiInline(
           en: 'No exercise recorded today yet',
           ko: '오늘 아직 기록된 운동이 없습니다',
+          translations: _kTr['No exercise recorded today yet'],
           color: Colors.white38,
           fontSize: 12.5,
         ),
@@ -192,12 +212,12 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  type?.name ?? typeId,
+                  type != null ? exerciseLocalName(type) : typeId, // 🆕 [2026-10-08] 12개 언어
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
               Text(
-                '${minutesByType[typeId]}분 · ${sessionsByType[typeId]}회',
+                '${minutesByType[typeId]}${appLanguage.isDefault ? '분' : ' min'} · ${sessionsByType[typeId]}${appLanguage.isDefault ? '회' : 'x'}', // 🆕 [2026-10-08]
                 style: const TextStyle(color: Colors.white70, fontSize: 12.5),
               ),
             ],
@@ -208,7 +228,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
   }
 
   Widget _buildSectionTitle(String en, String ko) {
-    return BiInline(en: en, ko: ko, color: ExerciseTheme.goldenLight, fontWeight: FontWeight.bold, fontSize: 14.5);
+    return BiInline(en: en, ko: ko, translations: _kTr[en], color: ExerciseTheme.goldenLight, fontWeight: FontWeight.bold, fontSize: 14.5); // 🆕 [2026-10-08] 10개 언어
   }
 
   Widget _buildSummaryRow() {
@@ -246,8 +266,14 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
           Text(value, style: ExerciseTheme.titleStyle(size: 22), textAlign: TextAlign.center),
           const SizedBox(height: 8),
           // 🆕 [2026-09-05 수정] 윗줄 영문(명조체) / 아랫줄 한글(노토산스)로 명시적 2줄 배치
-          Text(en, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center),
-          Text(ko, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10.5), textAlign: TextAlign.center),
+          // 🆕 [2026-10-08] 한국어 = 위 영문 · 아래 한글 / English = 영어만 / 10개 언어 = 그 언어만
+          if (appLanguage.isDefault) ...[
+            Text(en, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center),
+            Text(ko, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10.5), textAlign: TextAlign.center),
+          ] else if (appLanguage.isEnglishOnly)
+            Text(en, style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10.5), textAlign: TextAlign.center)
+          else
+            Text(_kTr[en]?[appLanguage.current] ?? en, style: GoogleFonts.notoSansKr(color: Colors.white54, fontSize: 10.5), textAlign: TextAlign.center),
         ],
       ),
     );
@@ -257,7 +283,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
   // X축 요일명. fl_chart의 leftTitles/bottomTitles로 참고 이미지의 축 구성을 재현함.
   Widget _buildWeeklyDurationChart() {
     final now = DateTime.now();
-    final days = List.generate(14, (i) => now.subtract(Duration(days: 13 - i))); // 🆕 [2026-10-04] 2주
+    final days = List.generate(7, (i) => now.subtract(Duration(days: 6 - i)));
     final values = days.map((d) {
       final key = _dateKey(d);
       return _records
@@ -270,19 +296,13 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
     // 🆕 [Y축 눈금 간격] 4등분해서 참고 이미지처럼 4~5개의 시간 눈금이 보이도록 계산
     final double interval = (maxVal / 4).clamp(10.0, 1000000.0);
 
-    const weekdayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+    final List<String> weekdayLabels = weekdayShortLabels(); // 🆕 [2026-10-08] 요일 12개 언어
 
     return Container(
-        height: 230,
-        padding: const EdgeInsets.fromLTRB(4, 20, 16, 8),
-        decoration: ExerciseTheme.luxeCardDecoration(highlighted: true), // 🆕 진한 테두리
-        // 🆕 [2026-10-04] 한 화면에 5~6일, 좌우로 2주, 처음엔 오늘(오른쪽 끝)이 보이게
-        child: LayoutBuilder(builder: (context, box) => SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            reverse: true,
-            child: SizedBox(
-              width: box.maxWidth / 5.5 * 14,
-              child: BarChart(
+      height: 220,
+      padding: const EdgeInsets.fromLTRB(4, 20, 16, 8),
+      decoration: ExerciseTheme.luxeCardDecoration(highlighted: true), // 🆕 진한 테두리
+      child: BarChart(
         BarChartData(
           maxY: maxVal,
           minY: 0,
@@ -334,7 +354,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
                   final idx = value.toInt();
                   if (idx < 0 || idx >= days.length) return const SizedBox.shrink();
                   final d = days[idx];
-                  final String label = '${weekdayLabels[d.weekday - 1]}\n${d.month}/${d.day}'; // 🆕 2주라 날짜도 함께
+                  final String label = weekdayLabels[d.weekday - 1];
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
@@ -366,9 +386,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
             );
           }),
         ),
-              ),
-            ),
-        )),
+      ),
     );
   }
 
@@ -390,7 +408,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
         height: 140,
         alignment: Alignment.center,
         decoration: ExerciseTheme.luxeCardDecoration(highlighted: true), // 🆕 진한 테두리
-        child: BiInline(en: 'No RPE data yet', ko: '아직 RPE 데이터가 없습니다', color: Colors.white38, fontSize: 12.5),
+        child: BiInline(en: 'No RPE data yet', ko: '아직 RPE 데이터가 없습니다', translations: _kTr['No RPE data yet'], color: Colors.white38, fontSize: 12.5),
       );
     }
 
@@ -468,7 +486,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
                 SizedBox(
                   width: 64,
                   child: Text(
-                    type?.name ?? entry.key,
+                    type != null ? exerciseLocalName(type) : entry.key, // 🆕 [2026-10-08]
                     style: ExerciseTheme.bodyStyle(color: Colors.white, size: 12.5),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -510,7 +528,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
-        child: BiInline(en: 'No data', ko: '데이터 없음', color: Colors.white38, fontSize: 12),
+        child: BiInline(en: 'No data', ko: '데이터 없음', translations: _kTr['No data'], color: Colors.white38, fontSize: 12),
       );
     }
 
@@ -562,7 +580,7 @@ class _ExerciseAnalysisScreenState extends State<ExerciseAnalysisScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          type?.name ?? entry.key,
+                          type != null ? exerciseLocalName(type) : entry.key, // 🆕 [2026-10-08]
                           style: const TextStyle(color: Colors.white, fontSize: 12.5),
                           overflow: TextOverflow.ellipsis,
                         ),

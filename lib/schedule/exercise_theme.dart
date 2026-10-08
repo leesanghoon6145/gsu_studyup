@@ -10,10 +10,12 @@
 // 화면들은 별도로 bilingual_text.dart를 import하지 않아도
 // LuxuryDialogFrame / luxuryDialogHeader / ThreeColorPencilIcon / biSnack /
 // appLanguage 등을 바로 쓸 수 있다.
+// 🆕 [2026-10-08] 확인 창의 '확인 · 취소' 기본 글자를 12개 언어로, 긴 글은 위아래 스크롤
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'bilingual_text.dart';
+import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 확인 · 취소 단추 12개 언어
 
 export 'bilingual_text.dart';
 
@@ -94,8 +96,8 @@ class ExerciseTheme {
       BuildContext context, {
         required String title,
         required String message,
-        String confirmLabel = '확인',
-        String cancelLabel = '취소',
+        String? confirmLabel, // 🆕 [2026-10-08] 비워 두면 지금 언어의 '확인'
+        String? cancelLabel, // 🆕 [2026-10-08] 비워 두면 지금 언어의 '취소'
         bool isDestructive = false,
         IconData icon = Icons.info_outline_rounded,
       }) async {
@@ -107,64 +109,66 @@ class ExerciseTheme {
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 20),
           child: LuxuryDialogFrame(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                luxuryDialogHeader(icon: icon, en: title, ko: title),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: pageBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Text(
-                    message,
-                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.5),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: Text(
-                          cancelLabel,
-                          style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+            child: SingleChildScrollView( // 🆕 [2026-10-08] 긴 번역 글도 위아래로 밀어서 다 보이게
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  luxuryDialogHeader(icon: icon, en: title, ko: title),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: pageBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white12),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isDestructive ? dangerRed : brandGolden,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          elevation: 4,
-                          shadowColor: (isDestructive ? dangerRed : brandGolden).withOpacity(0.5),
-                        ),
-                        onPressed: () => Navigator.of(dialogContext).pop(true),
-                        child: Text(
-                          confirmLabel,
-                          style: GoogleFonts.notoSansKr(
-                            color: isDestructive ? Colors.white : pageBg,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
+                    child: Text(
+                      message,
+                      style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.5),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white24),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () => Navigator.of(dialogContext).pop(false),
+                          child: Text(
+                            cancelLabel ?? exText('cancel'),
+                            style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isDestructive ? dangerRed : brandGolden,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 4,
+                            shadowColor: (isDestructive ? dangerRed : brandGolden).withOpacity(0.5),
+                          ),
+                          onPressed: () => Navigator.of(dialogContext).pop(true),
+                          child: Text(
+                            confirmLabel ?? exText('ok'),
+                            style: GoogleFonts.notoSansKr(
+                              color: isDestructive ? Colors.white : pageBg,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );

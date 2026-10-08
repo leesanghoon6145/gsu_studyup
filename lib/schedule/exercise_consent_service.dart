@@ -12,6 +12,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'exercise_theme.dart';
+import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 동의 창 글자 12개 언어
 
 class ExerciseConsentService {
   ExerciseConsentService._();
@@ -77,14 +78,7 @@ class ExerciseConsentService {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(color: ExerciseTheme.pageBg, borderRadius: BorderRadius.circular(10)),
                   child: Text(
-                    '운동 기록 기능은 아래와 같은 건강 관련 정보를 다룹니다:\n\n'
-                        '• 심박수 (평균/최고, 직접 입력 시)\n'
-                        '• 몸무게 (칼로리 계산용, 선택 입력)\n'
-                        '• 걸음수·운동시간 (폰 센서 또는 연동한 워치로부터 자동 수집)\n\n'
-                        '위 정보는 전부 이 기기 안에만 저장되며, 외부 서버로 전송되거나 '
-                        '제3자와 공유되지 않습니다. 동의는 언제든 설정에서 철회할 수 있고, '
-                        '철회 시 저장된 정보도 삭제할 수 있습니다.\n\n'
-                        '동의하셔야 운동 기록 기능을 사용할 수 있습니다.',
+                    exText('csBody'), // 🆕 [2026-10-08] 12개 언어
                     style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.6),
                   ),
                 ),
@@ -99,7 +93,7 @@ class ExerciseConsentService {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                        child: const Text('동의 안 함', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+                        child: Text(exText('csNo'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -111,7 +105,7 @@ class ExerciseConsentService {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                        child: const Text('동의합니다', style: TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 13)),
+                        child: Text(exText('csYes'), textAlign: TextAlign.center, style: const TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 13)),
                       ),
                     ),
                   ],

@@ -1,5 +1,9 @@
 // today_exercise_screen.dart
 //
+// 🆕 [2026-10-08] 화면의 모든 안내·단추·알림 글자를 12개 언어로 (exercise_screen_text.dart)
+//    한국어 = 한글(제목은 위 영문 · 아래 한글) / English = 영어만 / 10개 언어 = 그 언어만
+//    ※ 타이머 별 계산 · 저장 방식은 한 글자도 바꾸지 않음
+//
 // 종목 카드를 탭하면 진입하는 기록 입력 화면.
 // - 상단: 공통 필드 (날짜/시간/RPE/심박수/메모)
 // - 하단: 선택한 종목(ExerciseType)의 상세 필드를 스키마 기반으로 동적 렌더링
@@ -25,6 +29,8 @@ import 'exercise_type_analysis_screen.dart'; // ✅ [2026-09-13 추가] 하단 "
 import '../services/user_profile_service.dart'; // 🆕 [학생 운동 별 2026-10-06] 학생 계정 확인
 import '../star_economy.dart'; // 🆕 [학생 운동 별] 1분 1별, 하루 60개
 import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07]
+import 'exercise_type_names.dart'; // 🆕 [2026-10-08] 종목 이름 12개 언어
+import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 이 화면 글자 12개 언어
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -74,6 +80,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   final _avgHrController = TextEditingController();
   final _maxHrController = TextEditingController();
   final _memoController = TextEditingController();
+  // 🆕 [2026-10-08] 앱이 자동으로 적은 메모는 화면 언어로 보여주고, 안 고쳤으면 저장할 때 원래 글자 그대로 둠
+  String _memoOriginal = '';
+  String _memoShown = '';
 
   final Map<String, TextEditingController> _textControllers = {};
   final Map<String, String?> _selectValues = {};
@@ -116,6 +125,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   static const String _kWalkBaseKey = 'gke_walk_session_base';
   int _walkBase = 0;
   ExerciseRecord? _pendingConfirm; // 🆕 [삼성헬스 2026-10-05] 확인을 기다리는 어제 자동 기록
+  DayHeartStats? _dayHeart; // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고)
 
   // 🆕 [학생 운동 별 2026-10-06] 학생 계정에만 보이는 운동 타이머
   bool _isStudent = false;
@@ -139,6 +149,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _initStudentExerciseTimer(); // 🆕 [학생 운동 별 2026-10-06]
     _loadPendingConfirm(); // 🆕 [워치 운동 2026-10-05] 모든 종목: 확인을 기다리는 자동 기록
     _recentFuture = _loadRecent(); // 🆕 [2026-10-05] 최근 기록 목록 (자동 기록 포함)
+    _loadDayHeart(); // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고) — 열 때마다 새로 계산
     // 🆕 [걸음수 그래프] 걷기류(steps 필드가 있는 종목)에서만 별도로 로드
     if (_hasStepsField) _stepsHistoryFuture = _loadStepsByDate();
     // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 불러오기 (없으면 평균값 유지)
@@ -192,7 +203,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       _rpe = existing.rpe ?? 5;
       _avgHrController.text = existing.avgHeartRateBpm?.toString() ?? '';
       _maxHrController.text = existing.maxHeartRateBpm?.toString() ?? '';
-      _memoController.text = existing.memo;
+      _memoOriginal = existing.memo;
+      _memoShown = exAutoMemo(existing.memo);
+      _memoController.text = _memoShown;
       existing.detail.forEach((key, value) {
         if (_textControllers.containsKey(key)) {
           _textControllers[key]!.text = value.toString();
@@ -290,38 +303,39 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // ✅ [2026-09-13 추가 - 고급 디자인] 골드 세로 악센트 바 + 영문 소문자(스몰캡스
   // 느낌) + 한글 + 옅어지는 골드 구분선으로 구성된 구획 소제목.
   Widget _buildSectionHeader(String en, String ko) {
-    // ✅ [2026-09-14 버그 수정] EN+KO를 한 줄(Row)에 같이 넣다 보니, 이름이 긴
-    // 구획("페어웨이 · 그린 · 페널티" 등)에서 화면 밖으로 밀려 오버플로우가
-    // 났다. EN은 위, KO는 아래로 나눠서 각자 한 줄씩 차지하게 하고, 그래도
-    // 넘칠 만큼 길면 말줄임(...)으로 안전하게 자르도록 재구성.
+    // ✅ [2026-09-14] EN은 위, KO는 아래로 나눠서 각자 줄을 차지
+    // 🆕 [2026-10-08] 한국어 = 위 영문 · 아래 한글 / English = 영어만 / 10개 언어 = 그 언어만
+    //   글자가 길면 잘리지 않고 다음 줄로 내려감 (넘침 없음)
+    final bool isKo = appLanguage.isDefault;
+    final String top = isKo || appLanguage.isEnglishOnly ? en.toUpperCase() : exSection(en);
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(width: 3, height: 15, decoration: BoxDecoration(color: ExerciseTheme.brandGolden, borderRadius: BorderRadius.circular(2))),
+              Container(width: 3, height: 15, margin: const EdgeInsets.only(top: 2), decoration: BoxDecoration(color: ExerciseTheme.brandGolden, borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  en.toUpperCase(),
-                  style: GoogleFonts.gowunBatang(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 10.5, letterSpacing: 0.6),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  top,
+                  style: isKo || appLanguage.isEnglishOnly
+                      ? GoogleFonts.gowunBatang(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: isKo ? 10.5 : 13, letterSpacing: 0.6)
+                      : GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 11, top: 2),
-            child: Text(
-              ko,
-              style: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.w600, fontSize: 13),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          if (isKo)
+            Padding(
+              padding: const EdgeInsets.only(left: 11, top: 2),
+              child: Text(
+                ko,
+                style: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.w600, fontSize: 13),
+              ),
             ),
-          ),
           const SizedBox(height: 6),
           Container(
             height: 1,
@@ -332,6 +346,35 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         ],
       ),
     );
+  }
+
+  // 🆕 [2026-10-08] 제목 두 줄 도우미: 한국어 = 위 영문(고운바탕 굵게) · 아래 한글(노토산스)
+  //   English = 영어만 / 10개 언어 = 그 언어만
+  Widget _bi2(String key, {double enSize = 10.5, double koSize = 13, Color enColor = Colors.white70, Color koColor = Colors.white}) {
+    if (appLanguage.isDefault) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(exTextIn(key, 'EN').toUpperCase(), style: GoogleFonts.gowunBatang(color: enColor, fontWeight: FontWeight.bold, fontSize: enSize)),
+          Text(exTextIn(key, 'KO'), style: GoogleFonts.notoSansKr(color: koColor, fontWeight: FontWeight.bold, fontSize: koSize)),
+        ],
+      );
+    }
+    return Text(
+      exText(key),
+      style: appLanguage.isEnglishOnly
+          ? GoogleFonts.gowunBatang(color: koColor, fontWeight: FontWeight.bold, fontSize: koSize)
+          : GoogleFonts.notoSansKr(color: koColor, fontWeight: FontWeight.bold, fontSize: koSize),
+    );
+  }
+
+  // 🆕 [2026-10-08] 단추 글자: 한국어 = 예전 그대로(영문+한글) / 그 외 = 그 언어만
+  Widget _btnText(String key, {required Color color, double size = 13}) {
+    if (appLanguage.isDefault) {
+      return ExerciseTheme.biButtonLabel(exTextIn(key, 'EN'), exTextIn(key, 'KO'), color: color, size: size);
+    }
+    return Text(exText(key), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: size));
   }
 
   String _bilabel(ExerciseField field) {
@@ -346,7 +389,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   // 🆕 [2026-09-29] 입력칸 아래 회색 한 줄 설명 (한국어일 때만)
   String? _helpFor(ExerciseField field) {
-    if (!appLanguage.isDefault) return null;
+    // 🆕 [2026-10-08] 12개 언어 모두 설명이 보임 (exercise_field_help.dart)
     return exerciseFieldHelp(widget.exerciseType.id, field.key);
   }
 
@@ -369,9 +412,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   InputDecoration _decoration(String label, {String? unit, String? helper}) => InputDecoration(
     labelText: label.isEmpty ? null : label,
     helperText: helper, // 🆕 [2026-09-29] 입력칸 아래 회색 한 줄 설명
-    helperMaxLines: 2,
+    helperMaxLines: 4, // 🆕 [2026-10-08] 번역 설명이 길어도 다 보이게
     helperStyle: const TextStyle(color: Colors.white38, fontSize: 11),
-    suffixText: unit,
+    suffixText: unit == null ? null : exUnit(unit), // 🆕 [2026-10-08] 단위 12개 언어
     labelStyle: ExerciseTheme.bodyStyle(size: 13),
     suffixStyle: ExerciseTheme.bodyStyle(size: 12),
     filled: true,
@@ -453,26 +496,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   Future<void> _showSetupGuideDialog(StepSourceType type) async {
     final bool isWatch = type == StepSourceType.watch;
     final String titleEn = isWatch ? 'WATCH SETUP GUIDE' : 'PHONE SETUP GUIDE';
-    final String titleKo = isWatch ? '워치 연동 설정 방법' : '폰 걸음수 설정 방법';
+    final String titleKo = exText(isWatch ? 'guideTitleWatch' : 'guideTitlePhone'); // 🆕 [2026-10-08] 12개 언어
 
-    final String body = isWatch
-        ? '워치 걸음수가 우리 앱까지 오려면 아래 3단계가 전부 되어 있어야 합니다.\n\n'
-        '① 워치 ↔ 삼성헬스\n'
-        '워치의 Galaxy Wearable 앱이 폰과 페어링되어 있고, 삼성헬스 앱에 실제 걸음수가 찍히는지 확인.\n\n'
-        '② Health Connect 설치 + 동기화 켜기\n'
-        '폰에 "Health Connect" 앱 설치(안드로이드 14+는 기본 내장) → 삼성헬스 앱 → 설정 → '
-        '"Health Connect와 연결하기" → 걸음수 항목 토글 켜기.\n\n'
-        '③ 우리 앱 권한 허용\n'
-        '이 화면에서 워치를 처음 선택하면 권한 요청 팝업이 뜨는데 "허용"을 눌러야 함. '
-        '이미 거부했다면 Health Connect 앱 → 연결된 앱 → GKE StudyUp → 걸음수 읽기 권한 켜기.'
-        : '폰 자체 걸음수 센서를 쓰려면 아래가 되어 있어야 합니다.\n\n'
-        '① 신체 활동 권한 허용\n'
-        '안드로이드 10 이상은 "신체 활동(걸음 수)" 권한을 허용해야 걸음수 센서를 읽을 수 있습니다. '
-        '처음 폰을 선택하면 권한 팝업이 뜨는데 "허용"을 눌러주세요.\n\n'
-        '② 이미 거부했다면\n'
-        '설정 → 앱 → GKE StudyUp → 권한 → 신체 활동 → 허용으로 변경.\n\n'
-        '③ 측정 중엔 폰을 몸에 지니고 있기\n'
-        '주머니나 손에 들고 걸어야 센서가 걸음을 인식합니다.';
+    final String body = exText(isWatch ? 'guideBodyWatch' : 'guideBodyPhone');
 
     if (!mounted) return;
     await showDialog<void>(
@@ -491,7 +517,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 children: [
                   luxuryDialogHeader(
                     icon: isWatch ? Icons.watch_rounded : Icons.smartphone_rounded,
-                    en: titleEn,
+                    en: appLanguage.isDefault ? titleEn : titleKo,
                     ko: titleKo,
                   ),
                   Container(
@@ -517,7 +543,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: const Text('오늘 그만 보기', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+                          child: Text(exText('hideToday'), style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -529,7 +555,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: const Text('닫기', style: TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 13)),
+                          child: Text(exText('close'), style: const TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 13)),
                         ),
                       ),
                     ],
@@ -580,16 +606,16 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             context: context,
             builder: (dialogContext) => AlertDialog(
               backgroundColor: ExerciseTheme.containerBg,
-              title: const Text('권한이 꺼져 있습니다', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              content: const Text(
-                '예전에 신체 활동 권한을 거부하신 적이 있어서, 이제는 앱에서 다시 물어보지 못합니다.\n\n설정 화면에서 직접 "신체 활동" 권한을 켜주세요.',
-                style: TextStyle(color: Colors.white70, height: 1.5),
+              title: Text(exText('permOffTitle'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              content: Text(
+                exText('permOffBody'),
+                style: const TextStyle(color: Colors.white70, height: 1.5),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('취소', style: TextStyle(color: Colors.white54))),
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(exText('cancel'), style: const TextStyle(color: Colors.white54))),
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('설정 열기', style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold)),
+                  child: Text(exText('openSettings'), style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -599,8 +625,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           ExerciseTheme.showLuxeSnackBar(
             context,
             type == StepSourceType.watch
-                ? '워치 연결 권한이 아직 허용되지 않았습니다. 위 안내를 다시 확인해주세요.'
-                : '걸음수 센서 권한이 아직 허용되지 않았습니다. 위 안내를 다시 확인해주세요.',
+                ? exText('watchPermNotYet')
+                : exText('phonePermNotYet'),
           );
         }
       }
@@ -625,8 +651,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       ExerciseTheme.showLuxeSnackBar(
         context,
         type == StepSourceType.watch
-            ? '워치 연결 완료 - 오늘부터 자동으로 기록됩니다.'
-            : '폰 걸음수 자동 기록을 시작합니다.',
+            ? exText('watchConnected')
+            : exText('phoneAutoStart'),
       );
     }
   }
@@ -637,7 +663,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     if (mounted) {
       ExerciseTheme.showLuxeSnackBar(
         context,
-        value ? '매일 자동 기록을 켰습니다. 자정마다 자동으로 다음날로 넘어갑니다.' : '매일 자동 기록을 껐습니다.',
+        value ? exText('dailyOn') : exText('dailyOff'),
       );
     }
   }
@@ -684,7 +710,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         final int elapsedMin = DateTime.now().difference(_stepTrackingStartTime!).inMinutes;
         if (elapsedMin > 0) _durationController.text = elapsedMin.toString();
       }
-      if (mounted) ExerciseTheme.showLuxeSnackBar(context, '$finalSteps보 측정 완료 — 걸음수 · 거리 · 시간에 넣었어요. [기록 저장]을 눌러 주세요.');
+      if (mounted) ExerciseTheme.showLuxeSnackBar(context, exText('walkDone', {'n': finalSteps}));
+      if (_stepTrackingStartTime != null) _fillHeartFromWatch(_stepTrackingStartTime!, DateTime.now()); // 🆕 [2026-10-08] 측정한 시간의 워치 심박
       return;
     }
 
@@ -711,7 +738,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   Future<void> _onSave() async {
     final durationMin = int.tryParse(_durationController.text.trim()) ?? 0;
     if (durationMin <= 0) {
-      ExerciseTheme.showLuxeSnackBar(context, '운동 시간을 입력해 주세요.');
+      ExerciseTheme.showLuxeSnackBar(context, exText('enterDuration'));
       return;
     }
 
@@ -776,7 +803,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       rpe: _rpe,
       avgHeartRateBpm: int.tryParse(_avgHrController.text.trim()),
       maxHeartRateBpm: int.tryParse(_maxHrController.text.trim()),
-      memo: _memoController.text.trim(),
+      memo: (_memoShown.isNotEmpty && _memoController.text.trim() == _memoShown.trim()) ? _memoOriginal : _memoController.text.trim(),
       detail: detail,
     );
 
@@ -795,9 +822,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     if (record == null) return;
     final confirmed = await ExerciseTheme.showLuxeConfirmDialog(
       context,
-      title: '기록 삭제',
-      message: '이 운동 기록을 삭제할까요?\n이 작업은 되돌릴 수 없습니다.',
-      confirmLabel: '삭제',
+      title: exText('delTitle'),
+      message: exText('delMsg'),
+      confirmLabel: exText('del'),
       isDestructive: true,
       icon: Icons.delete_rounded,
     );
@@ -904,32 +931,24 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               const Icon(Icons.directions_walk_rounded, color: ExerciseTheme.brandGolden, size: 20),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('AUTO STEP TRACKING', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10.5)),
-                    Text(
-                      ExerciseStepService.activeSourceType == StepSourceType.watch ? '자동 걸음수 측정 (워치)' : '자동 걸음수 측정 (폰 센서)',
-                      style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                  ],
-                ),
+                // 🆕 [2026-10-08] 한국어 = 위 영문 · 아래 한글 / 그 외 = 그 언어만
+                child: _bi2(ExerciseStepService.activeSourceType == StepSourceType.watch ? 'autoTitleWatch' : 'autoTitlePhone'),
               ),
             ],
           ),
           const SizedBox(height: 12),
           // 🆕 [사용성 개선] 탭 한 번으로 자동 기록까지 시작된다는 걸 미리 안내
           Text(
-            '탭 한 번으로 연결과 매일 자동 기록이 함께 시작됩니다.',
+            exText('oneTapHint'),
             style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
           ),
           const SizedBox(height: 8),
           // 🆕 [2단계] 측정 소스 선택: 폰 센서 ↔ 워치(Health Connect/HealthKit)
           Row(
             children: [
-              Expanded(child: _buildSourceChip('📱 폰', StepSourceType.phone)),
+              Expanded(child: _buildSourceChip(exText('chipPhone'), StepSourceType.phone)),
               const SizedBox(width: 8),
-              Expanded(child: _buildSourceChip('⌚ 워치', StepSourceType.watch)),
+              Expanded(child: _buildSourceChip(exText('chipWatch'), StepSourceType.watch)),
               const SizedBox(width: 8),
               // 🆕 [실시간성 개선] 워치는 30초→5초 폴링으로 단축했지만, 그마저도
               // 기다리기 답답할 때 지금 당장 한 번 더 조회해서 바로 확인 가능하게 함.
@@ -937,7 +956,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 borderRadius: BorderRadius.circular(10),
                 onTap: () async {
                   await ExerciseStepService.refreshNow();
-                  if (mounted) ExerciseTheme.showLuxeSnackBar(context, '방금 값을 다시 확인했습니다.');
+                  _loadDayHeart(); // 🆕 [2026-10-08] 오늘 심박도 함께 새로
+                  if (mounted) ExerciseTheme.showLuxeSnackBar(context, exText('rechecked'));
                 },
                 child: Container(
                   padding: const EdgeInsets.all(9),
@@ -958,7 +978,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             child: OutlinedButton.icon(
               onPressed: _showConnectionCheck,
               icon: const Icon(Icons.health_and_safety_rounded, color: ExerciseTheme.brandGolden, size: 18),
-              label: const Text('🔍 삼성헬스 연결 점검', style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
+              label: Text(exText('shCheckBtn'), style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.6)),
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -969,7 +989,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           const SizedBox(height: 12),
           if (_stepUnavailable)
             Text(
-              '이 기기에서는 걸음수 센서를 사용할 수 없습니다. 아래 항목에 직접 입력해 주세요.',
+              exText('noSensor'),
               style: ExerciseTheme.bodyStyle(size: 11.5, color: Colors.white38),
             )
           else ...[
@@ -984,26 +1004,36 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                         ? 'Tracking... $_autoSteps steps'
                         : (_autoSteps > 0 ? 'Done: $_autoSteps steps' : 'Not started yet'),
                     ko: _isStepTracking
-                        ? '측정 중... $_autoSteps 보'
-                        : (_autoSteps > 0 ? '측정 완료: $_autoSteps 보' : '아직 측정 전'),
+                        ? exTextIn('tracking', 'KO', {'n': _autoSteps})
+                        : (_autoSteps > 0 ? exTextIn('trackDone', 'KO', {'n': _autoSteps}) : exTextIn('notStarted', 'KO')),
+                    // 🆕 [2026-10-08] 10개 언어
+                    translations: {
+                      for (final String l in AppLanguageService.foreignLanguageCodes)
+                        l: _isStepTracking
+                            ? exTextIn('tracking', l, {'n': _autoSteps})
+                            : (_autoSteps > 0 ? exTextIn('trackDone', l, {'n': _autoSteps}) : exTextIn('notStarted', l)),
+                    },
                     color: _isStepTracking ? ExerciseTheme.brandGolden : Colors.white70,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _toggleStepTracking,
-                  icon: Icon(_isStepTracking ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
-                  label: ExerciseTheme.biButtonLabel(
-                    _isStepTracking ? 'Stop' : 'Start',
-                    _isStepTracking ? '측정 중 · 누르면 끝' : '측정 시작', // 🆕 [2026-10-05] 빨간 단추 = 지금 측정 중
-                    color: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
-                    size: 12.5,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isStepTracking ? ExerciseTheme.dangerRed : ExerciseTheme.brandGolden,
-                    foregroundColor: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
+                // 🆕 [2026-10-08] 번역 글자가 길어도 단추가 화면 밖으로 밀리지 않게 폭 제한 (글자는 줄바꿈)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 170),
+                  child: ElevatedButton.icon(
+                    onPressed: _toggleStepTracking,
+                    icon: Icon(_isStepTracking ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
+                    label: _btnText(
+                      _isStepTracking ? 'stopBtn' : 'startBtn', // 🆕 [2026-10-05] 빨간 단추 = 지금 측정 중 · [2026-10-08] 12개 언어
+                      color: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
+                      size: 12.5,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isStepTracking ? ExerciseTheme.dangerRed : ExerciseTheme.brandGolden,
+                      foregroundColor: _isStepTracking ? Colors.white : ExerciseTheme.pageBg,
+                    ),
                   ),
                 ),
               ],
@@ -1011,7 +1041,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             if (_isStepTracking) ...[
               const SizedBox(height: 8),
               Text(
-                '폰을 주머니나 손에 들고 걸으면 자동으로 걸음수가 올라갑니다.',
+                exText('pocketHint'),
                 style: ExerciseTheme.bodyStyle(size: 11, color: Colors.white38),
               ),
             ],
@@ -1022,13 +1052,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('DAILY AUTO RECORD', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10)),
-                      Text('매일 자동 기록 (자정 기준)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
-                    ],
-                  ),
+                  child: _bi2('dailyAutoTitle', enSize: 10, koSize: 12.5), // 🆕 [2026-10-08]
                 ),
                 Switch(
                   value: _dailyAutoEnabled,
@@ -1041,7 +1065,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  '자정이 지나면 어제 걸음수가 자동 확정 저장되고, 오늘 걸음수가 새로 시작됩니다. 언제든 이 화면에서 직접 수정할 수 있습니다.',
+                  exText('dailyAutoHelp'),
                   style: ExerciseTheme.bodyStyle(size: 10.5, color: Colors.white38),
                 ),
               ),
@@ -1067,6 +1091,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                     BiInline(
                       en: "Today's Auto Record",
                       ko: '오늘 자동 기록',
+                      translations: exTextTranslations('todayAuto'),
                       color: Colors.white70,
                       fontSize: 10.5,
                     ),
@@ -1075,10 +1100,16 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Text(
                         _liveAutoSteps == null
-                            ? '삼성헬스(워치 포함) ${DailyStepWatcherService.instance.lastHealthSteps}보 · 폰 ${DailyStepWatcherService.instance.lastPhoneSteps}보 (아직 기록 전)'
+                            ? exText('autoNotYet', {'h': DailyStepWatcherService.instance.lastHealthSteps, 'p': DailyStepWatcherService.instance.lastPhoneSteps})
                         // 🆕 [칼로리 추가] 걸음수 기준 추정 칼로리도 거리와 함께 표시
                         // 🆕 [2026-10-05] 기록값(많은 쪽) + 삼성헬스(워치 포함) · 폰 각각
-                            : '기록 $_liveAutoSteps보 · ${_formatAutoDistance(_liveAutoSteps!)} · ${_estimateCaloriesForSteps(_liveAutoSteps!).round()}kcal   |   삼성헬스(워치) ${DailyStepWatcherService.instance.lastHealthSteps}보 · 폰 ${DailyStepWatcherService.instance.lastPhoneSteps}보',
+                            : exText('autoLine', {
+                          'n': _liveAutoSteps!,
+                          'd': _formatAutoDistance(_liveAutoSteps!),
+                          'c': _estimateCaloriesForSteps(_liveAutoSteps!).round(),
+                          'h': DailyStepWatcherService.instance.lastHealthSteps,
+                          'p': DailyStepWatcherService.instance.lastPhoneSteps,
+                        }),
                         style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 14), // 🆕 12 -> 14로 살짝 키움
                         maxLines: 1,
                       ),
@@ -1101,11 +1132,95 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     if (mounted) setState(() => _pendingConfirm = r);
   }
 
+  // ===================================================================
+  // 🆕 [2026-10-08] 워치 심박 — ① 오늘 심박(최저 · 평상 · 최고) ② 타이머 · 걸음 측정한 시간의 심박 자동 채우기
+  // 모두 폰 안의 Health Connect에서 읽음 (서버 · 데이터 비용 없음)
+  // ===================================================================
+  Future<void> _loadDayHeart() async {
+    final DayHeartStats? h = await HealthLink.dayHeartStats();
+    if (mounted) setState(() => _dayHeart = h);
+  }
+
+  Future<void> _fillHeartFromWatch(DateTime from, DateTime to) async {
+    if (to.difference(from).inMinutes < 1) return;
+    if (!await HealthLink.hasExtendedPermission()) return;
+    final (int? avg, int? mx) = await HealthLink.heartRateBetween(from, to);
+    if (!mounted || avg == null) return;
+    bool filled = false;
+    if (_avgHrController.text.trim().isEmpty) {
+      _avgHrController.text = avg.toString();
+      filled = true;
+    }
+    if (mx != null && _maxHrController.text.trim().isEmpty) {
+      _maxHrController.text = mx.toString();
+      filled = true;
+    }
+    if (filled) {
+      setState(() {});
+      ExerciseTheme.showLuxeSnackBar(context, exText('hrFilled', {'a': avg, 'm': mx ?? '-'}));
+    }
+    _loadDayHeart();
+  }
+
+  Widget _buildDayHeartCard() {
+    final DayHeartStats h = _dayHeart!;
+    Widget cell(String key, int v, Color c) => Expanded(
+      child: Column(
+        children: [
+          Text('$v', style: GoogleFonts.rajdhani(color: c, fontSize: 26, fontWeight: FontWeight.bold)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: appLanguage.isDefault
+                ? Column(
+              children: [
+                Text(exTextIn(key, 'EN').toUpperCase(), style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 9.5)),
+                Text(exTextIn(key, 'KO'), style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5)),
+              ],
+            )
+                : Text(exText(key), style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5)),
+          ),
+        ],
+      ),
+    );
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.favorite_rounded, color: ExerciseTheme.dangerRed, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: _bi2('dayHeart', koSize: 13)),
+              Text('bpm', style: GoogleFonts.rajdhani(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              cell('hrMin', h.min, const Color(0xFF60A5FA)),
+              Container(width: 1, height: 40, color: Colors.white12),
+              cell('hrRest', h.rest, const Color(0xFF22C55E)),
+              Container(width: 1, height: 40, color: Colors.white12),
+              cell('hrMaxDay', h.max, ExerciseTheme.dangerRed),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${exText('dayHeartNote')} · ${h.updatedAt.hour.toString().padLeft(2, '0')}:${h.updatedAt.minute.toString().padLeft(2, '0')}',
+            style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildConfirmCard() {
     final ExerciseRecord r = _pendingConfirm!;
     final int steps = (r.detail['steps'] as num?)?.toInt() ?? 0;
     final double km = (r.detail['distanceKm'] as num?)?.toDouble() ?? 0;
-    final String src = r.detail['autoSource'] == 'samsungHealth' ? '삼성헬스' : '폰';
+    final String src = r.detail['autoSource'] == 'samsungHealth' ? exText('srcSH') : exText('srcPhone');
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1117,21 +1232,21 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            r.recordId.startsWith('auto_workout_') ? '⌚ 워치 운동 자동 기록 — 맞나요?' : '어제 걸음 자동 기록 — 맞나요?',
+            r.recordId.startsWith('auto_workout_') ? exText('confirmWorkout') : exText('confirmSteps'),
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
           ),
           const SizedBox(height: 6),
           Text(
             r.recordId.startsWith('auto_workout_')
-                ? '${r.date.month}/${r.date.day} ${r.date.hour.toString().padLeft(2, '0')}:${r.date.minute.toString().padLeft(2, '0')} · ${r.durationMin}분'
+                ? '${r.date.month}/${r.date.day} ${r.date.hour.toString().padLeft(2, '0')}:${r.date.minute.toString().padLeft(2, '0')} · ${r.durationMin}${_sp}${exText('uMin')}'
                 '${(r.detail['distanceKm'] as num?) != null ? ' · ${(r.detail['distanceKm'] as num).toStringAsFixed(2)}km' : ''}'
-                '${r.avgHeartRateBpm != null ? ' · 심박 ${r.avgHeartRateBpm}' : ''}'
+                '${r.avgHeartRateBpm != null ? ' · ${exText('hr')} ${r.avgHeartRateBpm}' : ''}'
                 '${(r.detail['calories'] as num?) != null ? ' · ${r.detail['calories']}kcal' : ''}'
-                : '${r.date.month}/${r.date.day} · $steps보 · ${km.toStringAsFixed(2)}km ($src)',
+                : '${r.date.month}/${r.date.day} · $steps${_sp}${exText('uSteps')} · ${km.toStringAsFixed(2)}km ($src)',
             style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 4),
-          const Text('확인하지 않아도 이 값으로 저장돼요. 언제든 고칠 수 있어요.', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          Text(exText('confirmNote'), style: const TextStyle(color: Colors.white38, fontSize: 11)),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -1145,7 +1260,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                     if (changed == true) _loadPendingConfirm();
                   },
                   style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white38)),
-                  child: const Text('고치기', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(exText('fix'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1156,7 +1271,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                     _loadPendingConfirm();
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: ExerciseTheme.brandGolden),
-                  child: const Text('확인', style: TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold)),
+                  child: Text(exText('ok'), style: const TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -1205,7 +1320,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    luxuryDialogHeader(icon: Icons.health_and_safety_rounded, en: 'CONNECTION CHECK', ko: '삼성헬스 연결 점검'),
+                    luxuryDialogHeader(icon: Icons.health_and_safety_rounded, en: appLanguage.isDefault ? 'CONNECTION CHECK' : exText('connCheck'), ko: exTextIn('connCheck', 'KO')),
                     if (items == null)
                       const Padding(
                         padding: EdgeInsets.all(20),
@@ -1236,21 +1351,21 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        btn('설치·업데이트', () => HealthLink.install()),
-                        btn('권한 다시 요청', () async {
+                        btn(exText('btnInstall'), () => HealthLink.install()),
+                        btn(exText('btnPerm'), () async {
                           await HealthLink.requestPermission();
                         }),
-                        btn('운동·수면 권한 요청', () async {
+                        btn(exText('btnPermExt'), () async {
                           await HealthLink.requestExtendedPermission();
                         }),
-                        btn('폰 권한 설정 열기', () async {
+                        btn(exText('btnPhoneSettings'), () async {
                           await openAppSettings();
                         }),
-                        btn('자동 기록 켜기', () async {
+                        btn(exText('btnAutoOn'), () async {
                           await DailyStepWatcherService.instance.setEnabled(true);
                           if (mounted) setState(() => _dailyAutoEnabled = true);
                         }),
-                        btn('다시 점검', () async {}),
+                        btn(exText('btnRecheck'), () async {}),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -1258,7 +1373,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () => Navigator.pop(dctx),
-                        child: const Text('닫기', style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold)),
+                        child: Text(exText('close'), style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -1282,17 +1397,20 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     return list.take(10).toList();
   }
 
+  // 🆕 [2026-10-08] 숫자와 단위 사이 띄어쓰기 (한국어·중국어·일본어는 붙여 씀)
+  String get _sp => const ['KO', 'JA', 'ZH'].contains(appLanguage.current) ? '' : ' ';
+
   String _recordSummary(ExerciseRecord r) {
     final Map<String, dynamic> d = r.detail;
-    final List<String> parts = ['${r.date.month}/${r.date.day}', '${r.durationMin}분'];
+    final List<String> parts = ['${r.date.month}/${r.date.day}', '${r.durationMin}$_sp${exText('uMin')}']; // 🆕 [2026-10-08] 12개 언어
     final String nm = (d['exerciseName'] ?? d['activityName'] ?? '').toString(); // 🆕 [2026-10-07] 운동 이름
     if (nm.isNotEmpty) parts.add(nm.length > 18 ? '${nm.substring(0, 18)}…' : nm);
-    if (d['steps'] is num) parts.add('${d['steps']}보');
+    if (d['steps'] is num) parts.add('${d['steps']}$_sp${exText('uSteps')}');
     if (d['distanceKm'] is num) parts.add('${(d['distanceKm'] as num).toStringAsFixed(2)}km');
     if (d['distanceM'] is num) parts.add('${d['distanceM']}m');
-    if (r.avgHeartRateBpm != null) parts.add('심박 ${r.avgHeartRateBpm}${r.maxHeartRateBpm != null ? '/${r.maxHeartRateBpm}' : ''}');
+    if (r.avgHeartRateBpm != null) parts.add('${exText('hr')} ${r.avgHeartRateBpm}${r.maxHeartRateBpm != null ? '/${r.maxHeartRateBpm}' : ''}');
     if (d['calories'] is num) parts.add('${(d['calories'] as num).round()}kcal');
-    if (d['paceMinPerKm'] is num) parts.add('1km ${d['paceMinPerKm']}분');
+    if (d['paceMinPerKm'] is num) parts.add(exText('pace1km', {'n': d['paceMinPerKm']}));
     return parts.join(' · ');
   }
 
@@ -1307,35 +1425,47 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('📋 최근 기록  (⌚ 삼성헬스 자동 · ✏️ 직접)', style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(exText('recentTitle'), style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 2),
-              const Text('눌러서 자세히 보기 · 고치기 · 지우기', style: TextStyle(color: Colors.white38, fontSize: 10.5)),
+              Text(exText('recentHint'), style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
               const SizedBox(height: 8),
               if (list.isEmpty)
-                const Text('아직 기록이 없어요', style: TextStyle(color: Colors.white38, fontSize: 12))
+                Text(exText('recentEmpty'), style: const TextStyle(color: Colors.white38, fontSize: 12))
               else
-                ...list.map((r) => InkWell(
-                  onTap: () async {
-                    final bool? changed = await Navigator.push<bool>(
-                      context,
-                      MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: widget.exerciseType, existingRecord: r)),
-                    );
-                    if (changed == true && mounted) {
-                      setState(() => _recentFuture = _loadRecent());
-                      _loadPendingConfirm();
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      children: [
-                        SizedBox(width: 24, child: Text(r.recordId.startsWith('auto_') ? '⌚' : '✏️')),
-                        Expanded(child: Text(_recordSummary(r), style: const TextStyle(color: Colors.white, fontSize: 12.5))),
-                        const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
-                      ],
+              // 🆕 [2026-10-08] 최근 기록은 3줄만 보이고, 나머지는 칸 안에서 위아래로 밀어서 봄
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: list.length > 3 ? 132 : double.infinity),
+                  child: Scrollbar(
+                    thumbVisibility: list.length > 3,
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      physics: list.length > 3 ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                      children: list.map((r) => InkWell(
+                        onTap: () async {
+                          final bool? changed = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(builder: (_) => TodayExerciseScreen(exerciseType: widget.exerciseType, existingRecord: r)),
+                          );
+                          if (changed == true && mounted) {
+                            setState(() => _recentFuture = _loadRecent());
+                            _loadPendingConfirm();
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              SizedBox(width: 24, child: Text(r.recordId.startsWith('auto_') ? '⌚' : '✏️')),
+                              Expanded(child: Text(_recordSummary(r), style: const TextStyle(color: Colors.white, fontSize: 12.5))),
+                              const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
+                            ],
+                          ),
+                        ),
+                      )).toList(),
                     ),
                   ),
-                )),
+                ),
             ],
           ),
         );
@@ -1384,6 +1514,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       return;
     }
     // 멈춤 → 운동 시간 칸 채우기 + 별 적립
+    final DateTime? hrFrom = _exStart; // 🆕 [2026-10-08] 워치 심박을 가져올 시작 시각 (별 계산과 무관)
     _exTimer?.cancel();
     await prefs.remove(_exStartKey);
     final int minutes = _exElapsedSec ~/ 60;
@@ -1399,11 +1530,12 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     ExerciseTheme.showLuxeSnackBar(
       context,
       minutes == 0
-          ? '1분 이상 운동하면 별이 쌓여요.'
+          ? exText('timerMin1')
           : given > 0
-          ? '⭐ 별 $given개 적립! (오늘 운동 별 $today / ${DkeStars.exerciseDailyCap}) — 아래 [기록 저장]도 눌러 주세요.'
-          : '오늘 운동 별 ${DkeStars.exerciseDailyCap}개를 모두 모았어요. 운동 기록은 그대로 남아요. — [기록 저장]을 눌러 주세요.',
+          ? exText('timerGiven', {'g': given, 't': today, 'cap': DkeStars.exerciseDailyCap})
+          : exText('timerFull', {'cap': DkeStars.exerciseDailyCap}),
     );
+    if (hrFrom != null) _fillHeartFromWatch(hrFrom, DateTime.now()); // 🆕 [2026-10-08] 운동한 시간의 워치 심박
   }
 
   Widget _buildStudentExerciseTimer() {
@@ -1421,13 +1553,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               const Text('⏱', style: TextStyle(fontSize: 20)),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('EXERCISE TIMER', style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 10.5)),
-                    Text('운동 타이머 · 1분 = ⭐ 1개', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  ],
-                ),
+                child: _bi2('timerTitle', enColor: Colors.white54), // 🆕 [2026-10-08] 12개 언어
               ),
               Text(
                 '⭐ $_exStarsToday / ${DkeStars.exerciseDailyCap}',
@@ -1446,7 +1572,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             child: ElevatedButton.icon(
               onPressed: _toggleStudentExerciseTimer,
               icon: Icon(running ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 20),
-              label: Text(running ? '운동 끝 · 별 받기' : '운동 시작', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              label: Text(running ? exText('timerStop') : exText('timerStart'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: running ? ExerciseTheme.dangerRed : ExerciseTheme.brandGolden,
                 foregroundColor: running ? Colors.white : ExerciseTheme.pageBg,
@@ -1457,7 +1583,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            full ? '오늘 운동 별은 모두 모았어요. 운동 기록은 계속 남길 수 있어요.' : '하루 최대 60분(별 60개)까지 별이 쌓여요. 운동 별은 공부 출석에는 들어가지 않아요.',
+            full ? exText('timerFullNote') : exText('timerNote'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white38, fontSize: 10.5),
           ),
@@ -1600,8 +1726,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         });
 
         final String enTitle = isSteps ? 'DAILY STEPS' : 'DAILY MINUTES';
-        final String koTitle = isSteps ? '일별 걸음수' : '일별 운동시간';
-        final String unit = isSteps ? '보' : '분';
+        final String koTitle = exTextIn(isSteps ? 'chartSteps' : 'chartMinutes', 'KO');
+        final String unit = exText(isSteps ? 'uSteps' : 'uMin'); // 🆕 [2026-10-08] 12개 언어
 
         return Container(
           padding: const EdgeInsets.all(14),
@@ -1609,16 +1735,25 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(enTitle, style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10.5)),
-                  const SizedBox(width: 6),
-                  Text('($koTitle)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
-                ],
-              ),
+              // 🆕 [2026-10-08] 한국어 = 영문 (한글) / 그 외 = 그 언어만
+              if (appLanguage.isDefault)
+                Row(
+                  children: [
+                    Text(enTitle, style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 10.5)),
+                    const SizedBox(width: 6),
+                    Text('($koTitle)', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                  ],
+                )
+              else
+                Text(
+                  appLanguage.isEnglishOnly ? enTitle : exText(isSteps ? 'chartSteps' : 'chartMinutes'),
+                  style: appLanguage.isEnglishOnly
+                      ? GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)
+                      : GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
+                ),
               const SizedBox(height: 2),
               Text(
-                '좌우로 밀어서 최근 30일까지 볼 수 있습니다. 막대 위 숫자는 그 날의 추정 칼로리입니다.',
+                exText('chartHint'),
                 style: ExerciseTheme.bodyStyle(size: 10, color: Colors.white38),
               ),
               const SizedBox(height: 14),
@@ -1796,7 +1931,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    '※ ${unit == '보' ? '걸음수' : '기록'}가 많아 0~${base.toInt()}$unit 구간은 생략해서 표시했습니다.',
+                    exText(isSteps ? 'chartBrokenSteps' : 'chartBrokenMin', {'b': base.toInt(), 'u': unit}),
                     style: ExerciseTheme.bodyStyle(size: 10, color: Colors.white38),
                   ),
                 ),
@@ -1845,12 +1980,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: DropdownButtonFormField<String>(
+            isExpanded: true, // 🆕 [2026-10-08] 긴 번역 글자도 칸 안에서 줄바꿈 · 넘침 없음
             initialValue: _selectValues[field.key],
             dropdownColor: ExerciseTheme.containerBgElevated,
             style: const TextStyle(color: Colors.white),
             decoration: _decoration(_bilabel(field)),
             items: (field.options ?? [])
-                .map((o) => DropdownMenuItem(value: o, child: Text(_optionLabel(field, o))))
+                .map((o) => DropdownMenuItem(value: o, child: Text(_optionLabel(field, o), maxLines: 2, overflow: TextOverflow.ellipsis)))
                 .toList(),
             onChanged: (v) => setState(() => _selectValues[field.key] = v),
           ),
@@ -1912,14 +2048,12 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               children: [
                 Text(
                   _bilabel(field),
-                  style: ExerciseTheme.bodyStyle(color: Colors.white, size: 12.5),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  style: ExerciseTheme.bodyStyle(color: Colors.white, size: 12.5), // 🆕 [2026-10-08] 긴 글자는 줄바꿈 (잘림 없음)
                 ),
                 if (_helpFor(field) != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(_helpFor(field)!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
+                    child: Text(_helpFor(field)!, style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
                   ),
                 const SizedBox(height: 8),
                 Row(
@@ -2059,7 +2193,6 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   }
 
   Widget _buildGymLines() {
-    final bool ko = appLanguage.isDefault;
     final List<String> parts = _multiSelectValues['bodyPart'] ?? const [];
     final List<String> suggestions = [for (final p in parts) ...(_gymSuggestions[p] ?? const <String>[])];
     ExerciseField? equipField;
@@ -2069,32 +2202,32 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(ko ? '오늘 한 운동' : "Today's Exercises", style: ExerciseTheme.titleStyle(size: 14)),
+        Text(exText('gymToday'), style: ExerciseTheme.titleStyle(size: 14)),
         const SizedBox(height: 4),
         Text(
-          ko ? '운동마다 한 줄씩 적어요. 기구와 세트(무게 × 횟수)도 운동마다 따로 기록돼요.' : 'One line per exercise, each with its own equipment and sets.',
+          exText('gymHelp'),
           style: const TextStyle(color: Colors.white38, fontSize: 11),
         ),
         const SizedBox(height: 10),
         if (suggestions.isNotEmpty) ...[
-          Text(ko ? '눌러서 바로 넣기' : 'Tap to add', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          Text(exText('tapAdd'), style: const TextStyle(color: Colors.white54, fontSize: 11)),
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: suggestions
                 .map((n) => ActionChip(
-              label: Text(n, style: const TextStyle(color: ExerciseTheme.brandGolden, fontSize: 12)),
+              label: Text(gymMoveLabel(n), style: const TextStyle(color: ExerciseTheme.brandGolden, fontSize: 12)), // 🆕 [2026-10-08] 12개 언어
               backgroundColor: ExerciseTheme.pageBg,
               side: BorderSide(color: ExerciseTheme.brandGolden.withOpacity(0.5)),
               visualDensity: VisualDensity.compact,
               onPressed: () => setState(() {
                 final _GymLine last = _gymLines.last;
                 if (last.name.text.trim().isEmpty) {
-                  last.name.text = n;
+                  last.name.text = gymMoveLabel(n);
                 } else {
                   _gymLines.add(_GymLine()
-                    ..name.text = n
+                    ..name.text = gymMoveLabel(n)
                     ..sets.add(_SetRow()));
                 }
               }),
@@ -2104,7 +2237,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           const SizedBox(height: 12),
         ] else ...[
           Text(
-            ko ? '위에서 운동 부위를 고르면 추천 운동이 나와요.' : 'Pick a body part above to see suggestions.',
+            exText('pickPart'),
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 12),
@@ -2115,7 +2248,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           child: TextButton.icon(
             onPressed: () => setState(() => _gymLines.add(_GymLine()..sets.add(_SetRow()))),
             icon: const Icon(Icons.add_circle_outline_rounded, color: ExerciseTheme.brandGolden, size: 20),
-            label: ExerciseTheme.biButtonLabel('Add Exercise', '운동 추가', color: ExerciseTheme.brandGolden, size: 13),
+            label: _btnText('addExercise', color: ExerciseTheme.brandGolden, size: 13),
           ),
         ),
         const SizedBox(height: 8),
@@ -2146,8 +2279,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 child: TextField(
                   controller: line.name,
                   style: const TextStyle(color: Colors.white),
-                  decoration: _decoration(ko ? '운동 이름' : 'Exercise').copyWith(
-                    hintText: ko ? '예) 스쿼트, 벤치프레스, 랫풀다운' : 'e.g. Squat, Bench Press',
+                  decoration: _decoration(exText('exName')).copyWith(
+                    hintText: exText('exHint'),
                     hintStyle: const TextStyle(color: Colors.white24, fontSize: 12.5),
                     isDense: true,
                   ),
@@ -2164,7 +2297,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          Text(ko ? '사용 기구 (여러 개 선택)' : 'Equipment (multi-select)', style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+          Text(exText('equip'), style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
@@ -2187,7 +2320,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             }).toList(),
           ),
           const SizedBox(height: 10),
-          Text(ko ? '세트 (무게 × 횟수)' : 'Sets (weight × reps)', style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+          Text(exText('setsWR'), style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
           const SizedBox(height: 6),
           ...line.sets.asMap().entries.map((s) => Padding(
             padding: const EdgeInsets.only(bottom: 6),
@@ -2199,7 +2332,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                     controller: s.value.weight,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: _decoration(ko ? '무게' : 'Weight', unit: 'kg').copyWith(isDense: true),
+                    decoration: _decoration(exText('weight'), unit: 'kg').copyWith(isDense: true),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2208,7 +2341,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                     controller: s.value.reps,
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: _decoration(ko ? '횟수' : 'Reps', unit: ko ? '회' : null).copyWith(isDense: true),
+                    decoration: _decoration(exText('reps'), unit: ko ? '회' : null).copyWith(isDense: true),
                   ),
                 ),
                 IconButton(
@@ -2237,7 +2370,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 line.sets.add(r);
               }),
               icon: const Icon(Icons.add, color: ExerciseTheme.brandGolden, size: 18),
-              label: ExerciseTheme.biButtonLabel('Add Set', '세트 추가', color: ExerciseTheme.brandGolden, size: 12.5),
+              label: _btnText('addSet', color: ExerciseTheme.brandGolden, size: 12.5),
             ),
           ),
         ],
@@ -2453,7 +2586,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       controller: row.weight,
                       keyboardType: TextInputType.number,
                       style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: _decoration('중량', unit: 'kg'),
+                      decoration: _decoration(exText('weight'), unit: 'kg'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2462,7 +2595,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                       controller: row.reps,
                       keyboardType: TextInputType.number,
                       style: const TextStyle(color: Colors.white, fontSize: 13),
-                      decoration: _decoration('횟수'),
+                      decoration: _decoration(exText('reps')),
                     ),
                   ),
                   IconButton(
@@ -2476,7 +2609,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           TextButton.icon(
             onPressed: () => setState(() => _setRows.add(_SetRow())),
             icon: const Icon(Icons.add, color: ExerciseTheme.brandGolden, size: 18),
-            label: ExerciseTheme.biButtonLabel('Add Set', '세트 추가', color: ExerciseTheme.brandGolden, size: 12.5),
+            label: _btnText('addSet', color: ExerciseTheme.brandGolden, size: 12.5),
           ),
         ],
       ),
@@ -2497,13 +2630,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
         child: Row(
           children: [
             Expanded(
-              child: _buildBottomTab(icon: Icons.edit_note_rounded, en: 'INPUT', ko: '운동입력', active: true, onTap: null),
+              child: _buildBottomTab(icon: Icons.edit_note_rounded, en: exText('tabInput'), ko: '운동입력', active: true, onTap: null),
             ),
             Container(width: 1, height: 36, color: Colors.white12),
             Expanded(
               child: _buildBottomTab(
                 icon: Icons.insights_rounded,
-                en: 'ANALYSIS',
+                en: exText('tabAnalysis'),
                 ko: '운동분석',
                 active: false,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseTypeAnalysisScreen(type: widget.exerciseType))),
@@ -2551,7 +2684,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           children: [
             Icon(ExerciseTheme.iconForType(type.id), color: ExerciseTheme.brandGolden, size: 20),
             const SizedBox(width: 8),
-            BiTitle(en: type.id == 'etc' ? 'FREE WORKOUT' : enName, ko: exerciseDisplayName(type), enSize: 17, koSize: 17),
+            // 🆕 [2026-10-08] 긴 종목 이름은 제목 칸에 맞게 자동으로 살짝 줄임 (넘침 없음)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: BiTitle(en: type.id == 'etc' ? 'FREE WORKOUT' : enName, ko: exerciseDisplayName(type), enSize: 17, koSize: 17, translations: exerciseTitleTranslations(type.id)), // 🆕 [2026-10-08] 12개 언어
+              ),
+            ),
           ],
         ),
         actions: [
@@ -2582,9 +2721,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: ExerciseTheme.brandGolden),
               ),
-              child: const Text(
-                '✏️ 지난 기록 고치기 — 고친 뒤 맨 아래 [기록 저장] · 지우려면 오른쪽 위 🗑',
-                style: TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5),
+              child: Text(
+                exText('editBanner'),
+                style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5),
               ),
             ),
           // 공통: 날짜
@@ -2609,7 +2748,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 children: [
                   const Icon(Icons.calendar_today_rounded, color: ExerciseTheme.brandGolden, size: 18),
                   const SizedBox(width: 10),
-                  BiInline(en: 'DATE', ko: '기록 날짜', color: Colors.white70, fontSize: 12),
+                  BiInline(en: 'DATE', ko: '기록 날짜', color: Colors.white70, fontSize: 12, translations: exTextTranslations('date')),
                   const Spacer(),
                   Text(
                     '${_date.year}.${_date.month.toString().padLeft(2, '0')}.${_date.day.toString().padLeft(2, '0')}',
@@ -2629,13 +2768,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             const SizedBox(height: 16),
           ],
           // 공통: 운동시간
-          BiInline(en: 'DURATION', ko: '운동시간', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+          BiInline(en: 'DURATION', ko: '운동시간', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12, translations: exTextTranslations('duration')),
           const SizedBox(height: 6),
           TextField(
             controller: _durationController,
             keyboardType: TextInputType.number,
             style: const TextStyle(color: Colors.white),
-            decoration: _decoration('', unit: '분'),
+            decoration: _decoration('', unit: exText('uMin')),
           ),
           const SizedBox(height: 16),
 
@@ -2651,14 +2790,14 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      appLanguage.isDefault ? '몸이 느낀 힘든 정도 (1 아주 쉬움 ~ 10 최대)' : 'RPE (Perceived Exertion)',
+                      exText('rpeTitle'), // 🆕 [2026-10-08] 12개 언어
                       style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       // ✅ [2026-09-06 개편] 10개국어 선택 시 사전에서 해당 언어로 표시
                       appLanguage.isForeignSelected
-                          ? '자각 운동강도 (RPE $_rpe · ${kExerciseTermTranslations[kRpeLabelsEn[_rpe]]?[appLanguage.current] ?? kRpeLabelsEn[_rpe] ?? ''})'
+                          ? '${exText('rpeWord')} $_rpe · ${kExerciseTermTranslations[kRpeLabelsEn[_rpe]]?[appLanguage.current] ?? kRpeLabelsEn[_rpe] ?? ''}' // 🆕 [2026-10-08] 한글 '자각 운동강도' 섞임 수정
                           : appLanguage.isEnglishOnly
                           ? 'RPE $_rpe · ${kRpeLabelsEn[_rpe] ?? ''}'
                           : '힘든 정도 $_rpe · ${kRpeLabels[_rpe] ?? ''}',
@@ -2685,7 +2824,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           ),
 
           // 공통: 심박수 (선택)
-          BiInline(en: 'HEART RATE (OPTIONAL)', ko: '심박수 (선택)', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+          BiInline(en: 'HEART RATE (OPTIONAL)', ko: '심박수 (선택)', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12, translations: exTextTranslations('heart')),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -2695,7 +2834,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   keyboardType: TextInputType.number,
                   style: const TextStyle(color: Colors.white),
                   decoration: _decoration('', unit: 'bpm')
-                      .copyWith(hintText: appLanguage.isDefault ? '평균' : biHint('Average', '평균')),
+                      .copyWith(hintText: exText('avg')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -2705,7 +2844,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   keyboardType: TextInputType.number,
                   style: const TextStyle(color: Colors.white),
                   decoration: _decoration('', unit: 'bpm')
-                      .copyWith(hintText: appLanguage.isDefault ? '최고' : biHint('Max', '최고')),
+                      .copyWith(hintText: exText('max')),
                 ),
               ),
             ],
@@ -2717,6 +2856,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           BiInline(
             en: type.id == 'etc' ? 'FREE WORKOUT DETAILS' : '${ExerciseTheme.englishNameForType(type.id, type.name)} DETAILS', // 🆕 [2026-10-07]
             ko: '${exerciseDisplayName(type)} 세부 기록',
+            // 🆕 [2026-10-08] 10개 언어: 그 나라 종목 이름 + "세부 기록"
+            translations: {
+              for (final String l in AppLanguageService.foreignLanguageCodes)
+                l: '${exerciseNameIn(type.id, type.name, l)} · ${exTextIn('details', l)}',
+            },
             color: ExerciseTheme.goldenLight,
             fontWeight: FontWeight.bold,
             fontSize: 15,
@@ -2726,6 +2870,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           // 🆕 [만보기 연동 1단계] '걸음수' 필드가 있는 종목에서만 자동측정 카드 노출
           if (_pendingConfirm != null && !_isEditMode) ...[
             _buildConfirmCard(), // 🆕 [삼성헬스] 자동 기록 확인 (걸음 · 워치 운동)
+            const SizedBox(height: 12),
+          ],
+          // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고) — 워치 심박이 있을 때만 보임
+          if (_dayHeart != null && !_isEditMode) ...[
+            _buildDayHeartCard(),
             const SizedBox(height: 12),
           ],
           if (_isStudent && !_isEditMode) ...[
@@ -2751,7 +2900,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           _buildDailyTrendChart(isSteps: false),
 
           const SizedBox(height: 12),
-          BiInline(en: 'MEMO', ko: '메모', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12),
+          BiInline(en: 'MEMO', ko: '메모', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12, translations: exTextTranslations('memo')),
           const SizedBox(height: 6),
           TextField(
             controller: _memoController,
@@ -2771,7 +2920,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                 elevation: 6,
                 shadowColor: ExerciseTheme.brandGolden.withOpacity(0.5),
               ),
-              child: ExerciseTheme.biButtonLabel('Save Record', '기록 저장', color: ExerciseTheme.pageBg, size: 14.5),
+              child: _btnText('save', color: ExerciseTheme.pageBg, size: 14.5), // 🆕 [2026-10-08] 12개 언어
             ),
           ),
           const SizedBox(height: 12),

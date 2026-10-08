@@ -33,6 +33,7 @@ import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'exercise_data_service.dart';
 import 'exercise_models.dart';
+import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 연결 점검 · 수면 시간 글자 12개 언어
 
 // ============================================================================
 // Health Connect(삼성헬스 · 워치) 창구 — 한 곳에서만 다룸
@@ -158,6 +159,39 @@ class HealthLink {
     final double avg = v.reduce((a, b) => a + b) / v.length;
     final double mx = v.reduce((a, b) => a > b ? a : b);
     return (avg.round(), mx.round());
+  }
+
+  /// 🆕 [2026-10-08] 하루 심박: 최저 · 평상 · 최고 (0시 ~ 지금, 운동할 때 심박도 포함)
+  /// - 최고 = 하루 중 가장 높은 값 (운동 포함) / 최저 = 가장 낮은 값
+  /// - 평상 = 낮은 쪽 30% 값들의 평균 (가만히 있을 때의 보통 심박에 가까움)
+  /// - 폰 안에서만 읽음 (서버 · 데이터 비용 없음). 계산할 때마다 그날 값으로 폰에 저장
+  static Future<DayHeartStats?> dayHeartStats([DateTime? day]) async {
+    final DateTime now = DateTime.now();
+    final DateTime d = day ?? now;
+    final DateTime from = DateTime(d.year, d.month, d.day);
+    final DateTime end = from.add(const Duration(days: 1));
+    final DateTime to = end.isAfter(now) ? now : end;
+    if (!await hasExtendedPermission()) return DayHeartStats.load(from);
+    final pts = await _read(const [HealthDataType.HEART_RATE], from, to);
+    final List<double> v = [
+      for (final p in pts)
+        if (p.value is NumericHealthValue) (p.value as NumericHealthValue).numericValue.toDouble(),
+    ]..removeWhere((x) => x < 25 || x > 250); // 잘못 잰 값 빼기
+    if (v.isEmpty) return DayHeartStats.load(from);
+    v.sort();
+    int lowCount = (v.length * 0.3).ceil();
+    if (lowCount < 1) lowCount = 1;
+    final double rest = v.take(lowCount).reduce((a, b) => a + b) / lowCount;
+    final DayHeartStats s = DayHeartStats(
+      date: from,
+      min: v.first.round(),
+      rest: rest.round(),
+      max: v.last.round(),
+      count: v.length,
+      updatedAt: now,
+    );
+    await s.save();
+    return s;
   }
 
   /// 구간 최고 속도 — 지금 쓰는 health 꾸러미에는 속도 항목이 없어 null (1km 가장 빠른 시간은 비워 둠)
@@ -425,7 +459,7 @@ class SleepSummary {
     end: DateTime.tryParse(j['end']?.toString() ?? ''),
   );
 
-  String get hoursText => '${minutes ~/ 60}시간 ${minutes % 60}분';
+  String get hoursText => exText('hoursMin', {'h': minutes ~/ 60, 'm': minutes % 60}); // 🆕 [2026-10-08] 12개 언어
   String _hm(DateTime? d) => d == null ? '-' : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   String get rangeText => '${_hm(start)} ~ ${_hm(end)}';
 }
@@ -1036,52 +1070,91 @@ class DailyStepWatcherService {
     final HealthConnectSdkStatus? st = await HealthLink.sdkStatus();
     final bool installed = st == HealthConnectSdkStatus.sdkAvailable;
     items.add(StepCheckItem(
-      '① Health Connect 설치',
+      exText('ck1'), // 🆕 [2026-10-08] 점검 창 글자 12개 언어
       installed,
       st == null
-          ? '확인하지 못했어요'
+          ? exText('ckUnknown')
           : installed
-          ? '설치됨'
+          ? exText('ckInstalled')
           : st == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired
-          ? '업데이트가 필요해요 → [설치·업데이트]'
-          : '설치돼 있지 않아요 → [설치·업데이트]',
+          ? exText('ckUpdate')
+          : exText('ckNotInstalled'),
     ));
 
     final bool perm = installed && await HealthLink.hasPermission();
-    items.add(StepCheckItem('② 걸음·거리 읽기 권한', perm, perm ? '허용됨' : '허용 안 됨 → [권한 다시 요청]'));
+    items.add(StepCheckItem(exText('ck2'), perm, perm ? exText('ckAllowed') : exText('ckDeniedPerm')));
 
     int? hSteps;
     if (perm) hSteps = await HealthLink.stepsBetween(today, now);
     items.add(StepCheckItem(
-      '③ 삼성헬스 → 오늘 걸음',
+      exText('ck3'),
       (hSteps ?? 0) > 0,
       !perm
-          ? '권한이 있어야 읽을 수 있어요'
+          ? exText('ckNeedPerm')
           : hSteps == null
-          ? '읽지 못했어요'
+          ? exText('ckReadFail')
           : hSteps == 0
-          ? '0보 — 삼성헬스 → 설정 → Health Connect 연결을 켜 주세요'
-          : '$hSteps보',
+          ? exText('ckZero')
+          : exText('ckSteps', {'n': hSteps}),
     ));
 
     final bool phonePerm = (await Permission.activityRecognition.status).isGranted;
-    items.add(StepCheckItem('④ 폰 신체 활동 권한', phonePerm, phonePerm ? '허용됨' : '허용 안 됨 → [폰 권한 설정 열기]'));
+    items.add(StepCheckItem(exText('ck4'), phonePerm, phonePerm ? exText('ckAllowed') : exText('ckDeniedPhone')));
 
     final DailyStepWatcherService w = DailyStepWatcherService.instance;
-    items.add(StepCheckItem('⑤ 폰 센서 → 오늘 걸음', phonePerm, phonePerm ? '${w.lastPhoneSteps}보 (앱이 켜져 있는 동안 센 값)' : '권한이 있어야 세요'));
+    items.add(StepCheckItem(exText('ck5'), phonePerm, phonePerm ? exText('ckPhoneSteps', {'n': w.lastPhoneSteps}) : exText('ckNeedPerm2')));
 
     final bool ext = installed && await HealthLink.hasExtendedPermission();
-    items.add(StepCheckItem('⑦ 워치 운동 · 심박 · 수면 권한', ext, ext ? '허용됨 (워치 운동 · 수면 자동 기록)' : '허용 안 됨 → [운동·수면 권한 요청]'));
+    items.add(StepCheckItem(exText('ck7'), ext, ext ? exText('ckExtOk') : exText('ckDeniedExt')));
 
     final bool on = await w.isEnabled() && w.isRunning;
     items.add(StepCheckItem(
-      '⑥ 매일 자동 기록',
+      exText('ck6'),
       on,
       on
-          ? '켜짐 · 마지막 확인 ${w.lastSyncAt == null ? '-' : '${w.lastSyncAt!.hour.toString().padLeft(2, '0')}:${w.lastSyncAt!.minute.toString().padLeft(2, '0')}'}'
-          : '꺼짐 → [자동 기록 켜기]',
+          ? exText('ckOn', {'t': w.lastSyncAt == null ? '-' : '${w.lastSyncAt!.hour.toString().padLeft(2, '0')}:${w.lastSyncAt!.minute.toString().padLeft(2, '0')}'})
+          : exText('ckOff'),
     ));
     return items;
+  }
+}
+
+// 🆕 [2026-10-08] 하루 심박 요약 (최저 · 평상 · 최고) — 날짜별로 폰에 저장
+class DayHeartStats {
+  final DateTime date;
+  final int min;
+  final int rest;
+  final int max;
+  final int count;
+  final DateTime updatedAt;
+  DayHeartStats({required this.date, required this.min, required this.rest, required this.max, required this.count, required this.updatedAt});
+
+  static String _key(DateTime d) => 'gke_day_heart_${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Map<String, dynamic> toJson() => {'min': min, 'rest': rest, 'max': max, 'count': count, 'at': updatedAt.toIso8601String()};
+
+  Future<void> save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key(date), jsonEncode(toJson()));
+  }
+
+  static Future<DayHeartStats?> load(DateTime day) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString(_key(day));
+      if (raw == null) return null;
+      final Map<String, dynamic> j = jsonDecode(raw) as Map<String, dynamic>;
+      return DayHeartStats(
+        date: DateTime(day.year, day.month, day.day),
+        min: (j['min'] as num).toInt(),
+        rest: (j['rest'] as num).toInt(),
+        max: (j['max'] as num).toInt(),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+        updatedAt: DateTime.tryParse(j['at']?.toString() ?? '') ?? day,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }
 
