@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../global_lang.dart';
 import '../services/notice_counsel_service.dart';
+import '../services/notice_translate_service.dart'; // 🆕 [2026-10-09] 공지 10개 언어 폰 안 번역 (무료)
 import '../schedule/bilingual_text.dart' as gp; // 🆕 일반인(일반 플래너) 언어 설정 읽기용
 
 // ============================================================================
@@ -11,6 +12,7 @@ import '../schedule/bilingual_text.dart' as gp; // 🆕 일반인(일반 플래�
 // 일반인(일반 플래너): 탭 2개 📢 공지 / 💬 의견함 (교육상담 없음)
 // 교육상담 안: 🩺 실력진단(준비중) / 📚 교재 길잡이(준비중) / 💬 1:1 학습상담 / 📖 자주 묻는 상담(준비중)
 // 기본모드(KO/EN): 한글+영문 동시 표시 / 10개국어 선택 시 해당 언어만 표시
+// 🆕 [2026-10-09] 공지 본문: 한국어 = 직접 쓴 한글 / English = 직접 쓴 영문 / 10개 언어 = 올릴 때 폰 안 번역기로 한 번 번역해 저장한 글
 // ============================================================================
 
 const Color _kBg = Color(0xFF030712);
@@ -18,6 +20,19 @@ const Color _kCard = Color(0xFF0D1527);
 const Color _kGold = Color(0xFFE5C158);
 
 const Map<String, Map<String, String>> _tx = {
+  // 🆕 [2026-10-10] 긴 질문 · 답변 접고 펴기
+  'foldMore': {'KO': '더 보기', 'EN': 'More', 'JA': 'もっと見る', 'ZH': '展开', 'FR': 'Voir plus', 'DE': 'Mehr', 'RU': 'Ещё', 'AR': 'المزيد', 'HI': 'और देखें', 'VI': 'Xem thêm', 'ES': 'Ver más', 'TH': 'ดูเพิ่ม'},
+  'foldLess': {'KO': '접기', 'EN': 'Less', 'JA': '閉じる', 'ZH': '收起', 'FR': 'Réduire', 'DE': 'Weniger', 'RU': 'Свернуть', 'AR': 'إخفاء', 'HI': 'कम करें', 'VI': 'Thu gọn', 'ES': 'Ver menos', 'TH': 'ย่อ'},
+  // 🆕 [2026-10-09] 공지 영문 칸 · 자동 번역 (관리자만 보는 글자)
+  'fieldTitleEn': {'KO': '영문 제목 (선택)', 'EN': 'English title (optional)'},
+  'fieldContentEn': {'KO': '영문 내용 (선택)', 'EN': 'English content (optional)'},
+  'enGuide': {'KO': '영문을 넣으면 English 사용자에게 그대로 보이고, 10개 언어도 영문을 바탕으로 번역돼 더 정확해요.', 'EN': 'English users see this text as is, and the 10 other languages are translated from it for better accuracy.'},
+  'autoTranslate': {'KO': '10개 언어 자동 번역해서 함께 저장', 'EN': 'Translate into 10 languages and save'},
+  'autoTranslateHelp': {'KO': '폰 안 번역기로 번역해요 (무료). 처음 한 번만 언어별 번역 자료를 받아요 — 와이파이 권장.', 'EN': 'Uses the free on-device translator. Language packs download once — Wi-Fi recommended.'},
+  'translating': {'KO': '번역 중', 'EN': 'Translating'},
+  'trPartFail': {'KO': '일부 언어는 번역하지 못했어요 (그 언어는 영문으로 보여요). 다시 저장하면 다시 시도해요.', 'EN': 'Some languages failed (they show English for now). Save again to retry.'},
+  'trEdit': {'KO': '언어별 번역 보기 · 고치기', 'EN': 'View / edit translations'},
+  'trNone': {'KO': '아직 번역이 없어요. 위 "자동 번역"을 켜고 저장하세요.', 'EN': 'No translations yet. Turn on auto-translate above and save.'},
   'screenTitle': {'KO': '공지 및 교육상담', 'EN': 'Notice & Counseling', 'JA': 'お知らせ・教育相談', 'ZH': '公告与教育咨询', 'FR': 'Avis & Conseil', 'DE': 'Hinweise & Beratung', 'RU': 'Объявления и консультации', 'AR': 'الإعلانات والاستشارات', 'HI': 'सूचना और परामर्श', 'VI': 'Thông báo & Tư vấn', 'ES': 'Avisos y Asesoría', 'TH': 'ประกาศและให้คำปรึกษา'},
   'tabNotice': {'KO': '공지', 'EN': 'Notice', 'JA': 'お知らせ', 'ZH': '公告', 'FR': 'Avis', 'DE': 'Hinweise', 'RU': 'Объявления', 'AR': 'الإعلانات', 'HI': 'सूचना', 'VI': 'Thông báo', 'ES': 'Avisos', 'TH': 'ประกาศ'},
   'tabFeedback': {'KO': '의견함', 'EN': 'Feedback', 'JA': 'ご意見', 'ZH': '意见箱', 'FR': 'Suggestions', 'DE': 'Feedback', 'RU': 'Отзывы', 'AR': 'الملاحظات', 'HI': 'सुझाव', 'VI': 'Góp ý', 'ES': 'Opiniones', 'TH': 'ความคิดเห็น'},
@@ -148,13 +163,19 @@ Widget _biTitle(String k, {double size = 15}) {
 String _fmtDate(DateTime d) =>
     '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 
-// 🆕 [자동 번역 2026-10-04] 한국어 모드는 원문, 다른 언어는 번역(아직 없으면 원문)
-String _trPick(Map<String, String> tr, String original) {
-  if (_curLang == 'KO') return original;
-  return tr[_curLang.toLowerCase()] ?? original;
+// 🆕 [2026-10-09] 공지 글 고르기
+//   한국어 = 직접 쓴 한글 / English = 직접 쓴 영문 (없으면 번역 → 한글)
+//   10개 언어 = 저장된 번역 (없으면 영문 → 한글)
+String _trPick(Map<String, String> tr, String original, String en) {
+  final String l = _curLang;
+  if (l == 'KO') return original;
+  final String? saved = tr[l.toLowerCase()];
+  if (l == 'EN') return en.isNotEmpty ? en : (saved ?? original);
+  if (saved != null && saved.trim().isNotEmpty) return saved;
+  return en.isNotEmpty ? en : original;
 }
-String _nTitle(NoticeItem n) => _trPick(n.trTitle, n.title);
-String _nBody(NoticeItem n) => _trPick(n.trBody, n.body);
+String _nTitle(NoticeItem n) => _trPick(n.trTitle, n.title, n.titleEn);
+String _nBody(NoticeItem n) => _trPick(n.trBody, n.body, n.bodyEn);
 
 void _snack(BuildContext context, String k) {
   ScaffoldMessenger.of(context).showSnackBar(
@@ -659,10 +680,90 @@ class _NoticeTabState extends State<_NoticeTab> {
     );
   }
 
+  // 🆕 [2026-10-09] 언어별 번역 보기 · 고치기 (관리자) — 한 언어씩 고쳐 저장
+  Future<void> _openTranslationEditor(NoticeItem n) async {
+    const List<(String, String)> langs = [
+      ('ja', '🇯🇵 日本語'), ('zh', '🇨🇳 中文'), ('fr', '🇫🇷 Français'), ('de', '🇩🇪 Deutsch'), ('ru', '🇷🇺 Русский'),
+      ('ar', '🇸🇦 العربية'), ('hi', '🇮🇳 हिन्दी'), ('vi', '🇻🇳 Tiếng Việt'), ('es', '🇪🇸 Español'), ('th', '🇹🇭 ไทย'),
+    ];
+    final Map<String, String> titles = Map<String, String>.from(n.trTitle);
+    final Map<String, String> bodies = Map<String, String>.from(n.trBody);
+    String lang = 'ja';
+    final TextEditingController tCtrl = TextEditingController(text: titles[lang] ?? '');
+    final TextEditingController bCtrl = TextEditingController(text: bodies[lang] ?? '');
+    bool saving = false;
+    await showDialog(
+      context: context,
+      builder: (dctx) => StatefulBuilder(
+        builder: (ctx, setD) => _luxDialog(
+          titleKey: 'trEdit',
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: langs.map((l) {
+                return _pill(
+                  label: l.$2,
+                  selected: lang == l.$1,
+                  color: _kGold,
+                  onTap: () => setD(() {
+                    titles[lang] = tCtrl.text;
+                    bodies[lang] = bCtrl.text;
+                    lang = l.$1;
+                    tCtrl.text = titles[lang] ?? '';
+                    bCtrl.text = bodies[lang] ?? '';
+                  }),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            if ((titles[lang] ?? '').isEmpty && (bodies[lang] ?? '').isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(_enKo('trNone'), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11.5)),
+              ),
+            _secLabel('fieldTitle'),
+            TextField(
+              controller: tCtrl,
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+              decoration: _inputDeco('fieldTitle'),
+            ),
+            const SizedBox(height: 8),
+            _secLabel('fieldContent'),
+            TextField(
+              controller: bCtrl,
+              maxLines: 9,
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+              decoration: _inputDeco('fieldContent'),
+            ),
+          ],
+          actions: _luxActions(
+            saving: saving,
+            onClose: () => Navigator.pop(dctx),
+            onSave: () async {
+              setD(() => saving = true);
+              final bool ok = await NoticeCounselService.saveOneTranslation(n.id, lang, title: tCtrl.text.trim(), body: bCtrl.text.trim());
+              setD(() => saving = false);
+              if (mounted) _snack(context, ok ? 'sent' : 'failed');
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   // 🆕 existing이 있으면 "공지 수정"(왼쪽 아래 Delete / 삭제 포함), 없으면 "새 공지 쓰기"
   Future<void> _openWriteNotice({NoticeItem? existing}) async {
     final TextEditingController titleCtrl = TextEditingController(text: existing?.title ?? '');
     final TextEditingController bodyCtrl = TextEditingController(text: existing?.body ?? '');
+    // 🆕 [2026-10-09] 영문 칸 + 10개 언어 자동 번역
+    final TextEditingController titleEnCtrl = TextEditingController(text: existing?.titleEn ?? '');
+    final TextEditingController bodyEnCtrl = TextEditingController(text: existing?.bodyEn ?? '');
+    bool autoTr = existing == null || existing.trBody.isEmpty; // 새 공지 · 번역 없는 공지는 켜진 채로
+    // 이미 번역이 저장된 공지(직접 넣은 번역 포함)는 글을 고쳐도 스위치가 저절로 켜지지 않음
+    //   → 직접 넣은 번역이 기계 번역으로 덮어써지지 않게. 다시 번역하려면 스위치를 직접 켜면 됨
+    final bool keepAutoOn = existing == null || existing.trBody.isEmpty;
+    String progress = '';
     String cat = existing?.category ?? 'catOperation';
     // 🆕 기본값: 전체(학생+학부모+일반인) 체크 - 필요한 대상만 남기고 해제
     final Set<String> audiences = Set<String>.from(existing?.audiences ?? kAllAudiences);
@@ -712,6 +813,7 @@ class _NoticeTabState extends State<_NoticeTab> {
             TextField(
               controller: titleCtrl,
               maxLength: 60,
+              onChanged: (_) => setD(() => autoTr = autoTr || keepAutoOn), // 🆕 [2026-10-09] 제목을 고치면 번역도 다시
               style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
               decoration: _inputDeco('fieldTitle'),
             ),
@@ -720,11 +822,71 @@ class _NoticeTabState extends State<_NoticeTab> {
             TextField(
               controller: bodyCtrl,
               maxLines: 7,
-              maxLength: 3000,
+              maxLength: 6000, // 🆕 [2026-10-09] 3000 → 6000 (긴 사용 안내 공지)
+              onChanged: (_) => setD(() => autoTr = autoTr || keepAutoOn), // 🆕 글을 고치면 번역도 다시
               style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
               decoration: _inputDeco('fieldContent'),
             ),
             const SizedBox(height: 8),
+            // 🆕 [2026-10-09] 영문 제목 · 내용 (선택)
+            _secLabel('fieldTitleEn'),
+            TextField(
+              controller: titleEnCtrl,
+              maxLength: 100,
+              onChanged: (_) => setD(() => autoTr = autoTr || keepAutoOn),
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+              decoration: _inputDeco('fieldTitleEn'),
+            ),
+            const SizedBox(height: 8),
+            _secLabel('fieldContentEn'),
+            TextField(
+              controller: bodyEnCtrl,
+              maxLines: 7,
+              maxLength: 9000,
+              onChanged: (_) => setD(() => autoTr = autoTr || keepAutoOn),
+              style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+              decoration: _inputDeco('fieldContentEn'),
+            ),
+            Text(_enKo('enGuide'), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11, height: 1.5)),
+            const SizedBox(height: 12),
+            // 🆕 [2026-10-09] 10개 언어 자동 번역 (폰 안 번역기, 무료)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: _kFieldBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kGold.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.translate_rounded, color: _kGold, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_enKo('autoTranslate'), style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold))),
+                      Switch(value: autoTr, activeColor: _kGold, onChanged: (v) => setD(() => autoTr = v)),
+                    ],
+                  ),
+                  Text(_enKo('autoTranslateHelp'), style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11, height: 1.5)),
+                  if (progress.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      child: Text(progress, style: GoogleFonts.notoSansKr(color: _kGold, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                    ),
+                  if (existing != null && !sending)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => _openTranslationEditor(existing),
+                        icon: const Icon(Icons.edit_note_rounded, color: _kGold, size: 18),
+                        label: Text(_enKo('trEdit'), style: GoogleFonts.notoSansKr(color: _kGold, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             // 🆕 [연재 2026-09-25] 이어지는 공지: 2편을 쓸 때 1편을 고르면 자동 연결
             _secLabel('seriesLink'),
             Container(
@@ -803,6 +965,26 @@ class _NoticeTabState extends State<_NoticeTab> {
               }
               setD(() => sending = true);
               final List<String> auds = kAllAudiences.where(audiences.contains).toList();
+              // 🆕 [2026-10-09] 10개 언어 번역 (영문이 있으면 영문 바탕, 없으면 한글 바탕) — 관리자 폰 안에서 무료
+              final String titleEn = titleEnCtrl.text.trim();
+              final String bodyEn = bodyEnCtrl.text.trim();
+              Map<String, String>? trT;
+              Map<String, String>? trB;
+              List<String> trFailed = const [];
+              if (autoTr) {
+                final bool fromEn = titleEn.isNotEmpty && bodyEn.isNotEmpty;
+                final NoticeTranslateResult r = await NoticeTranslateService.translateAll(
+                  title: fromEn ? titleEn : title,
+                  body: fromEn ? bodyEn : body,
+                  fromEnglish: fromEn,
+                  onProgress: (d, t) {
+                    if (dctx.mounted) setD(() => progress = '🌐 ${_enKo('translating')} $d / $t');
+                  },
+                );
+                trT = r.titles;
+                trB = r.bodies;
+                trFailed = r.failed;
+              }
               final bool ok = existing == null
                   ? await NoticeCounselService.addNotice(
                 title: title,
@@ -811,6 +993,10 @@ class _NoticeTabState extends State<_NoticeTab> {
                 audiences: auds,
                 pinned: pinned,
                 prevId: prevId,
+                titleEn: titleEn,
+                bodyEn: bodyEn,
+                trTitle: trT,
+                trBody: trB,
               )
                   : await NoticeCounselService.updateNotice(
                 existing.id,
@@ -820,9 +1006,13 @@ class _NoticeTabState extends State<_NoticeTab> {
                 audiences: auds,
                 pinned: pinned,
                 prevId: prevId,
+                titleEn: titleEn,
+                bodyEn: bodyEn,
+                trTitle: trT,
+                trBody: trB,
               );
               if (dctx.mounted) Navigator.pop(dctx);
-              if (mounted) _snack(context, ok ? 'sent' : 'failed');
+              if (mounted) _snack(context, ok ? (trFailed.isNotEmpty ? 'trPartFail' : 'sent') : 'failed');
             },
           ),
         ),
@@ -1050,6 +1240,65 @@ class _EditMenuIcon extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+// 🆕 [2026-10-10] 긴 글 접고 펴기 — 4줄이 넘으면 "더 보기 ▼"로 접어 두고, 누르면 펼침 / "접기 ▲"로 다시 접음
+class _FoldText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final int foldLines;
+  const _FoldText(this.text, {required this.style, this.foldLines = 4});
+
+  @override
+  State<_FoldText> createState() => _FoldTextState();
+}
+
+class _FoldTextState extends State<_FoldText> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final TextPainter tp = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          maxLines: widget.foldLines,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: box.maxWidth);
+        final bool long = tp.didExceedMaxLines;
+        tp.dispose();
+        if (!long) return Text(widget.text, style: widget.style);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.text,
+              style: widget.style,
+              maxLines: _open ? null : widget.foldLines,
+              overflow: _open ? TextOverflow.visible : TextOverflow.ellipsis,
+            ),
+            InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _bi(_open ? 'foldLess' : 'foldMore'),
+                      style: GoogleFonts.notoSansKr(color: _kGold, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    Icon(_open ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: _kGold, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1317,7 +1566,7 @@ class _PrivatePostListState extends State<_PrivatePostList> {
             ],
           ),
           const SizedBox(height: 6),
-          Text(c.text, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6)),
+          _FoldText(c.text, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6)),
         ],
       ),
     );
@@ -1362,7 +1611,7 @@ class _PrivatePostListState extends State<_PrivatePostList> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(p.text, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6)),
+          _FoldText(p.text, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13, height: 1.6)),
           const SizedBox(height: 4),
           if (p.comments.isEmpty)
             Padding(

@@ -9,8 +9,10 @@ import '../../timer/timer_screen.dart';
 import '../../global_lang.dart'; // 👑 [12개국 연동] 전역 언어 스위치와 연결
 
 class AcademicTimelineScreen extends StatefulWidget {
-  const AcademicTimelineScreen({super.key});
-
+  // 🆕 [함께 공부 2026-10-11] 친구 학습방에서 열 때: 처음 보여 줄 탭 + 타이머를 켤 때 알려 줄 곳 (평소에는 둘 다 비어 있음)
+  final String? initialTrack;
+  final void Function(String subject, int minutes, String examTitle, String sound, String track)? onGroupTimerStart;
+  const AcademicTimelineScreen({super.key, this.initialTrack, this.onGroupTimerStart});
   @override
   State<AcademicTimelineScreen> createState() => _AcademicTimelineScreenState();
 }
@@ -35,8 +37,7 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     Colors.purple,
   ];
 
-  String _selectedTrack = 'PERSONAL_TIMETABLE'; // 🆕 [2026-07-29] 학사 타이머 진입 시 기본으로 개인 시간표 탭 선택
-
+  late String _selectedTrack = widget.initialTrack ?? 'PERSONAL_TIMETABLE'; // 🆕 [2026-07-29] 기본 개인 시간표 탭 / 🆕 [2026-10-11] 친구 학습방에서 열면 고른 탭
   // 1. 평상시
   String _selectedWeekdayEn = 'Monday';
   final List<Map<String, String>> _weekdayOptions = [
@@ -809,6 +810,9 @@ class _AcademicTimelineScreenState extends State<AcademicTimelineScreen> {
     final item = schedule[_selectedScheduleIndex!];
     final String taskText = item['task'] ?? '학습';
     final int? durationMinutes = _calcDurationMinutes(item['time'] ?? '');
+    // 🆕 [함께 공부 2026-10-11] 친구 학습방에서 열었으면 방 친구들에게 "같이 시작" 알림 (평소에는 아무 일 없음)
+    final bool examTrack = _selectedTrack == 'EXAM_PREP_PERIOD' || _selectedTrack == 'EXAM_DAY_TRACK';
+    widget.onGroupTimerStart?.call(taskText, durationMinutes ?? 30, examTrack ? (_isFinalExamMode ? '기말고사' : '중간고사') : '', _selectedSoundFile, _selectedTrack);
 
     Navigator.push(
       context,

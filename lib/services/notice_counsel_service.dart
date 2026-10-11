@@ -21,9 +21,14 @@ class NoticeItem {
   final bool pinned;
   final DateTime createdAt;
   final String? prevId; // 🆕 [연재 2026-09-25] 이 공지가 이어지는 "이전 편" 공지 id (없으면 첫 편·단독)
-  // 🆕 [자동 번역 2026-10-04] Firebase 번역 확장이 채워 주는 언어별 제목·내용 ({'en': …, 'ja': …})
+  // 🆕 [자동 번역 2026-10-04] 언어별 제목·내용 ({'ja': …, 'zh': …})
+  // 🆕 [2026-10-09] 이제 관리자 폰의 무료 번역기(폰 안 번역)가 공지를 올릴 때 10개 언어를 한 번 번역해 여기 저장
+  //   → 사용자는 저장된 번역을 읽기만 함 (서버 · 번역 비용 0원)
   final Map<String, String> trTitle;
   final Map<String, String> trBody;
+  // 🆕 [2026-10-09] 관리자가 직접 쓴 영문 제목 · 내용 (번역기보다 정확, 없으면 빈 칸)
+  final String titleEn;
+  final String bodyEn;
 
   NoticeItem({
     required this.id,
@@ -36,6 +41,8 @@ class NoticeItem {
     this.prevId,
     this.trTitle = const {},
     this.trBody = const {},
+    this.titleEn = '',
+    this.bodyEn = '',
   });
 
   factory NoticeItem.fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
@@ -51,6 +58,8 @@ class NoticeItem {
       prevId: ((m['prevId'] as String?) ?? '').isEmpty ? null : m['prevId'] as String,
       trTitle: _readTr(m['translatedTitle']), // 🆕 [자동 번역]
       trBody: _readTr(m['translated']), // 🆕 [자동 번역]
+      titleEn: (m['titleEn'] as String?) ?? '', // 🆕 [2026-10-09] 직접 쓴 영문
+      bodyEn: (m['bodyEn'] as String?) ?? '',
     );
   }
 }
@@ -202,10 +211,18 @@ class NoticeCounselService {
     required List<String> audiences,
     required bool pinned,
     String? prevId, // 🆕 [연재] 이전 편
+    String titleEn = '', // 🆕 [2026-10-09] 직접 쓴 영문
+    String bodyEn = '',
+    Map<String, String>? trTitle, // 🆕 [2026-10-09] 10개 언어 번역 (폰 안 번역기 결과)
+    Map<String, String>? trBody,
   }) async {
     try {
       await _db.collection(noticeCol).add({
         if (prevId != null) 'prevId': prevId,
+        'titleEn': titleEn,
+        'bodyEn': bodyEn,
+        if (trTitle != null) 'translatedTitle': trTitle,
+        if (trBody != null) 'translated': trBody,
         'title': title,
         'body': body,
         'category': category,
@@ -230,10 +247,18 @@ class NoticeCounselService {
         required List<String> audiences,
         required bool pinned,
         String? prevId, // 🆕 [연재] 이전 편 (null이면 연결 해제)
+        String titleEn = '', // 🆕 [2026-10-09] 직접 쓴 영문
+        String bodyEn = '',
+        Map<String, String>? trTitle, // 🆕 [2026-10-09] 다시 번역했을 때만 넣음 (null이면 예전 번역 그대로)
+        Map<String, String>? trBody,
       }) async {
     try {
       await _db.collection(noticeCol).doc(id).update({
         'prevId': prevId ?? FieldValue.delete(),
+        'titleEn': titleEn,
+        'bodyEn': bodyEn,
+        if (trTitle != null) 'translatedTitle': trTitle,
+        if (trBody != null) 'translated': trBody,
         'title': title,
         'body': body,
         'category': category,
@@ -244,6 +269,20 @@ class NoticeCounselService {
       return true;
     } catch (e) {
       debugPrint('[NOTICE] updateNotice 실패: $e');
+      return false;
+    }
+  }
+
+  // 🆕 [2026-10-09] 한 언어 번역만 관리자가 직접 고쳐 저장 (예: 'ja')
+  static Future<bool> saveOneTranslation(String id, String lang, {required String title, required String body}) async {
+    try {
+      await _db.collection(noticeCol).doc(id).update({
+        'translatedTitle.$lang': title,
+        'translated.$lang': body,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[NOTICE] saveOneTranslation 실패: $e');
       return false;
     }
   }

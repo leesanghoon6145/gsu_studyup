@@ -31,7 +31,8 @@ import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
 import '../services/user_profile_service.dart'; // 🆕 [응원 가족] 내 이름
 
 class CheerStarsScreen extends StatefulWidget {
-  const CheerStarsScreen({super.key});
+  const CheerStarsScreen({super.key, this.initialTypeId});
+  final String? initialTypeId; // 🆕 [2026-10-09] 처음 고를 종목 (자유 운동에서 들어오면 'etc')
 
   @override
   State<CheerStarsScreen> createState() => _CheerStarsScreenState();
@@ -124,6 +125,7 @@ class _CheerStarsScreenState extends State<CheerStarsScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.initialTypeId != null) _selectedTypeId = widget.initialTypeId!; // 🆕 [2026-10-09]
     appLanguage.addListener(_onLanguageChanged); // 🆕 [다국어] 언어를 바꾸면 바로 다시 그림
     _linkedCodesFuture = _loadSendTargets(); // 🆕 [응원 가족] 보호자 자녀 + 응원 가족 아이 함께
     _recentRecordsFuture = _loadRecentRecords();

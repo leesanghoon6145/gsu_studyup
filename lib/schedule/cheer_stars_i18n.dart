@@ -41,7 +41,7 @@ const Map<String, Map<String, String>> kCheerStarsText = {
   'ex_yoga': {'KO': '요가', 'EN': 'Yoga', 'JA': 'ヨガ', 'ZH': '瑜伽', 'FR': 'Yoga', 'DE': 'Yoga', 'RU': 'Йога', 'AR': 'اليوغا', 'HI': 'योग', 'VI': 'Yoga', 'ES': 'Yoga', 'TH': 'โยคะ'},
   'ex_pilates': {'KO': '필라테스', 'EN': 'Pilates', 'JA': 'ピラティス', 'ZH': '普拉提', 'FR': 'Pilates', 'DE': 'Pilates', 'RU': 'Пилатес', 'AR': 'البيلاتس', 'HI': 'पिलेट्स', 'VI': 'Pilates', 'ES': 'Pilates', 'TH': 'พิลาทิส'},
   'ex_hiking': {'KO': '등산', 'EN': 'Hiking', 'JA': '登山', 'ZH': '登山', 'FR': 'Randonnée', 'DE': 'Wandern', 'RU': 'Поход', 'AR': 'المشي الجبلي', 'HI': 'पर्वतारोहण', 'VI': 'Leo núi', 'ES': 'Senderismo', 'TH': 'เดินป่า'},
-  'ex_etc': {'KO': '기타', 'EN': 'Other', 'JA': 'その他', 'ZH': '其他', 'FR': 'Autre', 'DE': 'Sonstiges', 'RU': 'Другое', 'AR': 'أخرى', 'HI': 'अन्य', 'VI': 'Khác', 'ES': 'Otro', 'TH': 'อื่น ๆ'},
+  'ex_etc': {'KO': '자유 운동', 'EN': 'Free Workout', 'JA': '自由運動', 'ZH': '自由运动', 'FR': 'Entraînement libre', 'DE': 'Freies Training', 'RU': 'Свободная тренировка', 'AR': 'تمرين حر', 'HI': 'फ्री वर्कआउट', 'VI': 'Tập tự do', 'ES': 'Entrenamiento libre', 'TH': 'ออกกำลังกายอิสระ'}, // 🆕 [2026-10-09] 기타 → 자유 운동
 
   // ---------------- 나의 별 통장 ----------------
   'bankSaved': {'KO': '모아 둔 별', 'EN': 'Saved stars', 'JA': '貯めた星', 'ZH': '攒下的星星', 'FR': 'Étoiles épargnées', 'DE': 'Gesparte Sterne', 'RU': 'Накоплено звёзд', 'AR': 'النجوم المدخرة', 'HI': 'जमा सितारे', 'VI': 'Sao đã tích lũy', 'ES': 'Estrellas ahorradas', 'TH': 'ดาวที่สะสมไว้'},

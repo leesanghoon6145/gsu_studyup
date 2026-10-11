@@ -1636,40 +1636,59 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
 
   Widget _buildTopPillButton({
     IconData? icon,
-    required String label,
+    String label = '',
+    Map<String, String>? twoLine, // 🆕 [2026-10-10] 한글 한 줄 + 영문 한 줄 (외국어는 그 나라 말 한 줄)
     required VoidCallback onTap,
     bool filled = false,
   }) {
     final Color fg = filled ? Colors.black : brandGolden;
+    final bool two = twoLine != null;
+    final Map<String, String> m = twoLine ?? const {};
+    final bool showTwo = two && !DkeLang.isForeignSelected && m['KO'] != m['EN'];
+    final Widget textPart = showTwo
+        ? Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          m['KO'] ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.notoSansKr(color: fg, fontSize: 12.5, fontWeight: FontWeight.bold, height: 1.2),
+        ),
+        Text(
+          m['EN'] ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.gowunBatang(color: fg.withValues(alpha: 0.85), fontSize: 10.5, fontWeight: FontWeight.bold, height: 1.2),
+        ),
+      ],
+    )
+        : Text(
+      two ? _t(m) : label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: GoogleFonts.notoSansKr(color: fg, fontSize: two ? 12.5 : 11, fontWeight: FontWeight.bold),
+    );
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: _kTopButtonHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        height: two ? null : _kTopButtonHeight,
+        constraints: two ? const BoxConstraints(minHeight: 40) : null,
+        alignment: two ? Alignment.center : null,
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: two ? 5 : 0),
         decoration: BoxDecoration(
-          color: filled ? brandGolden : Colors.white10,
+          color: filled ? brandGolden : (two ? brandGolden.withValues(alpha: 0.08) : Colors.white10),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: brandGolden.withValues(alpha: 0.5)),
+          border: Border.all(color: brandGolden.withValues(alpha: two ? 0.8 : 0.5)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: fg, size: 14),
-              const SizedBox(width: 5),
+              Icon(icon, color: fg, size: two ? 17 : 14),
+              const SizedBox(width: 6),
             ],
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.notoSansKr(
-                  color: fg,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+            Flexible(child: textPart),
           ],
         ),
       ),
@@ -1807,7 +1826,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
             + ((data['parentRequests'] as Map?) ?? {}).length; // 🆕 [2026-10-02] 보호자 신청도 함께 세기
         final String lang = DkeLang.current;
         return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+          padding: const EdgeInsets.only(top: 10), // 🆕 [2026-10-10] 로그아웃·언어 줄 바로 아래로 이동
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: () => _openSupporterManager(code),
@@ -2010,22 +2029,28 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   // 글·그래프와 함께 자연스럽게 위로 밀려 올라가므로 스크롤이 부드러움.
   // ============================================================================
   Widget _topActionRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Flexible(
-          child: _buildTopPillButton(
-            icon: Icons.logout_rounded,
-            label: _bi(kLogoutLabelMap),
-            onTap: _confirmLogout,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: _buildTopPillButton(
+                icon: Icons.logout_rounded,
+                label: _bi(kLogoutLabelMap),
+                onTap: _confirmLogout,
+              ),
+            ),
+            const SizedBox(width: 10),
+            _buildTopPillButton(
+              icon: Icons.language_rounded,
+              label: _languageDisplayName(DkeLang.current),
+              onTap: _showLanguagePicker,
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        _buildTopPillButton(
-          icon: Icons.language_rounded,
-          label: _languageDisplayName(DkeLang.current),
-          onTap: _showLanguagePicker,
-        ),
+        _buildSupporterBar(), // 🆕 [2026-10-10] 응원 가족 n/5 — 로그아웃·언어 줄 바로 아래
       ],
     );
   }
@@ -3772,21 +3797,21 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
         children: [
           const SizedBox(height: 4),
           _buildLinkedChildrenBar(), // 🆕 [자녀 추가] 연결된 자녀 명단 + 추가 버튼
-          _buildSupporterBar(), // 🆕 [응원 가족 2026-09-30] 응원 가족 n/5 · 신청 n건
+
           const SizedBox(height: _kTopSectionGap),
-          // 🆕 [2026-10-01] 공지 및 교육상담(왼쪽) / 회원 연동(오른쪽). 로그아웃·언어는 내용 맨 위로 옮김
+          // 🆕 [2026-10-10] 공지 및 교육상담(왼쪽) / 회원 연동(오른쪽) — 같은 너비 · 한글/영문 두 줄
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(
+                Expanded(
                   child: Stack(
                     clipBehavior: Clip.none,
+                    fit: StackFit.passthrough,
                     children: [
                       _buildTopPillButton(
                         icon: Icons.campaign_rounded,
-                        label: _bi(kNoticeCounselMap),
+                        twoLine: kNoticeCounselMap,
                         onTap: () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const NoticeCounselScreen(isParent: true)),
@@ -3812,10 +3837,10 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
                   ),
                 ),
                 const SizedBox(width: 10),
-                Flexible(
+                Expanded(
                   child: _buildTopPillButton(
                     icon: _isVipMember ? null : Icons.link_rounded,
-                    label: _isVipMember ? _t(kVipBadgeMap) : _bi(kVipLinkMap),
+                    twoLine: _isVipMember ? kVipBadgeMap : kVipLinkMap,
                     filled: _isVipMember,
                     onTap: () => setState(() => _isVipMember = true),
                   ),

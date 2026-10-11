@@ -475,82 +475,125 @@ class _GeneralPlannerHomeScreenState extends State<GeneralPlannerHomeScreen> {
     );
   }
 
-  // 🆕 [2026-09-06 추가] 언어 선택 팝업. "기본(EN+한글 병기)" + 10개 외국어 목록.
+  // 🆕 [2026-10-09] 언어 선택 창 — 금테 고급 창 + 나라 국기 + 그 나라 말 이름, 작고 단정한 두 줄 버튼 (운동 화면과 같은 모양)
+  static const List<(String, String, String)> _kLangChoices = [
+    ('KO', '🇰🇷', '한국어'),
+    ('EN', '🇺🇸', 'English'),
+    ('JA', '🇯🇵', '日本語'),
+    ('ZH', '🇨🇳', '中文'),
+    ('FR', '🇫🇷', 'Français'),
+    ('DE', '🇩🇪', 'Deutsch'),
+    ('RU', '🇷🇺', 'Русский'),
+    ('AR', '🇸🇦', 'العربية'),
+    ('HI', '🇮🇳', 'हिन्दी'),
+    ('VI', '🇻🇳', 'Tiếng Việt'),
+    ('ES', '🇪🇸', 'Español'),
+    ('TH', '🇹🇭', 'ไทย'),
+  ];
+
   Future<void> _showLanguagePicker(BuildContext context) async {
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true, // 🆕 [오버플로우 수정] 기본 절반 높이 제한을 풀어서 내용에 맞게 커질 수 있게 함
-      builder: (sheetContext) {
-        // 🆕 [오버플로우 수정] 화면 높이의 80%를 넘지 않도록 제한하고, 그 안에서는 스크롤되게 함
-        final double maxHeight = MediaQuery.of(sheetContext).size.height * 0.8;
-        return Container(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0D1527),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      barrierColor: Colors.black.withOpacity(0.72),
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 26, vertical: 40),
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 380, maxHeight: MediaQuery.of(dctx).size.height * 0.8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF151E36), Color(0xFF070B17)],
+            ),
+            border: Border.all(color: _brandGolden.withOpacity(0.85), width: 1.4),
+            boxShadow: [
+              BoxShadow(color: _brandGolden.withOpacity(0.18), blurRadius: 28, spreadRadius: 1),
+            ],
           ),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-          child: SingleChildScrollView( // 🆕 [오버플로우 수정] 11개 항목이 화면보다 길어도 스크롤 가능
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('LANGUAGE', style: GoogleFonts.gowunBatang(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
-                Text('언어 선택', style: GoogleFonts.notoSansKr(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 16),
-                // 🆕 [2026-09-29] 한국어(기본) = 한글 / English = 영어만
-                _buildLanguageOption(
-                  sheetContext,
-                  code: 'KO',
-                  label: AppLanguageService.languageDisplayNames['KO'] ?? '한국어 (기본)',
-                  isSelected: appLanguage.current == 'KO',
+                const Icon(Icons.language_rounded, color: _brandGolden, size: 26),
+                const SizedBox(height: 6),
+                Text('LANGUAGE', style: GoogleFonts.gowunBatang(color: _brandGolden, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 2.5)),
+                Text('언어 선택', style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                const SizedBox(height: 10),
+                Container(
+                  height: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 30),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      _brandGolden.withOpacity(0.0),
+                      _brandGolden.withOpacity(0.7),
+                      _brandGolden.withOpacity(0.0),
+                    ]),
+                  ),
                 ),
-                _buildLanguageOption(
-                  sheetContext,
-                  code: 'EN',
-                  label: AppLanguageService.languageDisplayNames['EN'] ?? 'English (영어만)',
-                  isSelected: appLanguage.current == 'EN',
+                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final double w = (box.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _kLangChoices.map((c) => SizedBox(width: w, child: _buildLanguageChip(dctx, c.$1, c.$2, c.$3))).toList(),
+                    );
+                  },
                 ),
-                const Divider(color: Colors.white12, height: 20),
-                // 🆕 [10개 외국어]
-                ...AppLanguageService.foreignLanguageCodes.map((code) {
-                  return _buildLanguageOption(
-                    sheetContext,
-                    code: code,
-                    label: AppLanguageService.languageDisplayNames[code] ?? code,
-                    isSelected: appLanguage.current == code,
-                  );
-                }),
+                const SizedBox(height: 14),
+                TextButton(
+                  onPressed: () => Navigator.pop(dctx),
+                  child: Text('CLOSE · 닫기', style: GoogleFonts.notoSansKr(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  Widget _buildLanguageOption(BuildContext sheetContext, {required String code, required String label, required bool isSelected}) {
+  Widget _buildLanguageChip(BuildContext dctx, String code, String flag, String name) {
+    final bool sel = appLanguage.current == code;
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       onTap: () async {
         await appLanguage.setLanguage(code);
-        if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+        if (dctx.mounted) Navigator.of(dctx).pop();
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: sel ? const LinearGradient(colors: [Color(0xFFF3D77A), Color(0xFFC9A23F)]) : null,
+          color: sel ? null : Colors.white.withOpacity(0.04),
+          border: Border.all(color: sel ? _brandGolden : _brandGolden.withOpacity(0.28), width: sel ? 1.4 : 1),
+        ),
         child: Row(
           children: [
-            Icon(
-              isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-              color: isSelected ? _brandGolden : Colors.white38,
-              size: 18,
+            Text(flag, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  name,
+                  style: GoogleFonts.notoSansKr(
+                    color: sel ? const Color(0xFF1A1405) : Colors.white.withOpacity(0.88),
+                    fontWeight: sel ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: TextStyle(color: isSelected ? _brandGolden : Colors.white70, fontSize: 13.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-            ),
+            if (sel) const Icon(Icons.check_rounded, color: Color(0xFF1A1405), size: 16),
           ],
         ),
       ),

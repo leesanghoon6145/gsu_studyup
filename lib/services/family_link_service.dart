@@ -8,7 +8,7 @@ import 'user_profile_service.dart'; // 🆕 [자녀 이름 표시 2026-09-18] Dk
 import 'dart:async'; // 🆕 [자녀 이름 표시 2026-09-18] unawaited() 함수 사용을 위함
 import '../star_economy.dart'; // 🆕 [재설치 복원 2026-09-25] 별 복원용
 import 'supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
-
+import 'presence_service.dart'; // 🆕 [동시 접속자 2026-10-11]
 // 학생↔부모 기기 연결을 담당하는 서비스
 // (다른 서비스들과 동일하게 "단일 게이트웨이" 패턴 — 이 파일만 Firestore와 직접 통신)
 class FamilyLinkService {
@@ -582,6 +582,7 @@ class FamilyLinkService {
     int elapsedSeconds = 0,
     int totalSeconds = 0,
   }) async {
+    unawaited(PresenceService.beat(studying: isStudying, subject: subject)); // 🆕 [동시 접속자 2026-10-11] 5분에 한 번만 씀
     final code = await getMyLinkCode();
     if (code == null) return;
 
@@ -611,6 +612,7 @@ class FamilyLinkService {
   }
 
   static Future<void> clearLiveStudyStatus() async {
+    unawaited(PresenceService.beat(studying: false, force: true)); // 🆕 [동시 접속자 2026-10-11] 멈춤은 바로 반영
     final code = await getMyLinkCode();
     if (code == null) return;
     try {

@@ -31,6 +31,7 @@ import '../star_economy.dart'; // 🆕 [학생 운동 별] 1분 1별, 하루 60�
 import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07]
 import 'exercise_type_names.dart'; // 🆕 [2026-10-08] 종목 이름 12개 언어
 import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 이 화면 글자 12개 언어
+import 'cheer_stars_screen.dart'; // 🆕 [2026-10-09] 자유 운동 → 타이머로 별 모으기
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -129,6 +130,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   // 🆕 [학생 운동 별 2026-10-06] 학생 계정에만 보이는 운동 타이머
   bool _isStudent = false;
+  bool _isGeneralUser = false; // 🆕 [2026-10-09] 학생이 아닌 계정(일반 · 학부모) — 자유 운동 별 모으기 안내용
+  DateTime? _sessionStart; // 🆕 [2026-10-09] 타이머 · 걸음 측정으로 잰 운동 시작 시각 (기록에 함께 저장)
+  DateTime? _sessionEnd;
   Timer? _exTimer;
   DateTime? _exStart;
   int _exElapsedSec = 0;
@@ -203,6 +207,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       _rpe = existing.rpe ?? 5;
       _avgHrController.text = existing.avgHeartRateBpm?.toString() ?? '';
       _maxHrController.text = existing.maxHeartRateBpm?.toString() ?? '';
+      // 🆕 [2026-10-09] 시작 · 끝 시각이 있는 기록(워치 운동 등)인데 심박이 비어 있으면, 지금 한 번 더 워치 심박을 찾아 채움
+      //   (예전에 '운동·수면 권한'이 꺼져 있던 때 들어온 기록도 권한을 켠 뒤 열면 채워짐)
+      if (existing.avgHeartRateBpm == null && existing.maxHeartRateBpm == null && existing.startTime != null && existing.endTime != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _fillHeartFromWatch(existing.startTime!, existing.endTime!));
+      }
       _memoOriginal = existing.memo;
       _memoShown = exAutoMemo(existing.memo);
       _memoController.text = _memoShown;
@@ -282,6 +291,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     bool isShortField(ExerciseField f) => f.type == ExerciseFieldType.number || f.type == ExerciseFieldType.counter;
 
     for (final field in fields) {
+      // 🆕 [2026-10-09] 자동 계산 칸(화면에 안 보임)은 짝 맞추기에서 빼기 → 남은 칸이 좌우로 가지런히 짝지어짐
+      if (field.isCalculated) continue;
       if (field.section != currentSection) {
         flushShortFields();
         currentSection = field.section;
@@ -794,15 +805,45 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       detail['userEdited'] = true;
     }
 
+    // 🆕 [2026-10-09] 심박 칸이 비어 있으면 저장할 때 워치 심박을 한 번 더 찾아봄
+    //   ① 타이머 · 걸음 측정 · 워치 운동처럼 시작~끝 시각을 아는 기록 → 그 시간의 심박
+    //   ② 오늘 날짜로 새로 적는 기록 → "방금 끝낸 운동"으로 보고 지금부터 운동 시간만큼 거슬러 찾되,
+    //      그 사이 최고 심박이 100 이상(운동한 흔적)일 때만 넣음 (가만히 있던 시간의 심박이 잘못 들어가지 않게)
+    int? avgHr = int.tryParse(_avgHrController.text.trim());
+    int? maxHr = int.tryParse(_maxHrController.text.trim());
+    final DateTime? startT = _sessionStart ?? widget.existingRecord?.startTime;
+    final DateTime? endT = _sessionEnd ?? widget.existingRecord?.endTime;
+    if (avgHr == null && maxHr == null) {
+      try {
+        if (await HealthLink.hasExtendedPermission()) {
+          final DateTime now = DateTime.now();
+          final bool isToday = _date.year == now.year && _date.month == now.month && _date.day == now.day;
+          if (startT != null && endT != null) {
+            final (int? a, int? m) = await HealthLink.heartRateBetween(startT, endT);
+            avgHr = a;
+            maxHr = m;
+          } else if (isToday && !_isEditMode) {
+            final (int? a, int? m) = await HealthLink.heartRateBetween(now.subtract(Duration(minutes: durationMin)), now);
+            if (m != null && m >= 100) {
+              avgHr = a;
+              maxHr = m;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     final record = ExerciseRecord(
       recordId: widget.existingRecord?.recordId ??
           'rec_${DateTime.now().millisecondsSinceEpoch}',
       exerciseTypeId: widget.exerciseType.id,
       date: _date,
+      startTime: startT, // 🆕 [2026-10-09] 고쳐 저장해도 시작 · 끝 시각이 사라지지 않게
+      endTime: endT,
       durationMin: durationMin,
       rpe: _rpe,
-      avgHeartRateBpm: int.tryParse(_avgHrController.text.trim()),
-      maxHeartRateBpm: int.tryParse(_maxHrController.text.trim()),
+      avgHeartRateBpm: avgHr,
+      maxHeartRateBpm: maxHr,
       memo: (_memoShown.isNotEmpty && _memoController.text.trim() == _memoShown.trim()) ? _memoOriginal : _memoController.text.trim(),
       detail: detail,
     );
@@ -1143,6 +1184,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   Future<void> _fillHeartFromWatch(DateTime from, DateTime to) async {
     if (to.difference(from).inMinutes < 1) return;
+    _sessionStart = from; // 🆕 [2026-10-09] 기록에 시작 · 끝 시각도 함께 저장
+    _sessionEnd = to;
     if (!await HealthLink.hasExtendedPermission()) return;
     final (int? avg, int? mx) = await HealthLink.heartRateBetween(from, to);
     if (!mounted || avg == null) return;
@@ -1481,6 +1524,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
 
   Future<void> _initStudentExerciseTimer() async {
     final String? type = await DkeUserProfile.getUserType();
+    if (mounted && type != null && type != '학생') setState(() => _isGeneralUser = true); // 🆕 [2026-10-09]
     if (type != '학생' || !mounted) return;
     final int stars = await DkeStars.getTodayExerciseStars();
     final prefs = await SharedPreferences.getInstance();
@@ -1685,6 +1729,22 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 🆕 [파라미터화] isSteps:true면 걸음수 그래프(걷기 전용), false면 운동시간
   // 그래프(모든 종목 공통, 걷기 포함). 같은 화면 안에 두 그래프가 동시에
   // 있을 수 있어(걷기의 경우) 서로 다른 Future/ScrollController를 쓴다.
+  // 🆕 [2026-10-09] 막대 위 숫자: 걸음 = 6,532보 (한·중·일은 보/歩/步, 다른 언어는 숫자만) · 시간 = 45m
+  String _barValueText(int v, bool isSteps) {
+    final String n = v.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+    if (!isSteps) return '${n}m';
+    switch (appLanguage.current) {
+      case 'KO':
+        return '$n보';
+      case 'JA':
+        return '$n歩';
+      case 'ZH':
+        return '$n步';
+      default:
+        return n;
+    }
+  }
+
   Widget _buildDailyTrendChart({required bool isSteps}) {
     final ScrollController scrollController = isSteps ? _stepsChartScrollController : _durationChartScrollController;
     return FutureBuilder<Map<String, int>>(
@@ -1851,9 +1911,17 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                                             durationMin: values[groupIndex],
                                             bodyWeightKg: _bodyWeightKg,
                                           ).round();
+                                          // 🆕 [2026-10-09] 막대 위: 걸음수(보) 또는 운동시간(m) + 그 아래 작게 칼로리
+                                          final Color barColor = _rainbowWeekColors[days[groupIndex].weekday - 1];
                                           return BarTooltipItem(
-                                            '${kcal}kcal',
-                                            TextStyle(color: _rainbowWeekColors[days[groupIndex].weekday - 1], fontSize: 9, fontWeight: FontWeight.bold),
+                                            _barValueText(values[groupIndex], isSteps),
+                                            TextStyle(color: barColor, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                            children: [
+                                              TextSpan(
+                                                text: '\n${kcal}kcal',
+                                                style: TextStyle(color: barColor.withOpacity(0.75), fontSize: 8, fontWeight: FontWeight.w600),
+                                              ),
+                                            ],
                                           );
                                         },
                                       ),
@@ -2447,6 +2515,94 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     );
   }
 
+  // 🆕 [2026-10-09] 자유 운동 방법 창 (런지 · 플랭크 · 버피 테스트) — 12개 언어, 긴 글은 위아래로 밀어서 봄
+  Future<void> _showFreeMoveHowTo(Map<String, String> m) async {
+    final String lang = appLanguage.isDefault ? 'KO' : appLanguage.current;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 40),
+        child: LuxuryDialogFrame(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text(m['emoji']!, style: const TextStyle(fontSize: 26)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (lang == 'KO')
+                            Text(m['en']!.toUpperCase(), style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 11)),
+                          Text(freeMoveLabel(m, lang), style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 17)),
+                          Text(exText('howTo'), style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: ExerciseTheme.pageBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: ExerciseTheme.brandGolden.withOpacity(0.25)),
+                  ),
+                  child: Text(exText('how_${m['key']}'), style: GoogleFonts.notoSansKr(color: Colors.white.withOpacity(0.88), fontSize: 13, height: 1.65)),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: ExerciseTheme.brandGolden,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text(exText('close'), style: const TextStyle(color: ExerciseTheme.pageBg, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🆕 [2026-10-09] 학생이 아닌 계정: 자유 운동도 타이머로 하면 응원별 통장에 별이 쌓이고 통계에 들어감
+  Widget _buildFreeStarRunCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ExerciseTheme.luxeCardDecoration(highlighted: true),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(exText('starRunTitle'), style: GoogleFonts.notoSansKr(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 14.5)),
+          const SizedBox(height: 4),
+          Text(exText('starRunDesc'), style: const TextStyle(color: Colors.white60, fontSize: 11.5, height: 1.5)),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CheerStarsScreen(initialTypeId: 'etc'))),
+            icon: const Icon(Icons.timer_outlined, size: 18),
+            label: Text(exText('starRunBtn'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ExerciseTheme.brandGolden,
+              foregroundColor: ExerciseTheme.pageBg,
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFreeMoves() {
     final String lang = appLanguage.isDefault ? 'KO' : appLanguage.current;
     return Column(
@@ -2500,6 +2656,17 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
                   ],
                 ),
                 children: [
+                  // 🆕 [2026-10-09] 런지 · 플랭크 · 버피 테스트 — 운동 방법 보기
+                  if (const ['lunge', 'plank', 'burpee'].contains(k))
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => _showFreeMoveHowTo(m),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.info_outline_rounded, color: ExerciseTheme.brandGolden, size: 18),
+                        label: Text(exText('howTo'), style: const TextStyle(color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                      ),
+                    ),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2875,6 +3042,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고) — 워치 심박이 있을 때만 보임
           if (_dayHeart != null && !_isEditMode) ...[
             _buildDayHeartCard(),
+            const SizedBox(height: 12),
+          ],
+          // 🆕 [2026-10-09] 자유 운동 + 학생이 아닌 계정 → 타이머로 별 모으기 안내
+          if (_isFree && _isGeneralUser && !_isEditMode) ...[
+            _buildFreeStarRunCard(),
             const SizedBox(height: 12),
           ],
           if (_isStudent && !_isEditMode) ...[

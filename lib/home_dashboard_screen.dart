@@ -36,6 +36,7 @@ class HomeDashboardScreen extends StatefulWidget {
 }
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsBindingObserver {
+  final RoomInviteWatcher _inviteWatcher = RoomInviteWatcher(); // 🆕 [초대 2026-10-11] 친구 학습방 초대 팝업
   String _examBreakTimeSelection = '20분';
 
   String selectedSubject = '';
@@ -82,6 +83,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // 🆕 [버그 수정] 앱 재개(resume) 감지용
+    _inviteWatcher.start(() => context, () => mounted); // 🆕 [초대 2026-10-11]
     _audioPlayer = AudioPlayer();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
 
@@ -256,6 +258,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with WidgetsB
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this); // 🆕 옵저버 해제
+    _inviteWatcher.stop(); // 🆕 [초대 2026-10-11]
     _previewTimer?.cancel();
     _audioPlayer.stop();
     _audioPlayer.dispose();
