@@ -8687,6 +8687,29 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
             final List<Map<String, dynamic>> senders = bySender.values.toList()
               ..sort((a, b) => (b['stars'] as int).compareTo(a['stars'] as int));
 
+            // 🆕 [2026-10-15] 보낸 사람 목록의 합 = 전체 합계가 되도록:
+            //   예전 합계(parentGiftStars)에는 "보낸 사람 기록"이 생기기 전 별까지 들어 있음
+            //   → 목록에 없는 만큼을 "그 밖의 응원 (보낸 사람 기록 전)" 한 줄로 따로 보여 줌
+            int guardInList = 0;
+            int guardSpInList = 0;
+            for (final g in gifts) {
+              if (g['role'] == 'supporter') continue;
+              final int st = (g['stars'] as num?)?.toInt() ?? 0;
+              guardInList += st;
+              if (g['type'] == 'special') guardSpInList += st;
+            }
+            final int oldOnly = legacyTotal > guardInList ? legacyTotal - guardInList : 0;
+            final int oldOnlySp = legacySpecial > guardSpInList ? legacySpecial - guardSpInList : 0;
+            if (oldOnly > 0) {
+              senders.add({
+                'name': '',
+                'rel': 'other',
+                'relText': lang == 'KO' ? '그 밖의 응원 (보낸 사람 기록 전)' : 'Earlier cheers (sender not recorded)',
+                'stars': oldOnly,
+                'special': oldOnlySp,
+              });
+            }
+
             final int total = legacyTotal + supTotal;
             final int special = legacySpecial + supSpecial;
             final int normal = total - special;
@@ -8897,8 +8920,10 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
         final Map<String, Map<String, dynamic>> plans = {
           for (final d in snap.data?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) d.id: d.data(),
         };
-        final List<FamilyScholarRow> rows =
-        SupporterService.summarize(gifts, plans).where((r) => r.planCap > 0).toList();
+        // 🆕 [2026-10-15] 장학금을 정하지 않은 가족도 이번 달 별이 있으면 줄에 보이게 (금액 대신 "장학금 없음")
+        final List<FamilyScholarRow> rows = SupporterService.summarize(gifts, plans)
+            .where((r) => r.planCap > 0 || r.monthStars > 0)
+            .toList();
         if (rows.isEmpty) return const SizedBox.shrink();
         final int total = rows.fold<int>(0, (s, r) => s + r.monthWon);
         final int lastTotal = rows.fold<int>(0, (s, r) => s + r.lastMonthWon);
@@ -8934,7 +8959,16 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
                           style: GoogleFonts.notoSansKr(color: cream, fontSize: 12.5, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      Text(famWonText(r.monthWon, lang: lang), style: GoogleFonts.notoSansKr(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontSize: 13)),
+                      // 🆕 [2026-10-15] 이번 달 받은 별 개수 + 금액 (장학금을 정하지 않았으면 "장학금 없음")
+                      Text('★${r.monthStars}  ', style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(
+                        r.planCap > 0 ? famWonText(r.monthWon, lang: lang) : (lang == 'KO' ? '장학금 없음' : 'No scholarship'),
+                        style: GoogleFonts.notoSansKr(
+                          color: r.planCap > 0 ? const Color(0xFFFFD700) : Colors.white38,
+                          fontWeight: r.planCap > 0 ? FontWeight.w900 : FontWeight.bold,
+                          fontSize: r.planCap > 0 ? 13 : 11.5,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -10772,6 +10806,13 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
               // '개념강의' / '단원정리 및 문제해설'
               "score": item['score'],
               // 평가일 때만 int, 강의면 null
+              // 🆕 [2026-10-15] 교시별 분석용 (학습기록 저장 때 함께 저장된 값)
+              "understanding": item['understanding'],
+              "difficulty": item['difficulty'],
+              "concentration": item['concentration'],
+              "condition": item['condition'],
+              "incorrectNote": item['incorrectNote'],
+              "nextGoal": item['nextGoal'],
             });
           } catch (_) {
             // 손상된 기록 하나는 건너뛰고 나머지는 계속 집계
@@ -11015,9 +11056,87 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     buffer.write(ko
         ? '$dayWord 총 학습시간: $totalMin분\n강의 $lectureCount건 · 평가 $evalCount건\n\n'
         : '$dayWord total study time: $totalMin min\nLectures $lectureCount · Evaluations $evalCount\n\n');
-    buffer.write(await _archivedDailySummary(subjectCount, totalMin));
+    // 🆕 [2026-10-15] 원장님 원칙: 하루 3교시까지는 "하루 전체 시간 · 다른 날"과 비교하는 말을 쓰지 않음
+    //   → 교시별 집중도 · 이해도 · 난이도 · 컨디션 · 평가 · 오답 정리로 분석 (4교시부터는 예전 총평)
+    if (_selectedDaySessions.length <= 3) {
+      buffer.write(_earlySessionsAnalysis(ko));
+    } else {
+      buffer.write(await _archivedDailySummary(subjectCount, totalMin));
+    }
     buffer.write('\n\n${_biMap(_kAiNote)}');
     return buffer.toString();
+  }
+
+  // 🆕 [2026-10-15] 하루 1~3교시 분석 — 시간 비교 없이 학습기록의 질로 분석
+  String _earlySessionsAnalysis(bool ko) {
+    String en(String v) => const {
+      '높음': 'high', '보통': 'normal', '낮음': 'low',
+      '매우어려움': 'very hard', '어려움': 'hard', '쉬움': 'easy',
+      '좋음': 'good', '피곤함': 'tired',
+    }[v] ?? v;
+    final StringBuffer b = StringBuffer();
+    final List<String> good = [];
+    final List<String> care = [];
+    final List<String> goals = [];
+    for (int i = 0; i < _selectedDaySessions.length; i++) {
+      final Map<String, dynamic> s = _selectedDaySessions[i];
+      final String subj = _subjectName(s['subject'] as String);
+      final String p = ko ? '${i + 1}교시 $subj' : 'Session ${i + 1} $subj';
+      final int? und = (s['understanding'] as num?)?.toInt();
+      final String? diff = s['difficulty'] as String?;
+      final String? focus = s['concentration'] as String?;
+      final String? cond = s['condition'] as String?;
+      final num? score = s['score'] as num?;
+      final String? note = s['incorrectNote'] as String?;
+      final String goal = (s['nextGoal'] as String? ?? '').trim();
+      final bool hard = diff == '어려움' || diff == '매우어려움';
+
+      final List<String> parts = [];
+      if (focus != null) parts.add(ko ? '집중도 $focus' : 'Focus ${en(focus)}');
+      if (und != null) parts.add(ko ? '이해도 $und%' : 'Understanding $und%');
+      if (diff != null) parts.add(ko ? '난이도 $diff' : 'Difficulty ${en(diff)}');
+      if (cond != null) parts.add(ko ? '컨디션 $cond' : 'Condition ${en(cond)}');
+      b.write('■ $p ${_sessionTypeLabel(s)}\n');
+      if (parts.isNotEmpty) b.write('  ${parts.join(' · ')}\n');
+
+      if (focus == '높음') good.add(ko ? '$p: 집중도를 높게 유지했습니다.' : '$p: kept focus high.');
+      if (und != null && und >= 80) good.add(ko ? '$p: 이해도 $und%로 배운 내용을 잘 소화했습니다.' : '$p: understood $und% of the material.');
+      if (hard && und != null && und >= 60) good.add(ko ? '$p: 어려운 내용이었지만 끝까지 붙들고 이해해 냈습니다.' : '$p: stayed with hard material and understood it.');
+      if (score != null && score >= 90) good.add(ko ? '$p: 평가 ${score}점, 아주 좋은 결과입니다.' : '$p: scored $score — excellent.');
+      if (note == '정리함') good.add(ko ? '$p: 오답 정리까지 마쳤습니다.' : '$p: wrong answers reviewed.');
+
+      if (focus == '낮음') care.add(ko ? '$p: 집중도가 낮았습니다. 다음 교시는 폰을 멀리 두고 25분 집중부터 시작해 보세요.' : '$p: focus was low. Put the phone away and start with 25 focused minutes.');
+      if (und != null && und <= 40) care.add(ko ? '$p: 이해도가 $und%입니다. 오늘 안에 개념을 한 번 더 짚어 보세요.' : '$p: understanding was $und%. Review the concept once more today.');
+      if (cond == '피곤함') care.add(ko ? '$p: 피곤한 상태였습니다. 다음 교시 전에 5분 쉬고 물 한 잔 마셔요.' : '$p: you were tired. Rest 5 minutes and drink water before the next session.');
+      if (score != null && score < 70) care.add(ko ? '$p: 평가 ${score}점입니다. 틀린 문제 유형을 상세분석기록에서 확인해 보세요.' : '$p: scored $score. Check the missed question types in Detailed Analytics.');
+      if (note == '정리 안함') care.add(ko ? '$p: 오답 정리가 남아 있습니다. 틀린 문제는 오늘 안에 정리해 두세요.' : '$p: wrong-answer review is left. Finish it today.');
+      if (goal.isNotEmpty) goals.add('$p: $goal');
+    }
+    b.write('\n');
+    if (good.isNotEmpty) {
+      b.write(ko ? '[잘한 점]\n' : '[Strengths]\n');
+      for (final String g in good) b.write('• $g\n');
+      b.write('\n');
+    }
+    if (care.isNotEmpty) {
+      b.write(ko ? '[챙길 점]\n' : '[To Watch]\n');
+      for (final String c in care) b.write('• $c\n');
+      b.write('\n');
+    }
+    if (good.isEmpty && care.isEmpty) {
+      b.write(ko
+          ? '기록한 교시를 차분하게 마쳤습니다. 학습기록에 집중도 · 이해도를 함께 남기면 더 자세한 분석을 받을 수 있어요.\n\n'
+          : 'You finished your recorded sessions steadily. Add focus and understanding to your study log for a more detailed analysis.\n\n');
+    }
+    if (goals.isNotEmpty) {
+      b.write(ko ? '[다음 목표]\n' : '[Next Goals]\n');
+      for (final String g in goals) b.write('• $g\n');
+      b.write('\n');
+    }
+    b.write(_isSelectedDateToday
+        ? (ko ? '아직 하루가 끝나지 않았습니다. 남은 교시도 지금의 흐름을 이어가세요.' : "The day isn't over yet. Keep this flow in your next sessions.")
+        : (ko ? '이날은 ${_selectedDaySessions.length}교시를 기록했습니다.' : '${_selectedDaySessions.length} session(s) recorded that day.'));
+    return b.toString();
   }
 
   // 🆕 [2026-10-01] "상세분석기록" — 교시별 기록 + (평가가 있으면) 가장 낮은 점수 평가의 저장·공유 진단서
@@ -11336,20 +11455,24 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
     // (기존 "일일 전체 학습시간" 그래프의 슬라이딩 윈도우와 동일한 방식으로) Y축 숫자만
     // 위로 밀려서 항상 4단계(예: 200/150/100/50)만 보이고 그 아래 구간은 잘려서 안 보이게 함.
     // 일/주/월/연 전부 동일하게 적용.
-    double windowTopMinutes = 150.0;
+    // 🆕 [2026-10-15] 원장님 요청: Y축 0분 · 30분 · 60분 · 90분 (30분 간격)
+    //   90분을 넘으면 맨 위를 30분 단위로 올리고(예: 125분 → 150분) 축 폭은 늘 90분 유지
+    //   → 원점(맨 아래)이 자동으로 올라가고(예: 60분) 그 아래는 ✂ 가위로 잘라낸 것으로 표시
+    double windowTopMinutes = 90.0;
     if (maxMinutesFound > windowTopMinutes) {
-      windowTopMinutes = (maxMinutesFound / 150.0).ceil() * 150.0; // 🆕 [2026-10-07]
+      windowTopMinutes = (maxMinutesFound / 30.0).ceil() * 30.0;
     }
-    const double windowBottomMinutes = 0.0; // 🆕 [2026-10-07] 항상 0부터 → 적게 한 과목 막대도 보임
+    final double windowBottomMinutes = windowTopMinutes - 90.0;
+    final bool isCut = windowBottomMinutes > 0;
     final double yAxisMaxBoundary = windowTopMinutes; // 막대 높이 계산 기준(=창의 맨 위)
-    final double yAxisWindowRange =
-        windowTopMinutes - windowBottomMinutes; // 항상 150분 폭 유지
+    const double yAxisWindowRange = 90.0; // 항상 90분 폭 유지
+    final String mu = DkeLang.current == 'KO' ? '분' : 'm';
 
     List<String> dynamicYAxisLabels = [
-      "${windowTopMinutes.round()}m",
-      "${(windowTopMinutes * 2 / 3).round()}m",
-      "${(windowTopMinutes / 3).round()}m",
-      "0m",
+      "${windowTopMinutes.round()}$mu",
+      "${(windowTopMinutes - 30).round()}$mu",
+      "${(windowTopMinutes - 60).round()}$mu",
+      isCut ? "✂${windowBottomMinutes.round()}" : "0$mu",
     ];
 
     List<Color> colorPalette = (tabIndex == 1) ? _weeklyColors : _todayColors;
@@ -11506,9 +11629,9 @@ GKE StudyUp 希望帮助每一位学生培养**自主学习的力量**，
 
                                 if (drawScoreHeight < 0) drawScoreHeight = 0;
                                 drawAvgHeight = 0; // 🆕 [2026-10-07] 가짜 평균 막대 숨김
-                                if (drawScoreHeight < 4 &&
-                                    currentMins > windowBottomMinutes)
-                                  drawScoreHeight = 4; // 윈도우 안에 있을 때만 최소 시인성 보장
+                                // 🆕 [2026-10-15] ✂ 아래(잘린 구간)에 있는 과목도 얇은 막대로 보이게 (숫자는 실제 분)
+                                if (drawScoreHeight < 4 && currentMins > 0)
+                                  drawScoreHeight = 4;
 
                                 if (drawScoreHeight > hMaxDashboard)
                                   drawScoreHeight = hMaxDashboard;

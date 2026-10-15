@@ -154,6 +154,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _loadPendingConfirm(); // 🆕 [워치 운동 2026-10-05] 모든 종목: 확인을 기다리는 자동 기록
     _recentFuture = _loadRecent(); // 🆕 [2026-10-05] 최근 기록 목록 (자동 기록 포함)
     _loadDayHeart(); // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고) — 열 때마다 새로 계산
+    // 🆕 [2026-10-15] 심박 평균 · 최고 자동 넣기 (열 때 한 번 + 운동 시간(분)을 바꾸면 다시)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoFillHeart());
+    _durationController.addListener(_onDurationChangedForHeart);
     // 🆕 [걸음수 그래프] 걷기류(steps 필드가 있는 종목)에서만 별도로 로드
     if (_hasStepsField) _stepsHistoryFuture = _loadStepsByDate();
     // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 불러오기 (없으면 평균값 유지)
@@ -235,6 +238,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   void dispose() {
     _stepSession?.dispose(); // 🆕 [만보기 연동 1단계] 측정 중이었다면 스트림 구독 해제
     _exTimer?.cancel(); // 🆕 [학생 운동 별] 화면을 나가도 시작 시각은 저장돼 있어 다시 오면 이어짐
+    _hrAutoDebounce?.cancel(); // 🆕 [2026-10-15] 심박 자동 넣기 대기 취소
     for (final c in [..._freeSets.values, ..._freeReps.values]) {
       c.dispose(); // 🆕 [자유운동]
     }
@@ -1177,9 +1181,67 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 🆕 [2026-10-08] 워치 심박 — ① 오늘 심박(최저 · 평상 · 최고) ② 타이머 · 걸음 측정한 시간의 심박 자동 채우기
   // 모두 폰 안의 Health Connect에서 읽음 (서버 · 데이터 비용 없음)
   // ===================================================================
+  bool _heartEverSeen = false; // 🆕 [2026-10-13] 예전에 워치 심박이 들어온 적이 있는지
+
   Future<void> _loadDayHeart() async {
     final DayHeartStats? h = await HealthLink.dayHeartStats();
-    if (mounted) setState(() => _dayHeart = h);
+    bool seen = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      seen = prefs.getKeys().any((k) => k.startsWith('gke_day_heart_'));
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _dayHeart = h;
+        _heartEverSeen = seen;
+      });
+    }
+  }
+
+  /// 🆕 [2026-10-13] 오늘 워치 심박이 아직 없을 때 — 카드가 사라지지 않고 이유와 [다시 연결]을 보여 줌
+  Widget _buildNoHeartCard() {
+    final bool ko = appLanguage.isDefault;
+    final TextStyle titleSt = ko
+        ? GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
+        : GoogleFonts.gowunBatang(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13);
+    final TextStyle bodySt = ko
+        ? GoogleFonts.notoSansKr(color: Colors.white60, fontSize: 11.5, height: 1.5)
+        : GoogleFonts.gowunBatang(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 11.5, height: 1.5);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: ExerciseTheme.luxeCardDecoration(highlighted: false),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.favorite_border_rounded, color: ExerciseTheme.dangerRed, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text(ko ? '오늘 워치 심박이 아직 들어오지 않았어요' : 'No watch heart rate yet today', style: titleSt)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            ko
+                ? '• 워치와 폰이 연결돼 있는지 확인하고, 삼성헬스 앱을 한 번 열어 주세요 (동기화)\n• 그래도 안 보이면 아래 [다시 연결]을 눌러 심박 권한을 켜 주세요'
+                : '• Check the watch is connected and open Samsung Health once to sync\n• If it still does not appear, tap [Reconnect] to allow heart rate',
+            style: bodySt,
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () async {
+                await HealthLink.requestExtendedPermission();
+                await DailyStepWatcherService.instance.syncNow();
+                await _loadDayHeart();
+              },
+              icon: const Icon(Icons.sync_rounded, color: ExerciseTheme.brandGolden, size: 18),
+              label: Text(ko ? '다시 연결' : 'Reconnect', style: titleSt.copyWith(color: ExerciseTheme.brandGolden)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fillHeartFromWatch(DateTime from, DateTime to) async {
@@ -1190,11 +1252,12 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     final (int? avg, int? mx) = await HealthLink.heartRateBetween(from, to);
     if (!mounted || avg == null) return;
     bool filled = false;
-    if (_avgHrController.text.trim().isEmpty) {
+    // 🆕 [2026-10-15] 자동으로 넣어 둔 값은 실제 운동 시간의 심박으로 바꿈 (직접 쓴 값은 그대로)
+    if (_avgHrController.text.trim().isEmpty || !_hrTypedByHand) {
       _avgHrController.text = avg.toString();
       filled = true;
     }
-    if (mx != null && _maxHrController.text.trim().isEmpty) {
+    if (mx != null && (_maxHrController.text.trim().isEmpty || !_hrTypedByHand)) {
       _maxHrController.text = mx.toString();
       filled = true;
     }
@@ -1203,6 +1266,35 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       ExerciseTheme.showLuxeSnackBar(context, exText('hrFilled', {'a': avg, 'm': mx ?? '-'}));
     }
     _loadDayHeart();
+  }
+
+  // 🆕 [2026-10-15] 심박 평균 · 최고 자동 넣기 — 평소엔 자동, 직접 고쳐 쓰면 그 값을 그대로 둠
+  //   ① 타이머 · 걸음 측정 · 워치 운동처럼 시작~끝 시각을 알면 → 그 시간의 심박 (_fillHeartFromWatch)
+  //   ② 모르면(오늘 직접 적는 기록) → 지금부터 운동 시간(분)만큼 거슬러 올라간 시간의 평균 · 최고
+  bool _hrTypedByHand = false;
+  Timer? _hrAutoDebounce;
+
+  void _onDurationChangedForHeart() {
+    _hrAutoDebounce?.cancel();
+    _hrAutoDebounce = Timer(const Duration(milliseconds: 800), _autoFillHeart);
+  }
+
+  Future<void> _autoFillHeart() async {
+    if (_isEditMode || _hrTypedByHand || _sessionStart != null) return;
+    final DateTime now = DateTime.now();
+    if (_date.year != now.year || _date.month != now.month || _date.day != now.day) return;
+    try {
+      if (!await HealthLink.hasExtendedPermission()) return;
+      int minutes = int.tryParse(_durationController.text.trim()) ?? 30;
+      if (minutes < 5) minutes = 5;
+      if (minutes > 240) minutes = 240;
+      final (int? avg, int? mx) = await HealthLink.heartRateBetween(now.subtract(Duration(minutes: minutes)), now);
+      if (!mounted || _hrTypedByHand || _sessionStart != null || avg == null) return;
+      setState(() {
+        _avgHrController.text = avg.toString();
+        _maxHrController.text = (mx ?? avg).toString();
+      });
+    } catch (_) {}
   }
 
   Widget _buildDayHeartCard() {
@@ -2998,6 +3090,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               Expanded(
                 child: TextField(
                   controller: _avgHrController,
+                  onChanged: (_) => _hrTypedByHand = true, // 🆕 [2026-10-15] 직접 쓰면 자동 넣기 멈춤
                   keyboardType: TextInputType.number,
                   style: const TextStyle(color: Colors.white),
                   decoration: _decoration('', unit: 'bpm')
@@ -3008,6 +3101,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               Expanded(
                 child: TextField(
                   controller: _maxHrController,
+                  onChanged: (_) => _hrTypedByHand = true, // 🆕 [2026-10-15] 직접 쓰면 자동 넣기 멈춤
                   keyboardType: TextInputType.number,
                   style: const TextStyle(color: Colors.white),
                   decoration: _decoration('', unit: 'bpm')
@@ -3039,9 +3133,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             _buildConfirmCard(), // 🆕 [삼성헬스] 자동 기록 확인 (걸음 · 워치 운동)
             const SizedBox(height: 12),
           ],
-          // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고) — 워치 심박이 있을 때만 보임
-          if (_dayHeart != null && !_isEditMode) ...[
-            _buildDayHeartCard(),
+          // 🔧 [2026-10-13] 오늘 심박 — 있으면 최저 · 평상 · 최고, 없으면 (워치를 써 본 사람에게만) 이유와 [다시 연결]
+          if (!_isEditMode && (_dayHeart != null || _heartEverSeen)) ...[
+            _dayHeart != null ? _buildDayHeartCard() : _buildNoHeartCard(),
             const SizedBox(height: 12),
           ],
           // 🆕 [2026-10-09] 자유 운동 + 학생이 아닌 계정 → 타이머로 별 모으기 안내

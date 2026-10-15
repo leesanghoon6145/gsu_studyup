@@ -10,7 +10,7 @@ import 'package:audioplayers/audioplayers.dart'; // 🆕 [2026-08-17] 반복 알
 import '../global_lang.dart';
 import 'widgets/three_color_pencil_icon.dart';
 import 'planner_alarm_foreground_task.dart'; // 🆕 [2026-08-18] 알람 켜서 저장할 때만 권한 요청
-
+import 'global_alarm_stop_overlay.dart'; // 🆕 [2026-10-15] 앱 어디서든 뜨는 알람 끄기 화면
 // ============================================================================
 // [GKE StudyUp] 자기주도 플래너 — 실행 탭 전용 알람 서비스
 // 🆕 [2026-08-17 재설계] 일반 플래너 쪽에서 Logcat으로 정밀 확인된 사실:
@@ -108,10 +108,13 @@ class PlannerAlarmService {
       _channelId,
       _channelName,
       channelDescription: _channelDesc,
-      importance: Importance.high,
-      priority: Priority.high,
+      importance: Importance.max,
+      priority: Priority.max,
       playSound: true,
       enableVibration: true,
+      category: AndroidNotificationCategory.alarm, // 🆕 [2026-10-15] 알람으로 취급 (절전 · 방해 금지 중에도)
+      fullScreenIntent: true, // 🆕 [2026-10-15] 화면이 꺼져 있어도 켜지며 앱이 열림
+      visibility: NotificationVisibility.public,
     ),
     iOS: DarwinNotificationDetails(
       presentAlert: true,
@@ -193,7 +196,7 @@ class PlannerAlarmService {
           body,
           when,
           _details,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: AndroidScheduleMode.alarmClock, // 🆕 [2026-10-15] 정시 '알람 시계' 방식
           uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
         );
@@ -383,6 +386,12 @@ class PlannerAlarmService {
       await _plugin.show(notifId, title, body, details);
       await _startLoopingSound();
       ringingNotifier.value = true; // 🆕 이 줄이 실행되는 즉시 구독 중인 화면이 반응함
+      // 🆕 [2026-10-15] "울리는 중" 표시 → 앱 어디서든 끄기 화면이 뜸 (화면이 꺼져 뒤에서 울릴 때도)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(kAlarmRingingAtKey, DateTime.now().toIso8601String());
+        await prefs.setString(kAlarmRingingTitleKey, title);
+      } catch (_) {}
       debugPrint('[PlannerAlarmService] ✅ fireLoopingAlarm 표시+재생 시작 (notifId=$notifId)');
 
       _autoStopTimer?.cancel();
@@ -422,6 +431,12 @@ class PlannerAlarmService {
     _autoStopTimer?.cancel();
     _autoStopTimer = null;
     ringingNotifier.value = false; // 🆕 꺼지는 순간도 즉시 반영
+    // 🆕 [2026-10-15] "울리는 중" 표시 지우기
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(kAlarmRingingAtKey);
+      await prefs.remove(kAlarmRingingTitleKey);
+    } catch (_) {}
   }
 }
 
@@ -489,6 +504,9 @@ class PlannerAlarmWatcherService {
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
 
     final prefs = await SharedPreferences.getInstance();
+    // 🆕 [2026-10-15] 다른 화면에서 새로 저장 · 수정한 알람과 "이미 울림" 기록을 바로 읽도록 새로 고침
+    //   (안 하면 처음 읽어 둔 옛 목록만 계속 봐서, 새로 맞춘 알람이 화면이 꺼진 뒤에는 안 울렸음)
+    await prefs.reload();
     final String? raw = prefs.getString('gke_global_schedules');
     if (raw == null || raw.isEmpty) {
       debugPrint('[PlannerAlarmWatcherService] 틱 $nowStamp — 저장된 일정 없음');
@@ -527,7 +545,10 @@ class PlannerAlarmWatcherService {
       }
       // 🆕 [진단용] 알람ON인 모든 항목에 대해, 지금 시각과 얼마나 맞는지 항상 로그로 남김
       debugPrint('[PlannerAlarmWatcherService]   - "${item['title']}" 목표=$hh:$mm 반복=${item['alarmRepeat']} / 지금=${now.hour}:${now.minute}');
-      if (now.hour != hh || now.minute != mm) continue; // 지금 이 순간(분 단위)이 아니면 스킵
+      // 🆕 [2026-10-15] "정확히 그 1분"만 보던 것을 → 그 시각부터 10분 안이면 울림
+      //   (휴대폰이 잠깐 잠들어 그 1분을 놓치면 그날 알람이 통째로 안 울리던 원인)
+      final DateTime target = DateTime(now.year, now.month, now.day, hh, mm);
+      if (now.isBefore(target) || now.difference(target).inMinutes >= 10) continue;
 
       final String repeat = (item['alarmRepeat'] ?? 'once').toString();
       bool isDueToday;
@@ -1102,7 +1123,8 @@ class LearningScreenState extends State<LearningScreen>
   // PopScope(canPop: false)로 감싸서 "알람 끄기" 버튼 외에는 절대 못 닫히게 함(뒤로가기/바깥
   // 탭으로 실수로 안 끄고 넘어가는 것 방지).
   void _showRingingAlarmDialog() {
-    if (_alarmDialogShowing) return;
+    // 🆕 [2026-10-15] 끄기 화면은 앱 전체 공용(GlobalAlarmStopOverlay)이 어디서든 띄움 → 여기서는 안 띄움 (두 개 겹침 방지)
+    if (kGlobalAlarmOverlayOn || _alarmDialogShowing) return;
     _alarmDialogShowing = true;
     showDialog(
       context: context,
@@ -1787,6 +1809,21 @@ class LearningScreenState extends State<LearningScreen>
       selectedWeekdays = [date.weekday % 7]; // DateTime.weekday 일=7 → 0
     }
 
+    // 🆕 [2026-10-15] 제목 · 시간을 쓰거나 반복을 고르면 팝업이 저절로 올라가 맨 아래 "알람 켜기"가 보이게
+    //   (키보드에 가려 알람 켜기를 못 보고 저장해서 알람을 놓치는 일이 있었음)
+    final ScrollController popScroll = ScrollController();
+    void showAlarmSwitch() {
+      Future.delayed(const Duration(milliseconds: 350), () {
+        if (popScroll.hasClients) {
+          popScroll.animateTo(
+            popScroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -1809,6 +1846,7 @@ class LearningScreenState extends State<LearningScreen>
                     fontWeight: FontWeight.bold),
               ),
               content: SingleChildScrollView(
+                controller: popScroll, // 🆕 [2026-10-15] 저절로 올라가게
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1882,6 +1920,7 @@ class LearningScreenState extends State<LearningScreen>
                     const SizedBox(height: 4),
                     TextField(
                       controller: titleController,
+                      onSubmitted: (_) => showAlarmSwitch(), // 🆕 [2026-10-15] 다 쓰면 알람 켜기가 보이게
                       style: GoogleFonts.notoSansKr(
                           color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
@@ -1907,6 +1946,8 @@ class LearningScreenState extends State<LearningScreen>
                     const SizedBox(height: 4),
                     TextField(
                       controller: timeController,
+                      onChanged: (_) => showAlarmSwitch(), // 🆕 [2026-10-15] 시간을 쓰면 알람 켜기가 보이게
+                      onSubmitted: (_) => showAlarmSwitch(),
                       style: GoogleFonts.notoSansKr(
                           color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
@@ -1932,7 +1973,10 @@ class LearningScreenState extends State<LearningScreen>
                     const SizedBox(height: 8),
                     _repeatChipRow(
                       selected: repeat,
-                      onSelect: (v) => setPopState(() => repeat = v),
+                      onSelect: (v) {
+                        setPopState(() => repeat = v);
+                        showAlarmSwitch(); // 🆕 [2026-10-15] 반복을 고르면 알람 켜기가 보이게
+                      },
                     ),
                     if (repeat == 'weekly') ...[
                       const SizedBox(height: 10),
@@ -2110,7 +2154,7 @@ class LearningScreenState extends State<LearningScreen>
           },
         );
       },
-    );
+    ).then((_) => popScroll.dispose()); // 🆕 [2026-10-15] 팝업이 닫히면 정리
   }
 
   Widget _repeatChipRow({

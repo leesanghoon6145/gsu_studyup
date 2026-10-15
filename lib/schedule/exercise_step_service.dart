@@ -116,10 +116,24 @@ class HealthLink {
 
   static Future<bool> hasExtendedPermission() async {
     await _cfg();
+    // 🔧 [2026-10-13] 운동 · 심박 · 칼로리 · 수면을 하나씩 확인 — 하나라도 허용돼 있으면 true
+    //   (예전: 4가지가 모두 허용돼야 true → 하나만 꺼져도 심박 · 수면 · 워치 운동이 모두 사라졌음)
+    for (int i = 0; i < _extTypes.length; i++) {
+      try {
+        if (await _h.hasPermissions([_extTypes[i]], permissions: [_extAccess[i]]) ?? false) return true;
+      } catch (e) {
+        debugPrint('[HealthLink] hasExtendedPermission 오류: $e');
+      }
+    }
+    return false;
+  }
+
+  /// 🆕 [2026-10-13] 심박 권한만 따로 확인
+  static Future<bool> hasHeartPermission() async {
+    await _cfg();
     try {
-      return await _h.hasPermissions(_extTypes, permissions: _extAccess) ?? false;
-    } catch (e) {
-      debugPrint('[HealthLink] hasExtendedPermission 오류: $e');
+      return await _h.hasPermissions(const [HealthDataType.HEART_RATE], permissions: const [HealthDataAccess.READ]) ?? false;
+    } catch (_) {
       return false;
     }
   }
@@ -741,11 +755,16 @@ class DailyStepWatcherService {
     if (await HealthLink.isInstalled() && !await HealthLink.hasPermission()) {
       await HealthLink.requestPermission();
     }
-    // ③ 🆕 워치 운동 · 심박 · 칼로리 · 속도 · 수면 — 처음 한 번만 물어봄 (거절해도 걸음 기록은 그대로)
+    // ③ 🔧 [2026-10-13] 워치 운동 · 심박 · 칼로리 · 수면 — 심박 권한이 없으면 3일에 한 번 다시 물어봄
+    //   (앱을 다시 깔아 권한이 사라져도 소리 없이 꺼지지 않게 / 거절해도 걸음 기록은 그대로)
     final prefs0 = await SharedPreferences.getInstance();
-    if (await HealthLink.isInstalled() && !(prefs0.getBool(_kExtAskedKey) ?? false) && !await HealthLink.hasExtendedPermission()) {
-      await prefs0.setBool(_kExtAskedKey, true);
-      await HealthLink.requestExtendedPermission();
+    if (await HealthLink.isInstalled() && !await HealthLink.hasHeartPermission()) {
+      final int lastAsk = prefs0.getInt('gke_health_ext_ask_at') ?? 0;
+      final int nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (nowMs - lastAsk > const Duration(days: 3).inMilliseconds) {
+        await prefs0.setInt('gke_health_ext_ask_at', nowMs);
+        await HealthLink.requestExtendedPermission();
+      }
     }
 
     await syncNow();

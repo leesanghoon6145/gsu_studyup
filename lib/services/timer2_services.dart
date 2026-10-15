@@ -188,6 +188,15 @@ class Timer2Service {
     final String channelNameLocalized = tr('channelName');
     final String channelDescLocalized = tr('channelDesc');
 
+    // 🆕 [2026-10-15] 앱을 켠 뒤 설정에서 권한을 켠 경우도 바로 반영되게, 예약할 때마다 다시 확인
+    //   (예전엔 앱 시작 때 한 번만 확인 → 나중에 권한을 켜도 앱을 껐다 켜기 전까지 예약이 안 됨)
+    try {
+      final bool? granted = await _plugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.canScheduleExactNotifications();
+      if (granted != null) _exactAlarmPermissionGranted = granted;
+    } catch (_) {}
+
     // 🆕 [버그 수정] 권한이 없으면 아예 시도하지 않고 즉시 반환 -> "무한 대기"처럼 보이는 현상 방지
     if (!_exactAlarmPermissionGranted) {
       debugPrint("[Timer2Service] 정확한 알람 권한이 없어 예약을 진행하지 않습니다. 설정에서 권한을 켜주세요.");
@@ -244,11 +253,15 @@ class Timer2Service {
               _channelId,
               channelNameLocalized,
               channelDescription: channelDescLocalized,
-              importance: Importance.high,
-              priority: Priority.high,
+              importance: Importance.max,
+              priority: Priority.max,
+              category: AndroidNotificationCategory.alarm, // 🆕 [2026-10-15] 알람으로 취급
+              fullScreenIntent: true, // 🆕 화면이 꺼져 있어도 켜지며 알림
+              visibility: NotificationVisibility.public,
             ),
           ),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          // 🆕 [2026-10-15] 삼성 절전에도 정시에 울리는 '알람 시계' 방식 (예전: exactAllowWhileIdle)
+          androidScheduleMode: AndroidScheduleMode.alarmClock,
           uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
           payload: jsonEncode({
@@ -270,11 +283,15 @@ class Timer2Service {
               _channelId,
               channelNameLocalized,
               channelDescription: channelDescLocalized,
-              importance: Importance.high,
-              priority: Priority.high,
+              importance: Importance.max,
+              priority: Priority.max,
+              category: AndroidNotificationCategory.alarm, // 🆕 [2026-10-15] 알람으로 취급
+              fullScreenIntent: true, // 🆕 화면이 꺼져 있어도 켜지며 알림
+              visibility: NotificationVisibility.public,
             ),
           ),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          // 🆕 [2026-10-15] 삼성 절전에도 정시에 울리는 '알람 시계' 방식 (예전: exactAllowWhileIdle)
+          androidScheduleMode: AndroidScheduleMode.alarmClock,
           uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
           payload: jsonEncode({'type': 'end', 'task': taskText, 'time': timeStr}),

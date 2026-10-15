@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
     <!-- 🆕 [2026-10-04] Health Connect 읽기 권한 (삼성헬스 · 워치 자동 기록용, 읽기만) -->
@@ -67,6 +68,22 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false"
             android:exported="false" />
+
+        <!-- 🆕 [2026-10-15] 예약 알람을 실제로 띄우는 장치 (없어서 정해진 시각에 알림이 조용히 사라졌음) -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <!-- 🆕 [2026-10-15] 폰을 껐다 켜거나 앱을 업데이트해도 예약 알람이 다시 살아나게 -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
     </application>
     <queries>
         <package android:name="com.google.android.apps.healthdata"/>

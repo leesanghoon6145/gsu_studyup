@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.4.0+22
+version: 2.5.0+23
 
 environment:
   sdk: ^3.11.5
@@ -51,6 +51,8 @@ dependencies:
   health: ^12.2.0        # ← 여기 추가 (2단계: 워치 연동)
   permission_handler: ^11.3.1
   wakelock_plus: ^1.2.8
+  pdf: ^3.11.1           # 🆕 [2026-10-15] 실력진단 시험지 PDF 만들기
+  printing: ^5.13.4      # 🆕 [2026-10-15] 실력진단 시험지 인쇄 · 공유
   google_mlkit_translation: ^0.15.1
 dev_dependencies:
   flutter_test:
@@ -135,3 +137,5 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+

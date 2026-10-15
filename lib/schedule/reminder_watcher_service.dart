@@ -39,7 +39,10 @@ class ReminderWatcherService {
   static final ReminderWatcherService instance = ReminderWatcherService._();
 
   Timer? _timer;
+  Timer? _exactTimer; // 🆕 [2026-10-15] 알람 시각 "정각"에 한 번 더 확인하는 1회용 타이머
   bool _isRunning = false;
+  bool _ticking = false; // 🆕 [2026-10-15] 확인이 겹쳐서 두 번 울리지 않게
+  bool _rerun = false;
 
   // 🆕 같은 세션(앱 실행 중) 안에서 중복 확인을 줄이기 위한 메모리 캐시.
   // 실제 중복 방지의 최종 근거는 SharedPreferences(아래)입니다.
@@ -60,21 +63,81 @@ class ReminderWatcherService {
   void stop() {
     _timer?.cancel();
     _timer = null;
+    _exactTimer?.cancel(); // 🆕 [2026-10-15]
+    _exactTimer = null;
     _isRunning = false;
     debugPrint('[ReminderWatcherService] 감시 중지');
   }
 
   Future<void> _tick() async {
-    try {
-      await _checkReminders();
-    } catch (e) {
-      debugPrint('[ReminderWatcherService] 리마인더 확인 중 오류(무시하고 계속): $e');
+    // 🆕 [2026-10-15] 30초 확인과 정각 확인이 겹치면 한 번만 돌리고, 끝난 뒤 한 번 더 확인
+    if (_ticking) {
+      _rerun = true;
+      return;
     }
+    _ticking = true;
     try {
-      await _checkAppointments();
-    } catch (e) {
-      debugPrint('[ReminderWatcherService] 약속 확인 중 오류(무시하고 계속): $e');
+      try {
+        await _checkReminders();
+      } catch (e) {
+        debugPrint('[ReminderWatcherService] 리마인더 확인 중 오류(무시하고 계속): $e');
+      }
+      try {
+        await _checkAppointments();
+      } catch (e) {
+        debugPrint('[ReminderWatcherService] 약속 확인 중 오류(무시하고 계속): $e');
+      }
+      try {
+        await _armExactTimer();
+      } catch (e) {
+        debugPrint('[ReminderWatcherService] 정각 타이머 설정 오류(무시하고 계속): $e');
+      }
+    } finally {
+      _ticking = false;
     }
+    if (_rerun) {
+      _rerun = false;
+      await _tick();
+    }
+  }
+
+  // 🆕 [2026-10-15] 정시에 울리게: 30초마다만 확인하면 최대 30초 늦게 울림.
+  //   다음 알람이 35초 안에 있으면 그 시각(+0.2초)에 정확히 한 번 더 확인하는 1회용 타이머를 맞춤.
+  Future<void> _armExactTimer() async {
+    _exactTimer?.cancel();
+    _exactTimer = null;
+    final DateTime now = DateTime.now();
+    final String todayKey = _todayKey(now);
+    DateTime? next;
+    void consider(String time) {
+      final List<String> p = time.split(':');
+      if (p.length != 2) return;
+      final int hh = int.tryParse(p[0]) ?? -1;
+      final int mm = int.tryParse(p[1]) ?? -1;
+      if (hh < 0 || mm < 0) return;
+      final DateTime t = DateTime(now.year, now.month, now.day, hh, mm);
+      if (!t.isAfter(now)) return;
+      if (next == null || t.isBefore(next!)) next = t;
+    }
+
+    for (final item in await ReminderDataService.loadAll()) {
+      if (!item.isEnabled || item.time.isEmpty) continue;
+      if (item.repeatType == '매일') {
+        consider(item.time);
+      } else if (item.repeatType == '매주') {
+        if (_parseWeekdays(item.weekdays, fallbackDate: item.date).contains(now.weekday)) consider(item.time);
+      } else if (item.date == todayKey) {
+        consider(item.time);
+      }
+    }
+    for (final item in await AppointmentDataService.loadAll()) {
+      if (item.isCompleted || item.time.isEmpty) continue;
+      if (item.date == todayKey) consider(item.time);
+    }
+    if (next == null) return;
+    final Duration wait = next!.difference(now);
+    if (wait > const Duration(seconds: 35)) return; // 아직 멀면 다음 30초 확인이 다시 맞춤
+    _exactTimer = Timer(wait + const Duration(milliseconds: 200), () => _tick());
   }
 
   String _todayKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

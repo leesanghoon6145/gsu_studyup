@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../global_lang.dart';
 import '../services/notice_counsel_service.dart';
+import 'skill_diagnosis_screen.dart'; // 🆕 [2026-10-15] 실력진단
+import 'faq_screen.dart'; // 🆕 [2026-10-15] 자주 묻는 상담
 import '../services/notice_translate_service.dart'; // 🆕 [2026-10-09] 공지 10개 언어 폰 안 번역 (무료)
 import '../schedule/bilingual_text.dart' as gp; // 🆕 일반인(일반 플래너) 언어 설정 읽기용
+import 'textbook_guide_screen.dart';
 
 // ============================================================================
 // 🆕 [2026-09-24] 공지 및 교육상담 화면 (학생·학부모 공용)
@@ -545,8 +548,76 @@ class _NoticeCounselScreenState extends State<NoticeCounselScreen> with SingleTi
               showCrisis: true,
               showReplyTime: true,
               writeLabelKey: 'applyCounsel',
-            )
-          else if (!widget.isGeneral)
+              // 🆕 [2026-10-14] 교재 길잡이 금색 버튼 — 상담 글과 함께 위아래로 움직임
+              topBanner: Column(children: [
+                // 🆕 [2026-10-15] 실력진단 단추 (교재 길잡이 단추 위)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SkillDiagnosisScreen(isStudent: true)),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D1527),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5C158), width: 1.3),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text('🩺', style: TextStyle(fontSize: 25)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Skill Check', style: GoogleFonts.gowunBatang(color: const Color(0xFFE5C158), fontWeight: FontWeight.bold, fontSize: 13.2)),
+                                Text('실력진단 — 시험 보고 내 단계 알기', style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15.5)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: Color(0xFFE5C158)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TextbookGuideScreen(isStudent: true)),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFFF6DD8A), Color(0xFFD4AF37)]),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(color: const Color(0xFFE5C158).withValues(alpha: 0.3), blurRadius: 12)],
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('📚', style: TextStyle(fontSize: 25)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Find My Textbook', style: GoogleFonts.gowunBatang(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13.2)),
+                              Text('교재 길잡이 — 나에게 맞는 교재 찾기', style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 15.5)),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: Colors.black),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+                ]), // 🆕 [2026-10-15] 실력진단 · 교재 길잡이 두 단추 묶음 끝
+    )
+    else if (!widget.isGeneral)
             const _CounselTab(),
         ],
       ),
@@ -571,6 +642,23 @@ class _NoticeTabState extends State<_NoticeTab> {
   // 🆕 [연재 2026-09-25] 지금 화면에 보이는 공지 목록 (이전 편 고르기·다음 편 찾기에 사용)
   List<NoticeItem> _latest = [];
 
+  // 🆕 [2026-10-14] 공지도 10개씩 페이지 넘기기
+  static const int _perPage = 10;
+  int _page = 0;
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _goPage(int p) {
+    setState(() => _page = p);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+  }
   NoticeItem? _prevOf(NoticeItem n) {
     if (n.prevId == null) return null;
     for (final NoticeItem x in _latest) {
@@ -608,11 +696,17 @@ class _NoticeTabState extends State<_NoticeTab> {
       }
       chains.add(chain);
     }
-    for (final NoticeItem n in list) {
-      if (!used.contains(n.id)) {
-        chains.add([n]);
-        used.add(n.id);
+    // 🆕 [2026-10-12] 1편↔2편이 서로를 "이전 편"으로 가리키는 고리가 생겨도, 오래된 편부터 차례로 이어 줌
+    for (final NoticeItem n in list.reversed) {
+      if (used.contains(n.id)) continue;
+      final List<NoticeItem> chain = [];
+      NoticeItem? cur = n;
+      while (cur != null && !used.contains(cur.id)) {
+        chain.add(cur);
+        used.add(cur.id);
+        cur = nextOf[cur.id];
       }
+      chains.add(chain);
     }
     int topPos(List<NoticeItem> c) => c.fold<int>(1 << 30, (m, e) => pos[e.id]! < m ? pos[e.id]! : m);
     chains.sort((a, b) => topPos(a).compareTo(topPos(b)));
@@ -1041,18 +1135,28 @@ class _NoticeTabState extends State<_NoticeTab> {
           final List<NoticeItem> list = _orderSeries(snap.data!); // 🆕 [연재] 1편→2편 순서로 붙임
           _latest = list;
           if (list.isEmpty) return _EmptyBox(textKey: 'noNotice');
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
-            itemCount: list.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, i) => _NoticeCard(
-              item: list[i],
-              admin: admin,
-              onEdit: () => _openWriteNotice(existing: list[i]),
-              prev: _prevOf(list[i]),
-              next: _nextOf(list[i]),
-              onOpen: _openReader,
-            ),
+          // 🆕 [2026-10-14] 10개씩 페이지 넘기기 (연재 순서는 그대로)
+          final int pages = (list.length + _perPage - 1) ~/ _perPage;
+          final int page = _page.clamp(0, pages - 1);
+          final List<NoticeItem> shown = list.skip(page * _perPage).take(_perPage).toList();
+          return ListView(
+            controller: _scroll,
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 90),
+            children: [
+              for (final NoticeItem n in shown)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: _NoticeCard(
+                    item: n,
+                    admin: admin,
+                    onEdit: () => _openWriteNotice(existing: n),
+                    prev: _prevOf(n),
+                    next: _nextOf(n),
+                    onOpen: _openReader,
+                  ),
+                ),
+              if (pages > 1) _PageBar(page: page, pages: pages, onChanged: _goPage),
+            ],
           );
         },
       ),
@@ -1370,6 +1474,7 @@ class _PrivatePostList extends StatefulWidget {
   final bool showCrisis; // 1388 안내 표시 여부
   final bool showReplyTime; // "2~3일 안에 답변" 안내 표시 여부
   final String writeLabelKey;
+  final Widget? topBanner; // 🆕 [2026-10-14] 맨 위에 붙는 버튼 (학생 상담 탭: 교재 길잡이)
 
   const _PrivatePostList({
     required this.collection,
@@ -1378,6 +1483,7 @@ class _PrivatePostList extends StatefulWidget {
     required this.showCrisis,
     required this.showReplyTime,
     required this.writeLabelKey,
+    this.topBanner,
   });
 
   @override
@@ -1424,11 +1530,6 @@ class _PrivatePostListState extends State<_PrivatePostList> {
                   );
                 }).toList(),
               ),
-              // 마음 고민·공부 고민을 고르면 1388 안내를 한 번 더 보여줌
-              if (cat == 'catStudent' || cat == 'catWorry') ...[
-                const SizedBox(height: 12),
-                const _CrisisBanner(),
-              ],
               const SizedBox(height: 16),
             ],
             _secLabel('fieldContent'),
@@ -1620,15 +1721,77 @@ class _PrivatePostListState extends State<_PrivatePostList> {
             )
           else
             ...p.comments.map((c) => _commentBox(p, c, admin)),
-          if (admin)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
+          // 🆕 [2026-10-14] 관리자 답변 버튼 — 카드 맨 아래 금색 테두리로 크게 (답변 없으면 '답변하기', 있으면 '댓글 달기')
+          if (admin) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 40,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _kGold, width: 1.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
                 onPressed: () => _openCommentDialog(p),
                 icon: const Icon(Icons.add_comment_rounded, color: _kGold, size: 18),
-                label: Text(_bi('writeComment'), style: GoogleFonts.notoSansKr(color: _kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                label: Text(
+                  p.comments.isEmpty ? '💬 ${_bi('writeReply')}' : '💬 ${_bi('writeComment')}',
+                  style: GoogleFonts.notoSansKr(color: _kGold, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // 🆕 [2026-10-14] 탭 이름만 고정 · 안내부터 글 목록까지 함께 위아래로 움직임 · 10개씩 페이지 넘기기
+  static const int _perPage = 10;
+  int _page = 0;
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _goPage(int p) {
+    setState(() => _page = p);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+  }
+
+  Widget _header(bool admin) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Column(
+        children: [
+          if (widget.showCrisis) ...[
+            const _CrisisBanner(),
+            const SizedBox(height: 10),
+          ],
+          _infoLine(Icons.lock_outline_rounded, admin ? 'adminNote' : 'privacyNote'),
+          if (widget.showReplyTime) ...[
+            const SizedBox(height: 4),
+            _infoLine(Icons.schedule_rounded, 'replyTime'),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kGold,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => _openWriteDialog(),
+              icon: const Icon(Icons.edit_rounded, color: Colors.black, size: 18),
+              label: Text(_bi(widget.writeLabelKey), style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+          ),
         ],
       ),
     );
@@ -1637,56 +1800,97 @@ class _PrivatePostListState extends State<_PrivatePostList> {
   @override
   Widget build(BuildContext context) {
     final bool admin = NoticeCounselService.isAdmin;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Column(
-            children: [
-              if (widget.showCrisis) ...[
-                const _CrisisBanner(),
-                const SizedBox(height: 10),
-              ],
-              _infoLine(Icons.lock_outline_rounded, admin ? 'adminNote' : 'privacyNote'),
-              if (widget.showReplyTime) ...[
-                const SizedBox(height: 4),
-                _infoLine(Icons.schedule_rounded, 'replyTime'),
-              ],
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _kGold,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () => _openWriteDialog(),
-                  icon: const Icon(Icons.edit_rounded, color: Colors.black, size: 18),
-                  label: Text(_bi(widget.writeLabelKey), style: GoogleFonts.notoSansKr(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15)),
-                ),
-              ),
-            ],
+    return StreamBuilder<List<PrivatePost>>(
+      stream: _stream,
+      builder: (context, snap) {
+        final List<Widget> items = [
+          if (widget.topBanner != null) widget.topBanner!,
+          _header(admin),
+        ];
+        if (snap.hasError) {
+          items.add(_EmptyBox(textKey: 'loadFailed'));
+        } else if (!snap.hasData) {
+          items.add(const Padding(
+            padding: EdgeInsets.all(40),
+            child: Center(child: CircularProgressIndicator(color: _kGold)),
+          ));
+        } else if (snap.data!.isEmpty) {
+          items.add(_EmptyBox(textKey: 'noPosts'));
+        } else {
+          final List<PrivatePost> list = snap.data!;
+          final int pages = (list.length + _perPage - 1) ~/ _perPage;
+          final int page = _page.clamp(0, pages - 1);
+          final List<PrivatePost> shown = list.skip(page * _perPage).take(_perPage).toList();
+          for (final PrivatePost p in shown) {
+            items.add(Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: _postCard(p, admin),
+            ));
+          }
+          if (pages > 1) items.add(_PageBar(page: page, pages: pages, onChanged: _goPage));
+        }
+        return ListView(
+          controller: _scroll,
+          padding: const EdgeInsets.only(bottom: 24),
+          children: items,
+        );
+      },
+    );
+  }
+}
+
+// ============================================================================
+// 🆕 [2026-10-14] 페이지 넘기기 ◀ 1 2 3 ▶ — 공지사항 · 게시판 · 교육상담 함께 사용
+// ============================================================================
+class _PageBar extends StatelessWidget {
+  final int page; // 0부터 시작
+  final int pages;
+  final ValueChanged<int> onChanged;
+  const _PageBar({required this.page, required this.pages, required this.onChanged});
+
+  Widget _box(String label, {bool on = false, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? _kGold : _kCard,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _kGold.withValues(alpha: (on || onTap != null) ? 0.6 : 0.15)),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.notoSansKr(
+            color: on ? Colors.black : (onTap == null ? Colors.white24 : Colors.white),
+            fontWeight: FontWeight.bold,
+            fontSize: 13.5,
           ),
         ),
-        Expanded(
-          child: StreamBuilder<List<PrivatePost>>(
-            stream: _stream,
-            builder: (context, snap) {
-              if (snap.hasError) return _EmptyBox(textKey: 'loadFailed');
-              if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: _kGold));
-              final List<PrivatePost> list = snap.data!;
-              if (list.isEmpty) return _EmptyBox(textKey: 'noPosts');
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, i) => _postCard(list[i], admin),
-              );
-            },
-          ),
-        ),
-      ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    int start = page - 2 < 0 ? 0 : page - 2;
+    int end = start + 4;
+    if (end > pages - 1) {
+      end = pages - 1;
+      start = end - 4 < 0 ? 0 : end - 4;
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _box('◀', onTap: page > 0 ? () => onChanged(page - 1) : null),
+          for (int i = start; i <= end; i++) _box('${i + 1}', on: i == page, onTap: i == page ? null : () => onChanged(i)),
+          _box('▶', onTap: page < pages - 1 ? () => onChanged(page + 1) : null),
+        ],
+      ),
     );
   }
 }
@@ -1754,14 +1958,24 @@ class _CounselTab extends StatelessWidget {
           crossAxisSpacing: 12,
           childAspectRatio: 1.0,
           children: [
-            _menuTile(context, '🩺', 'btnDiag', 'descDiag', () => _snack(context, 'comingSoon')),
-            _menuTile(context, '📚', 'btnTextbook', 'descTextbook', () => _snack(context, 'comingSoon')),
+            _menuTile(context, '🩺', 'btnDiag', 'descDiag', () {
+              // 🆕 [2026-10-15] 실력진단 열기 (준비중 → 실제 화면)
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SkillDiagnosisScreen()),
+              );
+            }),
+            _menuTile(context, '📚', 'btnTextbook', 'descTextbook', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TextbookGuideScreen()))),
             _menuTile(context, '💬', 'btnOneOnOne', 'descOneOnOne', () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const _OneOnOnePage()),
               );
             }),
-            _menuTile(context, '📖', 'btnFaq', 'descFaq', () => _snack(context, 'comingSoon')),
+            _menuTile(context, '📖', 'btnFaq', 'descFaq', () {
+              // 🆕 [2026-10-15] 자주 묻는 상담 열기 (준비중 → 실제 화면)
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const FaqScreen(viewer: 'parent')),
+              );
+            }),
           ],
         ),
       ],

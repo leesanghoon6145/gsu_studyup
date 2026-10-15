@@ -126,6 +126,9 @@ class NotificationService {
       playSound: true, // 🆕 [명시적 설정] 소리 재생을 명시적으로 켬
       sound: RawResourceAndroidNotificationSound('soft_alarm'), // 🆕 [2026-08-16 추가] android/app/src/main/res/raw/soft_alarm.mp3 커스텀 사운드 연결 (확장자 .mp3는 빼고 파일명만 적음)
       enableVibration: true,
+      category: AndroidNotificationCategory.alarm, // 🆕 [2026-10-15] 알람으로 취급 (절전 · 방해 금지 중에도)
+      fullScreenIntent: true, // 🆕 [2026-10-15] 화면이 꺼져 있어도 켜지며 앱이 열림 → 반복 알람으로 이어짐
+      visibility: NotificationVisibility.public,
     );
   }
 
@@ -201,7 +204,10 @@ class NotificationService {
           body,
           scheduledDate,
           details,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          // 🆕 [2026-10-15] 정시에 울리는 '알람 시계' 방식으로 되돌림.
+          //   8월에 예약 알람이 안 뜬 진짜 원인은 AndroidManifest.xml에 알림을 띄우는 장치가 빠져 있던 것이었음
+          //   (근사 방식 inexact는 삼성 절전 중 수 분~수십 분 늦게 울려서 "시간이 정확하지 않은" 원인이 됨)
+          androidScheduleMode: AndroidScheduleMode.alarmClock,
           matchDateTimeComponents: matchComponents,
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         );
@@ -319,6 +325,12 @@ class NotificationService {
 
       await _plugin.show(notifId, title, body, details);
       await _startLoopingSound();
+      // 🆕 [2026-10-15] "울리는 중" 표시 → 앱 어디서든 끄기 화면이 뜸 (global_alarm_stop_overlay.dart와 같은 이름)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('gke_alarm_ringing_at', DateTime.now().toIso8601String());
+        await prefs.setString('gke_alarm_ringing_title', title);
+      } catch (_) {}
       debugPrint('[NotificationService] ✅ fireLoopingAlarm 표시 완료 및 반복 재생 시작 (notifId=$notifId)');
 
       // ✅ [2026-08-16 변경] 리마인더 화면 첫 안내 팝업에서 사용자가 직접
@@ -378,6 +390,12 @@ class NotificationService {
     }
     _autoStopTimer?.cancel();
     _autoStopTimer = null;
+    // 🆕 [2026-10-15] "울리는 중" 표시 지우기
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('gke_alarm_ringing_at');
+      await prefs.remove('gke_alarm_ringing_title');
+    } catch (_) {}
   }
 
   // 🆕 [권한 상태 확인] 사용자가 설정에서 알림을 꺼버렸는지 확인.
@@ -438,9 +456,8 @@ class _RingingAlarmStopBannerState extends State<RingingAlarmStopBanner> {
   @override
   void initState() {
     super.initState();
-    _check();
-    // 🆕 [2026-09-05 변경] 1초마다 확인해서 울리기 시작하면 즉시 전체화면 팝업을 띄움
-    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) => _check());
+    // 🆕 [2026-10-15] 끄기 화면은 앱 전체 공용(GlobalAlarmStopOverlay)이 어디서든 띄움
+    //   → 여기서는 더 이상 띄우지 않음 (두 개가 겹쳐 뜨는 것 방지)
   }
 
   @override

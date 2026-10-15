@@ -36,7 +36,26 @@ class PlannerAlarmTaskHandler extends TaskHandler {
   // 🆕 ForegroundTaskOptions의 eventAction 주기(아래 main.dart에서 30초로 설정)마다 호출됨
   @override
   void onRepeatEvent(DateTime timestamp) {
+    _stopIfStoppedElsewhere(); // 🆕 [2026-10-15]
     _checkSchedules();
+  }
+
+  // 🆕 [2026-10-15] 앱 화면의 [알람 끄기]를 누르면 오는 신호 → 여기(뒤)에서 울리던 소리도 바로 끔
+  @override
+  void onReceiveData(Object data) {
+    if (data == 'stop_alarm') PlannerAlarmService.stopAlarmSound();
+  }
+
+  // 🆕 [2026-10-15] 신호를 못 받았어도, 앱에서 "울리는 중" 표시를 지웠으면 30초 안에 여기서도 끔
+  Future<void> _stopIfStoppedElsewhere() async {
+    if (!PlannerAlarmService.ringingNotifier.value) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      if (prefs.getString('gke_alarm_ringing_at') == null) {
+        await PlannerAlarmService.stopAlarmSound();
+      }
+    } catch (_) {}
   }
 
   @override
@@ -64,6 +83,9 @@ class PlannerAlarmTaskHandler extends TaskHandler {
   // 포함되는지, "한 번만" = 등록된 그 날짜인지.
   Future<void> _checkSchedules() async {
     final prefs = await SharedPreferences.getInstance();
+    // 🆕 [2026-10-15] 다른 화면에서 새로 저장 · 수정한 알람과 "이미 울림" 기록을 바로 읽도록 새로 고침
+    //   (안 하면 처음 읽어 둔 옛 목록만 계속 봐서, 새로 맞춘 알람이 화면이 꺼진 뒤에는 안 울렸음)
+    await prefs.reload();
     final String? raw = prefs.getString('gke_global_schedules');
     if (raw == null || raw.isEmpty) return;
 
@@ -87,7 +109,10 @@ class PlannerAlarmTaskHandler extends TaskHandler {
       final int hh = int.tryParse(tp[0]) ?? -1;
       final int mm = int.tryParse(tp[1]) ?? -1;
       if (hh < 0 || mm < 0) continue;
-      if (now.hour != hh || now.minute != mm) continue;
+      // 🆕 [2026-10-15] "정확히 그 1분"만 보던 것을 → 그 시각부터 10분 안이면 울림
+      //   (휴대폰이 잠깐 잠들어 그 1분을 놓치면 그날 알람이 통째로 안 울리던 원인)
+      final DateTime target = DateTime(now.year, now.month, now.day, hh, mm);
+      if (now.isBefore(target) || now.difference(target).inMinutes >= 10) continue;
 
       final String repeat = (item['alarmRepeat'] ?? 'once').toString();
       bool isDueToday;

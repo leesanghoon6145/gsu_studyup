@@ -21,6 +21,8 @@ import 'services/family_link_service.dart'; // 🆕 [부모-자녀 응원 시스
 import 'timer/timer_screen.dart';
 import 'parent/parent_consent_screen.dart';
 import 'schedule/exercise_step_service.dart'; // 🆕 [2026-10-05] 걸음 자동 기록을 앱 시작부터
+import 'community/welcome_notice_dialog.dart'; // 🆕 [2026-10-12] 로그인 화면 첫 안내 팝업
+import 'planner/global_alarm_stop_overlay.dart'; // 🆕 [2026-10-15] 앱 어디서든 뜨는 알람 끄기 화면
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -431,6 +433,8 @@ class GsuStudyUpApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: Timer2Service.navigatorKey, // ← 이 줄만 추가
+      // 🆕 [2026-10-15] 알람이 울리면 어느 화면이든(로그인 화면 포함) 맨 위에 [알람 끄기] 화면을 띄움
+      builder: (context, child) => GlobalAlarmStopOverlay(child: child ?? const SizedBox.shrink()),
       title: 'GSU StudyUp',
       debugShowCheckedModeBanner: false,
       // 🆕 [한국어 달력 등 시스템 위젯 현지화] 생년월일 선택 달력 등이 영어 대신 한국어로 표시되도록 등록
@@ -723,6 +727,10 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   void initState() {
     super.initState();
     _loadRememberedCredentials(); // 🆕 [버그 수정] 화면 진입 시 저장된 이메일/비밀번호 자동 채움
+    // 🆕 [2026-10-12] 로그인 화면이 다 그려진 뒤 첫 안내 팝업 (오늘 하루/다시 보지 않기 반영)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) WelcomeNoticeDialog.showIfNeeded(context);
+    });
   }
 
   // 🆕 [버그 수정 2026-09-08] 이전에 "기억하기"를 체크하고 로그인했었다면, 저장된

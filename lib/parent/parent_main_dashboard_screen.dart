@@ -2096,16 +2096,70 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     buffer.writeln(
       "\n${_t(isToday ? kTodayTotalTimeMap : _kDayTotalTimeMap)}: $totalMinutes${_t(kMinutesUnitMap)}",
     );
-    final String summary = await ReportArchiveService.dailySummary(
-      code: code,
-      personKey: 'student_$childName',
-      day: day,
-      subjectCount: sessions.map((r) => r.subject).toSet().length,
-      totalMinutes: totalMinutes,
-    );
     buffer.writeln("\n${_t(isToday ? kTodaySummaryHeaderMap : _kDaySummaryHeaderMap)}");
-    buffer.writeln(summary);
+    // 🆕 [2026-10-15] 원장님 원칙: 하루 3교시까지는 시간 비교 없이 교시별 학습의 질로 분석
+    if (sessions.length <= 3) {
+      buffer.writeln(_parentEarlyAnalysis(sessions, isToday));
+    } else {
+      final String summary = await ReportArchiveService.dailySummary(
+        code: code,
+        personKey: 'student_$childName',
+        day: day,
+        subjectCount: sessions.map((r) => r.subject).toSet().length,
+        totalMinutes: totalMinutes,
+      );
+      buffer.writeln(summary);
+    }
     return buffer.toString();
+  }
+
+  // 🆕 [2026-10-15] 하루 1~3교시 분석 — 시간 비교 없이 집중도 · 이해도 · 난이도 · 컨디션 · 평가 · 오답 정리로
+  String _parentEarlyAnalysis(List<ParentSessionRecord> sessions, bool isToday) {
+    final bool ko = DkeLang.current == 'KO';
+    final List<String> good = [];
+    final List<String> care = [];
+    for (int i = 0; i < sessions.length; i++) {
+      final rec = sessions[i];
+      final String p = ko ? '${i + 1}교시 ${rec.subject}' : 'Session ${i + 1} ${rec.subject}';
+      final int? und = (rec.understanding as num?)?.toInt();
+      final String? diff = rec.difficulty?.toString();
+      final String? focus = rec.concentration?.toString();
+      final String? cond = rec.condition?.toString();
+      final String? note = rec.incorrectNote?.toString();
+      final num? score = rec.recordType == '평가' ? (rec.score as num?) : null;
+      final bool hard = diff == '어려움' || diff == '매우어려움';
+
+      if (focus == '높음') good.add(ko ? '$p: 집중도를 높게 유지했습니다.' : '$p: kept focus high.');
+      if (und != null && und >= 80) good.add(ko ? '$p: 이해도 $und%로 배운 내용을 잘 소화했습니다.' : '$p: understood $und% of the material.');
+      if (hard && und != null && und >= 60) good.add(ko ? '$p: 어려운 내용이었지만 끝까지 붙들고 이해해 냈습니다.' : '$p: stayed with hard material and understood it.');
+      if (score != null && score >= 90) good.add(ko ? '$p: 평가 ${score}점, 아주 좋은 결과입니다.' : '$p: scored $score — excellent.');
+      if (note == '정리함') good.add(ko ? '$p: 오답 정리까지 마쳤습니다.' : '$p: wrong answers reviewed.');
+
+      if (focus == '낮음') care.add(ko ? '$p: 집중도가 낮았습니다. 다음 교시는 휴대폰을 멀리 두고 시작하도록 응원해 주세요.' : '$p: focus was low. Encourage starting the next session with the phone put away.');
+      if (und != null && und <= 40) care.add(ko ? '$p: 이해도가 $und%입니다. 오늘 안에 개념을 다시 짚어 보도록 격려해 주세요.' : '$p: understanding was $und%. Encourage a quick concept review today.');
+      if (cond == '피곤함') care.add(ko ? '$p: 피곤한 상태였습니다. 잠깐 쉬고 물을 마시도록 챙겨 주세요.' : '$p: your child was tired. A short rest and some water will help.');
+      if (score != null && score < 70) care.add(ko ? '$p: 평가 ${score}점입니다. 점수보다 틀린 이유를 함께 찾아보는 대화가 도움이 됩니다.' : '$p: scored $score. Talking through why answers were missed helps more than the score.');
+      if (note == '정리 안함') care.add(ko ? '$p: 오답 정리가 남아 있습니다.' : '$p: wrong-answer review is still left.');
+    }
+    final StringBuffer b = StringBuffer();
+    if (good.isNotEmpty) {
+      b.writeln(ko ? '[잘한 점]' : '[Strengths]');
+      for (final String g in good) b.writeln('• $g');
+      b.writeln();
+    }
+    if (care.isNotEmpty) {
+      b.writeln(ko ? '[챙겨 주실 점]' : '[Please Watch]');
+      for (final String c in care) b.writeln('• $c');
+      b.writeln();
+    }
+    if (good.isEmpty && care.isEmpty) {
+      b.writeln(ko ? '기록한 교시를 차분하게 마쳤습니다.' : 'The recorded sessions were completed steadily.');
+      b.writeln();
+    }
+    b.write(isToday
+        ? (ko ? '아직 하루가 끝나지 않았습니다. 지금은 공부 시간보다 공부의 질을 봐 주시고, 짧은 응원 한마디를 보내 주세요.' : "The day isn't over yet. Look at the quality rather than the hours for now, and send a short word of cheer.")
+        : (ko ? '이날은 ${sessions.length}교시를 기록했습니다.' : '${sessions.length} session(s) recorded that day.'));
+    return b.toString();
   }
 
   Future<String> _buildArchivedExamReport({
@@ -2344,6 +2398,13 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
     buffer.writeln(
       "\n${_t(kTodayTotalTimeMap)}: $todayTotalMinutes${_t(kMinutesUnitMap)}",
     );
+
+    // 🆕 [2026-10-15] 원장님 원칙: 하루 3교시까지는 시간 비교 없이 교시별 학습의 질로 분석
+    if (todaySessions.length <= 3) {
+      buffer.writeln("\n${_t(kTodaySummaryHeaderMap)}");
+      buffer.writeln(_parentEarlyAnalysis(todaySessions, true));
+      return buffer.toString();
+    }
 
     // 🆕 [요청] 오늘 학습한 과목 전체를 종합한 150~200자 AI 총평을 별도 문단으로 추가
     final int subjectCount = todaySessions.map((r) => r.subject).toSet().length;
