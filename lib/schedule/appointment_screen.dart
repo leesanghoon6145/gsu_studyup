@@ -14,6 +14,7 @@ import 'appointment_data_service.dart';
 import 'bilingual_text.dart';
 import 'notification_service.dart'; // 🆕 [권한 안내 배너 + 알림 예약/취소]
 import 'reminder_watcher_service.dart'; // 🆕 [2026-08-16 우회로] 예약 자동발동 실패 문제로 직접 감시하는 방식 추가
+import 'package:gsu_studyup/services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 
 class AppointmentScreen extends StatefulWidget {
   const AppointmentScreen({super.key});
@@ -65,6 +66,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     TimeOfDay? selectedTime = existing != null && existing.time.contains(':')
         ? TimeOfDay(hour: int.parse(existing.time.split(':')[0]), minute: int.parse(existing.time.split(':')[1]))
         : null;
+    // 🆕 [2026-10-16] 약속 알림 시점 (여러 개 고를 수 있음). 새 약속은 "정각"이 기본
+    final Set<int> alarmOffsets = existing != null ? existing.alarmOffsets.toSet() : <int>{0};
 
     final String? action = await showDialog<String>(
       context: context,
@@ -171,6 +174,56 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // 🆕 [2026-10-16] ⏰ 약속 알림 시점 — 여러 개 고를 수 있음 (예: 1일 전 + 정각 = 2번 울림)
+                    Row(
+                      children: [
+                        const Icon(Icons.alarm_rounded, color: _brandGolden, size: 16),
+                        const SizedBox(width: 6),
+                        Text('ALERT', style: GoogleFonts.gowunBatang(color: _brandGolden, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        Text('알림 시점 (여러 개 선택)', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: kAppointmentOffsets.map((off) {
+                        final bool on = alarmOffsets.contains(off);
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 5),
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() {
+                                if (on) {
+                                  if (alarmOffsets.length > 1) alarmOffsets.remove(off); // 최소 1개는 남김
+                                } else {
+                                  alarmOffsets.add(off);
+                                }
+                              }),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: on ? _brandGolden.withOpacity(0.18) : _pageBg,
+                                  borderRadius: BorderRadius.circular(9),
+                                  border: Border.all(color: on ? _brandGolden : Colors.white12, width: on ? 1.4 : 1),
+                                ),
+                                child: Text(
+                                  kAppointmentOffsetLabel(off),
+                                  style: GoogleFonts.notoSansKr(color: on ? Colors.white : Colors.white54, fontSize: 11.5, fontWeight: on ? FontWeight.bold : FontWeight.normal),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    if (selectedTime == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text('※ 시간을 정해야 알림이 울려요', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 11)),
+                      ),
+                    const SizedBox(height: 12),
                     _buildField(icon: Icons.place_outlined, controller: locationCtrl, hintEn: 'Location', hintKo: '장소, 비워도 됨'),
                     const SizedBox(height: 12),
                     _buildField(icon: Icons.notes_rounded, controller: memoCtrl, hintEn: 'Memo', hintKo: '선택 사항', maxLines: 2),
@@ -247,6 +300,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           location: locationCtrl.text.trim(),
           memo: memoCtrl.text.trim(),
           isCompleted: existing.isCompleted,
+          alarmOffsets: alarmOffsets.toList()..sort(), // 🆕 [2026-10-16] 약속 알림 시점
         );
         await AppointmentDataService.update(updated);
         // 🆕 [알림 연동] 시간이 설정되어 있으면 알람 재예약, 시간이 없으면 취소
@@ -270,6 +324,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           time: timeStr,
           location: locationCtrl.text.trim(),
           memo: memoCtrl.text.trim(),
+          alarmOffsets: alarmOffsets.toList()..sort(), // 🆕 [2026-10-16] 약속 알림 시점
         );
         await AppointmentDataService.add(newItem);
         // 🆕 [알림 연동] 시간이 설정된 약속만 알람 예약

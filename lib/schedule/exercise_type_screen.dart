@@ -22,6 +22,7 @@ import 'exercise_theme.dart';
 import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07]
 import 'exercise_type_names.dart'; // 🆕 [2026-10-08] 종목 이름 12개 언어
 import 'app_language_service.dart'; // 🆕 [2026-10-08] 언어 버튼
+import 'exercise_guide.dart'; // 🆕 [2026-10-16] 운동 사용 설명서
 
 class ExerciseTypeScreen extends StatefulWidget {
   const ExerciseTypeScreen({super.key});
@@ -55,9 +56,14 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
           return;
         }
         _reload();
+        if (mounted) ExerciseGuide.showIfNeeded(context); // 🆕 [2026-10-16] 동의 뒤 사용 설명서
       });
     } else {
       _reload();
+      // 🆕 [2026-10-16] 들어올 때 사용 설명서 ("다음부터 보지 않기"를 골랐으면 안 뜸)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ExerciseGuide.showIfNeeded(context);
+      });
     }
   }
 
@@ -153,6 +159,7 @@ class _ExerciseTypeScreenState extends State<ExerciseTypeScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: const ExerciseGuideBar(), // 🆕 [2026-10-16] 맨 아래 [사용 설명서 보기]
       body: _loading
           ? const Center(
         child: CircularProgressIndicator(color: ExerciseTheme.brandGolden),

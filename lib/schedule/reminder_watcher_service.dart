@@ -33,7 +33,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'reminder_data_service.dart';
 import 'appointment_data_service.dart';
 import 'notification_service.dart';
-
+import 'package:gsu_studyup/services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 class ReminderWatcherService {
   ReminderWatcherService._();
   static final ReminderWatcherService instance = ReminderWatcherService._();
@@ -70,6 +70,8 @@ class ReminderWatcherService {
   }
 
   Future<void> _tick() async {
+    // 🆕 [2026-10-16] 새 알람(안드로이드가 직접 울림)이 잘 예약돼 있으면 예비 감시는 쉼 → 두 번 울리지 않음
+    if (await GkeAlarmEngine.systemReady('general')) return;
     // 🆕 [2026-10-15] 30초 확인과 정각 확인이 겹치면 한 번만 돌리고, 끝난 뒤 한 번 더 확인
     if (_ticking) {
       _rerun = true;

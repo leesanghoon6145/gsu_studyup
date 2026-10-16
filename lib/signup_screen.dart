@@ -689,6 +689,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       // 실제 "학교 학년 이름"으로 표시하기 위해 필요)
                       school: (isStudent && !isGeneral) ? _schoolController.text.trim() : null,
                       grade: (isStudent && !isGeneral) ? _gradeController.text.trim() : null,
+                      birthDate: _birthDateDisplayText, // 🆕 [2026-10-16] 생년월일도 저장 (심폐 체력 자동 계산용)
                     ),
                   ),
                 );
@@ -821,6 +822,7 @@ class TermsAgreementScreen extends StatefulWidget {
   final String? parentEmail;
   final String? school; // 🆕 [요청 2026-09-04] 학생 가입 시 학교명
   final String? grade; // 🆕 [요청 2026-09-04] 학생 가입 시 학년
+  final String? birthDate; // 🆕 [2026-10-16] 생년월일 'yyyy-MM-dd'
 
   const TermsAgreementScreen({
     super.key,
@@ -832,6 +834,7 @@ class TermsAgreementScreen extends StatefulWidget {
     this.parentEmail,
     this.school, // 🆕
     this.grade, // 🆕
+    this.birthDate, // 🆕 [2026-10-16]
   });
 
   @override
@@ -972,6 +975,7 @@ class _TermsAgreementScreenState extends State<TermsAgreementScreen> {
                   parentEmail: widget.parentEmail,
                   school: widget.school, // 🆕
                   grade: widget.grade, // 🆕
+                  birthDate: widget.birthDate, // 🆕 [2026-10-16]
                 );
 
                 if (!mounted) return;

@@ -86,6 +86,8 @@ class PlannerAlarmTaskHandler extends TaskHandler {
     // 🆕 [2026-10-15] 다른 화면에서 새로 저장 · 수정한 알람과 "이미 울림" 기록을 바로 읽도록 새로 고침
     //   (안 하면 처음 읽어 둔 옛 목록만 계속 봐서, 새로 맞춘 알람이 화면이 꺼진 뒤에는 안 울렸음)
     await prefs.reload();
+    // 🆕 [2026-10-16] 새 알람(안드로이드가 직접 울림)이 잘 예약돼 있으면 예비 감시는 쉼 → 두 번 울리지 않음
+    if (prefs.getBool('gke_alarm_system_ready_planner') == true) return;
     final String? raw = prefs.getString('gke_global_schedules');
     if (raw == null || raw.isEmpty) return;
 

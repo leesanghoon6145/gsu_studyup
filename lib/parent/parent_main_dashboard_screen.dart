@@ -21,6 +21,7 @@ import '../services/cloud_backup_service.dart'; // 🆕 [재설치 복원 2단�
 import '../services/notice_counsel_service.dart'; // 🆕 [빨간 점 2026-09-25]
 import '../services/exercise_star_service.dart'; // 🆕 [부모 운동 응원별 2026-09-29] 별 통장 표시
 import '../schedule/general_planner_home_screen.dart'; // 🆕 [부모 운동 응원별 2026-09-29] "운동하기" → 일반 플래너
+import '../schedule/general_guide.dart'; // 🆕 [2026-10-16] 일반 플래너 사용 설명서
 import '../schedule/cheer_stars_i18n.dart'; // 🆕 [다국어 2026-09-29] 카드 글자 12개 언어
 import '../services/supporter_service.dart'; // 🆕 [응원 가족 2026-09-30]
 import '../services/report_archive_service.dart'; // 🆕 [리포트 저장 2026-10-01]
@@ -3536,7 +3537,7 @@ class _ParentMainDashboardScreenState extends State<ParentMainDashboardScreen>
   void _openCheerStarsFromParent() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const GeneralPlannerHomeScreen(openedFromParentRoom: true)),
+      MaterialPageRoute(builder: (_) => const GeneralGuideGate(child: GeneralPlannerHomeScreen(openedFromParentRoom: true))), // 🆕 [2026-10-16]
     );
   }
 

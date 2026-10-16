@@ -47,6 +47,7 @@ class DkeUserProfile {
     String? parentEmail,
     String? school, // 🆕 [요청 2026-09-04]
     String? grade, // 🆕 [요청 2026-09-04]
+    String? birthDate, // 🆕 [2026-10-16] 생년월일 'yyyy-MM-dd' (오늘의 건강 · 심폐 체력 자동 계산용)
   }) async {
     final String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return; // 계정 생성이 안 된 상태면 저장할 곳이 없음
@@ -59,10 +60,12 @@ class DkeUserProfile {
         if (parentEmail != null && parentEmail.isNotEmpty) 'parentEmail': parentEmail,
         if (school != null && school.isNotEmpty) 'school': school, // 🆕
         if (grade != null && grade.isNotEmpty) 'grade': grade, // 🆕
+        if (birthDate != null && birthDate.isNotEmpty) 'birthDate': birthDate, // 🆕 [2026-10-16]
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       // 로컬 캐시도 함께 갱신 (다음 실행 시 잠깐 보여줄 용도)
+      if (birthDate != null && birthDate.isNotEmpty) await _cacheBirthYear(int.tryParse(birthDate.split('-').first)); // 🆕
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kCachedUserTypeKey, userType);
       await prefs.setString(_kCachedNameKey, realName);
@@ -180,6 +183,55 @@ class DkeUserProfile {
     } catch (e) {
       // 저장 실패해도 앱 흐름을 막지 않음
     }
+  }
+
+  // ===========================================================================
+  // 🆕 [2026-10-16] 출생연도 — 회원가입 때 넣은 생년월일에서 가져옴 (오늘의 건강 · 심폐 체력 자동 계산용)
+  //   · 처음 한 번만 Firestore에서 읽고, 그 뒤로는 폰에 기억해 둔 값을 씀 (읽기 비용 최소)
+  //   · 예전 가입자(생년월일 저장 전)는 비어 있음 → 오늘의 건강 [직접 입력]에서 넣으면 여기로 저장
+  // ===========================================================================
+  static const String _kBirthYearKey = 'dke_user_birth_year_cache';
+
+  static Future<void> _cacheBirthYear(int? y) async {
+    if (y == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_scopedCacheKey(_kBirthYearKey), y);
+    } catch (_) {}
+  }
+
+  static Future<int?> getBirthYear() async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int? cached = prefs.getInt(_scopedCacheKey(_kBirthYearKey));
+      if (cached != null) return cached;
+      final doc = await _db.collection(_collection).doc(uid).get();
+      final Map<String, dynamic>? d = doc.data();
+      int? y;
+      final dynamic bd = d?['birthDate'];
+      if (bd is String && bd.length >= 4) y = int.tryParse(bd.substring(0, 4));
+      if (bd is Timestamp) y = bd.toDate().year;
+      y ??= (d?['birthYear'] as num?)?.toInt();
+      if (y != null) await prefs.setInt(_scopedCacheKey(_kBirthYearKey), y);
+      return y;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 예전 가입자가 직접 넣은 출생연도 저장 (생년월일이 이미 있으면 그대로 둠)
+  static Future<void> updateBirthYear(int year) async {
+    final String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await _cacheBirthYear(year);
+    try {
+      await _db.collection(_collection).doc(uid).set({
+        'birthYear': year,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
   }
 
   // 🆕 [요청 2026-09-05] 이름이 "학습자"로만 나타나는 계정을 위해, 마이페이지에서 이름을

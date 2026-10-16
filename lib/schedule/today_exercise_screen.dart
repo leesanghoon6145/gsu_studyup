@@ -32,6 +32,7 @@ import 'exercise_type_data.dart'; // 🆕 [자유운동 2026-10-07]
 import 'exercise_type_names.dart'; // 🆕 [2026-10-08] 종목 이름 12개 언어
 import 'exercise_screen_text.dart'; // 🆕 [2026-10-08] 이 화면 글자 12개 언어
 import 'cheer_stars_screen.dart'; // 🆕 [2026-10-09] 자유 운동 → 타이머로 별 모으기
+import 'health_vitals.dart'; // 🆕 [2026-10-16] 오늘의 건강: 혈압 · 혈당 · 심폐 체력 · 체성분
 
 class TodayExerciseScreen extends StatefulWidget {
   final ExerciseType exerciseType;
@@ -154,9 +155,13 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _loadPendingConfirm(); // 🆕 [워치 운동 2026-10-05] 모든 종목: 확인을 기다리는 자동 기록
     _recentFuture = _loadRecent(); // 🆕 [2026-10-05] 최근 기록 목록 (자동 기록 포함)
     _loadDayHeart(); // 🆕 [2026-10-08] 오늘 심박 (최저 · 평상 · 최고) — 열 때마다 새로 계산
-    // 🆕 [2026-10-15] 심박 평균 · 최고 자동 넣기 (열 때 한 번 + 운동 시간(분)을 바꾸면 다시)
-    WidgetsBinding.instance.addPostFrameCallback((_) => _autoFillHeart());
-    _durationController.addListener(_onDurationChangedForHeart);
+    // 🔧 [2026-10-16] 손으로 쓰는 심박 칸을 없앴으므로 하루 평균을 운동 기록에 넣지 않음
+    //   → 운동마다 심박은 저장할 때 "운동한 시간"의 워치 심박으로 자동 저장 (_save 참고)
+    // 🆕 [2026-10-16] 삼성헬스 → 앱으로 심박이 늦게 넘어오므로, 화면이 열려 있는 동안 1분마다 '오늘 심박' 카드를 새로 받음
+    _hrRetry = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!mounted) return;
+      _loadDayHeart();
+    });
     // 🆕 [걸음수 그래프] 걷기류(steps 필드가 있는 종목)에서만 별도로 로드
     if (_hasStepsField) _stepsHistoryFuture = _loadStepsByDate();
     // 🆕 [개인정보 - 칼로리 계산용] 저장된 몸무게 불러오기 (없으면 평균값 유지)
@@ -239,6 +244,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _stepSession?.dispose(); // 🆕 [만보기 연동 1단계] 측정 중이었다면 스트림 구독 해제
     _exTimer?.cancel(); // 🆕 [학생 운동 별] 화면을 나가도 시작 시각은 저장돼 있어 다시 오면 이어짐
     _hrAutoDebounce?.cancel(); // 🆕 [2026-10-15] 심박 자동 넣기 대기 취소
+    _hrRetry?.cancel(); // 🆕 [2026-10-16] 심박 1분마다 다시 받기 멈춤
     for (final c in [..._freeSets.values, ..._freeReps.values]) {
       c.dispose(); // 🆕 [자유운동]
     }
@@ -1181,10 +1187,18 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   // 🆕 [2026-10-08] 워치 심박 — ① 오늘 심박(최저 · 평상 · 최고) ② 타이머 · 걸음 측정한 시간의 심박 자동 채우기
   // 모두 폰 안의 Health Connect에서 읽음 (서버 · 데이터 비용 없음)
   // ===================================================================
+  int? _dayAvgHr; // 🆕 [2026-10-16] 오늘 심박 평균 (0시 ~ 지금)
   bool _heartEverSeen = false; // 🆕 [2026-10-13] 예전에 워치 심박이 들어온 적이 있는지
 
   Future<void> _loadDayHeart() async {
     final DayHeartStats? h = await HealthLink.dayHeartStats();
+    // 🆕 [2026-10-16] 오늘 0시 ~ 지금 심박 평균
+    int? avgDay;
+    try {
+      final DateTime n = DateTime.now();
+      final (int? a, int? _) = await HealthLink.heartRateBetween(DateTime(n.year, n.month, n.day), n);
+      avgDay = a;
+    } catch (_) {}
     bool seen = false;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1193,6 +1207,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     if (mounted) {
       setState(() {
         _dayHeart = h;
+        _dayAvgHr = avgDay;
         _heartEverSeen = seen;
       });
     }
@@ -1249,7 +1264,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
     _sessionStart = from; // 🆕 [2026-10-09] 기록에 시작 · 끝 시각도 함께 저장
     _sessionEnd = to;
     if (!await HealthLink.hasExtendedPermission()) return;
-    final (int? avg, int? mx) = await HealthLink.heartRateBetween(from, to);
+    final (int? wAvg, int? wMx) = await HealthLink.heartRateBetween(from, to);
+    int? avg = wAvg;
+    int? mx = wMx;
+    String src = '운동한 시간';
+    // (운동한 시간의 심박이 아직 안 넘어왔으면 저장할 때 한 번 더 찾아봄 — _save 참고)
     if (!mounted || avg == null) return;
     bool filled = false;
     // 🆕 [2026-10-15] 자동으로 넣어 둔 값은 실제 운동 시간의 심박으로 바꿈 (직접 쓴 값은 그대로)
@@ -1262,7 +1281,7 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
       filled = true;
     }
     if (filled) {
-      setState(() {});
+      setState(() => _hrSource = src);
       ExerciseTheme.showLuxeSnackBar(context, exText('hrFilled', {'a': avg, 'm': mx ?? '-'}));
     }
     _loadDayHeart();
@@ -1274,28 +1293,9 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
   bool _hrTypedByHand = false;
   Timer? _hrAutoDebounce;
 
-  void _onDurationChangedForHeart() {
-    _hrAutoDebounce?.cancel();
-    _hrAutoDebounce = Timer(const Duration(milliseconds: 800), _autoFillHeart);
-  }
-
-  Future<void> _autoFillHeart() async {
-    if (_isEditMode || _hrTypedByHand || _sessionStart != null) return;
-    final DateTime now = DateTime.now();
-    if (_date.year != now.year || _date.month != now.month || _date.day != now.day) return;
-    try {
-      if (!await HealthLink.hasExtendedPermission()) return;
-      int minutes = int.tryParse(_durationController.text.trim()) ?? 30;
-      if (minutes < 5) minutes = 5;
-      if (minutes > 240) minutes = 240;
-      final (int? avg, int? mx) = await HealthLink.heartRateBetween(now.subtract(Duration(minutes: minutes)), now);
-      if (!mounted || _hrTypedByHand || _sessionStart != null || avg == null) return;
-      setState(() {
-        _avgHrController.text = avg.toString();
-        _maxHrController.text = (mx ?? avg).toString();
-      });
-    } catch (_) {}
-  }
+  // 🆕 [2026-10-16] 심박 칸 아래 "어디서 받은 값인지" 표시 + 1분마다 다시 받기
+  String _hrSource = '';
+  Timer? _hrRetry;
 
   Widget _buildDayHeartCard() {
     final DayHeartStats h = _dayHeart!;
@@ -1337,6 +1337,26 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
               cell('hrMin', h.min, const Color(0xFF60A5FA)),
               Container(width: 1, height: 40, color: Colors.white12),
               cell('hrRest', h.rest, const Color(0xFF22C55E)),
+              Container(width: 1, height: 40, color: Colors.white12),
+              // 🆕 [2026-10-16] 평균 (오늘 0시 ~ 지금)
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(_dayAvgHr?.toString() ?? '-', style: GoogleFonts.rajdhani(color: ExerciseTheme.brandGolden, fontSize: 26, fontWeight: FontWeight.bold)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: appLanguage.isDefault
+                          ? Column(
+                        children: [
+                          Text('AVERAGE', style: GoogleFonts.gowunBatang(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 9.5)),
+                          Text('평균', style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5)),
+                        ],
+                      )
+                          : Text(appLanguage.isEnglishOnly ? 'Average' : '평균 · Avg', style: GoogleFonts.notoSansKr(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11.5)),
+                    ),
+                  ],
+                ),
+              ),
               Container(width: 1, height: 40, color: Colors.white12),
               cell('hrMaxDay', h.max, ExerciseTheme.dangerRed),
             ],
@@ -3082,34 +3102,8 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
             ),
           ),
 
-          // 공통: 심박수 (선택)
-          BiInline(en: 'HEART RATE (OPTIONAL)', ko: '심박수 (선택)', color: ExerciseTheme.brandGolden, fontWeight: FontWeight.bold, fontSize: 12, translations: exTextTranslations('heart')),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _avgHrController,
-                  onChanged: (_) => _hrTypedByHand = true, // 🆕 [2026-10-15] 직접 쓰면 자동 넣기 멈춤
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _decoration('', unit: 'bpm')
-                      .copyWith(hintText: exText('avg')),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _maxHrController,
-                  onChanged: (_) => _hrTypedByHand = true, // 🆕 [2026-10-15] 직접 쓰면 자동 넣기 멈춤
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _decoration('', unit: 'bpm')
-                      .copyWith(hintText: exText('max')),
-                ),
-              ),
-            ],
-          ),
+          // 🔧 [2026-10-16] 원장님 요청: 손으로 쓰는 심박 칸은 없앰 → 위 '오늘 심박' 카드에 최저 · 평상 · 평균 · 최고
+          //   (운동마다 심박 평균 · 최고는 보이지 않게 자동으로 받아 함께 저장됨)
           const SizedBox(height: 20),
 
           Divider(color: ExerciseTheme.brandGolden.withOpacity(0.2)),
@@ -3136,6 +3130,11 @@ class _TodayExerciseScreenState extends State<TodayExerciseScreen> {
           // 🔧 [2026-10-13] 오늘 심박 — 있으면 최저 · 평상 · 최고, 없으면 (워치를 써 본 사람에게만) 이유와 [다시 연결]
           if (!_isEditMode && (_dayHeart != null || _heartEverSeen)) ...[
             _dayHeart != null ? _buildDayHeartCard() : _buildNoHeartCard(),
+            const SizedBox(height: 12),
+          ],
+          // 🆕 [2026-10-16] 오늘의 건강 — 혈압 · 혈당 · 심폐 체력 · 체성분 (일반 · 학부모 계정, 자동 + 직접 입력)
+          if (!_isEditMode && !_isStudent) ...[
+            HealthVitalsCard(day: DateTime(_date.year, _date.month, _date.day)),
             const SizedBox(height: 12),
           ],
           // 🆕 [2026-10-09] 자유 운동 + 학생이 아닌 계정 → 타이머로 별 모으기 안내

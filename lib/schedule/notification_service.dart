@@ -57,6 +57,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:audioplayers/audioplayers.dart'; // 🆕 [2026-08-16 추가] 알람 소리 반복 재생용
 import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [2026-08-16 추가] 사용자가 선택한 알람 안전정지 시간 저장/조회용
+import 'package:gsu_studyup/services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
@@ -89,7 +90,8 @@ class NotificationService {
       // 🆕 [2026-08-16 추가] 알림을 탭하거나 "알람 끄기" 버튼을 눌렀을 때 반복 재생 중인
       // 소리를 멈추기 위한 콜백. 반복 알람이 아닌 일반 알림(showCustomNow 등)을 탭해도
       // 그냥 아무 반복 재생이 없는 상태라 stopAlarmSound()가 조용히 무시됩니다.
-      onDidReceiveNotificationResponse: _onNotificationResponse,
+      onDidReceiveNotificationResponse: GkeAlarmEngine.onResponse, // 🆕 [2026-10-16] 누르기 · [알람 끄기]는 총괄 담당이 처리
+      onDidReceiveBackgroundNotificationResponse: gkeAlarmBackgroundResponse,
     );
 
     // 🆕 [권한 요청] Android 13+(알림), Android 12+(정확한 알람)
@@ -142,106 +144,19 @@ class NotificationService {
     required String time, // 'HH:mm'
     String? repeatType,
   }) async {
-    debugPrint('[NotificationService] scheduleAt 호출됨: id=$id, date=$date, time=$time, repeatType=$repeatType');
-    await _ensureInitialized();
-    debugPrint('[NotificationService] 초기화 완료');
-    await cancel(id); // 기존 예약이 있으면 먼저 취소하고 새로 등록 (수정 시 중복 방지)
-
-    if (time.isEmpty) {
-      debugPrint('[NotificationService] 시간이 비어있어서 예약 건너뜀');
-      return;
-    }
-
-    final dateParts = date.split('-');
-    final timeParts = time.split(':');
-    if (dateParts.length != 3 || timeParts.length != 2) {
-      debugPrint('[NotificationService] 날짜/시간 형식이 잘못됨: date=$date, time=$time');
-      return;
-    }
-
-    try {
-      tz.TZDateTime scheduledDate = tz.TZDateTime(
-        tz.local,
-        int.parse(dateParts[0]),
-        int.parse(dateParts[1]),
-        int.parse(dateParts[2]),
-        int.parse(timeParts[0]),
-        int.parse(timeParts[1]),
-      );
-
-      final now = tz.TZDateTime.now(tz.local);
-      debugPrint('[NotificationService] 예약 목표시각=$scheduledDate / 지금=$now / tz.local=${tz.local.name}');
-      DateTimeComponents? matchComponents;
-
-      if (repeatType == '매일') {
-        matchComponents = DateTimeComponents.time;
-        if (scheduledDate.isBefore(now)) scheduledDate = scheduledDate.add(const Duration(days: 1));
-      } else if (repeatType == '매주') {
-        matchComponents = DateTimeComponents.dayOfWeekAndTime;
-        if (scheduledDate.isBefore(now)) scheduledDate = scheduledDate.add(const Duration(days: 7));
-      } else {
-        // 1회성 알림인데 이미 지난 시각이면 등록하지 않음
-        if (scheduledDate.isBefore(now)) {
-          debugPrint('[NotificationService] ⚠️ 목표시각이 이미 지나서 예약을 건너뜀! (목표=$scheduledDate, 지금=$now) - 초기화/권한요청에 시간이 오래 걸려서 짧은 테스트가 이미 지나버렸을 수 있음');
-          return;
-        }
-      }
-
-      final details = NotificationDetails(
-        android: _androidDetails(),
-        iOS: const DarwinNotificationDetails(),
-      );
-
-      try {
-        // ✅ [2026-08-15 수정 3] exactAllowWhileIdle -> inexactAllowWhileIdle 로 변경.
-        // 즉시 알림(showNow)은 소리/표시 전부 정상 작동하는 게 확인됐고, 오직
-        // "미래 시각 예약"만 실패하고 있어서, 이 기기(삼성 One UI)에서
-        // exactAllowWhileIdle 계열 정확한 알람 등록 자체가 원인일 가능성이
-        // 높다고 판단했습니다. 근사 시각 모드로 1차 시도를 바꿔봅니다.
-        await _plugin.zonedSchedule(
-          _notifId(id),
-          title,
-          body,
-          scheduledDate,
-          details,
-          // 🆕 [2026-10-15] 정시에 울리는 '알람 시계' 방식으로 되돌림.
-          //   8월에 예약 알람이 안 뜬 진짜 원인은 AndroidManifest.xml에 알림을 띄우는 장치가 빠져 있던 것이었음
-          //   (근사 방식 inexact는 삼성 절전 중 수 분~수십 분 늦게 울려서 "시간이 정확하지 않은" 원인이 됨)
-          androidScheduleMode: AndroidScheduleMode.alarmClock,
-          matchDateTimeComponents: matchComponents,
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        );
-        debugPrint('[NotificationService] ✅ 근사 알람으로 예약 성공! notifId=${_notifId(id)}, 예약시각=$scheduledDate');
-      } catch (e) {
-        // 🆕 [2차 시도 - 안전장치] 근사 알람도 실패한 경우, 정확한 알람 모드로
-        // 재시도.
-        debugPrint('[NotificationService] 근사 알람 예약 실패, 정확한 알람으로 재시도: $e');
-        try {
-          await _plugin.zonedSchedule(
-            _notifId(id),
-            title,
-            body,
-            scheduledDate,
-            details,
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            matchDateTimeComponents: matchComponents,
-            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          );
-        } catch (e2) {
-          debugPrint('[NotificationService] 정확한 알람 예약도 실패: $e2');
-        }
-      }
-    } catch (e) {
-      debugPrint('[NotificationService] 알림 예약 준비 중 오류: $e');
-    }
+    // 🆕 [2026-10-16] 새 알람 방식: 알람 총괄 담당(GkeAlarmEngine)이 저장된 알림 · 약속 전체를 다시 맞춤
+    //   (여러 요일 · 약속 알림 시점 · 1분/5분 · 알람 소리 통로 · 재부팅 뒤 유지 모두 그쪽에서 처리)
+    debugPrint('[NotificationService] scheduleAt → 새 알람 방식으로 다시 맞춤: id=$id');
+    await GkeAlarmEngine.syncGeneral();
   }
 
   static Future<void> cancel(String id) async {
     try {
-      await _plugin.cancel(_notifId(id));
+      await _plugin.cancel(_notifId(id)); // 예전 방식 예약 정리
     } catch (e) {
       // 취소 실패해도 무시 (예약된 적 없는 id를 취소하는 경우 등)
     }
+    await GkeAlarmEngine.syncGeneral(); // 🆕 [2026-10-16] 지우거나 끈 알림을 빼고 다시 맞춤
   }
 
   // 🆕 [2026-08-15 추가 - 진단 전용] 예약(스케줄링) 과정을 완전히 건너뛰고,

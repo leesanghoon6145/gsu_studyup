@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.health.READ_DISTANCE"/>
     <uses-permission android:name="android.permission.health.READ_EXERCISE"/>
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
+    <!-- 🆕 [2026-10-16] 오늘의 건강: 혈압 · 혈당 · 체중 · 키 · 체지방률 읽기 -->
+    <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE"/>
+    <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE"/>
+    <uses-permission android:name="android.permission.health.READ_WEIGHT"/>
+    <uses-permission android:name="android.permission.health.READ_HEIGHT"/>
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT"/>
     <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED"/>
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
     <uses-permission android:name="android.permission.health.READ_SPEED"/>
@@ -73,6 +79,10 @@
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <!-- 🆕 [2026-10-16] 앱이 꺼져 있어도 알림창 [알람 끄기] 단추가 작동하게 -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
         <!-- 🆕 [2026-10-15] 폰을 껐다 켜거나 앱을 업데이트해도 예약 알람이 다시 살아나게 -->
         <receiver
             android:exported="false"

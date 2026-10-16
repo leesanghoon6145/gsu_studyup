@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:shared_preferences/shared_preferences.dart'; // 🆕 [12개국어 지원 2026-09-02] 저장된 언어 설정을 읽기 위함
+import 'gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 
 class Timer2Service {
   Timer2Service._();
@@ -105,7 +106,8 @@ class Timer2Service {
 
     await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
+      onDidReceiveNotificationResponse: GkeAlarmEngine.onResponse, // 🆕 [2026-10-16] 학사 타임라인 누르기도 총괄 담당이 받아 타이머로 연결
+      onDidReceiveBackgroundNotificationResponse: gkeAlarmBackgroundResponse,
     );
 
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();

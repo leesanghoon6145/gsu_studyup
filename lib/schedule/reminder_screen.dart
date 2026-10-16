@@ -15,6 +15,7 @@ import 'reminder_data_service.dart';
 import 'bilingual_text.dart';
 import 'notification_service.dart'; // 🆕 [권한 안내 배너 + 알림 예약/취소]
 import 'reminder_watcher_service.dart'; // 🆕 [2026-08-16 우회로] 예약 자동발동 실패 문제로 직접 감시하는 방식 추가
+import 'package:gsu_studyup/services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 
 class _RepeatOption {
   final String enLabel;
@@ -128,9 +129,9 @@ class _ReminderScreenState extends State<ReminderScreen> {
                       Container(height: 1, decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _brandGolden.withOpacity(0.5), Colors.transparent]))),
                       const SizedBox(height: 18),
                       Text(
-                        '설정하신 시각이 되면, 학습 알람이 정성껏 울려드립니다.\n\n'
-                            '이 알람은 스스로 멈추지 않고 계속 이어지며, 화면에 나타나는 붉은색 "지금 울리는 알람 끄기" 버튼을 눌러주셔야 비로소 멈춥니다. 알림창을 통해서는 꺼지지 않으니, 이 점 미리 헤아려주시기 바랍니다.\n\n'
-                            '혹시 곧바로 손이 닿지 않는 상황을 대비하여, 알람이 스스로 멈추는 시간을 아래에서 미리 정해두실 수 있습니다.',
+                        '설정하신 시각이 되면, 휴대폰 화면이 꺼져 있어도 · 진동이나 무음이어도 학습 알람이 알람 소리로 정성껏 울려드립니다.\n\n'
+                            '알람이 울리면 화면에 [알람 끄기] 팝업이 나타나고, 알림창의 [알람 끄기] 단추로도 끌 수 있습니다.\n\n'
+                            '끄지 않으면 아래에서 고른 시간(1분 또는 5분) 동안 울린 뒤 저절로 멈춥니다. 이 시간은 알림 화면 위쪽에서 언제든 바꿀 수 있습니다.',
                         style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 12.5, height: 1.6),
                       ),
                       const SizedBox(height: 20),
@@ -182,6 +183,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
                             final prefs = await SharedPreferences.getInstance();
                             await prefs.setInt(NotificationService.prefsAlarmRingMinutesKey, selectedMinutes);
                             await prefs.setBool(_onboardingShownKey, true);
+                            await GkeAlarmEngine.syncAll(); // 🆕 [2026-10-16] 고른 1분/5분을 이미 맞춘 알람에도 적용
                             if (context.mounted) Navigator.of(context).pop();
                           },
                           child: Text('안내를 확인했습니다', style: GoogleFonts.notoSansKr(color: _pageBg, fontSize: 13.5, fontWeight: FontWeight.bold)),
@@ -562,6 +564,7 @@ class _ReminderScreenState extends State<ReminderScreen> {
           children: [
             const RingingAlarmStopBanner(), // 🆕 [2026-08-16 추가] 지금 울리는 알람을 확실하게 끄는 버튼, 울릴 때만 보임
             const NotificationPermissionBanner(), // 🆕 [권한 안내 배너] 알림이 꺼져있으면 여기 안내가 뜸
+            const GkeRingMinutesPicker(), // 🆕 [2026-10-16] 알람이 울리는 시간 1분 / 5분 (언제든 바꿈)
             // ✅ [2026-08-16 제거] 진단용 테스트 버튼(30초 예약 테스트, 즉시 알림, 60초 영어전용 테스트)은
             // 원인 파악용이었고 실제 해결책(우회로 감시자 + 안내 팝업)이 완성되어 더 이상 필요 없어져서 제거함.
             Expanded(

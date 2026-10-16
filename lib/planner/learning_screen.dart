@@ -11,6 +11,7 @@ import '../global_lang.dart';
 import 'widgets/three_color_pencil_icon.dart';
 import 'planner_alarm_foreground_task.dart'; // 🆕 [2026-08-18] 알람 켜서 저장할 때만 권한 요청
 import 'global_alarm_stop_overlay.dart'; // 🆕 [2026-10-15] 앱 어디서든 뜨는 알람 끄기 화면
+import 'package:gsu_studyup/services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 // ============================================================================
 // [GKE StudyUp] 자기주도 플래너 — 실행 탭 전용 알람 서비스
 // 🆕 [2026-08-17 재설계] 일반 플래너 쪽에서 Logcat으로 정밀 확인된 사실:
@@ -65,7 +66,12 @@ class PlannerAlarmService {
         iOS: iosInit,
       );
       // 🆕 [2026-08-17] 반복 알람 알림을 탭하거나 "알람 끄기" 버튼을 눌렀을 때 소리를 멈추기 위한 콜백
-      await _plugin.initialize(initSettings, onDidReceiveNotificationResponse: _onNotificationResponse);
+      // 🆕 [2026-10-16] 알림 누르기 · [알람 끄기]는 알람 총괄 담당이 한 곳에서 처리 (서로 덮어쓰지 않게)
+      await _plugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: GkeAlarmEngine.onResponse,
+        onDidReceiveBackgroundNotificationResponse: gkeAlarmBackgroundResponse,
+      );
 
       final androidImpl = _plugin
           .resolvePlatformSpecificImplementation<
@@ -150,117 +156,11 @@ class PlannerAlarmService {
     required String repeat, // once | daily | weekly
     List<int> weekdays = const [],
   }) async {
-    await initialize();
-
-    // 시간 파싱 강화: "9:00", "09:00", "09:00:00", "9시" 등 방어
-    int hh = 0, mm = 0;
-    try {
-      final cleaned = timeHHmm.trim().replaceAll(RegExp(r'[시분초\s]'), ':');
-      final parts = cleaned.split(RegExp(r'[:：]')).where((s) => s.isNotEmpty).toList();
-      if (parts.isNotEmpty) hh = int.parse(parts[0]);
-      if (parts.length > 1) mm = int.parse(parts[1]);
-      if (hh < 0 || hh > 23) hh = 0;
-      if (mm < 0 || mm > 59) mm = 0;
-    } catch (e) {
-      debugPrint('[PlannerAlarmService] time parse fail "$timeHHmm": $e');
-    }
-
-    // 기존 예약 전부 취소 후 재등록 (수정 시 중복 방지)
-    await cancelAllFor(scheduleId);
-
-    final int notifId = _baseIdFor(scheduleId);
-    debugPrint(
-        '[PlannerAlarmService] schedule id=$scheduleId notifId=$notifId '
-            'repeat=$repeat date=${date.year}-${date.month}-${date.day} '
-            'time=$hh:$mm tz=${tz.local.name}');
-
-    try {
-      if (repeat == 'once') {
-        // 기기 로컬 달력 시각 → TZDateTime (로컬 타임존 성분 그대로)
-        final tz.TZDateTime when = tz.TZDateTime(
-          tz.local,
-          date.year,
-          date.month,
-          date.day,
-          hh,
-          mm,
-        );
-        final now = tz.TZDateTime.now(tz.local);
-        if (!when.isAfter(now)) {
-          debugPrint('[PlannerAlarmService] past time, skip once: $when (now=$now)');
-          return false;
-        }
-        await _plugin.zonedSchedule(
-          notifId,
-          title,
-          body,
-          when,
-          _details,
-          androidScheduleMode: AndroidScheduleMode.alarmClock, // 🆕 [2026-10-15] 정시 '알람 시계' 방식
-          uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-        );
-        debugPrint('[PlannerAlarmService] once scheduled at $when');
-        return true;
-      }
-
-      if (repeat == 'daily') {
-        tz.TZDateTime when = tz.TZDateTime(tz.local, date.year, date.month, date.day, hh, mm);
-        final now = tz.TZDateTime.now(tz.local);
-        if (!when.isAfter(now)) {
-          when = when.add(const Duration(days: 1));
-        }
-        await _plugin.zonedSchedule(
-          notifId,
-          title,
-          body,
-          when,
-          _details,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.time,
-        );
-        debugPrint('[PlannerAlarmService] daily scheduled at $when');
-        return true;
-      }
-
-      if (repeat == 'weekly') {
-        if (weekdays.isEmpty) return false;
-        bool any = false;
-        final now = tz.TZDateTime.now(tz.local);
-
-        for (final int w in weekdays) {
-          // 우리 배열: 0=일 … 6=토 → Dart weekday (월=1 … 일=7)
-          final int dartWeekday = w == 0 ? 7 : w;
-
-          final tz.TZDateTime when = _nextWeekdayTime(
-            from: now,
-            dartWeekday: dartWeekday,
-            hour: hh,
-            minute: mm,
-          );
-
-          await _plugin.zonedSchedule(
-            _idForWeekday(scheduleId, w),
-            title,
-            body,
-            when,
-            _details,
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-            matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-          );
-          debugPrint('[PlannerAlarmService] weekly w=$w scheduled at $when');
-          any = true;
-        }
-        return any;
-      }
-    } catch (e, st) {
-      debugPrint('[PlannerAlarmService] schedule failed: $e\n$st');
-    }
-    return false;
+    // 🆕 [2026-10-16] 새 알람 방식: 알람 총괄 담당(GkeAlarmEngine)이 저장된 학생 알람 전체를 다시 맞춤
+    //   (알람 소리 통로 · 1분/5분 · 화면 꺼짐에도 정시 · 재부팅 · 업데이트 뒤에도 유지)
+    debugPrint('[PlannerAlarmService] schedule → 새 알람 방식으로 다시 맞춤: id=$scheduleId');
+    await GkeAlarmEngine.syncPlanner();
+    return true;
   }
 
   /// from 이후(포함하지 않음) 가장 가까운 해당 요일·시각
@@ -304,13 +204,14 @@ class PlannerAlarmService {
   static Future<void> cancelAllFor(String scheduleId) async {
     await initialize();
     try {
-      await _plugin.cancel(_baseIdFor(scheduleId));
+      await _plugin.cancel(_baseIdFor(scheduleId)); // 예전 방식 예약 정리
       for (int w = 0; w <= 6; w++) {
         await _plugin.cancel(_idForWeekday(scheduleId, w));
       }
     } catch (e) {
       debugPrint('[PlannerAlarmService] cancel failed: $e');
     }
+    await GkeAlarmEngine.syncPlanner(); // 🆕 [2026-10-16] 지우거나 끈 알람을 빼고 다시 맞춤
   }
 
   /// 하위 호환: 기존 호출부용 래퍼
@@ -395,7 +296,8 @@ class PlannerAlarmService {
       debugPrint('[PlannerAlarmService] ✅ fireLoopingAlarm 표시+재생 시작 (notifId=$notifId)');
 
       _autoStopTimer?.cancel();
-      _autoStopTimer = Timer(const Duration(minutes: 3), () async {
+      final int ringMin = await GkeAlarmEngine.ringMinutes(); // 🆕 [2026-10-16] 고른 1분 / 5분
+      _autoStopTimer = Timer(Duration(minutes: ringMin), () async {
         debugPrint('[PlannerAlarmService] ⏱️ 3분 경과, 안전장치로 반복 알람 자동 정지');
         await stopAlarmSound();
         await _plugin.cancel(notifId);
@@ -499,6 +401,8 @@ class PlannerAlarmWatcherService {
   }
 
   Future<void> _checkSchedules() async {
+    // 🆕 [2026-10-16] 새 알람(안드로이드가 직접 울림)이 잘 예약돼 있으면 예비 감시는 쉼 → 두 번 울리지 않음
+    if (await GkeAlarmEngine.systemReady('planner')) return;
     final DateTime now = DateTime.now();
     final String nowStamp =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
@@ -1812,6 +1716,24 @@ class LearningScreenState extends State<LearningScreen>
     // 🆕 [2026-10-15] 제목 · 시간을 쓰거나 반복을 고르면 팝업이 저절로 올라가 맨 아래 "알람 켜기"가 보이게
     //   (키보드에 가려 알람 켜기를 못 보고 저장해서 알람을 놓치는 일이 있었음)
     final ScrollController popScroll = ScrollController();
+    // 🆕 [2026-10-16] 시간 칸: 숫자 4자리(예: 0930)만 누르면 09:30으로 바뀌고, 키보드가 닫히며 아래(반복)로 저절로 내려감
+    final FocusNode timeFocus = FocusNode();
+    String? normalizeHHmm(String raw) {
+      final String v = raw.trim();
+      int? h;
+      int? m;
+      final RegExpMatch? withColon = RegExp(r'^(\d{1,2})\s*[:.;]\s*(\d{2})$').firstMatch(v);
+      final String digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+      if (withColon != null) {
+        h = int.tryParse(withColon.group(1)!);
+        m = int.tryParse(withColon.group(2)!);
+      } else if (digits.length == 4 && digits == v) {
+        h = int.tryParse(digits.substring(0, 2));
+        m = int.tryParse(digits.substring(2));
+      }
+      if (h == null || m == null || h > 23 || m > 59) return null;
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+    }
     void showAlarmSwitch() {
       Future.delayed(const Duration(milliseconds: 350), () {
         if (popScroll.hasClients) {
@@ -1920,7 +1842,8 @@ class LearningScreenState extends State<LearningScreen>
                     const SizedBox(height: 4),
                     TextField(
                       controller: titleController,
-                      onSubmitted: (_) => showAlarmSwitch(), // 🆕 [2026-10-15] 다 쓰면 알람 켜기가 보이게
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) => timeFocus.requestFocus(), // 🆕 [2026-10-16] 제목을 다 쓰면 시간 칸으로 바로 이동
                       style: GoogleFonts.notoSansKr(
                           color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
@@ -1946,12 +1869,31 @@ class LearningScreenState extends State<LearningScreen>
                     const SizedBox(height: 4),
                     TextField(
                       controller: timeController,
-                      onChanged: (_) => showAlarmSwitch(), // 🆕 [2026-10-15] 시간을 쓰면 알람 켜기가 보이게
-                      onSubmitted: (_) => showAlarmSwitch(),
+                      focusNode: timeFocus,
+                      keyboardType: TextInputType.number, // 숫자 자판
+                      // 🆕 [2026-10-16] 칸을 누르면 기존 시간이 통째로 선택돼 바로 새로 쓸 수 있음
+                      onTap: () => timeController.selection =
+                          TextSelection(baseOffset: 0, extentOffset: timeController.text.length),
+                      // 🆕 [2026-10-16] 쓰는 동안에는 화면이 움직이지 않음. 4자리를 다 쓰면 09:30으로 바꾸고 키보드를 닫은 뒤 아래로 한 번 내려감
+                      onChanged: (v) {
+                        final String digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+                        if (digits.length < 4) return;
+                        final String? hm = normalizeHHmm(digits.substring(0, 4));
+                        if (hm == null) return;
+                        timeController.value = TextEditingValue(
+                            text: hm, selection: TextSelection.collapsed(offset: hm.length));
+                        timeFocus.unfocus();
+                        showAlarmSwitch();
+                      },
+                      onSubmitted: (v) {
+                        final String? hm = normalizeHHmm(v);
+                        if (hm != null) timeController.text = hm;
+                        showAlarmSwitch();
+                      },
                       style: GoogleFonts.notoSansKr(
                           color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
-                        hintText: '09:00',
+                        hintText: '0930 → 09:30',
                         hintStyle: GoogleFonts.notoSansKr(
                             color: slate500, fontSize: 12),
                         filled: true,
@@ -2002,34 +1944,17 @@ class LearningScreenState extends State<LearningScreen>
                     ],
                     const SizedBox(height: 14),
 
-                    // 알람 ON/OFF
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: slate800)),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.notifications_active_outlined,
-                                  color: goldColor, size: 18),
-                              const SizedBox(width: 8),
-                              Text(_biStr('alarmOnLabel'),
-                                  style: GoogleFonts.notoSansKr(
-                                      fontSize: 13, color: Colors.white)),
-                            ],
-                          ),
-                          Switch(
-                            value: alarmOn,
-                            activeColor: goldColor,
-                            onChanged: (v) => setPopState(() => alarmOn = v),
-                          ),
-                        ],
-                      ),
+                    const GkeRingMinutesPicker(), // 🆕 [2026-10-16] 알람이 울리는 시간 1분 / 5분
+                    // 🆕 [2026-10-16] "알람 켜기" 스위치 없앰 — 시간을 넣고 저장하면 알람이 자동으로 켜짐 (깜빡 잊는 일 없게)
+                    Row(
+                      children: [
+                        Icon(Icons.alarm_on_rounded, color: goldColor, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text('시간을 넣고 저장하면 알람이 자동으로 켜집니다',
+                              style: GoogleFonts.notoSansKr(fontSize: 11.5, color: Colors.white70)),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2069,9 +1994,11 @@ class LearningScreenState extends State<LearningScreen>
                           style: ElevatedButton.styleFrom(
                               backgroundColor: goldColor),
                           onPressed: () async {
-                            final String time = timeController.text.trim();
+                            // 🆕 [2026-10-16] 시간을 09:30 모양으로 맞추고, 시간이 맞게 들어가 있으면 알람 자동 켜짐
+                            final String time = normalizeHHmm(timeController.text) ?? timeController.text.trim();
                             final String title = titleController.text.trim();
                             if (time.isEmpty || title.isEmpty) return;
+                            alarmOn = normalizeHHmm(time) != null;
                             if (repeat == 'weekly' && selectedWeekdays.isEmpty) {
                               return; // 요일 미선택 시 저장 차단
                             }
@@ -2154,7 +2081,10 @@ class LearningScreenState extends State<LearningScreen>
           },
         );
       },
-    ).then((_) => popScroll.dispose()); // 🆕 [2026-10-15] 팝업이 닫히면 정리
+    ).then((_) {
+      popScroll.dispose(); // 🆕 [2026-10-15] 팝업이 닫히면 정리
+      timeFocus.dispose();
+    });
   }
 
   Widget _repeatChipRow({

@@ -55,6 +55,7 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
   // [주석] 확장 및 숨김 상태 제어 변수
   bool _isYearTargetExpanded = true;
   bool _isDayCalendarVisible = true;
+  bool _isReady = false; // 🆕 [2026-10-16] 다 불러온 뒤 부드럽게 나타나기 위한 표시
 
   // [주석] 연간, 월간, 주간, 일간 독립형 이원화 선택 패널 제어 변수
   bool _isYearTargetSelected = true;
@@ -520,10 +521,16 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
     _sortGlobalSchedules();
 
-    _loadPersonalTimetableCache().then((_) {
-      _initStorageAndLoad().then((_) {
-        _syncDailyTimelineForDate(_selectedDayDate);
-        _calculateMonthlyProgress();
+    // 🆕 [2026-10-16] 부드러운 입장: 화면이 미끄러져 들어오는 0.3초 동안은 무거운 불러오기를 쉬고,
+    // 다 불러온 뒤 한 번에 부드럽게 나타나게 함 (들어갈 때 버벅거림 해결)
+    Future.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
+      _loadPersonalTimetableCache().then((_) {
+        _initStorageAndLoad().then((_) {
+          _syncDailyTimelineForDate(_selectedDayDate);
+          _calculateMonthlyProgress();
+          if (mounted) setState(() => _isReady = true);
+        });
       });
     });
   }
@@ -916,8 +923,14 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    super.build(context); // 🆕 [2026-10-16] 화면 유지 장치가 제대로 작동하도록
+    // 🆕 [2026-10-16] 다 불러온 뒤 0.25초 동안 부드럽게 나타남 (탭이 툭 튀는 모습 숨김)
+    return AnimatedOpacity(
+        opacity: _isReady ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        child: Scaffold(
+          backgroundColor: const Color(0xFF0F172A),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight + 8),
         child: AppBar(
@@ -990,15 +1003,17 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildYearView(),
-          _buildMonthView(),
-          _buildWeekView(),
-          _buildDayView(),
-        ],
-      ),
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              // 🆕 [2026-10-16] 연간·월간·주간·일간 화면을 한 번 그리면 버리지 않고 간직 → 넘길 때 버벅거림 해결
+              _KeepAlivePage(child: _buildYearView()),
+              _KeepAlivePage(child: _buildMonthView()),
+              _KeepAlivePage(child: _buildWeekView()),
+              _KeepAlivePage(child: _buildDayView()),
+            ],
+          ),
+        ),
     );
   }
 
@@ -3450,5 +3465,25 @@ class PlanningScreenState extends State<PlanningScreen> with SingleTickerProvide
         ],
       ),
     );
+  }
+}
+
+// 🆕 [2026-10-16] 탭을 넘겨도 화면을 버리지 않고 간직하는 작은 포장지 (연간·월간·주간·일간 공용)
+class _KeepAlivePage extends StatefulWidget {
+  final Widget child;
+  const _KeepAlivePage({required this.child});
+
+  @override
+  State<_KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<_KeepAlivePage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

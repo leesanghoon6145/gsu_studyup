@@ -13,6 +13,7 @@ import 'home_dashboard_screen.dart';
 import 'signup_screen.dart';
 import 'parent/parent_main_dashboard_screen.dart'; // 🆕 [유형별 라우팅] 학부모 화면
 import 'schedule/general_planner_home_screen.dart'; // 🆕 [유형별 라우팅] 일반 사용자 화면
+import 'schedule/general_guide.dart'; // 🆕 [2026-10-16] 일반 플래너 사용 설명서
 import 'package:gsu_studyup/global_lang.dart';
 import 'services/timer2_services.dart';
 import 'services/auth_service.dart'; // 🆕 [실제 로그인/회원가입]
@@ -23,6 +24,7 @@ import 'parent/parent_consent_screen.dart';
 import 'schedule/exercise_step_service.dart'; // 🆕 [2026-10-05] 걸음 자동 기록을 앱 시작부터
 import 'community/welcome_notice_dialog.dart'; // 🆕 [2026-10-12] 로그인 화면 첫 안내 팝업
 import 'planner/global_alarm_stop_overlay.dart'; // 🆕 [2026-10-15] 앱 어디서든 뜨는 알람 끄기 화면
+import 'services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +42,9 @@ void main() async {
   // 알림 서비스도 웹에서는 스킵
   if (!kIsWeb) {
     await Timer2Service.initialize();
+    // 🆕 [2026-10-16] 알람 총괄 담당 시작 + 저장된 모든 알람(학생 · 일반 · 약속)을 새 방식으로 다시 맞춤
+    await GkeAlarmEngine.init();
+    unawaited(GkeAlarmEngine.syncAll());
 
     Timer2Service.onNotificationStartTapped = (data) {
       Timer2Service.navigatorKey.currentState?.push(
@@ -75,6 +80,7 @@ void main() async {
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         DailyStepWatcherService.instance.stop(); // 계정이 바뀌면 새 계정으로 다시 시작
+        unawaited(GkeAlarmEngine.syncAll()); // 🆕 [2026-10-16] 로그인한 계정의 알람으로 다시 맞춤
         unawaited(DailyStepWatcherService.instance.resumeIfEnabled());
       } else {
         DailyStepWatcherService.instance.stop();
@@ -806,7 +812,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
       } else if (userType == '일반') {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const GeneralPlannerHomeScreen()),
+          MaterialPageRoute(builder: (context) => const GeneralGuideGate(child: GeneralPlannerHomeScreen())), // 🆕 [2026-10-16] 들어오면 사용 설명서
         );
       } else {
         // 기본값(학생 또는 유형 정보 없음)은 기존과 동일하게 학생용 대시보드로

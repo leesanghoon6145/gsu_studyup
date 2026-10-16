@@ -1,11 +1,16 @@
 // ============================================================================
 // 🆕 [일반 플래너 - 약속] AppointmentDataService
 // "약속" 항목(누구와 만나는지, 언제, 어디서)을 저장/불러오는 서비스입니다.
+//
+// 🆕 [2026-10-16 새 알람 방식] 약속 알림 시점(alarmOffsets)을 함께 저장합니다.
+//   정각(0) · 30분 전(30) · 1시간 전(60) · 1일 전(1440) 중 고른 것 — 여러 개 가능
+//   예전에 저장된 약속(이 칸이 없음)은 "정각" 한 번으로 봅니다.
+//   저장 · 수정 · 삭제할 때마다 알람 총괄 담당(GkeAlarmEngine)이 약속 알람 전체를 다시 맞춥니다.
 // ============================================================================
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'notification_service.dart'; // 🆕 [실제 알림 연동] 약속 시간에 실제 알림이 울리도록 연결
+import 'package:gsu_studyup/services/gke_alarm_engine.dart'; // 🆕 [2026-10-16] 알람 총괄 담당
 import 'planner_scope.dart'; // 🆕 [계정별 분리 2026-09-30]
 
 class AppointmentItem {
@@ -18,6 +23,7 @@ class AppointmentItem {
   final String memo;
   bool isCompleted;
   String createdAt; // 🆕 [정렬 수정] 최근에 입력한 게 맨 위로 오도록 하는 기준 시각
+  final List<int> alarmOffsets; // 🆕 [2026-10-16] 약속 알림 시점(분 전): 0 · 30 · 60 · 1440
 
   AppointmentItem({
     required this.id,
@@ -29,7 +35,9 @@ class AppointmentItem {
     this.memo = '',
     this.isCompleted = false,
     String? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
+    List<int>? alarmOffsets,
+  })  : createdAt = createdAt ?? DateTime.now().toIso8601String(),
+        alarmOffsets = (alarmOffsets == null || alarmOffsets.isEmpty) ? const <int>[0] : alarmOffsets;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -41,6 +49,7 @@ class AppointmentItem {
     'memo': memo,
     'isCompleted': isCompleted,
     'createdAt': createdAt,
+    'alarmOffsets': alarmOffsets,
   };
 
   factory AppointmentItem.fromJson(Map<String, dynamic> json) => AppointmentItem(
@@ -53,6 +62,9 @@ class AppointmentItem {
     memo: json['memo'] as String? ?? '',
     isCompleted: json['isCompleted'] as bool? ?? false,
     createdAt: json['createdAt'] as String?,
+    alarmOffsets: (json['alarmOffsets'] is List)
+        ? (json['alarmOffsets'] as List).map((e) => e is int ? e : int.tryParse('$e') ?? 0).toList()
+        : null, // 🆕 예전 약속은 "정각" 한 번
   );
 }
 
@@ -95,14 +107,7 @@ class AppointmentDataService {
     final all = await loadAll();
     all.add(item);
     await _saveAll(all);
-    // 🆕 [실제 알림 연동] 시간이 설정된 약속이면 그 시각에 실제 알림 예약
-    await NotificationService.scheduleAt(
-      id: item.id,
-      title: '약속: ${item.title}',
-      body: item.withPerson.isNotEmpty ? '${item.withPerson}님과의 약속입니다.' : '약속 시간입니다.',
-      date: item.date,
-      time: item.time,
-    );
+    await GkeAlarmEngine.syncGeneral(); // 🆕 [2026-10-16] 약속 알람 다시 맞춤
   }
 
   static Future<void> update(AppointmentItem updated) async {
@@ -112,21 +117,14 @@ class AppointmentDataService {
       all[idx] = updated;
       await _saveAll(all);
     }
-    // 🆕 [실제 알림 연동] 수정 시 예약을 새 시간으로 다시 걸어줌
-    await NotificationService.scheduleAt(
-      id: updated.id,
-      title: '약속: ${updated.title}',
-      body: updated.withPerson.isNotEmpty ? '${updated.withPerson}님과의 약속입니다.' : '약속 시간입니다.',
-      date: updated.date,
-      time: updated.time,
-    );
+    await GkeAlarmEngine.syncGeneral(); // 🆕 [2026-10-16] 약속 알람 다시 맞춤 (완료 표시하면 알람도 꺼짐)
   }
 
   static Future<void> delete(String id) async {
     final all = await loadAll();
     all.removeWhere((e) => e.id == id);
     await _saveAll(all);
-    await NotificationService.cancel(id); // 🆕 [실제 알림 연동] 삭제 시 예약된 알림도 취소
+    await GkeAlarmEngine.syncGeneral(); // 🆕 [2026-10-16] 지운 약속의 알람도 함께 정리
   }
 
   static Future<void> _saveAll(List<AppointmentItem> items) async {
